@@ -53,17 +53,15 @@ static const std::string TABLET_DELVEC_PREFIX = "dlv_";
 static const std::string TABLET_PERSISTENT_INDEX_META_PREFIX = "tpi_";
 
 static string encode_meta_log_key(TTabletId id, uint64_t logid);
-static bool decode_meta_log_key(const std::string_view& key, TTabletId* id, uint64_t* logid);
+static bool decode_meta_log_key(std::string_view key, TTabletId* id, uint64_t* logid);
 static string encode_meta_rowset_key(TTabletId id, uint32_t rowsetid);
-[[maybe_unused]] static bool decode_meta_rowset_key(const std::string_view& key, TTabletId* id, uint32_t* rowsetid);
+[[maybe_unused]] static bool decode_meta_rowset_key(std::string_view key, TTabletId* id, uint32_t* rowsetid);
 static string encode_meta_pending_rowset_key(TTabletId id, int64_t version);
-[[maybe_unused]] static bool decode_meta_pending_rowset_key(const std::string_view& key, TTabletId* id,
-                                                            int64_t* version);
+[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id, int64_t* version);
 std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int64_t version);
-void decode_del_vector_key(const std::string_view& enc_key, TTabletId* tablet_id, uint32_t* segment_id,
-                           int64_t* version);
+void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id, int64_t* version);
 std::string encode_persistent_index_key(TTabletId tablet_id);
-void decode_persistent_index_key(const std::string_view& enc_key, TTabletId* tablet_id);
+void decode_persistent_index_key(std::string_view enc_key, TTabletId* tablet_id);
 
 static std::string encode_tablet_meta_key(TTabletId tablet_id, TSchemaHash schema_hash) {
     return strings::Substitute("$0$1_$2", HEADER_PREFIX, tablet_id, schema_hash);
@@ -100,7 +98,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
     string prefix;
     bool parsed = false;
     bool first = true;
-    auto traverse_rst_func = [&](const std::string_view& key, const std::string_view& value) -> bool {
+    auto traverse_rst_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint32_t rowset_id;
         if (!decode_meta_rowset_key(key, &tid, &rowset_id)) {
@@ -144,7 +142,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
         json_meta->append("\n]");
     }
 
-    auto traverse_pending_rst_func = [&](const std::string_view& key, const std::string_view& value) -> bool {
+    auto traverse_pending_rst_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         int64_t version;
         if (!decode_meta_pending_rowset_key(key, &tid, &version)) {
@@ -192,7 +190,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
         json_meta->append("\n]");
     }
 
-    auto traverse_log_func = [&](const std::string_view& key, const std::string_view& value) -> bool {
+    auto traverse_log_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint64_t logid;
         if (!decode_meta_log_key(key, &tid, &logid)) {
@@ -239,7 +237,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
     if (!first) {
         json_meta->append("\n]");
     }
-    auto traverse_dlv_func = [&](const std::string_view& key, const std::string_view& value) -> bool {
+    auto traverse_dlv_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint32_t segment_id;
         int64_t version;
@@ -420,18 +418,17 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
     return store->get_meta()->write_batch(&wb);
 }
 
-Status TabletMetaManager::traverse_headers(KVStore* meta,
-                                           std::function<bool(long, long, const std::string&)> const& func) {
+Status TabletMetaManager::walk(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
-        // TODO: avoid converting to std::string
-        std::string value_str(value);
         TTabletId tablet_id;
         TSchemaHash schema_hash;
         if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
             LOG(WARNING) << "invalid tablet_meta key:" << key;
             return true;
         }
-        return func(tablet_id, schema_hash, value_str);
+        return func(tablet_id, schema_hash, value);
     };
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
 }
@@ -604,7 +601,7 @@ static string encode_meta_log_key(TTabletId id, uint64_t logid) {
     return ret;
 }
 
-static bool decode_meta_log_key(const std::string_view& key, TTabletId* id, uint64_t* logid) {
+static bool decode_meta_log_key(std::string_view key, TTabletId* id, uint64_t* logid) {
     if (key.length() != TABLET_META_LOG_PREFIX.length() + sizeof(uint64_t) * 2) {
         return false;
     }
@@ -622,7 +619,7 @@ static string encode_meta_rowset_key(TTabletId id, uint32_t rowsetid) {
     return ret;
 }
 
-[[maybe_unused]] static bool decode_meta_rowset_key(const std::string_view& key, TTabletId* id, uint32_t* rowsetid) {
+[[maybe_unused]] static bool decode_meta_rowset_key(std::string_view key, TTabletId* id, uint32_t* rowsetid) {
     if (key.length() != TABLET_META_ROWSET_PREFIX.length() + sizeof(uint64_t) + sizeof(uint32_t)) {
         return false;
     }
@@ -641,8 +638,7 @@ static string encode_meta_pending_rowset_key(TTabletId id, int64_t version) {
     return ret;
 }
 
-[[maybe_unused]] static bool decode_meta_pending_rowset_key(const std::string_view& key, TTabletId* id,
-                                                            int64_t* version) {
+[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id, int64_t* version) {
     if (key.length() != TABLET_META_PENDING_ROWSET_PREFIX.length() + sizeof(uint64_t) + sizeof(uint64_t)) {
         return false;
     }
@@ -665,8 +661,7 @@ std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int6
     return key;
 }
 
-void decode_del_vector_key(const std::string_view& enc_key, TTabletId* tablet_id, uint32_t* segment_id,
-                           int64_t* version) {
+void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id, int64_t* version) {
     DCHECK_EQ(4 + sizeof(TTabletId) + sizeof(uint32_t) + sizeof(int64_t), enc_key.size());
     *tablet_id = BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 4));
     *segment_id = BigEndian::ToHost32(UNALIGNED_LOAD32(enc_key.data() + 12));
@@ -681,12 +676,12 @@ std::string encode_persistent_index_key(TTabletId tablet_id) {
     return key;
 }
 
-void decode_persistent_index_key(const std::string_view& enc_key, TTabletId* tablet_id) {
+void decode_persistent_index_key(std::string_view enc_key, TTabletId* tablet_id) {
     DCHECK_EQ(4 + sizeof(uint64_t), enc_key.size());
     *tablet_id = BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 4));
 }
 
-int64_t decode_del_vector_key_version(const std::string_view& key) {
+int64_t decode_del_vector_key_version(std::string_view key) {
     DCHECK_GT(key.size(), sizeof(int64_t));
     auto v = UNALIGNED_LOAD64(key.data() + key.size() - sizeof(int64_t));
     return std::numeric_limits<int64_t>::max() - BigEndian::ToHost64(v);
@@ -792,7 +787,7 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
     put_fixed64_le(&prefix, BigEndian::FromHost64(tablet_id));
 
     return store->get_meta()->iterate(META_COLUMN_FAMILY_INDEX, prefix,
-                                      [&](const std::string_view& key, const std::string_view& value) -> bool {
+                                      [&](std::string_view key, std::string_view value) -> bool {
                                           RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
                                           CHECK(rowset_meta->init(value)) << "Corrupted rowset meta";
                                           return func(std::move(rowset_meta));
@@ -851,7 +846,7 @@ Status TabletMetaManager::traverse_meta_logs(DataDir* store, TTabletId tablet_id
     std::string upper_bound = encode_meta_log_key(tablet_id, UINT64_MAX);
 
     auto st = store->get_meta()->iterate_range(META_COLUMN_FAMILY_INDEX, lower_bound, upper_bound,
-                                               [&](const std::string_view& key, const std::string_view& value) {
+                                               [&](std::string_view key, std::string_view value) {
                                                    TTabletId tid;
                                                    uint64_t logid;
                                                    if (!decode_meta_log_key(key, &tid, &logid)) {
@@ -1248,7 +1243,7 @@ Status TabletMetaManager::pending_rowset_iterate(DataDir* store, TTabletId table
     put_fixed64_le(&prefix, BigEndian::FromHost64(tablet_id));
 
     return store->get_meta()->iterate(
-            META_COLUMN_FAMILY_INDEX, prefix, [&](const std::string_view& key, const std::string_view& value) -> bool {
+            META_COLUMN_FAMILY_INDEX, prefix, [&](std::string_view key, std::string_view value) -> bool {
                 TTabletId tid = -1;
                 int64_t version = -1;
                 if (!decode_meta_pending_rowset_key(key, &tid, &version)) {

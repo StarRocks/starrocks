@@ -2,23 +2,17 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
-import java.util.Set;
 
-public class PhysicalHashJoinOperator extends PhysicalOperator {
-    private final JoinOperator joinType;
-    private final ScalarOperator onPredicate;
-    private final String joinHint;
+public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
 
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
@@ -26,25 +20,7 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_HASH_JOIN);
-        this.joinType = joinType;
-        this.onPredicate = onPredicate;
-        this.joinHint = joinHint;
-        this.limit = limit;
-        this.predicate = predicate;
-        this.projection = projection;
-    }
-
-    public JoinOperator getJoinType() {
-        return joinType;
-    }
-
-    public ScalarOperator getOnPredicate() {
-        return onPredicate;
-    }
-
-    public String getJoinHint() {
-        return joinHint;
+        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
     }
 
     @Override
@@ -68,15 +44,6 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
     }
 
     @Override
-    public ColumnRefSet getUsedColumns() {
-        ColumnRefSet refs = super.getUsedColumns();
-        if (onPredicate != null) {
-            refs.union(onPredicate.getUsedColumns());
-        }
-        return refs;
-    }
-
-    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -96,33 +63,5 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 
-    @Override
-    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
-
-        if (predicate != null && predicate.getUsedColumns().isIntersect(dictSet)) {
-            return false;
-        }
-
-        if (onPredicate != null && onPredicate.getUsedColumns().isIntersect(dictSet)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
-        if (predicate != null) {
-            columnRefSet.union(predicate.getUsedColumns());
-        }
-
-        if (onPredicate != null) {
-            columnRefSet.union(onPredicate.getUsedColumns());
-        }
-    }
 
 }

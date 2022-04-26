@@ -25,7 +25,8 @@ import com.starrocks.thrift.TPartitionType;
 
 public enum PartitionType {
     UNPARTITIONED("UNPARTITIONED"),
-    RANGE("RANGE");
+    RANGE("RANGE"),
+    LIST("LIST");
 
     public String typeString;
 

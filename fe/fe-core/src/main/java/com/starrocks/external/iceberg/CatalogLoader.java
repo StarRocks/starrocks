@@ -8,6 +8,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 
 import java.util.Map;
@@ -15,7 +16,7 @@ import java.util.Map;
 /**
  * Most code of this file was copied from CatalogLoader.java of flink in iceberg codebase.
  * Please see https://github.com/apache/iceberg.
- * // TODO: add hadoop or custom catalogloader here.
+ * // TODO: add hadoop catalogloader here.
  */
 public interface CatalogLoader {
 
@@ -28,6 +29,10 @@ public interface CatalogLoader {
 
     static CatalogLoader hive(String name, Configuration hadoopConf, Map<String, String> properties) {
         return new HiveCatalogLoader(name, hadoopConf, properties);
+    }
+
+    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String catalogImpl) {
+        return new CustomCatalogLoader(name, hadoopConf, properties, catalogImpl);
     }
 
     class HiveCatalogLoader implements CatalogLoader {
@@ -62,4 +67,36 @@ public interface CatalogLoader {
         }
     }
 
+    class CustomCatalogLoader implements CatalogLoader {
+
+        private final SerializableConfiguration hadoopConf;
+        private final Map<String, String> properties;
+        private final String name;
+        private final String catalogImpl;
+
+        private CustomCatalogLoader(
+                String name,
+                Configuration conf,
+                Map<String, String> properties,
+                String catalogImpl) {
+            this.hadoopConf = new SerializableConfiguration(conf);
+            this.properties = Maps.newHashMap(properties); // wrap into a hashmap for serialization
+            this.name = name;
+            this.catalogImpl = Preconditions.checkNotNull(catalogImpl,
+                    "Cannot initialize custom Catalog, impl class name is null");
+        }
+
+        @Override
+        public Catalog loadCatalog() {
+            return CatalogUtil.loadCatalog(catalogImpl, name, properties, hadoopConf.get());
+        }
+
+        @Override
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                    .add("name", name)
+                    .add("catalogImpl", catalogImpl)
+                    .toString();
+        }
+    }
 }

@@ -29,6 +29,7 @@ import com.starrocks.common.ErrorReport;
 // Now only support utf-8
 public class SetNamesVar extends SetVar {
     private static final String DEFAULT_NAMES = "utf8";
+    private static final String GBK_NAMES = "gbk";
     private String charset;
     private String collate;
 
@@ -57,8 +58,12 @@ public class SetNamesVar extends SetVar {
             charset = DEFAULT_NAMES;
         }
 
-        if (!charset.equalsIgnoreCase(DEFAULT_NAMES)) {
+        if (!charset.equalsIgnoreCase(DEFAULT_NAMES)&&!charset.equalsIgnoreCase(GBK_NAMES)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, charset);
+        }
+        // be is not supported yet,so Display unsupported information to the user
+        if (!charset.equalsIgnoreCase(DEFAULT_NAMES)){
+            throw new AnalysisException("charset name " + charset + " is not supported yet");
         }
     }
 

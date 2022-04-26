@@ -16,15 +16,10 @@ using std::string;
 
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
-class EditVersion;
 class MemTracker;
 class KVStore;
-class Rowset;
-using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetUpdateState;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
 class Tablet;
-class TabletMeta;
 
 // UpdateManager maintain update feature related data structures, including
 // PrimaryIndexe cache, RowsetUpdateState cache, DelVector cache and

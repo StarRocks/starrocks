@@ -315,13 +315,12 @@ public:
 
     //unix_timestamp is called with a timezone argument,
     //it returns seconds of the value of date literal since '1970-01-01 00:00:00' UTC
-    bool unix_timestamp(int64_t* timestamp, const std::string_view& timezone) const;
+    bool unix_timestamp(int64_t* timestamp, std::string_view timezone) const;
     bool unix_timestamp(int64_t* timestamp, const cctz::time_zone& ctz) const;
 
     //construct datetime_value from timestamp and timezone
     //timestamp is an internal timestamp value representing seconds since '1970-01-01 00:00:00' UTC
-    bool from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
-                            cctz::time_zone& ctz);
+    bool from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone, cctz::time_zone& ctz);
     bool from_unixtime(int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, const cctz::time_zone& ctz);
 

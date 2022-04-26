@@ -61,6 +61,7 @@ import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 public class CreateTableStmt extends DdlStmt {
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
+    private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private boolean ifNotExists;
     private boolean isExternal;
@@ -73,10 +74,13 @@ public class CreateTableStmt extends DdlStmt {
     private Map<String, String> properties;
     private Map<String, String> extProperties;
     private String engineName;
+    private String charsetName;
     private String comment;
     private List<AlterClause> rollupAlterClauseList;
 
     private static Set<String> engineNames;
+
+    private static Set<String> charsetNames;
 
     // set in analyze
     private List<Column> columns = Lists.newArrayList();
@@ -95,10 +99,16 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("jdbc");
     }
 
+    static {
+        charsetNames = Sets.newHashSet();
+        charsetNames.add("utf8");
+        charsetNames.add("gbk");
+    }
+
     // for backup. set to -1 for normal use
     private int tableSignature;
 
-    public CreateTableStmt() {
+    public CreateTableStmt(String charsetName) {
         // for persist
         tableName = new TableName();
         columnDefs = Lists.newArrayList();
@@ -115,7 +125,7 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, null);
     }
 
@@ -130,7 +140,23 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> ops) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableName, columnDefinitions, engineName, null, keysDesc, partitionDesc,
+                distributionDesc, properties, extProperties, comment, ops);
+    }
+
+    public CreateTableStmt(boolean ifNotExists,
+                           boolean isExternal,
+                           TableName tableName,
+                           List<ColumnDef> columnDefinitions,
+                           String engineName,
+                           String charsetName,
+                           KeysDesc keysDesc,
+                           PartitionDesc partitionDesc,
+                           DistributionDesc distributionDesc,
+                           Map<String, String> properties,
+                           Map<String, String> extProperties,
+                           String comment, List<AlterClause> ops) {
+        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, ops);
     }
 
@@ -140,6 +166,7 @@ public class CreateTableStmt extends DdlStmt {
                            List<ColumnDef> columnDefinitions,
                            List<IndexDef> indexDefs,
                            String engineName,
+                           String charsetName,
                            KeysDesc keysDesc,
                            PartitionDesc partitionDesc,
                            DistributionDesc distributionDesc,
@@ -159,6 +186,12 @@ public class CreateTableStmt extends DdlStmt {
             this.engineName = engineName;
         }
 
+        if (Strings.isNullOrEmpty(charsetName)) {
+            this.charsetName = DEFAULT_CHARSET_NAME;
+        } else {
+            this.charsetName = charsetName;
+        }
+
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
@@ -171,6 +204,8 @@ public class CreateTableStmt extends DdlStmt {
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
     }
+
+
 
     public void addColumnDef(ColumnDef columnDef) {
         columnDefs.add(columnDef);
@@ -224,6 +259,14 @@ public class CreateTableStmt extends DdlStmt {
         return engineName;
     }
 
+    public String getCharsetName() {
+        return charsetName;
+    }
+
+    public void setCharsetName(String charsetName) {
+        this.charsetName = charsetName;
+    }
+
     public String getDbName() {
         return tableName.getDb();
     }
@@ -264,6 +307,7 @@ public class CreateTableStmt extends DdlStmt {
         }
 
         analyzeEngineName();
+        analyzeCharsetName();
 
         // analyze key desc
         if (!(engineName.equals("mysql") || engineName.equals("broker") ||
@@ -401,12 +445,12 @@ public class CreateTableStmt extends DdlStmt {
         if (engineName.equals("olap")) {
             // analyze partition
             if (partitionDesc != null) {
-                if (partitionDesc.getType() != PartitionType.RANGE) {
-                    throw new AnalysisException("Currently only support range partition with engine type olap");
+                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
+                    partitionDesc.analyze(columnDefs, properties);
+                } else {
+                    throw new AnalysisException(
+                            "Currently only support range and list partition with engine type olap");
                 }
-
-                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-                rangePartitionDesc.analyze(columnDefs, properties);
             }
 
             // analyze distribution
@@ -512,6 +556,21 @@ public class CreateTableStmt extends DdlStmt {
         }
     }
 
+    private void analyzeCharsetName() throws AnalysisException {
+        if (Strings.isNullOrEmpty(charsetName)) {
+            charsetName = "utf8";
+        }
+        charsetName = charsetName.toLowerCase();
+
+        if (!charsetNames.contains(charsetName)) {
+            throw new AnalysisException("Unknown charset name: " + charsetName);
+        }
+        // be is not supported yet,so Display unsupported information to the user
+        if (!charsetName.equals(DEFAULT_CHARSET_NAME)){
+            throw new AnalysisException("charset name " + charsetName + " is not supported yet");
+        }
+    }
+
     public static CreateTableStmt read(DataInput in) throws IOException {
         throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
     }
@@ -544,7 +603,10 @@ public class CreateTableStmt extends DdlStmt {
         if (engineName != null) {
             sb.append(" ENGINE = ").append(engineName);
         }
-
+        sb.append("\n)");
+        if (charsetName != null) {
+            sb.append(" CHARSET = ").append(charsetName);
+        }
         if (keysDesc != null) {
             sb.append("\n").append(keysDesc.toSql());
         }

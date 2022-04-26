@@ -19,13 +19,13 @@ set(EXEC_FILES
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
+        ./common/tracer_test.cpp
         ./common/s3_uri_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
         ./env/env_s3_test.cpp
         ./env/output_stream_wrapper_test.cpp
-        ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
@@ -35,19 +35,21 @@ set(EXEC_FILES
         ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
-        ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/vectorized/sorting_test.cpp
+        ./exec/vectorized/chunks_sorter_test.cpp
+        ./exec/vectorized/parquet_scanner_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
+        ./exec/vectorized/repeat_node_test.cpp
+        ./exec/es_scan_reader_test.cpp
+        ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
-        ./exec/parquet/parquet_schema_test.cpp
-        ./exec/parquet/encoding_test.cpp
-        ./exec/parquet/page_reader_test.cpp
-        ./exec/parquet/metadata_test.cpp
-        ./exec/parquet/group_reader_test.cpp
-        ./exec/parquet/file_reader_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -111,6 +113,13 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/orc/orc_chunk_reader_test.cpp
+        ./formats/parquet/parquet_schema_test.cpp
+        ./formats/parquet/encoding_test.cpp
+        ./formats/parquet/page_reader_test.cpp
+        ./formats/parquet/metadata_test.cpp
+        ./formats/parquet/group_reader_test.cpp
+        ./formats/parquet/file_reader_test.cpp        
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp
@@ -264,8 +273,11 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
+        ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/starrocks_metrics_test.cpp
+        ./util/system_metrics_test.cpp
+        ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
-        ./exec/vectorized/hdfs_scan_node_test.cpp
         )
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
@@ -290,6 +302,7 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/test")
 
+# =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
 add_executable(bytes_test
@@ -311,10 +324,26 @@ TARGET_LINK_LIBRARIES(bytes_test
         tcmalloc
         )
 
-add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
-TARGET_LINK_LIBRARIES(starrocks_column_to_arrow_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(starrocks_column_to_arrow_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+# =================================================
+# test cases must be compiled as a standalone binary
+ADD_BE_TEST(http/metrics_action_test)
+ADD_BE_TEST(http/http_client_test)
 
-add_executable(engine_storage_migration_task_test ./storage/task/engine_storage_migration_task_test.cpp)
-TARGET_LINK_LIBRARIES(engine_storage_migration_task_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(engine_storage_migration_task_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+# ADD_BE_TEST(plugin/plugin_zip_test)
+# ADD_BE_TEST(plugin/plugin_loader_test)
+# ADD_BE_PLUGIN(plugin/example/plugin_example)
+
+ADD_BE_TEST(runtime/routine_load_task_executor_test)
+ADD_BE_TEST(runtime/small_file_mgr_test)
+ADD_BE_TEST(runtime/user_function_cache_test)
+
+ADD_BE_TEST(storage/delete_handler_test)
+ADD_BE_TEST(storage/options_test)
+ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+
+# you can simply add test case as single binary without adding `main`
+# ADD_BE_TEST(exec/vectorized/sorting_test)
+
+# =================================================
+# benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.
+ADD_BE_BENCH(exec/vectorized/chunks_sorter_bench_test)

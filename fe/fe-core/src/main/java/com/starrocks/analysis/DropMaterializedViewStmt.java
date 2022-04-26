@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -49,12 +50,19 @@ public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
     private final TableName dbMvName;
+    @Deprecated
     private final TableName dbTblName;
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, TableName dbTblName) {
         this.ifExists = ifExists;
         this.dbMvName = dbMvName;
         this.dbTblName = dbTblName;
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
+        this.ifExists = ifExists;
+        this.dbMvName = dbMvName;
+        this.dbTblName = null;
     }
 
     public boolean isSetIfExists() {
@@ -65,6 +73,7 @@ public class DropMaterializedViewStmt extends DdlStmt {
         return dbMvName.getTbl();
     }
 
+    @Deprecated
     public String getTblName() {
         if (dbTblName != null) {
             return dbTblName.getTbl();
@@ -74,14 +83,20 @@ public class DropMaterializedViewStmt extends DdlStmt {
     }
 
     public String getDbName() {
-        if (dbTblName != null) {
-            return dbTblName.getDb();
-        } else {
-            return dbMvName.getDb();
-        }
+        return dbMvName.getDb();
+    }
+
+    public TableName getDbMvName() {
+        return dbMvName;
+    }
+
+    @Deprecated
+    public TableName getDbTblName() {
+        return dbTblName;
     }
 
     @Override
+    @Deprecated
     public void analyze(Analyzer analyzer) throws UserException {
         if (dbTblName != null && !Strings.isNullOrEmpty(dbMvName.getDb())) {
             throw new AnalysisException(
@@ -153,5 +168,10 @@ public class DropMaterializedViewStmt extends DdlStmt {
             stringBuilder.append(" IN `").append(dbTblName).append("`");
         }
         return stringBuilder.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropMaterializedViewStatement(this, context);
     }
 }

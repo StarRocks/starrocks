@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rewrite.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -131,6 +132,16 @@ public class Optimizer {
             }
         }
 
+        //add join implementRule
+        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addMergeJoinImplementationRule();
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addHashJoinImplementationRule();
+        } else {
+            context.getRuleSet().addAutoJoinImplementationRule();
+        }
+
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(
                 rootTaskContext, memo.getRootGroup()));
 
@@ -154,6 +165,9 @@ public class Optimizer {
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
+        // Reorder predicates
+        result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
+                rootTaskContext);
         return result;
     }
 

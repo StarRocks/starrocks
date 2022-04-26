@@ -29,6 +29,7 @@ statement
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName                              #dropMaterialized
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                                                          #createView
@@ -431,7 +432,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
     ;
 
 type
@@ -562,4 +563,5 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | MATERIALIZED
     ;

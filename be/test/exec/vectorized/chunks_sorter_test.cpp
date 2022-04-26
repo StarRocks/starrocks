@@ -153,7 +153,7 @@ protected:
     std::unique_ptr<ColumnRef> _expr_cust_key, _expr_nation, _expr_region, _expr_mkt_sgmt, _expr_constant;
 };
 
-void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
+static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
     for (ExprContext* ctx : exprs) {
         delete ctx;
     }
@@ -895,8 +895,3 @@ TEST_F(ChunksSorterTest, test_tie) {
 }
 
 } // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

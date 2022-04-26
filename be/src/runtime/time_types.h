@@ -133,6 +133,8 @@ public:
     static constexpr JulianDate UNIX_EPOCH_JULIAN = 2440588;
     // from_date(0000, 1, 1)
     static constexpr JulianDate BC_EPOCH_JULIAN = 1721060;
+    // from_date(0001, 1, 1)
+    static constexpr JulianDate AD_EPOCH_JULIAN = 1721426;
 
     // from_date(0000, 1, 1)
     static constexpr JulianDate MIN_DATE = 1721060;

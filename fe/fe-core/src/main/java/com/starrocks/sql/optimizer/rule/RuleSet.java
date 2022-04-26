@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementation
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -117,7 +118,7 @@ import java.util.Map;
 public class RuleSet {
     private static final Map<RuleSetType, List<Rule>> rewriteRules = Maps.newHashMap();
 
-    private static final List<Rule> implementRules = ImmutableList.of(
+    private static final List<Rule> allImplementRules = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
             new IcebergScanImplementationRule(),
@@ -127,7 +128,6 @@ public class RuleSet {
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
-            new HashJoinImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),
@@ -145,6 +145,8 @@ public class RuleSet {
             new CTEConsumerImplementationRule(),
             new CTEProduceImplementationRule()
     );
+
+    private final List<Rule> implementRules = Lists.newArrayList(allImplementRules);
 
     private final List<Rule> transformRules = Lists.newArrayList();
 
@@ -213,8 +215,6 @@ public class RuleSet {
                 new PushDownPredicateDirectRule(),
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
-                PushDownPredicateScanRule.ICEBERG_SCAN,
-                PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
@@ -229,6 +229,7 @@ public class RuleSet {
 
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.HUDI_SCAN,
+                MergePredicateRule.ICEBERG_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
@@ -318,4 +319,18 @@ public class RuleSet {
     public List<Rule> getRewriteRulesByType(RuleSetType type) {
         return rewriteRules.get(type);
     }
+
+    public void addHashJoinImplementationRule() {
+        this.implementRules.add(HashJoinImplementationRule.getInstance());
+    }
+
+    public void addMergeJoinImplementationRule() {
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
+    }
+
+    public void addAutoJoinImplementationRule() {
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
+        this.implementRules.add(HashJoinImplementationRule.getInstance());
+    }
+
 }

@@ -45,7 +45,7 @@ public:
 
     ~RowsetMeta() = default;
 
-    bool init(const std::string_view& pb_rowset_meta) {
+    bool init(std::string_view pb_rowset_meta) {
         bool ret = _deserialize_from_pb(pb_rowset_meta);
         if (!ret) {
             return false;
@@ -82,9 +82,9 @@ public:
 
     void set_rowset_id(const RowsetId& rowset_id) {
         // rowset id is a required field, just set it to 0
-        _rowset_meta_pb.set_rowset_id(0);
+        _rowset_meta_pb.set_deprecated_rowset_id(0);
         _rowset_id = rowset_id;
-        _rowset_meta_pb.set_rowset_id_v2(rowset_id.to_string());
+        _rowset_meta_pb.set_rowset_id(rowset_id.to_string());
     }
 
     int64_t tablet_id() const { return _rowset_meta_pb.tablet_id(); }
@@ -272,7 +272,7 @@ public:
     const RowsetMetaPB& get_meta_pb() const { return _rowset_meta_pb; }
 
 private:
-    bool _deserialize_from_pb(const std::string_view& value) {
+    bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb.ParseFromArray(value.data(), value.size());
     }
 
@@ -284,10 +284,10 @@ private:
     }
 
     void _init() {
-        if (_rowset_meta_pb.rowset_id() > 0) {
-            _rowset_id.init(_rowset_meta_pb.rowset_id());
+        if (_rowset_meta_pb.deprecated_rowset_id() > 0) {
+            _rowset_id.init(_rowset_meta_pb.deprecated_rowset_id());
         } else {
-            _rowset_id.init(_rowset_meta_pb.rowset_id_v2());
+            _rowset_id.init(_rowset_meta_pb.rowset_id());
         }
     }
 

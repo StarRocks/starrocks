@@ -11,6 +11,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -139,6 +140,12 @@ public class Analyzer {
         @Override
         public Void visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext session) {
             GrantRoleAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
     }

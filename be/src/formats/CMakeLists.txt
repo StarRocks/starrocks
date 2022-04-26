@@ -1,7 +1,7 @@
 # This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/converter")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 add_library(Formats STATIC
         csv/array_converter.cpp
@@ -19,6 +19,19 @@ add_library(Formats STATIC
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        orc/orc_chunk_reader.cpp
+        parquet/column_chunk_reader.cpp
+        parquet/column_converter.cpp
+        parquet/column_reader.cpp
+        parquet/encoding.cpp
+        parquet/level_codec.cpp
+        parquet/page_reader.cpp
+        parquet/schema.cpp
+        parquet/stored_column_reader.cpp
+        parquet/utils.cpp
+        parquet/metadata.cpp
+        parquet/group_reader.cpp
+        parquet/file_reader.cpp
         )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

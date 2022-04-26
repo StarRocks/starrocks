@@ -696,6 +696,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public OptExpression visitPhysicalHashJoin(OptExpression optExpression, DecodeContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitPhysicalMergeJoin(OptExpression optExpression, DecodeContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        public OptExpression visitPhysicalJoin(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
             context.needEncode = true;
 

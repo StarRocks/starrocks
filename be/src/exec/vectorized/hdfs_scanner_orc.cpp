@@ -101,7 +101,7 @@ private:
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsFileReaderParam& reader_params,
-                       OrcScannerAdapter* adapter);
+                       OrcChunkReader* reader);
     bool filterOnOpeningStripe(uint64_t stripeIndex, const orc::proto::StripeInformation* stripeInformation) override;
     bool filterOnPickRowGroup(size_t rowGroupIdx, const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) override;
@@ -130,7 +130,7 @@ private:
     // 1. use `upper_bound` to find the first range.end > `offset`
     // 2. and check if range.start <= `offset`
     std::map<uint64_t, uint64_t> _scan_ranges;
-    OrcScannerAdapter* _adapter;
+    OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
 };
 
@@ -141,21 +141,21 @@ void OrcRowReaderFilter::onEndingPickRowGroups() {}
 void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
     cctz::time_zone writer_tzinfo;
     if (tz == "" || !TimezoneUtils::find_cctz_time_zone(tz, writer_tzinfo)) {
-        _writer_tzoffset_in_seconds = _adapter->tzoffset_in_seconds();
+        _writer_tzoffset_in_seconds = _reader->tzoffset_in_seconds();
     } else {
         _writer_tzoffset_in_seconds = TimezoneUtils::to_utc_offset(writer_tzinfo);
     }
 }
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
-                                       const HdfsFileReaderParam& reader_params, OrcScannerAdapter* adapter)
+                                       const HdfsFileReaderParam& reader_params, OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _reader_params(reader_params),
           _current_stripe_index(0),
           _init_use_dict_filter_slots(false),
           _can_do_filter_on_orc_cvb(true),
-          _adapter(adapter),
-          _writer_tzoffset_in_seconds(adapter->tzoffset_in_seconds()) {
+          _reader(reader),
+          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
@@ -187,7 +187,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     ChunkPtr max_chunk = vectorized::ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
-        int32_t column_index = _adapter->get_column_id_by_name(slot->col_name());
+        int32_t column_index = _reader->get_column_id_by_name(slot->col_name());
         if (column_index >= 0) {
             auto row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
@@ -198,8 +198,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr min_col = min_chunk->columns()[i];
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
-            int64_t tz_offset_in_seconds = _adapter->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = _adapter->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
+            int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
+            Status st = _reader->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }
@@ -268,7 +268,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
             if (!_reader_params.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
-            int32_t column_index = _adapter->get_column_id_by_name(col.col_name);
+            int32_t column_index = _reader->get_column_id_by_name(col.col_name);
             if (column_index < 0) {
                 continue;
             }
@@ -289,7 +289,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         // create chunk
         orc::StringDictionary* dict = it->second;
-        if (dict->dictionaryOffset.size() > _adapter->runtime_state()->chunk_size()) {
+        if (dict->dictionaryOffset.size() > _reader->runtime_state()->chunk_size()) {
             continue;
         }
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
@@ -388,7 +388,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     std::unordered_set<std::string> known_column_names;
-    OrcScannerAdapter::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
+    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
     _file_read_param.set_columns_from_file(known_column_names);
     ASSIGN_OR_RETURN(auto skip, _file_read_param.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -398,7 +398,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 
-    // create orc adapter for further reading.
+    // create orc reader for further reading.
     int src_slot_index = 0;
     bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
@@ -408,28 +408,27 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
-            // reserve room for later set in `OrcScannerAdapter`
+            // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
             VLOG_FILE << "[ORC] active load field = " << it->col_name();
             _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
-            // reserve room for later set in `OrcScannerAdapter`
+            // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
         _src_slot_descriptors.emplace_back(it);
         src_slot_index++;
     }
 
-    _orc_adapter = std::make_unique<OrcScannerAdapter>(runtime_state, _src_slot_descriptors);
-    _orc_row_reader_filter =
-            std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
-    _orc_adapter->disable_broker_load_mode();
-    _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
-    _orc_adapter->set_read_chunk_size(runtime_state->chunk_size());
-    _orc_adapter->set_runtime_state(runtime_state);
-    _orc_adapter->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
-    RETURN_IF_ERROR(_orc_adapter->set_timezone(_file_read_param.timezone));
+    _orc_reader = std::make_unique<OrcChunkReader>(runtime_state, _src_slot_descriptors);
+    _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_reader.get());
+    _orc_reader->disable_broker_load_mode();
+    _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
+    _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
+    _orc_reader->set_runtime_state(runtime_state);
+    _orc_reader->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_file_read_param.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
         for (const auto& it : _conjunct_ctxs_by_slot) {
@@ -437,18 +436,18 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
-        _orc_adapter->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
+        _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
-    _orc_adapter->set_hive_column_names(_scanner_params.hive_column_names);
+    _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
-        _orc_adapter->set_lazy_load_context(&_lazy_load_ctx);
+        _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
-    RETURN_IF_ERROR(_orc_adapter->init(std::move(reader)));
+    RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
     return Status::OK();
 }
 
 void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
-    _orc_adapter.reset(nullptr);
+    _orc_reader.reset(nullptr);
 }
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -465,25 +464,25 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         bool has_used_dict_filter = false;
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            RETURN_IF_ERROR(_orc_adapter->read_next(&position));
+            RETURN_IF_ERROR(_orc_reader->read_next(&position));
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
-            RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
-                                                                       &_dict_filter));
-            if (_orc_adapter->get_cvb_size() != read_num_values) {
+            RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                      &_dict_filter));
+            if (_orc_reader->get_cvb_size() != read_num_values) {
                 has_used_dict_filter = true;
             }
         }
 
         size_t chunk_size = 0;
-        if (_orc_adapter->get_cvb_size() != 0) {
+        if (_orc_reader->get_cvb_size() != 0) {
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_stats.column_convert_ns);
-                if (!_orc_adapter->has_lazy_load_context()) {
-                    ret = _orc_adapter->get_chunk();
+                if (!_orc_reader->has_lazy_load_context()) {
+                    ret = _orc_reader->get_chunk();
                 } else {
-                    ret = _orc_adapter->get_active_chunk();
+                    ret = _orc_reader->get_active_chunk();
                 }
                 RETURN_IF_ERROR(ret);
                 *chunk = std::move(ret.value());
@@ -517,7 +516,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         ck->set_num_rows(chunk_size);
 
-        if (!_orc_adapter->has_lazy_load_context()) {
+        if (!_orc_reader->has_lazy_load_context()) {
             return Status::OK();
         }
 
@@ -527,16 +526,16 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            _orc_adapter->lazy_seek_to(position.row_in_stripe);
-            _orc_adapter->lazy_read_next(read_num_values);
+            _orc_reader->lazy_seek_to(position.row_in_stripe);
+            _orc_reader->lazy_read_next(read_num_values);
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);
             if (has_used_dict_filter) {
-                _orc_adapter->lazy_filter_on_cvb(&_dict_filter);
+                _orc_reader->lazy_filter_on_cvb(&_dict_filter);
             }
-            _orc_adapter->lazy_filter_on_cvb(&_chunk_filter);
-            StatusOr<ChunkPtr> ret = _orc_adapter->get_lazy_chunk();
+            _orc_reader->lazy_filter_on_cvb(&_chunk_filter);
+            StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk();
             RETURN_IF_ERROR(ret);
             Chunk& ret_ck = *(ret.value());
             ck->merge(std::move(ret_ck));
