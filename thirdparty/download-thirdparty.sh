@@ -41,7 +41,7 @@ if [[ -z "${TP_DIR}" ]]; then
 fi
 
 if [ ! -f ${TP_DIR}/vars.sh ]; then
-    echo "vars.sh is missing".
+    echo "vars.sh is missing."
     exit 1
 fi
 . ${TP_DIR}/vars.sh
