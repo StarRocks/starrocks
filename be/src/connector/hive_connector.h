@@ -37,6 +37,9 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
 
+    int64_t raw_rows_read() const override;
+    int64_t num_rows_read() const override;
+
 private:
     HiveDataSourceProvider* _provider;
     THdfsScanRange _scan_range;

@@ -295,5 +295,12 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     return Status::OK();
 }
 
+int64_t HiveDataSource::raw_rows_read() const {
+    return _scanner->raw_rows_read();
+}
+int64_t HiveDataSource::num_rows_read() const {
+    return _scanner->num_rows_read();
+}
+
 } // namespace connector
 } // namespace starrocks
