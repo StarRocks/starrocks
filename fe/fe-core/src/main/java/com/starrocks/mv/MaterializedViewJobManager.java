@@ -34,12 +34,17 @@ public class MaterializedViewJobManager {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewJobManager.class);
     // first long is mvTableId
     Map<Long, Queue<MaterializedViewRefreshJob>> pendingJobMap;
-    // first long is mvTableId, for each mv only support 1 running job currently
+    // mvTableId -> running MaterializedViewRefreshJob, for each mv only support 1 running job currently
     Map<Long, MaterializedViewRefreshJob> runningJobMap;
     // first long is scheduledId, manage generate periodicity tasks, only support 1 schedule currently
     Map<Long, MaterializedViewSchedulerInfo> periodScheduledManager;
     Deque<MaterializedViewRefreshJob> jobHistory;
-    private final ScheduledExecutorService periodScheduled = Executors.newScheduledThreadPool(1);
+    // The periodScheduler is responsible for periodically checking whether the running task is completed
+    // and updating the status. It is also responsible for placing pending tasks in the running queue.
+    // This operation cannot be completed concurrently, so only one thread is required to lock it.
+    private final ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
+    // for dispatch tasks
+    private final ScheduledExecutorService dispatchTaskScheduler = Executors.newScheduledThreadPool(1);
     private final QueryableReentrantLock lock;
 
     private final MaterializedViewJobExecutor jobExecutor;
@@ -52,8 +57,6 @@ public class MaterializedViewJobManager {
         jobHistory = Queues.newLinkedBlockingDeque();
         lock = new QueryableReentrantLock(true);
 
-        // for dispatch tasks
-        ScheduledExecutorService dispatchTaskScheduler = Executors.newScheduledThreadPool(1);
         dispatchTaskScheduler.scheduleAtFixedRate(() -> {
             if (!tryLock()) {
                 return;
@@ -76,7 +79,7 @@ public class MaterializedViewJobManager {
                     }
                 }
 
-                // put the pending job that can be run into running map
+                // schedule the pending jobs that can be run into running map
                 Iterator<Long> pendingIterator = pendingJobMap.keySet().iterator();
                 while (pendingIterator.hasNext()) {
                     Long mvTableId = pendingIterator.next();
@@ -111,7 +114,7 @@ public class MaterializedViewJobManager {
                                      LocalDateTime startTime, Long period, TimeUnit timeUnit) {
         Duration duration = Duration.between(LocalDateTime.now(), startTime);
         long initialDelay = duration.getSeconds();
-        ScheduledFuture<?> future = periodScheduled.scheduleAtFixedRate(() -> addPendingJob(builder.build()),
+        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> addPendingJob(builder.build()),
                 initialDelay, period, timeUnit);
         MaterializedViewSchedulerInfo info = new MaterializedViewSchedulerInfo(startTime, period, timeUnit, builder);
         long scheduledId = Catalog.getCurrentCatalog().getNextId();
@@ -153,17 +156,17 @@ public class MaterializedViewJobManager {
     }
 
     // For tasks manually created by users, we do not merge jobs by default.
-    // For tasks that are automatically create by the system duo to create
+    // For tasks that are automatically created by the system duo, like creating
     // materialized view or time-triggered tasks. Since it is currently a full
     // refresh, we merge this tasks and update mergeCount field.
     private void mergeOrOfferJob(Queue<MaterializedViewRefreshJob> jobQueue, MaterializedViewRefreshJob job) {
-        if (job.getTriggerType() == Constants.MaterializedViewTriggerType.MANUAL) {
+        if (job.getTriggerType() == Constants.MaterializedViewRefreshTriggerType.MANUAL) {
             jobQueue.offer(job);
         } else {
             boolean isMerged = false;
             for (MaterializedViewRefreshJob mayCanMergeJob : jobQueue) {
                 // auto trigger task is full refresh currently
-                if (mayCanMergeJob.getTriggerType() == Constants.MaterializedViewTriggerType.AUTO) {
+                if (mayCanMergeJob.getTriggerType() == Constants.MaterializedViewRefreshTriggerType.AUTO) {
                     mayCanMergeJob.incrementMergeCount();
                     isMerged = true;
                 }
@@ -211,7 +214,10 @@ public class MaterializedViewJobManager {
             MaterializedViewRefreshJob runningJob = runningJobMap.get(mvTableId);
             if (runningJob != null && runningJob.getId() == jobId) {
                 Future<?> future = runningJob.getFuture();
-                future.cancel(true);
+                boolean isCanceled = future.cancel(true);
+                if (!isCanceled) {
+                    return false;
+                }
                 runningJob.setStatus(Constants.MaterializedViewJobStatus.CANCELED);
                 runningJobMap.remove(mvTableId);
                 jobHistory.addFirst(runningJob);

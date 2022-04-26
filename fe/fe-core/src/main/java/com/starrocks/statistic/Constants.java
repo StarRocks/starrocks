@@ -30,11 +30,6 @@ public class Constants {
         FINISH,
     }
 
-    public enum MaterializedViewScheduleType {
-        ONCE,
-        SCHEDULE,
-    }
-
     // PENDING -> RUNNING -> FAILED
     //                    -> SUCCESS
     //                    -> PARTIAL_SUCCESS
@@ -62,7 +57,7 @@ public class Constants {
         SUCCESS
     }
 
-    public enum MaterializedViewTriggerType {
+    public enum MaterializedViewRefreshTriggerType {
         AUTO,
         MANUAL
     }

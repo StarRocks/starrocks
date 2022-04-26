@@ -51,7 +51,7 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJobBuilder builder = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO);
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO);
 
 
         List<IMaterializedViewRefreshTask> tasks = Lists.newArrayList();
@@ -102,7 +102,7 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks)
                 .build();
 
@@ -132,7 +132,7 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .withRefreshDatePartitionRange("2020-01-01", "2020-04-24")
                 .setTasksAhead(tasks)
                 .build();
@@ -163,7 +163,7 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks)
                 .build();
 
@@ -199,7 +199,7 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks)
                 .build();
 
@@ -245,14 +245,14 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job1 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks)
                 .build();
 
         MaterializedViewRefreshJob job2 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .build();
         new MockUp<MaterializedViewRefreshJob>(MaterializedViewRefreshJob.class) {
             @Mock
@@ -285,26 +285,26 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job1 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks)
                 .build();
 
         MaterializedViewRefreshJob job2 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .build();
 
         MaterializedViewRefreshJob job3 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .build();
 
         MaterializedViewRefreshJob job4 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .build();
         new MockUp<MaterializedViewRefreshJob>(MaterializedViewRefreshJob.class) {
             @Mock
@@ -346,26 +346,26 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job1 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .setTasksAhead(tasks)
                 .build();
 
         MaterializedViewRefreshJob job2 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .build();
 
         MaterializedViewRefreshJob job3 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .build();
 
         MaterializedViewRefreshJob job4 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .build();
         new MockUp<MaterializedViewRefreshJob>(MaterializedViewRefreshJob.class) {
             @Mock
@@ -410,14 +410,14 @@ public class MaterializedViewJobManagerTest {
         MaterializedViewRefreshJob job1 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 2)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.AUTO)
                 .setTasksAhead(tasks1)
                 .build();
 
         MaterializedViewRefreshJob job2 = MaterializedViewRefreshJobBuilder
                 .newBuilder(1, 3)
                 .mode(Constants.MaterializedViewRefreshMode.ASYNC)
-                .triggerType(Constants.MaterializedViewTriggerType.MANUAL)
+                .triggerType(Constants.MaterializedViewRefreshTriggerType.MANUAL)
                 .setTasksAhead(tasks2)
                 .build();
         new MockUp<MaterializedViewRefreshJob>(MaterializedViewRefreshJob.class) {
