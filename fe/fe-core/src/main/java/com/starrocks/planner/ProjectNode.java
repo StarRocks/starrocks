@@ -121,7 +121,9 @@ public class ProjectNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
-        if (!canPushDownRuntimeFilter()) return false;
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (probeExpr instanceof SlotRef) {
                 for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {

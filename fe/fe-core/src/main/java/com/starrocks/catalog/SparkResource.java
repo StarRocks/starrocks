@@ -34,6 +34,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.load.loadv2.SparkRepository;
 import com.starrocks.load.loadv2.SparkYarnConfigFiles;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.File;
 import java.util.Map;
@@ -180,7 +181,7 @@ public class SparkResource extends Resource {
     // Each SparkResource has and only has one SparkRepository.
     // This method get the remote archive which matches the dpp version from remote repository
     public synchronized SparkRepository.SparkArchive prepareArchive() throws LoadException {
-        String remoteRepositoryPath = workingDir + "/" + Catalog.getCurrentCatalog().getClusterId()
+        String remoteRepositoryPath = workingDir + "/" + GlobalStateMgr.getCurrentState().getClusterId()
                 + "/" + SparkRepository.REPOSITORY_DIR + name;
         BrokerDesc brokerDesc = new BrokerDesc(broker, getBrokerPropertiesWithoutPrefix());
         SparkRepository repository = new SparkRepository(remoteRepositoryPath, brokerDesc);
@@ -303,7 +304,7 @@ public class SparkResource extends Resource {
             throw new DdlException("working_dir and broker should be assigned at the same time");
         }
         // check broker exist
-        if (broker != null && !Catalog.getCurrentCatalog().getBrokerMgr().containsBroker(broker)) {
+        if (broker != null && !GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(broker)) {
             throw new DdlException("Unknown broker name(" + broker + ")");
         }
         brokerProperties = getBrokerProperties(properties);

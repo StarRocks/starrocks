@@ -23,10 +23,10 @@ package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -49,7 +49,7 @@ public abstract class AbstractJob implements Writable {
     protected JobType type;
 
     // must be set right before job's running
-    protected Catalog catalog;
+    protected GlobalStateMgr globalStateMgr;
     // repo will be set at first run()
     protected Repository repo;
     protected long repoId;
@@ -85,14 +85,14 @@ public abstract class AbstractJob implements Writable {
     }
 
     protected AbstractJob(JobType type, String label, long dbId, String dbName,
-                          long timeoutMs, Catalog catalog, long repoId) {
+                          long timeoutMs, GlobalStateMgr globalStateMgr, long repoId) {
         this.type = type;
         this.label = label;
         this.dbId = dbId;
         this.dbName = dbName;
         this.createTime = System.currentTimeMillis();
         this.timeoutMs = timeoutMs;
-        this.catalog = catalog;
+        this.globalStateMgr = globalStateMgr;
         this.repoId = repoId;
     }
 
@@ -132,8 +132,8 @@ public abstract class AbstractJob implements Writable {
         return timeoutMs;
     }
 
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
+    public void setCatalog(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     public long getRepoId() {

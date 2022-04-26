@@ -183,7 +183,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     if (!is_recovery) {
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -235,7 +235,7 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         // it maybe a fatal error
         rowset_ptr->make_visible(version);
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id

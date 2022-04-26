@@ -202,7 +202,8 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 9> : <string id 3>"));
-        Assert.assertTrue(plan.contains("PREDICATES: DictExpr(9: S_ADDRESS,[<place-holder> LIKE '%Customer%Complaints%'])"));
+        Assert.assertTrue(
+                plan.contains("PREDICATES: DictExpr(9: S_ADDRESS,[<place-holder> LIKE '%Customer%Complaints%'])"));
     }
 
     @Test
@@ -415,7 +416,8 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select lower(substr(S_ADDRESS, 0, 1)) as a, count(*) from supplier group by a";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[lower(substr(<place-holder>, 0, 1))])"));
+        Assert.assertTrue(
+                plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[lower(substr(<place-holder>, 0, 1))])"));
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         plan = getFragmentPlan(sql);
@@ -569,11 +571,13 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
         // test case when output variable, shouldn't use low cardinality optimization
-        sql = "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
+        sql =
+                "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("     dict_col=S_ADDRESS"));
         // test case when with common expression 1
-        sql = "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
+        sql =
+                "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  output columns:\n" +
@@ -582,12 +586,14 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  cardinality: 1"));
         Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
         // test case when result string
-        sql = "select case when S_ADDRESS = 'key' then 'key1' when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
+        sql =
+                "select case when S_ADDRESS = 'key' then 'key1' when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 11> : <string id 9>"));
         // test case when with unsupported function call
-        sql = "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
+        sql =
+                "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }

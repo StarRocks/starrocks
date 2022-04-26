@@ -42,10 +42,7 @@ namespace starrocks {
 using namespace strings;
 
 TEST(ZipUtilTest, basic) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     FileUtils::remove_all(path + "/test_data/target");
 
@@ -67,10 +64,7 @@ TEST(ZipUtilTest, basic) {
 }
 
 TEST(ZipUtilTest, dir) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     FileUtils::remove_all(path + "/test_data/target");
 
@@ -98,10 +92,7 @@ TEST(ZipUtilTest, dir) {
 }
 
 TEST(ZipUtilTest, targetAlready) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     ZipFile f(path + "/test_data/zip_normal.zip");
 
@@ -111,10 +102,7 @@ TEST(ZipUtilTest, targetAlready) {
 }
 
 TEST(ZipUtilTest, notzip) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     ZipFile f(path + "/test_data/zip_normal_data");
     Status st = f.extract("test", "test");
@@ -123,8 +111,3 @@ TEST(ZipUtilTest, notzip) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

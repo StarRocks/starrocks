@@ -25,9 +25,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -39,10 +39,10 @@ public class JobsDbProcDir implements ProcDirInterface {
             .add("DbId").add("DbName")
             .build();
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    public JobsDbProcDir(Catalog catalog) {
-        this.catalog = catalog;
+    public JobsDbProcDir(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     @Override
@@ -63,29 +63,29 @@ public class JobsDbProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist.");
         }
 
-        return new JobsProcDir(catalog, db);
+        return new JobsProcDir(globalStateMgr, db);
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        Preconditions.checkNotNull(catalog);
+        Preconditions.checkNotNull(globalStateMgr);
 
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<String> names = catalog.getDbNames();
+        List<String> names = globalStateMgr.getDbNames();
         if (names == null || names.isEmpty()) {
             // empty
             return result;
         }
 
         for (String name : names) {
-            Database db = catalog.getDb(name);
+            Database db = globalStateMgr.getDb(name);
             result.addRow(Lists.newArrayList(String.valueOf(db.getId()), name));
         }
 

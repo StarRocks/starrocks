@@ -47,8 +47,8 @@ public class Config extends ConfigBase {
      * sys_log_verbose_modules:
      * Verbose modules. VERBOSE level is implemented by log4j DEBUG level.
      * eg:
-     * sys_log_verbose_modules = com.starrocks.catalog
-     * This will only print debug log of files in package com.starrocks.catalog and all its sub packages.
+     * sys_log_verbose_modules = com.starrocks.globalStateMgr
+     * This will only print debug log of files in package com.starrocks.globalStateMgr and all its sub packages.
      * <p>
      * sys_log_roll_interval:
      * DAY:  log suffix is yyyyMMdd
@@ -430,17 +430,15 @@ public class Config extends ConfigBase {
     public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
-    // The number of concurrent requests BRPC can processed
+
+    // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
+    // each request must borrow a connection from the pool.
     @ConfField
-    public static int brpc_number_of_concurrent_requests_processed = 4096;
+    public static int brpc_connection_pool_size = 16;
 
     // BRPC idle wait time (ms)
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
-
-    // enable using a share channel for BRPC client
-    @ConfField
-    public static boolean enable_brpc_share_channel = true;
 
     /**
      * FE mysql server port
@@ -888,7 +886,7 @@ public class Config extends ConfigBase {
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
     /**
-     * The tryLock timeout configuration of catalog lock.
+     * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
      */
     @ConfField(mutable = true)

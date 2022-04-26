@@ -6,8 +6,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCatalogType;
+import com.starrocks.external.iceberg.IcebergCustomCatalogTest;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,14 +49,14 @@ public class IcebergTableTest {
     }
 
     @Test
-    public void testWithResourceName(@Mocked Catalog catalog,
+    public void testWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked IcebergCatalog icebergCatalog,
                                      @Mocked Table iTable) throws DdlException {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
-        resourceProperties.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.1:9083");
-        resourceProperties.put("starrocks.catalog-type", "hive");
+        resourceProperties.put("iceberg.globalStateMgr.hive.metastore.uris", "thrift://127.0.0.1:9083");
+        resourceProperties.put("starrocks.globalStateMgr-type", "hive");
         icebergResource.setProperties(resourceProperties);
 
         List<Types.NestedField> fields = new ArrayList<>();
@@ -64,18 +65,67 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergCatalog(IcebergCatalogType type, String uris) {
+            public IcebergCatalog getIcebergHiveCatalog(String uris) {
                 return icebergCatalog;
             }
         };
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
+                result = resourceMgr;
+
+                resourceMgr.getResource("iceberg0");
+                result = icebergResource;
+
+                icebergCatalog.loadTable((TableIdentifier) any);
+                result = iTable;
+
+                iTable.schema();
+                result = schema;
+            }
+        };
+
+        properties.put("resource", resourceName);
+        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+        Assert.assertEquals(tableName, table.getTable());
+        Assert.assertEquals(db, table.getDb());
+    }
+
+    @Test
+    public void testCustomWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
+                                           @Mocked ResourceMgr resourceMgr,
+                                           @Mocked IcebergCatalog icebergCatalog,
+                                           @Mocked Table iTable) throws DdlException {
+        Resource icebergResource = new IcebergResource(resourceName);
+        Map<String, String> resourceProperties = Maps.newHashMap();
+        resourceProperties.put("starrocks.globalStateMgr-type", "custom");
+        resourceProperties.put("iceberg.globalStateMgr-impl",
+                IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
+        icebergResource.setProperties(resourceProperties);
+
+        List<Types.NestedField> fields = new ArrayList<>();
+        fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
+        Schema schema = new Schema(fields);
+
+        new MockUp<IcebergUtil>() {
+            @Mock
+            public IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties) {
+                return icebergCatalog;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("iceberg0");

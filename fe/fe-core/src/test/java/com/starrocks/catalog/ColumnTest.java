@@ -22,11 +22,11 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,17 +43,17 @@ import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALU
 
 public class ColumnTest {
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test
@@ -210,7 +210,6 @@ public class ColumnTest {
         }
 
     }
-
 
     @Test(expected = DdlException.class)
     public void testSchemaChangeAllowedNullToNonNull() throws DdlException {

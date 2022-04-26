@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -67,7 +68,7 @@ public class HudiTableTest {
     }
 
     @Test
-    public void testWithResourceName(@Mocked Catalog catalog,
+    public void testWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked HiveRepository hiveRepository,
                                      @Mocked HoodieTableMetaClient metaClient,
@@ -78,8 +79,10 @@ public class HudiTableTest {
         hudiResource.setProperties(resourceProperties);
 
         List<Schema.Field> hudiFields = new ArrayList<>();
-        hudiFields.add(new Schema.Field("col1", Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
-        hudiFields.add(new Schema.Field("col2", Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
+        hudiFields.add(new Schema.Field("col1",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
+        hudiFields.add(new Schema.Field("col2",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         Schema hudiSchema = Schema.createRecord(hudiFields);
 
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
@@ -98,17 +101,17 @@ public class HudiTableTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("hudi0");
                 result = hudiResource;
 
-                catalog.getHiveRepository();
+                globalStateMgr.getHiveRepository();
                 result = hiveRepository;
 
                 hiveRepository.getTable(resourceName, hudiDb, hudiTable);

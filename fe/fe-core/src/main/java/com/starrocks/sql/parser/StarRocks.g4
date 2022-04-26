@@ -23,12 +23,15 @@ statement
         distributionDesc?
         properties?
         AS queryStatement                                                                   #createTableAsSelect
+    | ALTER TABLE qualifiedName
+                alterClause (',' alterClause)*                                              #alterTable
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
     | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
     | USE schema=identifier                                                                 #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName                              #dropMaterialized
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                                                          #createView
@@ -44,6 +47,14 @@ statement
     | alterSystem ADD FOLLOWER string                                                   #addFollower
     | alterSystem DROP OBSERVER string                                                   #dropObserver
     | alterSystem ADD OBSERVER string                                                   #addObserver
+    ;
+
+alterClause
+    : tableRenameClause
+    ;
+
+tableRenameClause
+    : RENAME identifier
     ;
 
 explainDesc
@@ -435,7 +446,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
     ;
 
 type
@@ -560,4 +571,5 @@ nonReserved
 
 alterSystem
     : ALTER SYSTEM
+    | MATERIALIZED
     ;

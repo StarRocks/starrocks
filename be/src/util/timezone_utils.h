@@ -34,11 +34,11 @@ namespace starrocks {
 
 class TimezoneUtils {
 public:
-    static bool find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
+    static bool find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone,
                                     cctz::time_zone& ctz);
     static void init_time_zones();
-    static bool find_cctz_time_zone(const std::string_view& timezone, cctz::time_zone& ctz);
-    static bool timezone_offsets(const std::string_view& src, const std::string_view& dst, int64_t* offset);
+    static bool find_cctz_time_zone(std::string_view timezone, cctz::time_zone& ctz);
+    static bool timezone_offsets(std::string_view src, std::string_view dst, int64_t* offset);
     static int64_t to_utc_offset(const cctz::time_zone& ctz); // timezone offset in seconds.
 
 public:

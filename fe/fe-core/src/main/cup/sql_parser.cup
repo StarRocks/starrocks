@@ -248,7 +248,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_INNER, KW_INSERT, KW_INT, KW_SIGNED, KW_INTERMEDIATE, KW_INTERSECT, KW_INTERVAL, KW_INTO, KW_IGNORE, KW_IS, KW_ISNULL, KW_ISOLATION,
     KW_JOIN, KW_JSON,
     KW_KEY, KW_KEYS, KW_KILL,
-    KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LOAD,
+    KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
     KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MIGRATE, KW_MIGRATIONS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
@@ -309,11 +309,11 @@ nonterminal ValueList value_clause;
 
 // No return.
 nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_or_index, opt_storage, opt_wild_where,
-            charset, opt_charset_name, equal, transaction_characteristics, isolation_level,
+            charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String user, opt_user;
+nonterminal String user, opt_user, opt_charset_name, opt_character_name, opt_equal_or_not;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
@@ -428,6 +428,12 @@ nonterminal SingleRangePartitionDesc single_range_partition_desc;
 nonterminal MultiRangePartitionDesc multi_range_partition_desc;
 nonterminal List<PartitionDesc> opt_range_partition_desc_list;
 nonterminal List<PartitionDesc> range_partition_desc_list;
+
+nonterminal List<PartitionDesc> opt_list_partition_desc_list;
+nonterminal List<PartitionDesc> list_partition_desc_list;
+nonterminal PartitionDesc list_partition_desc;
+nonterminal List<List<String>> list_partition_multi_item_list;
+nonterminal List<String> list_partition_multi_item;
 
 nonterminal List<AccessPrivilege> privilege_list;
 nonterminal List<String> string_list;
@@ -1185,7 +1191,7 @@ create_stmt ::=
         RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns RPAREN opt_engine:engineName
+            LPAREN column_definition_list:columns RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -1194,11 +1200,11 @@ create_stmt ::=
             opt_properties:tblProperties
             opt_ext_properties:extProperties
     {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, keys, partition,
+        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, charsetName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName
+            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -1207,7 +1213,7 @@ create_stmt ::=
             opt_properties:tblProperties
             opt_ext_properties:extProperties
     {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, keys, partition,
+        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, charsetName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
@@ -1243,7 +1249,7 @@ create_stmt ::=
     {:
         RESULT = new CreateRepositoryStmt(isReadOnly, repoName, brokerName, location, properties);
     :}
-    | KW_CREATE KW_ROLE ident:role
+    | KW_CREATE KW_ROLE ident_or_text:role
     {:
         RESULT = new CreateRoleStmt(role);
     :}
@@ -1821,7 +1827,7 @@ drop_stmt ::=
     {:
         RESULT = new DropRepositoryStmt(repoName);
     :}
-    | KW_DROP KW_ROLE ident:role
+    | KW_DROP KW_ROLE ident_or_text:role
     {:
         RESULT = new DropRoleStmt(role);
     :}
@@ -1915,6 +1921,12 @@ opt_partition ::=
     {:
         RESULT = new RangePartitionDesc(columns, list);
     :}
+    /* List partition */
+    | KW_PARTITION KW_BY KW_LIST LPAREN ident_list:columns RPAREN
+            LPAREN opt_list_partition_desc_list:list RPAREN
+    {:
+        RESULT = new ListPartitionDesc(columns, list);
+    :}
     ;
 
 opt_distribution ::=
@@ -1983,6 +1995,63 @@ opt_keys ::=
         RESULT = new KeysDesc(KeysType.AGG_KEYS, keys);
     :}
     ;
+
+opt_list_partition_desc_list ::=
+    {:
+        RESULT = null;
+    :}
+    | list_partition_desc_list:list
+    {:
+        RESULT = list;
+    :}
+    ;
+
+list_partition_desc_list ::=
+    list_partition_desc_list:list COMMA list_partition_desc:desc
+    {:
+        list.add(desc);
+        RESULT = list;
+    :}
+    | list_partition_desc:desc
+    {:
+        RESULT = Lists.newArrayList(desc);
+    :}
+    ;
+
+list_partition_desc ::=
+    KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
+        string_list:values RPAREN opt_key_value_map:properties
+    {:
+        RESULT = new SingleItemListPartitionDesc(ifNotExists, partName, values, properties);
+    :}
+    | KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
+        list_partition_multi_item_list:multiValues RPAREN opt_key_value_map:properties
+    {:
+        RESULT = new MultiItemListPartitionDesc(ifNotExists, partName, multiValues, properties);
+    :}
+    ;
+
+list_partition_multi_item_list ::=
+    list_partition_multi_item_list:list COMMA list_partition_multi_item:desc
+    {:
+        list.add(desc);
+        RESULT = list;
+    :}
+    | list_partition_multi_item:desc
+    {:
+        List<List<String>> arrayList = new ArrayList();
+        arrayList.add(desc);
+        RESULT = arrayList;
+    :}
+    ;
+
+list_partition_multi_item ::=
+    LPAREN string_list:values RPAREN
+    {:
+        RESULT = values;
+    :}
+    ;
+
 
 opt_range_partition_desc_list ::=
 	/* Empty */
@@ -2196,9 +2265,9 @@ opt_is_key ::=
 	;
 
 column_definition ::=
-    ident:columnName type_def:typeDef opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
+    ident:columnName type_def:typeDef opt_character_name:characterName opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
     {:
-        ColumnDef columnDef = new ColumnDef(columnName, typeDef, isKey, aggType, isAllowNull, defaultValue, comment);
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, characterName, isKey, aggType, isAllowNull, defaultValue, comment);
         RESULT = columnDef;
     :}
     ;
@@ -2692,9 +2761,44 @@ old_or_new_charset_name_or_default ::=
     :}
     ;
 
+opt_equal_or_not ::=
+    ident_or_text:id
+    {:
+        RESULT = id;
+    :}
+    | EQUAL ident_or_text:id
+    {:
+        RESULT = id;
+    :}
+    ;
+
 opt_charset_name ::=
+    {:
+        RESULT = "utf8";
+    :}
+    | KW_DEFAULT charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    | charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    ;
+
+opt_character_name ::=
     /* empty */
-    | charset old_or_new_charset_name_or_default
+    {:
+        RESULT = null;
+    :}
+    | KW_CHAR KW_SET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
+    | KW_CHARSET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
     ;
 
 opt_collate ::=
@@ -5122,6 +5226,8 @@ keyword ::=
     | KW_LESS:id
     {: RESULT = id; :}
     | KW_LEVEL:id
+    {: RESULT = id; :}
+    | KW_LIST:id
     {: RESULT = id; :}
     | KW_LOCAL:id
     {: RESULT = id; :}

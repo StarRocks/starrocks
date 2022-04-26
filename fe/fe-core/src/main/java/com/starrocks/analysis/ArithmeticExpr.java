@@ -30,8 +30,8 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -178,7 +178,8 @@ public class ArithmeticExpr extends Expr {
                     // for examples:
                     // decimal32(4,3) * decimal32(4,3) => decimal32(8,6);
                     // decimal64(15,3) * decimal32(9,4) => decimal128(24,7).
-                    PrimitiveType commonPtype = ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale).getPrimitiveType();
+                    PrimitiveType commonPtype =
+                            ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale).getPrimitiveType();
                     // a common type shall never be narrower than type of lhs and rhs
                     commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, lhsPtype);
                     commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, rhsPtype);
@@ -192,14 +193,18 @@ public class ArithmeticExpr extends Expr {
                     // the result.
                     // for examples:
                     // decimal128(23,5) * decimal64(18,4) => decimal128(38, 9).
-                    result.returnType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, maxDecimalPrecision, returnScale);
-                    result.lhsTargetType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, lhsPrecision, lhsScale);
-                    result.rhsTargetType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, rhsPrecision, rhsScale);
+                    result.returnType =
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, maxDecimalPrecision, returnScale);
+                    result.lhsTargetType =
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, lhsPrecision, lhsScale);
+                    result.rhsTargetType =
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, rhsPrecision, rhsScale);
                     return result;
                 } else {
                     // returnScale > 38, so it is cannot be represented as decimal.
                     throw new AnalysisException(
-                            String.format("Return scale(%d) exceeds maximum value(%d), please cast decimal type to low-precision one",
+                            String.format(
+                                    "Return scale(%d) exceeds maximum value(%d), please cast decimal type to low-precision one",
                                     returnScale, maxDecimalPrecision));
                 }
             case INT_DIVIDE:

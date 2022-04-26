@@ -28,14 +28,11 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
-    broker_reader.cpp
-    buffered_reader.cpp
     data_sink.cpp
     decompressor.cpp
     empty_set_node.cpp
     exec_node.cpp
     exchange_node.cpp
-    local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
     sort_exec_exprs.cpp
@@ -48,7 +45,6 @@ set(EXEC_FILES
     es/es_query_builder.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_reader.cpp
     parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
@@ -80,7 +76,6 @@ set(EXEC_FILES
     vectorized/except_node.cpp
     vectorized/file_scanner.cpp
     vectorized/orc_scanner.cpp
-    vectorized/orc_scanner_adapter.cpp
     vectorized/arrow_to_starrocks_converter.cpp
     vectorized/arrow_to_json_converter.cpp
     vectorized/parquet_scanner.cpp
@@ -126,18 +121,6 @@ set(EXEC_FILES
     vectorized/sorting/merge_cascade.cpp
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
-    parquet/column_chunk_reader.cpp
-    parquet/column_converter.cpp
-    parquet/column_reader.cpp
-    parquet/encoding.cpp
-    parquet/level_codec.cpp
-    parquet/page_reader.cpp
-    parquet/schema.cpp
-    parquet/stored_column_reader.cpp
-    parquet/utils.cpp
-    parquet/metadata.cpp
-    parquet/group_reader.cpp
-    parquet/file_reader.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
@@ -171,6 +154,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
     pipeline/exec_state_reporter.cpp
+    pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp

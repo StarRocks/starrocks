@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -25,6 +26,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -52,6 +54,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -76,6 +79,14 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause statement, C context) {
+        return visitNode(statement, context);
     }
 
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
@@ -166,6 +177,9 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
     public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

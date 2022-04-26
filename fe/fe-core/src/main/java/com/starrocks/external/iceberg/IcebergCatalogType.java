@@ -4,8 +4,9 @@ package com.starrocks.external.iceberg;
 
 public enum IcebergCatalogType {
     HIVE_CATALOG,
+    CUSTOM_CATALOG,
     UNKNOWN;
-    // TODO: add more iceberg catalog type
+    // TODO: add more iceberg globalStateMgr type
 
     public static IcebergCatalogType fromString(String catalogType) {
         for (IcebergCatalogType type : IcebergCatalogType.values()) {

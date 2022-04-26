@@ -24,7 +24,6 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
@@ -36,6 +35,7 @@ import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
@@ -263,7 +263,7 @@ public class CurrentQueryInfoProvider {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new AnalysisException(new StringBuilder("Backend ")

@@ -1539,7 +1539,7 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     return true;
 }
 
-bool DateTimeValue::unix_timestamp(int64_t* timestamp, const std::string_view& timezone) const {
+bool DateTimeValue::unix_timestamp(int64_t* timestamp, std::string_view timezone) const {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
         return false;
@@ -1553,7 +1553,7 @@ bool DateTimeValue::unix_timestamp(int64_t* timestamp, const cctz::time_zone& ct
     return true;
 }
 
-bool DateTimeValue::from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
+bool DateTimeValue::from_cctz_timezone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone,
                                        cctz::time_zone& ctz) {
     return TimezoneUtils::find_cctz_time_zone(timezone_hsscan, timezone, ctz);
 }

@@ -4,8 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -19,11 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
-import com.starrocks.sql.optimizer.base.DistributionProperty;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -34,7 +28,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -380,12 +373,12 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
-                                Catalog.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
-                        Catalog.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
@@ -454,8 +447,8 @@ public class Utils {
     public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
                                               Collection<Long> selectedPartitionId,
                                               Collection<Long> selectedTabletId) {
-        int backendSize = Catalog.getCurrentSystemInfo().backendSize();
-        int aliveBackendSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendSize = GlobalStateMgr.getCurrentSystemInfo().backendSize();
+        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
@@ -480,13 +473,18 @@ public class Utils {
         return true;
     }
 
-    public static boolean canOnlyDoBroadcast(PhysicalHashJoinOperator node,
-                                             List<BinaryPredicateOperator> equalOnPredicate, String hint) {
-        // Cross join only support broadcast join
-        if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
-                || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
-                || "BROADCAST".equalsIgnoreCase(hint)) {
-            return true;
+    public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence();
+        }
+        if (predicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
+            if (compoundPredicate.isAnd()) {
+                return isEqualBinaryPredicate(compoundPredicate.getChild(0)) &&
+                        isEqualBinaryPredicate(compoundPredicate.getChild(1));
+            }
+            return false;
         }
         return false;
     }
@@ -553,73 +551,5 @@ public class Utils {
         } catch (Exception ignored) {
         }
         return Optional.empty();
-    }
-
-    // Compute the required properties of shuffle join for children, adjust shuffle columns orders for
-    // respect the required properties from parent.
-    public static List<PhysicalPropertySet> computeShuffleJoinRequiredProperties(PhysicalPropertySet requiredFromParent,
-                                                                                 List<Integer> leftShuffleColumns,
-                                                                                 List<Integer> rightShuffleColumns) {
-        Optional<HashDistributionDesc> requiredShuffleDescOptional =
-                getShuffleJoinHashDistributionDesc(requiredFromParent);
-        if (!requiredShuffleDescOptional.isPresent()) {
-            // required property is not SHUFFLE_JOIN
-            return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
-        } else {
-            // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
-            // order required by parent
-            HashDistributionDesc requiredShuffleDesc = requiredShuffleDescOptional.get();
-            boolean adjustBasedOnLeft = leftShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
-                    leftShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
-                    requiredShuffleDesc.getColumns().containsAll(leftShuffleColumns);
-            boolean adjustBasedOnRight = rightShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
-                    rightShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
-                    requiredShuffleDesc.getColumns().containsAll(rightShuffleColumns);
-
-            if (adjustBasedOnLeft || adjustBasedOnRight) {
-                List<Integer> requiredLeft = Lists.newArrayList();
-                List<Integer> requiredRight = Lists.newArrayList();
-
-                for (Integer cid : requiredShuffleDesc.getColumns()) {
-                    int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) :
-                            rightShuffleColumns.indexOf(cid);
-                    requiredLeft.add(leftShuffleColumns.get(idx));
-                    requiredRight.add(rightShuffleColumns.get(idx));
-                }
-                return createShuffleJoinRequiredProperties(requiredLeft, requiredRight);
-            } else {
-                return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
-            }
-        }
-    }
-
-    private static Optional<HashDistributionDesc> getShuffleJoinHashDistributionDesc(
-            PhysicalPropertySet requiredPropertySet) {
-        if (!requiredPropertySet.getDistributionProperty().isShuffle()) {
-            return Optional.empty();
-        }
-        HashDistributionDesc requireDistributionDesc =
-                ((HashDistributionSpec) requiredPropertySet.getDistributionProperty().getSpec())
-                        .getHashDistributionDesc();
-        if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
-            return Optional.empty();
-        }
-
-        return Optional.of(requireDistributionDesc);
-    }
-
-    private static List<PhysicalPropertySet> createShuffleJoinRequiredProperties(List<Integer> leftColumns,
-                                                                                 List<Integer> rightColumns) {
-        HashDistributionSpec leftDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(leftColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
-        HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(rightColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
-
-        PhysicalPropertySet leftRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(leftDistribution));
-        PhysicalPropertySet rightRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(rightDistribution));
-
-        return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
     }
 }

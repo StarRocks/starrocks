@@ -279,9 +279,6 @@ template std::vector<DataDir*> StorageEngine::get_stores<true>();
 Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
-    MonotonicStopWatch timer;
-    timer.start();
-
     // 1. update available capacity of each data dir
     // get all root path info and construct a path map.
     // path -> DataDirInfo
@@ -305,7 +302,6 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
         data_dir_infos->emplace_back(entry.second);
     }
 
-    timer.stop();
     return Status::OK();
 }
 
@@ -815,8 +811,8 @@ void StorageEngine::_do_manual_compact() {
 void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
     auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                           const std::string& meta_str) -> bool {
-        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+                                                           std::string_view meta_str) -> bool {
+        auto rowset_meta = std::make_shared<RowsetMeta>();
         bool parsed = rowset_meta->init(meta_str);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;

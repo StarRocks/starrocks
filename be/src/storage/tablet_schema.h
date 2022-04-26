@@ -79,7 +79,7 @@ public:
     void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
 
     std::string_view name() const { return std::string_view(_col_name.data(), _col_name.size()); }
-    void set_name(const std::string_view name) { _col_name.assign(name.data(), name.size()); }
+    void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
     FieldType type() const { return _type; }
     void set_type(FieldType type) { _type = type; }
@@ -232,7 +232,7 @@ public:
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
     size_t row_size() const;
-    size_t field_index(const std::string_view& field_name) const;
+    size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     size_t num_columns() const { return _cols.size(); }

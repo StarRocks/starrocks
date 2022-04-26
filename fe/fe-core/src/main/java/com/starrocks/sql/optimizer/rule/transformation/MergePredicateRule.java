@@ -32,6 +32,8 @@ public class MergePredicateRule extends TransformationRule {
             new MergePredicateRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergePredicateRule HUDI_SCAN =
             new MergePredicateRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final MergePredicateRule ICEBERG_SCAN =
+            new MergePredicateRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final MergePredicateRule SCHEMA_SCAN =
             new MergePredicateRule(OperatorType.LOGICAL_SCHEMA_SCAN);
 

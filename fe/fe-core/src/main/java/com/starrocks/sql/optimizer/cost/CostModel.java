@@ -4,14 +4,15 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -34,7 +36,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -267,7 +268,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 
@@ -293,9 +294,9 @@ public class CostModel {
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
-                    int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+                    int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns) *
-                                    Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
+                                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size(),
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     break;
@@ -330,9 +331,10 @@ public class CostModel {
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
-            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
-                    rightStatistics.getUsedColumns(),
-                    Utils.extractConjuncts(join.getOnPredicate()));
+            List<BinaryPredicateOperator> eqOnPredicates =
+                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
+                            rightStatistics.getUsedColumns(),
+                            Utils.extractConjuncts(join.getOnPredicate()));
 
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
@@ -343,6 +345,35 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
+            }
+        }
+
+        @Override
+        public CostEstimate visitPhysicalMergeJoin(PhysicalMergeJoinOperator join, ExpressionContext context) {
+            Preconditions.checkState(context.arity() == 2);
+            // For broadcast join, use leftExecInstanceNum as right child real destinations num.
+            int leftExecInstanceNum = context.getChildLeftMostScanTabletsNum(0);
+            context.getChildLogicalProperty(1).setLeftMostScanTabletsNum(leftExecInstanceNum);
+
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            Statistics leftStatistics = context.getChildStatistics(0);
+            Statistics rightStatistics = context.getChildStatistics(1);
+
+            List<BinaryPredicateOperator> eqOnPredicates =
+                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(), rightStatistics.getUsedColumns(),
+                            Utils.extractConjuncts(join.getOnPredicate()));
+            if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
+                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                        rightStatistics.getOutputSize(context.getChildOutputColumns(1))
+                                * Constants.CrossJoinCostPenalty * 2, 0);
+            } else {
+                return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
+                        0, 0);
+
             }
         }
 

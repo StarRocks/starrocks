@@ -23,10 +23,10 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
@@ -51,10 +51,10 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static final int HOSTNAME_INDEX = 2;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    public FrontendsProcNode(Catalog catalog) {
-        this.catalog = catalog;
+    public FrontendsProcNode(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     @Override
@@ -64,7 +64,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
         List<List<String>> infos = Lists.newArrayList();
 
-        getFrontendsInfo(catalog, infos);
+        getFrontendsInfo(globalStateMgr, infos);
 
         for (List<String> info : infos) {
             result.addRow(info);
@@ -73,19 +73,19 @@ public class FrontendsProcNode implements ProcNodeInterface {
         return result;
     }
 
-    public static void getFrontendsInfo(Catalog catalog, List<List<String>> infos) {
-        String masterIp = Catalog.getCurrentCatalog().getMasterIp();
+    public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
+        String masterIp = GlobalStateMgr.getCurrentState().getMasterIp();
         if (masterIp == null) {
             masterIp = "";
         }
 
         // get all node which are joined in bdb group
-        List<InetSocketAddress> allFe = catalog.getHaProtocol().getElectableNodes(true /* include leader */);
-        allFe.addAll(catalog.getHaProtocol().getObserverNodes());
+        List<InetSocketAddress> allFe = globalStateMgr.getHaProtocol().getElectableNodes(true /* include leader */);
+        allFe.addAll(globalStateMgr.getHaProtocol().getObserverNodes());
         List<Pair<String, Integer>> allFeHosts = convertToHostPortPair(allFe);
-        List<Pair<String, Integer>> helperNodes = catalog.getHelperNodes();
+        List<Pair<String, Integer>> helperNodes = globalStateMgr.getHelperNodes();
 
-        for (Frontend fe : catalog.getFrontends(null /* all */)) {
+        for (Frontend fe : globalStateMgr.getFrontends(null /* all */)) {
 
             List<String> info = new ArrayList<String>();
             info.add(fe.getNodeName());
@@ -95,7 +95,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
 
-            if (fe.getHost().equals(catalog.getSelfNode().first)) {
+            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
                 info.add(Integer.toString(Config.query_port));
                 info.add(Integer.toString(Config.rpc_port));
             } else {
@@ -106,12 +106,12 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(fe.getRole().name());
             info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
-            info.add(Integer.toString(catalog.getClusterId()));
+            info.add(Integer.toString(globalStateMgr.getClusterId()));
             info.add(String.valueOf(isJoin(allFeHosts, fe)));
 
-            if (fe.getHost().equals(catalog.getSelfNode().first)) {
+            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
                 info.add("true");
-                info.add(Long.toString(catalog.getEditLog().getMaxJournalId()));
+                info.add(Long.toString(globalStateMgr.getEditLog().getMaxJournalId()));
             } else {
                 info.add(String.valueOf(fe.isAlive()));
                 info.add(Long.toString(fe.getReplayedJournalId()));

@@ -436,8 +436,12 @@ public abstract class SetOperationNode extends PlanNode {
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
-        if (!canPushDownRuntimeFilter()) return false;
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) return false;
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+            return false;
+        }
 
         if (probeExpr instanceof SlotRef) {
             boolean pushDown = false;
@@ -452,7 +456,8 @@ public abstract class SetOperationNode extends PlanNode {
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
                 // try to push all children if any expr of a child can match `probeExpr`
                 for (Expr mexpr : materializedResultExprLists_.get(i)) {
-                    if ((mexpr instanceof SlotRef) && mappedProbeSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
+                    if ((mexpr instanceof SlotRef) &&
+                            mappedProbeSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
                         if (children.get(i).pushDownRuntimeFilters(description, mexpr)) {
                             pushDown = true;
                         }

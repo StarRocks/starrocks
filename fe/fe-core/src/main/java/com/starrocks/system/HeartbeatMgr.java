@@ -24,7 +24,6 @@ package com.starrocks.system;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -34,6 +33,7 @@ import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.HeartbeatService;
@@ -106,21 +106,21 @@ public class HeartbeatMgr extends MasterDaemon {
         }
 
         // send frontend heartbeat
-        List<Frontend> frontends = Catalog.getCurrentCatalog().getFrontends(null);
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
             if (frontend.getHost().equals(masterInfo.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
-                    Catalog.getCurrentCatalog().getClusterId(),
-                    Catalog.getCurrentCatalog().getToken());
+                    GlobalStateMgr.getCurrentState().getClusterId(),
+                    GlobalStateMgr.getCurrentState().getToken());
             hbResponses.add(executor.submit(handler));
         }
 
         // send broker heartbeat;
         Map<String, List<FsBroker>> brokerMap = Maps.newHashMap(
-                Catalog.getCurrentCatalog().getBrokerMgr().getBrokerListMap());
+                GlobalStateMgr.getCurrentState().getBrokerMgr().getBrokerListMap());
         for (Map.Entry<String, List<FsBroker>> entry : brokerMap.entrySet()) {
             for (FsBroker brokerAddress : entry.getValue()) {
                 BrokerHeartbeatHandler handler = new BrokerHeartbeatHandler(entry.getKey(), brokerAddress,
@@ -154,19 +154,19 @@ public class HeartbeatMgr extends MasterDaemon {
 
         // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
-                Catalog.getCurrentCatalog().getEditLog().getMaxJournalId(),
-                System.currentTimeMillis(), Catalog.getCurrentCatalog().getFeStartTime(),
+                GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId(),
+                System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
                 Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
         // write edit log
-        Catalog.getCurrentCatalog().getEditLog().logHeartbeat(hbPackage);
+        GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-                Frontend fe = Catalog.getCurrentCatalog().getFeByName(hbResponse.getName());
+                Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
                 }
@@ -181,7 +181,7 @@ public class HeartbeatMgr extends MasterDaemon {
                         // invalid all connections cached in ClientPool
                         ClientPool.backendPool.clearPool(new TNetworkAddress(be.getHost(), be.getBePort()));
                         if (!isReplay) {
-                            Catalog.getCurrentCatalog().getGlobalTransactionMgr()
+                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
                         }
                     }
@@ -191,7 +191,7 @@ public class HeartbeatMgr extends MasterDaemon {
             }
             case BROKER: {
                 BrokerHbResponse hbResponse = (BrokerHbResponse) response;
-                FsBroker broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(
+                FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
                         hbResponse.getName(), hbResponse.getHost(), hbResponse.getPort());
                 if (broker != null) {
                     boolean isChanged = broker.handleHbResponse(hbResponse);
@@ -288,12 +288,12 @@ public class HeartbeatMgr extends MasterDaemon {
 
         @Override
         public HeartbeatResponse call() {
-            if (fe.getHost().equals(Catalog.getCurrentCatalog().getSelfNode().first)) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
                 // heartbeat to self
-                if (Catalog.getCurrentCatalog().isReady()) {
+                if (GlobalStateMgr.getCurrentState().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
-                            Catalog.getCurrentCatalog().getReplayedJournalId(), System.currentTimeMillis(),
-                            Catalog.getCurrentCatalog().getFeStartTime(),
+                            GlobalStateMgr.getCurrentState().getReplayedJournalId(), System.currentTimeMillis(),
+                            GlobalStateMgr.getCurrentState().getFeStartTime(),
                             Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");

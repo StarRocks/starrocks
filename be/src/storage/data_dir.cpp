@@ -364,20 +364,18 @@ Status DataDir::load() {
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                const std::string& meta_str) -> bool {
-        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+                                                std::string_view meta_str) -> bool {
+        auto rowset_meta = std::make_shared<RowsetMeta>();
         bool parsed = rowset_meta->init(meta_str);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error
             return true;
         }
-        if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
-            LOG(FATAL) << "must change V1 format to V2 format."
-                       << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                       << ", schema_hash: " << rowset_meta->tablet_schema_hash()
-                       << ", rowset_id:" << rowset_meta->rowset_id();
-        }
+        LOG_IF(FATAL, rowset_meta->rowset_type() == ALPHA_ROWSET)
+                << "must change V1 format to V2 format."
+                << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
+                << ", schema_hash: " << rowset_meta->tablet_schema_hash() << ", rowset_id:" << rowset_meta->rowset_id();
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
@@ -395,7 +393,7 @@ Status DataDir::load() {
     std::set<int64_t> tablet_ids;
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
-                                                                    const std::string& value) -> bool {
+                                                                    std::string_view value) -> bool {
         Status st =
                 _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
         if (!st.ok() && !st.is_not_found()) {
@@ -413,7 +411,7 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::traverse_headers(_kv_store, load_tablet_func);
+    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()

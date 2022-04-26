@@ -68,7 +68,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void createTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getCatalog().createTable(createTableStmt);
+            session.getGlobalStateMgr().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -76,7 +76,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void dropTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getCatalog().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
+            session.getGlobalStateMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }

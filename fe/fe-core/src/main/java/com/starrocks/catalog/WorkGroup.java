@@ -74,7 +74,6 @@ public class WorkGroup implements Writable {
         return GsonUtils.GSON.fromJson(json, WorkGroup.class);
     }
 
-
     private List<String> showClassifier(WorkGroupClassifier classifier) {
         List<String> row = new ArrayList<>();
         row.add(this.name);
@@ -150,11 +149,11 @@ public class WorkGroup implements Writable {
         if (memLimit != null) {
             twg.setMem_limit(memLimit);
         }
-           
+
         if (bigQueryMemLimit != null) {
             twg.setBig_query_mem_limit(bigQueryMemLimit);
         }
-        
+
         if (bigQueryScanRowsLimit != null) {
             twg.setBig_query_scan_rows_limit(bigQueryScanRowsLimit);
         }
@@ -188,7 +187,7 @@ public class WorkGroup implements Writable {
     public void setMemLimit(double memLimit) {
         this.memLimit = memLimit;
     }
-    
+
     public Long getBigQueryMemLimit() {
         return bigQueryMemLimit;
     }

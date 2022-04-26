@@ -75,11 +75,11 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     ASSERT_EQ(OLAP_FIELD_TYPE_INT, load_meta->tablet_schema().column(0).type());
 
     load_meta.reset(new TabletMeta());
-    auto visit_func = [&](long tablet_id, long schema_hash, const std::string& meta) -> bool {
+    auto visit_func = [&](long tablet_id, long schema_hash, std::string_view meta) -> bool {
         CHECK(load_meta->deserialize(meta).ok());
         return true;
     };
-    ASSERT_TRUE(TabletMetaManager::traverse_headers(_data_dir->get_meta(), visit_func).ok());
+    ASSERT_TRUE(TabletMetaManager::walk(_data_dir->get_meta(), visit_func).ok());
     ASSERT_EQ(1, load_meta->table_id());
     ASSERT_EQ(2, load_meta->tablet_id());
     ASSERT_EQ(3, load_meta->schema_hash());
@@ -325,11 +325,11 @@ protected:
                     rowset_meta_pb.set_num_segments(1);
                     rowset_meta_pb.set_data_disk_size(1024 * 1024);
                     rowset_meta_pb.set_empty(false);
-                    rowset_meta_pb.set_rowset_id(i /*unused*/);
+                    rowset_meta_pb.set_deprecated_rowset_id(0);
                     rowset_meta_pb.set_rowset_seg_id(i);
                     RowsetId id;
                     id.init(2, i, 0, 0);
-                    rowset_meta_pb.set_rowset_id_v2(id.to_string());
+                    rowset_meta_pb.set_rowset_id(id.to_string());
 
                     EditVersionMetaPB edit;
                     auto v = edit.mutable_version();

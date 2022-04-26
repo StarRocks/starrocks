@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "common/object_pool.h"
 #include "util/bitmap_value.h"
 
@@ -29,6 +30,8 @@ public:
     using ValueType = T;
 
     ObjectColumn() = default;
+
+    explicit ObjectColumn(size_t size) : _pool(size) {}
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 

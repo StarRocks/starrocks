@@ -30,7 +30,6 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
@@ -55,6 +54,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -200,7 +200,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     /**
      * runPendingJob():
      * 1. Create all replicas of all shadow indexes and wait them finished.
-     * 2. After creating done, add the shadow indexes to catalog, user can not see this
+     * 2. After creating done, add the shadow indexes to globalStateMgr, user can not see this
      * shadow index, but internal load process will generate data for these indexes.
      * 3. Get a new transaction id, then set job's state to WAITING_TXN
      */
@@ -208,7 +208,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         LOG.info("begin to send create replica tasks. job: {}", jobId);
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -331,7 +331,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         // create all replicas success.
-        // add all shadow indexes to catalog
+        // add all shadow indexes to globalStateMgr
         db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
@@ -345,11 +345,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         this.watershedTxnId =
-                Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
 
         // write edit log
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer schema change job {} state to {}, watershed txn id: {}", jobId, this.jobState,
                 watershedTxnId);
     }
@@ -399,7 +399,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -470,7 +470,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -550,12 +550,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("schema change job finished: {}", jobId);
     }
 
     private void onFinished(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
@@ -563,10 +563,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
                 long originIdxId = entry.getValue();
-                // get index from catalog, not from 'partitionIdToRollupIndex'.
+                // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
                 // because if this alter job is recovered from edit log, index in 'partitionIndexMap'
-                // is not the same object in catalog. So modification on that index can not reflect to the index
-                // in catalog.
+                // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
+                // in globalStateMgr.
                 MaterializedIndex shadowIdx = partition.getIndex(shadowIdxId);
                 Preconditions.checkNotNull(shadowIdx, shadowIdxId);
                 MaterializedIndex droppedIdx = null;
@@ -596,7 +596,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 // the origin tablet created by old schema can be deleted from FE meta data
                 for (Tablet originTablet : droppedIdx.getTablets()) {
-                    Catalog.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
                 }
             }
         }
@@ -654,7 +654,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         return true;
     }
 
@@ -662,8 +662,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.writeLock();
             try {
@@ -697,7 +697,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return Catalog.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -707,7 +707,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * These changes should be same as changes in SchemaChangeHandler.createJob()
      */
     private void replayPending(SchemaChangeJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -721,7 +721,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 return;
             }
 
-            TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             for (Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
                 long partitionId = cell.getRowKey();
                 long shadowIndexId = cell.getColumnKey();
@@ -755,7 +755,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(SchemaChangeJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -784,7 +784,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(SchemaChangeJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.writeLock();
             try {
@@ -941,7 +941,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         watershedTxnId = in.readLong();
 
         // index
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_70) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_70) {
             indexChange = in.readBoolean();
             if (indexChange) {
                 if (in.readBoolean()) {
@@ -956,7 +956,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_84) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }
@@ -1007,7 +1007,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_84) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }
@@ -1023,7 +1023,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * If the meta version >=86, it will be deserialized by the `read` of AlterJobV2 rather then here.
      */
     public static SchemaChangeJobV2 read(DataInput in) throws IOException {
-        Preconditions.checkState(Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86);
+        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86);
         SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2();
         schemaChangeJob.readFields(in);
         return schemaChangeJob;
@@ -1033,7 +1033,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_80) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_80) {
             boolean isMetaPruned = in.readBoolean();
             if (isMetaPruned) {
                 readJobFinishedData(in);

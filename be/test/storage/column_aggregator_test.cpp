@@ -670,4 +670,41 @@ TEST(ColumnAggregator, testArrayReplace) {
     EXPECT_EQ("['20', '21', '22', '23', '24', '25', '26', '27', '28', '29']", agg->debug_item(4));
 }
 
+// insert into tbl values (key, null);
+TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
+    auto array_type_info = std::make_shared<ArrayTypeInfo>(get_type_info(FieldType::OLAP_FIELD_TYPE_VARCHAR));
+    FieldPtr field =
+            std::make_shared<Field>(1, "test_array", array_type_info,
+                                    FieldAggregationMethod::OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, 1, false, true);
+
+    auto agg = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+    aggregator->update_aggregate(agg.get());
+    std::vector<uint32_t> loops;
+
+    // first chunk column
+    auto src = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    src->append_nulls(1);
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 1, loops.data(), false);
+
+    ASSERT_EQ(0, agg->size());
+
+    aggregator->finalize();
+
+    ASSERT_EQ(1, agg->size());
+    ASSERT_EQ("NULL", agg->debug_item(0));
+}
+
 } // namespace starrocks::vectorized

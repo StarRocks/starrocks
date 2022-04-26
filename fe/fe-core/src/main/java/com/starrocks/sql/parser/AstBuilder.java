@@ -8,6 +8,8 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -32,6 +34,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
@@ -78,6 +81,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
@@ -148,6 +152,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // -------------------------------- Statement ------------------------------
 
     @Override
+    public ParseNode visitAlterTable(StarRocksParser.AlterTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
+        return new AlterTableStmt(targetTableName, alterClauses);
+    }
+
+    @Override
+    public ParseNode visitTableRenameClause(StarRocksParser.TableRenameClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new TableRenameClause(identifier.getValue());
+    }
+
+    @Override
     public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
@@ -160,11 +178,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitDropMaterialized(StarRocksParser.DropMaterializedContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new DropMaterializedViewStmt(context.IF() != null, mvName);
+    }
+
+    @Override
     public ParseNode visitShowTables(StarRocksParser.ShowTablesContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
-        if (context.db != null) {
-            database = context.db.getText();
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
         }
 
         if (context.pattern != null) {
@@ -1241,7 +1266,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB", "DATE_FLOOR");
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {

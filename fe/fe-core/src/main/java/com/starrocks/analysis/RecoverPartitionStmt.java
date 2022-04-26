@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -32,6 +31,7 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 public class RecoverPartitionStmt extends DdlStmt {
     private TableName dbTblName;
@@ -57,11 +57,11 @@ public class RecoverPartitionStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         dbTblName.analyze(analyzer);
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbTblName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTblName.getDb(),
                 dbTblName.getTbl(),
                 PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
-                        Privilege.CREATE_PRIV,
-                        Privilege.ADMIN_PRIV),
+                                Privilege.CREATE_PRIV,
+                                Privilege.ADMIN_PRIV),
                         Operator.OR))) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "RECOVERY",
                     ConnectContext.get().getQualifiedUser(),

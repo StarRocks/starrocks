@@ -25,7 +25,7 @@ Status ArrayInputStream::seek(int64_t offset) {
     return Status::OK();
 }
 
-StatusOr<std::string_view> ArrayInputStream::peak(int64_t nbytes) {
+StatusOr<std::string_view> ArrayInputStream::peek(int64_t nbytes) {
     int64_t n = std::max<int64_t>(std::min(_size - _offset, nbytes), 0);
     return std::string_view(reinterpret_cast<const char*>(_data) + _offset, n);
 }

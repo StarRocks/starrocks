@@ -38,12 +38,9 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TRuntimeFilterProberParams;
-import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jcodings.util.Hash;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +139,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
-    private Set<Integer> hashJoinNodeIds = Sets.newHashSet();
+
+    private Set<Integer> joinNodeIds = Sets.newHashSet();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -240,14 +238,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
-        root.fillLocalRfWaitingSet(hashJoinNodeIds);
-        if (root instanceof HashJoinNode) {
-            hashJoinNodeIds.add(root.getId().asInt());
+        root.fillLocalRfWaitingSet(joinNodeIds);
+        if (root instanceof JoinNode) {
+            joinNodeIds.add(root.getId().asInt());
         }
         if (clearGlobalRuntimeFilter) {
             root.clearProbeRuntimeFilters();
-            if (root instanceof HashJoinNode) {
-                ((HashJoinNode) root).clearBuildRuntimeFilters();
+            if (root instanceof JoinNode) {
+                ((JoinNode) root).clearBuildRuntimeFilters();
             }
         }
         for (PlanNode child : root.getChildren()) {
@@ -525,8 +523,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             return;
         }
 
-        if (root instanceof HashJoinNode) {
-            HashJoinNode joinNode = (HashJoinNode) root;
+        if (root instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) root;
             for (RuntimeFilterDescription description : joinNode.getBuildRuntimeFilters()) {
                 buildRuntimeFilters.put(description.getFilterId(), description);
             }
@@ -556,8 +554,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             return;
         }
 
-        if (root instanceof HashJoinNode) {
-            HashJoinNode joinNode = (HashJoinNode) root;
+        if (root instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) root;
             for (RuntimeFilterDescription description : joinNode.getBuildRuntimeFilters()) {
                 description.addMergeNode(host);
             }
@@ -599,8 +597,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public boolean hashLocalBucketShuffleRightOrFullJoin(PlanNode planRoot) {
-        if (planRoot instanceof HashJoinNode) {
-            HashJoinNode joinNode = (HashJoinNode) planRoot;
+        if (planRoot instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) planRoot;
             if (joinNode.isLocalHashBucket() &&
                     (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin())) {
                 return true;

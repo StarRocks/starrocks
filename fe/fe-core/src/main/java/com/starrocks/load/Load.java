@@ -46,7 +46,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -61,6 +60,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
@@ -95,7 +95,7 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) && 
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) &&
                     !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 continue;
             }
@@ -177,11 +177,11 @@ public class Load {
      * 5. init slot descs and expr map for load plan
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-            Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-            Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
-            Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
-            boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-            List<String> columnsFromPath) throws UserException {
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath) throws UserException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
                 columnsFromPath, false, false);
@@ -493,7 +493,8 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
-    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) throws UserException {
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs)
+            throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
@@ -822,7 +823,7 @@ public class Load {
             }
             properties.remove("name");
 
-            if (!Catalog.getCurrentCatalog().getBrokerMgr().containsBroker(brokerName)) {
+            if (!GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(brokerName)) {
                 throw new DdlException("broker does not exist: " + brokerName);
             }
 
@@ -845,7 +846,7 @@ public class Load {
             loadErrorHubParam = LoadErrorHub.Param.createNullParam();
         }
 
-        Catalog.getCurrentCatalog().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
+        GlobalStateMgr.getCurrentState().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
 
         LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
@@ -866,8 +867,8 @@ public class Load {
         }
     }
 
-    public static void replayClearRollupInfo(ReplicaPersistInfo info, Catalog catalog) {
-        Database db = catalog.getDb(info.getDbId());
+    public static void replayClearRollupInfo(ReplicaPersistInfo info, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(info.getDbId());
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());

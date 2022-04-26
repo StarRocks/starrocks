@@ -285,6 +285,22 @@ set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/
 
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
+add_library(http_client_curl STATIC IMPORTED GLOBAL)
+set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
+
+add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_common.a)
+
+add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
+
+add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
+
+
+add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -527,6 +543,11 @@ set(STARROCKS_DEPENDENCIES
     librdkafka_cpp
     librdkafka
     velocypack
+    opentelemetry_trace
+    http_client_curl
+    opentelemetry_resources	
+    opentelemetry_common
+    opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
 )
 
@@ -593,6 +614,7 @@ endif ()
 
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
+add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/env)
@@ -624,7 +646,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
     get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS})
+    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -647,7 +669,7 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark)
+    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
 
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
@@ -678,12 +700,6 @@ ENDFUNCTION()
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
-    # The following commands should be removed after all tests mreged into a single binary.
-    add_subdirectory(${TEST_DIR}/exec)
-    add_subdirectory(${TEST_DIR}/http)
-    add_subdirectory(${TEST_DIR}/storage)
-    add_subdirectory(${TEST_DIR}/runtime)
-    add_subdirectory(${TEST_DIR}/util)
 endif ()
 
 # Install be

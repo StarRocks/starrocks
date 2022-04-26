@@ -26,7 +26,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.CancelStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -43,6 +42,7 @@ import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TTabletInfo;
@@ -145,7 +145,7 @@ public abstract class AlterHandler extends MasterDaemon {
                 iterator.remove();
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
-                Catalog.getCurrentCatalog().getEditLog().logRemoveExpiredAlterJobV2(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log);
                 LOG.info("remove expired {} job {}. finish at {}", alterJobV2.getType(),
                         alterJobV2.getJobId(), TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
             }
@@ -322,15 +322,15 @@ public abstract class AlterHandler extends MasterDaemon {
         }
     }
 
-    public void replayInitJob(AlterJob alterJob, Catalog catalog) {
-        Database db = catalog.getDb(alterJob.getDbId());
+    public void replayInitJob(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(alterJob.getDbId());
         alterJob.replayInitJob(db);
         // add rollup job
         addAlterJob(alterJob);
     }
 
-    public void replayFinishing(AlterJob alterJob, Catalog catalog) {
-        Database db = catalog.getDb(alterJob.getDbId());
+    public void replayFinishing(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(alterJob.getDbId());
         alterJob.replayFinishing(db);
         alterJob.setState(JobState.FINISHING);
         // !!! the alter job should add to the cache again, because the alter job is deserialized from journal
@@ -338,18 +338,18 @@ public abstract class AlterHandler extends MasterDaemon {
         addAlterJob(alterJob);
     }
 
-    public void replayFinish(AlterJob alterJob, Catalog catalog) {
-        Database db = catalog.getDb(alterJob.getDbId());
+    public void replayFinish(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(alterJob.getDbId());
         alterJob.replayFinish(db);
         alterJob.setState(JobState.FINISHED);
 
         jobDone(alterJob);
     }
 
-    public void replayCancel(AlterJob alterJob, Catalog catalog) {
+    public void replayCancel(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
         removeAlterJob(alterJob.getTableId());
         alterJob.setState(JobState.CANCELLED);
-        Database db = catalog.getDb(alterJob.getDbId());
+        Database db = globalStateMgr.getDb(alterJob.getDbId());
         if (db != null) {
             // we log rollup job cancelled even if db is dropped.
             // so check db != null here
@@ -419,7 +419,7 @@ public abstract class AlterHandler extends MasterDaemon {
      *      because its already looks like normal.
      */
     public void handleFinishAlterTask(AlterReplicaTask task) throws MetaNotFoundException {
-        Database db = Catalog.getCurrentCatalog().getDb(task.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(task.getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + task.getDbId() + " does not exist");
         }
@@ -472,7 +472,7 @@ public abstract class AlterHandler extends MasterDaemon {
                         replica.getDataSize(), replica.getRowCount(),
                         replica.getLastFailedVersion(),
                         replica.getLastSuccessVersion());
-                Catalog.getCurrentCatalog().getEditLog().logUpdateReplica(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
             }
 
             LOG.info("after handle alter task tablet: {}, replica: {}", task.getSignature(), replica);
