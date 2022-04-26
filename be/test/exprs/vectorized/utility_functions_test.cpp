@@ -85,9 +85,8 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
 
         for (int column_idx = 0; column_idx < column_viewer.size(); column_idx++) {
             auto& uuid = column_viewer.value(column_idx);
-            ASSERT_EQ(33, uuid.get_size());
+            ASSERT_EQ(36, uuid.get_size());
             deduplication.insert(uuid.to_string());
-            ASSERT_EQ(uuid.data[16], '-');
         }
 
         ASSERT_EQ(deduplication.size(), column_size);

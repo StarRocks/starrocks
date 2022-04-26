@@ -19,6 +19,7 @@ public:
     using BaseClass = JsonColumnBase;
 
     JsonColumn() = default;
+    explicit JsonColumn(size_t size) : SuperClass(size) {}
     JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {}
 
     MutableColumnPtr clone() const override;

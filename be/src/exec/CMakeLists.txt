@@ -154,6 +154,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
     pipeline/exec_state_reporter.cpp
+    pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp
