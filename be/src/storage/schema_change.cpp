@@ -1401,6 +1401,20 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             return Status::InternalError("base tablet's max version is less than request version");
         }
 
+        // we lock base_tablet header_lock first and then lock new_tablet header_lock
+        // the gap during this period, new_tablet may publish new version
+        // then we remove all data from new tablet, that make data inconsistency
+        // Due to the low probability of occurrence and compatibility with the original implementation
+        // a check is currently added, and the upper layer will retry after failure
+        Version new_tablet_max_version = new_tablet->max_version();
+        if (new_tablet_max_version.first != -1 && new_tablet_max_version.second != max_version.second) {
+            std::stringstream ss;
+            ss << "base tablet's max version=" << max_version.second
+               << " is not equal new tablet's max version=" << new_tablet_max_version.second;
+            LOG(WARNING) << ss;
+            return Status::InternalError(ss);
+        }
+
         LOG(INFO) << "begin to remove all data from new tablet to prevent rewrite."
                   << " new_tablet=" << new_tablet->full_name();
         std::vector<RowsetSharedPtr> rowsets_to_delete;
