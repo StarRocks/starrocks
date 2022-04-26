@@ -365,7 +365,7 @@ public class ShowExecutor {
         rowSet.add(Lists.newArrayList("ELASTICSEARCH", "YES", "ELASTICSEARCH cluster which data is in it", "NO", "NO", "NO"));
         rowSet.add(Lists.newArrayList("HIVE", "YES", "HIVE database which data is in it", "NO", "NO", "NO"));
         rowSet.add(Lists.newArrayList("ICEBERG", "YES", "ICEBERG data lake which data is in it", "NO", "NO", "NO"));
-
+        rowSet.add(Lists.newArrayList("HUDI", "YES", "HUDI database which data is in it", "NO", "NO", "NO"));
         // Only success
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
