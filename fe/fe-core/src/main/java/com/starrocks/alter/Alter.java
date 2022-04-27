@@ -39,7 +39,7 @@ import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
-import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;

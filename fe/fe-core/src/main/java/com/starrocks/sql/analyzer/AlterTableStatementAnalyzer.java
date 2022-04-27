@@ -4,12 +4,12 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Index;
-import com.starrocks.sql.ast.CreateIndexClause;
-import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.Index;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -60,7 +60,8 @@ public class AlterTableStatementAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-            clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(), indexDef.getComment()));
+            clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment()));
             return null;
         }
 

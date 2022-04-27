@@ -4,7 +4,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -32,17 +32,8 @@ public class AnalyzeAlterTableStatementTest {
     public void testTableRename() {
         AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table test rename test1");
         Assert.assertEquals(alterTableStmt.getOps().size(), 1);
-        Assert.assertEquals("ALTER TABLE `default_cluster:test`.`test` RENAME test1", alterTableStmt.toString());
-        Assert.assertEquals("test", alterTableStmt.getTbl().getTbl());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof TableRenameClause);
         analyzeFail("alter table test rename");
-    }
-
-    @Test
-    public void testTableRenameClause() {
-        TableRenameClause clause = new TableRenameClause("newTableName");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
-        Assert.assertEquals("RENAME newTableName",
-                clause.toSql());
     }
 
     @Test(expected = SemanticException.class)
@@ -62,5 +53,29 @@ public class AnalyzeAlterTableStatementTest {
         List<AlterClause> ops = Lists.newArrayList();
         AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
         AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+    }
+
+    @Test
+    public void testCreateIndex() {
+        String sql = "CREATE INDEX index1 ON `db`.`table` (`col1`) USING BITMAP COMMENT 'balabala'";
+        analyzeSuccess(sql);
+
+        sql = "CREATE INDEX index1 ON t0 (`v1`) USING BITMAP where v2 = 2 COMMENT 'balabala'";
+        analyzeSuccess(sql);
+
+        sql = "create fulltext index in_1 on t0(v1)";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testDropIndex() {
+        String sql = "DROP INDEX index1 ON db.t0";
+        analyzeSuccess(sql);
+
+        sql = "alter table t0 drop primary key";
+        analyzeSuccess(sql);
+
+        sql = "alter table t0 drop index index1";
+        analyzeSuccess(sql);
     }
 }

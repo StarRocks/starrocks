@@ -21,6 +21,7 @@ statement
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
     | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -35,11 +36,13 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    // Admin Set Statement
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+
     //Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -65,6 +68,10 @@ createIndexStatement
     : CREATE FULLTEXT? INDEX indexName=identifier
         ON qualifiedName identifierList indexType?
         (WHERE expression)? comment?
+    ;
+
+dropIndexStatement
+    : DROP INDEX indexName=identifier ON qualifiedName
     ;
 
 indexType

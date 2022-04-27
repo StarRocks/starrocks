@@ -5,6 +5,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -22,6 +23,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -30,6 +32,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -41,6 +44,7 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.InsertTarget;
@@ -91,7 +95,25 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.*;
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.Identifier;
+import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
@@ -103,7 +125,11 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -201,11 +227,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 IndexDef.IndexType.BITMAP,
                 comment);
 
-        CreateIndexClause createIndexClause = new CreateIndexClause(null, indexDef, true);
+        CreateIndexClause createIndexClause = new CreateIndexClause(null, indexDef, false);
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new AlterTableStmt(targetTableName, Lists.newArrayList(createIndexClause));
+    }
+
+    @Override
+    public ParseNode visitDropIndexStatement(StarRocksParser.DropIndexStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        DropIndexClause dropIndexClause = new DropIndexClause(identifier.getValue(), null, false);
+
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new AlterTableStmt(targetTableName, Lists.newArrayList(dropIndexClause));
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -278,6 +314,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropIndexClause(StarRocksParser.DropIndexClauseContext context) {
+        if (context.PRIMARY() != null) {
+            return new DropIndexClause("PRIMARY", null, true);
+        }
         Identifier identifier = (Identifier) visit(context.identifier());
         return new DropIndexClause(identifier.getValue(), null, true);
     }

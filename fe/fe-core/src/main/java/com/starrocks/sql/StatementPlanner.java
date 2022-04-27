@@ -7,11 +7,13 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -24,7 +26,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -162,7 +164,7 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewParser(StatementBase statement) {
-        return  isNewAlterTable(statement)
+        return isNewAlterTable(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
@@ -174,17 +176,6 @@ public class StatementPlanner {
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowTableStmt;
-    }
-
-    private static boolean isNewAlterTable(StatementBase statement) {
-        boolean isAlterTable = false;
-        if (statement instanceof AlterTableStmt) {
-            List<AlterClause> alterClauses = ((AlterTableStmt) statement).getOps();
-            if (alterClauses.stream().allMatch(alterClause -> isNewAlterTableClause(alterClause))) {
-                isAlterTable = true;
-            }
-        }
-        return isAlterTable;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -209,7 +200,20 @@ public class StatementPlanner {
                 || statement instanceof DropMaterializedViewStmt;
     }
 
+    private static boolean isNewAlterTable(StatementBase statement) {
+        boolean isAlterTable = false;
+        if (statement instanceof AlterTableStmt) {
+            List<AlterClause> alterClauses = ((AlterTableStmt) statement).getOps();
+            if (alterClauses.stream().allMatch(StatementPlanner::isNewAlterTableClause)) {
+                isAlterTable = true;
+            }
+        }
+        return isAlterTable;
+    }
+
     public static boolean isNewAlterTableClause(AlterClause clause) {
-        return clause instanceof TableRenameClause;
+        return clause instanceof CreateIndexClause
+                || clause instanceof DropIndexClause
+                || clause instanceof TableRenameClause;
     }
 }
