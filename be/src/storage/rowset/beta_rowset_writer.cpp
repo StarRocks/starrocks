@@ -332,9 +332,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         // once upsert, subsequent flush can only do upsert
         switch (_flush_chunk_state) {
         case FlushChunkState::UNKNOWN:
-            _flush_chunk_state = FlushChunkState::UPSERTS;
+            _flush_chunk_state = FlushChunkState::UPSERT;
             break;
-        case FlushChunkState::UPSERTS:
+        case FlushChunkState::UPSERT:
             break;
         default: {
             std::string msg =
@@ -350,9 +350,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         // once delete, subsequent flush can only do delete
         switch (_flush_chunk_state) {
         case FlushChunkState::UNKNOWN:
-            _flush_chunk_state = FlushChunkState::DELETES;
+            _flush_chunk_state = FlushChunkState::DELETE;
             break;
-        case FlushChunkState::DELETES:
+        case FlushChunkState::DELETE:
             break;
         default: {
             std::string msg =

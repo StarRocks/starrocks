@@ -37,7 +37,7 @@ class WritableBlock;
 
 class SegmentWriter;
 
-enum class FlushChunkState { UNKNOWN, UPSERTS, DELETES, MIXED };
+enum class FlushChunkState { UNKNOWN, UPSERT, DELETE, MIXED };
 
 class BetaRowsetWriter : public RowsetWriter {
 public:
