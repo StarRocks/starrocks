@@ -11,6 +11,8 @@ namespace connector {
 
 class HiveConnector final : public Connector {
 public:
+    ~HiveConnector() override = default;
+
     DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 };
@@ -20,6 +22,7 @@ class HiveDataSourceProvider;
 
 class HiveDataSourceProvider final : public DataSourceProvider {
 public:
+    ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
     HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
@@ -31,6 +34,8 @@ protected:
 
 class HiveDataSource final : public DataSource {
 public:
+    ~HiveDataSource() override = default;
+
     HiveDataSource(HiveDataSourceProvider* provider, const TScanRange& scan_range);
     Status init() override;
     Status open(RuntimeState* state) override;

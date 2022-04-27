@@ -7,7 +7,7 @@
 namespace starrocks {
 namespace connector {
 
-static ConnectorManager global_default_instance;
+static ConnectorManager _global_default_instance;
 
 const Connector* ConnectorManager::get(const std::string& name) {
     auto it = _connectors.find(name);
@@ -20,13 +20,20 @@ void ConnectorManager::put(const std::string& name, std::unique_ptr<Connector> c
 }
 
 ConnectorManager* ConnectorManager::default_instance() {
-    return &global_default_instance;
+    return &_global_default_instance;
 }
 
-void ConnectorManager::init() {
-    ConnectorManager* cm = default_instance();
-    cm->put("hive", std::make_unique<HiveConnector>());
-}
+const std::string Connector::HIVE = "hive";
+
+class ConnectorManagerInit {
+public:
+    ConnectorManagerInit() {
+        ConnectorManager* cm = ConnectorManager::default_instance();
+        cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
+    }
+};
+
+static ConnectorManagerInit _init;
 
 } // namespace connector
 } // namespace starrocks

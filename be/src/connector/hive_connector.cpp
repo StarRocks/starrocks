@@ -296,9 +296,11 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
 }
 
 int64_t HiveDataSource::raw_rows_read() const {
+    if (_scanner == nullptr) return 0;
     return _scanner->raw_rows_read();
 }
 int64_t HiveDataSource::num_rows_read() const {
+    if (_scanner == nullptr) return 0;
     return _scanner->num_rows_read();
 }
 

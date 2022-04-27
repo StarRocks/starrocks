@@ -16,6 +16,57 @@ class ConnectorScanner;
 
 class ConnectorScanNode final : public starrocks::ScanNode {
 public:
+    ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~ConnectorScanNode() override;
+
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+
+    // for non-pipeline APIs.
+    Status prepare(RuntimeState* state) override;
+    Status open(RuntimeState* state) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+    Status close(RuntimeState* state) override;
+    Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+
+    // for pipline APIs
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
+    connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
+
+private:
+    RuntimeState* _runtime_state = nullptr;
+    connector::DataSourceProviderPtr _data_source_provider = nullptr;
+
+    // non-pipeline methods.
+    void _init_counter();
+    Status _start_scan_thread(RuntimeState* state);
+    Status _create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range);
+    bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
+    void _scanner_thread(ConnectorScanner* scanner);
+    void _release_scanner(ConnectorScanner* scanner);
+    void _update_status(const Status& status);
+    Status _get_status();
+    void _fill_chunk_pool(int count);
+    void _close_pending_scanners();
+    void _push_pending_scanner(ConnectorScanner* scanner);
+    ConnectorScanner* _pop_pending_scanner();
+
+    // non-pipeline fields.
+    std::vector<TScanRangeParams> _scan_ranges;
+    bool _closed = false;
+
+    int _num_scanners = 0;
+    int _chunks_per_scanner = 0;
+    bool _start = false;
+    mutable SpinLock _status_mtx;
+    Status _status = Status::OK();
+
+    std::atomic<int32_t> _scanner_submit_count = 0;
+    std::atomic<int32_t> _running_threads = 0;
+    std::atomic<int32_t> _closed_scanners = 0;
+
+private:
     template <typename T>
     class Stack {
     public:
@@ -45,63 +96,10 @@ public:
         RuntimeProfile::Counter* scanner_queue_timer = nullptr;
         RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     };
-
-public:
-    ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~ConnectorScanNode() override;
-
-    Status init(const TPlanNode& tnode, RuntimeState* state) override;
-
-    // for non-pipeline APIs.
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
-    Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
-
-    // for pipline APIs
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
-
-    connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
-
-private:
-    RuntimeState* _runtime_state = nullptr;
-    connector::DataSourceProviderPtr _data_source_provider = nullptr;
-
-    // non-pipeline
-    // methods.
-    void _init_counter();
-    Status _start_scan_thread(RuntimeState* state);
-    Status _create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range);
-    bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
-    void _scanner_thread(ConnectorScanner* scanner);
-    void _release_scanner(ConnectorScanner* scanner);
-    void _update_status(const Status& status);
-    Status _get_status();
-    void _fill_chunk_pool(int count);
-    void _close_pending_scanners();
-    void _push_pending_scanner(ConnectorScanner* scanner);
-    ConnectorScanner* _pop_pending_scanner();
-
-    // fields.
-    std::vector<TScanRangeParams> _scan_ranges;
-    bool _closed = false;
-
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;
-    Stack<ConnectorScanner*> _pending_scanners;
-    int _num_scanners = 0;
-    int _chunks_per_scanner = 0;
-    bool _start = false;
-    mutable SpinLock _status_mutex;
-    Status _status = Status::OK();
     std::atomic_bool _pending_token = true;
-
-    std::atomic<int32_t> _scanner_submit_count = 0;
-    std::atomic<int32_t> _running_threads = 0;
-    std::atomic<int32_t> _closed_scanners = 0;
-
+    Stack<ConnectorScanner*> _pending_scanners;
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
 };

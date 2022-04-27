@@ -21,13 +21,7 @@ namespace connector {
 
 class DataSource {
 public:
-    void set_runtime_profile(RuntimeProfile* runtime_profile) { _runtime_profile = runtime_profile; }
-    void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
-    void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {
-        _runtime_filters = runtime_filters;
-    }
-    void set_read_limit(const uint64_t limit) { _read_limit = limit; }
-
+    virtual ~DataSource() = default;
     virtual Status init() { return Status::OK(); }
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
@@ -35,6 +29,13 @@ public:
 
     virtual int64_t raw_rows_read() const { return 0; }
     virtual int64_t num_rows_read() const { return 0; }
+
+    void set_runtime_profile(RuntimeProfile* runtime_profile) { _runtime_profile = runtime_profile; }
+    void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
+    void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {
+        _runtime_filters = runtime_filters;
+    }
+    void set_read_limit(const uint64_t limit) { _read_limit = limit; }
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -47,6 +48,8 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
+    virtual ~DataSourceProvider() = default;
+
     virtual Status init(RuntimeState* state, const TPlanNode& plan_node) { return Status::OK(); }
 
     // First version we use TScanRange to define scan range
@@ -63,6 +66,10 @@ using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
 class Connector {
 public:
+    // supported connectors.
+    static const std::string HIVE;
+
+    virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
@@ -75,7 +82,6 @@ public:
 
 class ConnectorManager {
 public:
-    static void init();
     static ConnectorManager* default_instance();
     const Connector* get(const std::string& name);
     void put(const std::string& name, std::unique_ptr<Connector> connector);

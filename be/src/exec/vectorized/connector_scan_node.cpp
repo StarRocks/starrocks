@@ -30,8 +30,6 @@
 
 namespace starrocks::vectorized {
 
-static const int kMaxConcurrency = config::max_hdfs_scanner_num;
-
 // ======================================================
 
 class OpenLimitAllocator {
@@ -167,15 +165,16 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
-    // TODO: for(scan_range), create scanner
-    // create_and_init_scanner(state, *hdfs_file);
+    for (const TScanRangeParams& scan_range : _scan_ranges) {
+        _create_and_init_scanner(state, scan_range.scan_range);
+    }
 
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
     _chunks_per_scanner = config::doris_scanner_row_num / state->chunk_size();
     _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % state->chunk_size() != 0);
-    int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
+    int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
     TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
@@ -194,15 +193,16 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TS
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
+    data_source->set_runtime_profile(_runtime_profile.get());
     data_source->init();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source)));
+    scanner->init(state);
     _push_pending_scanner(scanner);
     return Status::OK();
 }
 
 Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-
     if (!_start && _status.ok()) {
         Status status = _start_scan_thread(state);
         _update_status(status);
@@ -227,7 +227,7 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
         const int32_t num_closed = _closed_scanners.load(std::memory_order_acquire);
         const int32_t num_pending = _pending_scanners.size();
         const int32_t num_running = _num_scanners - num_pending - num_closed;
-        if ((num_pending > 0) && (num_running < kMaxConcurrency)) {
+        if ((num_pending > 0) && (num_running < config::max_hdfs_scanner_num)) {
             if (_chunk_pool.size() >= (num_running + 1) * _chunks_per_scanner) {
                 (void)_submit_scanner(_pop_pending_scanner(), true);
             }
@@ -243,7 +243,7 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
             int64_t num_rows_over = _num_rows_returned - _limit;
             (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
             COUNTER_SET(_rows_returned_counter, _limit);
-            _update_status(Status::EndOfFile("HdfsScanNode has reach limit"));
+            _update_status(Status::EndOfFile("ConnectorScanNode has reach limit"));
             _result_chunks.shutdown();
         }
         *eos = false;
@@ -251,7 +251,7 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
         return Status::OK();
     }
 
-    _update_status(Status::EndOfFile("EOF of HdfsScanNode"));
+    _update_status(Status::EndOfFile("EOF of ConnectorScanNode"));
     *eos = true;
     status = _get_status();
     return status.is_end_of_file() ? Status::OK() : status;
@@ -336,7 +336,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
     // so even if there are enough resources to follow, they cannot be fully utilized,
     // and we need to schedule the scanners that are in a pending state as well.
     if (scanner->has_pending_token()) {
-        int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
+        int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
         int need_put = concurrency - _running_threads;
         int left_resource = concurrency_limit - scanner->open_limit();
         if (left_resource > 0) {
@@ -473,8 +473,15 @@ ConnectorScanner* ConnectorScanNode::_pop_pending_scanner() {
     return scanner;
 }
 
+void ConnectorScanNode::_update_status(const Status& status) {
+    std::lock_guard<SpinLock> lck(_status_mtx);
+    if (_status.ok()) {
+        _status = status;
+    }
+}
+
 Status ConnectorScanNode::_get_status() {
-    std::lock_guard<SpinLock> lck(_status_mutex);
+    std::lock_guard<SpinLock> lck(_status_mtx);
     return _status;
 }
 

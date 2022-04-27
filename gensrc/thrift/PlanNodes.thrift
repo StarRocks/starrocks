@@ -804,7 +804,7 @@ struct TTableFunctionNode {
 }
 
 struct TConnectorScanNode {  
-  1: required string connector_name
+  1: optional string connector_name
   // // Scan node for hdfs
   // 2: optional THdfsScanNode hdfs_scan_node
 }

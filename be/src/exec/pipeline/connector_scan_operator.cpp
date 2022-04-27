@@ -58,6 +58,7 @@ ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, Mors
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
+    _data_source->set_runtime_profile(runtime_profile);
     _data_source->init();
 }
 
