@@ -894,14 +894,7 @@ public class FileSystemManager {
     public void pwrite(TBrokerFD fd, long offset, byte[] data) {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
-            long currentStreamOffset;
-            try {
-                currentStreamOffset = fsDataOutputStream.getPos();
-            } catch (IOException e) {
-                logger.error("errors while get file pos from output stream", e);
-                throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
-                        "errors while get file pos from output stream");
-            }
+            long currentStreamOffset = fsDataOutputStream.getPos();
             if (currentStreamOffset != offset) {
                 throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_OFFSET,
                         "current outputstream offset is {} not equal to request {}",
