@@ -2,6 +2,7 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -165,6 +166,7 @@ public class StatementPlanner {
         return  isNewAlterTable(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -190,6 +192,7 @@ public class StatementPlanner {
         return isNewAlterTable(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateMaterializedViewStatement
