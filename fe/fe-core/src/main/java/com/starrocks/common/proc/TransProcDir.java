@@ -23,8 +23,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 
 import java.util.List;
@@ -61,7 +61,7 @@ public class TransProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        GlobalTransactionMgr transactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         List<List<String>> infos = transactionMgr.getDbTransInfo(dbId, state.equals("running"), MAX_SHOW_ENTRIES);
         result.setRows(infos);
         return result;

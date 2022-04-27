@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -26,6 +25,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -42,14 +42,15 @@ import java.util.Map;
 
 public class TabletsProcDirTest {
     @Test
-    public void testFetchResultStarOSTablet(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService) {
+    public void testFetchResultStarOSTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                            @Mocked SystemInfoService systemInfoService) {
         Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 1L;
         idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);
@@ -119,7 +120,8 @@ public class TabletsProcDirTest {
     }
 
     @Test
-    public void testFetchResultWithLocalTablet(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService) {
+    public void testFetchResultWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                               @Mocked SystemInfoService systemInfoService) {
         Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 20L;
         idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
@@ -127,7 +129,7 @@ public class TabletsProcDirTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);

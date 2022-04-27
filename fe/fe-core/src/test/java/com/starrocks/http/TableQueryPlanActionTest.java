@@ -86,12 +86,12 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     @Test
     public void testNoSqlFailure() throws IOException {
         RequestBody body = RequestBody
-            .create(JSON, "{}");
+                .create(JSON, "{}");
         Request request = new Request.Builder()
-            .post(body)
-            .addHeader("Authorization", rootAuth)
-            .url(URI + PATH_URI)
-            .build();
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(URI + PATH_URI)
+                .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
         System.out.println(respStr);

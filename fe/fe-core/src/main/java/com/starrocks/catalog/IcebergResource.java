@@ -23,7 +23,7 @@ import java.util.Map;
  * PROPERTIES
  * (
  * "type" = "iceberg",
- * "starrocks.catalog-type"="hive"
+ * "starrocks.globalStateMgr-type"="hive"
  * );
  * <p>
  * DROP RESOURCE "iceberg0";
@@ -31,9 +31,9 @@ import java.util.Map;
 public class IcebergResource extends Resource {
     private static final Logger LOG = LogManager.getLogger(IcebergResource.class);
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
-    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
+    private static final String ICEBERG_CATALOG = "starrocks.globalStateMgr-type";
+    private static final String ICEBERG_METASTORE_URIS = "iceberg.globalStateMgr.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.globalStateMgr-impl";
 
     @SerializedName(value = "catalogType")
     private String catalogType;
@@ -80,7 +80,7 @@ public class IcebergResource extends Resource {
                 }
                 break;
             default:
-                throw new DdlException("Unexpected catalog type: " + catalogType);
+                throw new DdlException("Unexpected globalStateMgr type: " + catalogType);
         }
     }
 
@@ -95,7 +95,7 @@ public class IcebergResource extends Resource {
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, catalogImpl));
                 break;
             default:
-                LOG.warn("Unexpected catalog type: " + catalogType);
+                LOG.warn("Unexpected globalStateMgr type: " + catalogType);
                 break;
         }
     }

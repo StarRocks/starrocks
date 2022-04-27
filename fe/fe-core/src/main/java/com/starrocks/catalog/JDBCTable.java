@@ -8,6 +8,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -26,7 +27,6 @@ public class JDBCTable extends Table {
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
-
 
     private String resourceName;
     private String jdbcTable;
@@ -63,7 +63,7 @@ public class JDBCTable extends Table {
             throw new DdlException("property " + RESOURCE + " must be set");
         }
 
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource == null) {
             throw new DdlException("jdbc resource [" + resourceName + "] not exists");
         }
@@ -75,7 +75,8 @@ public class JDBCTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        JDBCResource resource = (JDBCResource) (Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName));
+        JDBCResource resource =
+                (JDBCResource) (GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName));
         TJDBCTable tJDBCTable = new TJDBCTable();
         tJDBCTable.setJdbc_driver_name(resource.getName());
         tJDBCTable.setJdbc_driver_url(resource.getProperty(JDBCResource.DRIVER_URL));

@@ -131,6 +131,7 @@ public class FunctionSet {
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String DATE_TRUNC = "date_trunc";
+    public static final String DATE_FLOOR = "date_floor";
 
     // string functions
     public static final String SUBSTRING = "substring";
@@ -429,7 +430,7 @@ public class FunctionSet {
         addBuiltInFunction(fn);
     }
 
-    // Populate all the aggregate builtins in the catalog.
+    // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {

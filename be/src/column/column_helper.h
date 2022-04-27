@@ -168,9 +168,10 @@ public:
         return dst_column->clone_shared();
     }
 
+    // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
-    // If is_const is true, you must pass the size arg
+    // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
 
     /**

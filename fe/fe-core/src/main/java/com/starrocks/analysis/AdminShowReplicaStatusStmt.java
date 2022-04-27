@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica.ReplicaStatus;
@@ -38,6 +37,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -65,7 +65,7 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         super.analyze(analyzer);
 
         // check auth
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
         }
 

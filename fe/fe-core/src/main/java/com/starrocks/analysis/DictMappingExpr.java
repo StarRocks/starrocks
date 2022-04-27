@@ -33,7 +33,7 @@ public class DictMappingExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return "DictExpr(" + this.getChild(0).toSqlImpl() + ",[" + this.getChild(1).toSqlImpl()  + "])";
+        return "DictExpr(" + this.getChild(0).toSqlImpl() + ",[" + this.getChild(1).toSqlImpl() + "])";
     }
 
     @Override

@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -43,6 +42,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
@@ -704,11 +704,11 @@ public class FunctionCallExpr extends Expr {
                 String dbName = fnName.analyzeDb(analyzer);
                 if (!Strings.isNullOrEmpty(dbName)) {
                     // check operation privilege
-                    if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(
                             ConnectContext.get(), dbName, PrivPredicate.SELECT)) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
                     }
-                    Database db = Catalog.getCurrentCatalog().getDb(dbName);
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
                     if (db != null) {
                         Function searchDesc = new Function(
                                 fnName, collectChildReturnTypes(), Type.INVALID, false);

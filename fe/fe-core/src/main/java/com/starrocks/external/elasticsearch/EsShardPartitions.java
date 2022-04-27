@@ -60,7 +60,8 @@ public class EsShardPartitions {
      * @param searchShards the return value of _search_shards
      * @return shardRoutings is used for searching
      */
-    public static EsShardPartitions findShardPartitions(String indexName, String searchShards) throws StarRocksESException {
+    public static EsShardPartitions findShardPartitions(String indexName, String searchShards)
+            throws StarRocksESException {
 
         EsShardPartitions partitions = new EsShardPartitions(indexName);
         JSONObject jsonObject = new JSONObject(searchShards);

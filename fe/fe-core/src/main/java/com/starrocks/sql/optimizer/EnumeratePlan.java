@@ -185,7 +185,8 @@ public class EnumeratePlan {
                 childPlanCount *=
                         countGroupValidPlan(groupExpression.inputAt(childIndex), inputProperties.get(childIndex));
             }
-            groupExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty, inputProperties), childPlanCount);
+            groupExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty, inputProperties),
+                    childPlanCount);
             groupExpressionPlanCount += childPlanCount;
         }
         return groupExpressionPlanCount;

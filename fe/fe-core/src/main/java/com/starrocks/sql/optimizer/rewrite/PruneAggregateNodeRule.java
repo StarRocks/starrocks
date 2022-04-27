@@ -13,39 +13,39 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 /**
  * Because of local property, we could generate three/four stage plan like:
  * three stage:
- *        Agg(Global)
- *            |
- *       Agg(Distinct Global)
- *           |
- *        Agg(Local)
- *
+ * Agg(Global)
+ * |
+ * Agg(Distinct Global)
+ * |
+ * Agg(Local)
+ * <p>
  * four stage:
- *          Agg(Global)
- *            |
- *         Distribution
- *            |
- *         Agg（Distinct Local)
- *            |
- *         Agg (Distinct Global)
- *            |
- *         Agg (Local)
+ * Agg(Global)
+ * |
+ * Distribution
+ * |
+ * Agg（Distinct Local)
+ * |
+ * Agg (Distinct Global)
+ * |
+ * Agg (Local)
  * Because of there is no shuffle between the Agg(Distinct Global) and Agg(Local), the update/merge procedure is not
  * really required here. We could optimize the two aggregate node(Agg(Distinct Global) - Agg(Local)) to one aggregate node.
  * This optimization avoids serialization and deserialization of data.
  * Optimized plan：
- *  three stage:
- *        Agg(Global)
- *             |
- *        Agg(Local)
- *
- *  four stage:
- *          Agg(Global)
- *              |
- *          Distribution
- *              |
- *       Agg（Distinct Local)
- *              |
- *         Agg (Local)
+ * three stage:
+ * Agg(Global)
+ * |
+ * Agg(Local)
+ * <p>
+ * four stage:
+ * Agg(Global)
+ * |
+ * Distribution
+ * |
+ * Agg（Distinct Local)
+ * |
+ * Agg (Local)
  **/
 public class PruneAggregateNodeRule implements PhysicalOperatorTreeRewriteRule {
     private static final PruneAggVisitor pruneAggVisitor = new PruneAggVisitor();
@@ -64,7 +64,8 @@ public class PruneAggregateNodeRule implements PhysicalOperatorTreeRewriteRule {
         @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             for (int i = 0; i < optExpression.arity(); ++i) {
-                optExpression.setChild(i, optExpression.inputAt(i).getOp().accept(this, optExpression.inputAt(i), null));
+                optExpression.setChild(i,
+                        optExpression.inputAt(i).getOp().accept(this, optExpression.inputAt(i), null));
             }
             return optExpression;
         }

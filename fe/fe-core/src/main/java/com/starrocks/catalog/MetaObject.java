@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -61,11 +62,11 @@ public class MetaObject implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             this.signature = in.readLong();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
             this.lastCheckTime = in.readLong();
         }
     }

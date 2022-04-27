@@ -16,7 +16,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -66,8 +65,10 @@ import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -134,7 +135,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
 /**
  * PlanFragmentBuilder used to transform physical operator to exec plan fragment
@@ -549,7 +549,7 @@ public class PlanFragmentBuilder {
 
                     long localBeId = -1;
                     if (Config.enable_local_replica_selection) {
-                        localBeId = Catalog.getCurrentSystemInfo()
+                        localBeId = GlobalStateMgr.getCurrentSystemInfo()
                                 .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                     }
 
@@ -1305,7 +1305,7 @@ public class PlanFragmentBuilder {
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
             if (node instanceof OlapScanNode) {
-                ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+                ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
                 OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
                     return true;
@@ -1612,7 +1612,7 @@ public class PlanFragmentBuilder {
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
 
             // 2. Get eqJoinConjuncts
-            List<BinaryPredicateOperator> eqOnPredicates = getEqConj(
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns,
                     rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));

@@ -21,10 +21,10 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -38,15 +38,15 @@ import java.util.Arrays;
 public class ShowPartitionsStmtTest {
     @Mocked
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Before
     public void setUp() {
-        catalog = AccessTestUtil.fetchAdminCatalog();
-        FakeCatalog.setCatalog(catalog);
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         new Expectations() {
             {
@@ -56,7 +56,7 @@ public class ShowPartitionsStmtTest {
 
                 analyzer.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 analyzer.getClusterName();
                 minTimes = 0;

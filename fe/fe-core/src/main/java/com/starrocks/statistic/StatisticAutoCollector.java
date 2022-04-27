@@ -4,12 +4,12 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.Constants.AnalyzeType;
 import com.starrocks.statistic.Constants.ScheduleStatus;
 import com.starrocks.statistic.Constants.ScheduleType;
@@ -56,7 +56,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             setInterval(Config.statistic_collect_interval_sec * 1000);
         }
 
-        Catalog.getCurrentAnalyzeMgr().expireAnalyzeJob();
+        GlobalStateMgr.getCurrentAnalyzeMgr().expireAnalyzeJob();
 
         if (!Config.enable_statistic_collect) {
             return;
@@ -78,7 +78,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
     private void initDefaultJob() {
         // Add a default sample job if was't been collect
-        List<AnalyzeJob> allAnalyzeJobs = Catalog.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
+        List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
         if (allAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
             return;
         }
@@ -93,7 +93,7 @@ public class StatisticAutoCollector extends MasterDaemon {
         analyzeJob.setStatus(ScheduleStatus.PENDING);
         analyzeJob.setWorkTime(LocalDateTime.MIN);
 
-        Catalog.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
     }
 
     private void collectStatistics(List<TableCollectJob> allJobs) {
@@ -123,14 +123,14 @@ public class StatisticAutoCollector extends MasterDaemon {
             analyzeJob.setStatus(ScheduleStatus.RUNNING);
             analyzeJob.setReason("");
             // only update job
-            Catalog.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(analyzeJob);
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(analyzeJob);
             for (TableCollectJob tcj : entry.getValue()) {
                 try {
                     LOG.info("Statistic collect work job: {}, type: {}, db: {}, table: {}",
                             analyzeJob.getId(), analyzeJob.getType(), tcj.db.getFullName(), tcj.table.getName());
                     tcj.tryCollect();
 
-                    Catalog.getCurrentStatisticStorage().expireColumnStatistics(tcj.table, tcj.columns);
+                    GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(tcj.table, tcj.columns);
                 } catch (Exception e) {
                     LOG.warn("Statistic collect work job: {}, type: {}, db: {}, table: {}. throw exception.",
                             analyzeJob.getId(), analyzeJob.getType(), tcj.db.getFullName(), tcj.table.getName(), e);
@@ -151,12 +151,12 @@ public class StatisticAutoCollector extends MasterDaemon {
                 analyzeJob.setStatus(ScheduleStatus.PENDING);
             }
             analyzeJob.setWorkTime(LocalDateTime.now());
-            Catalog.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
         }
     }
 
     private List<TableCollectJob> generateAllJobs() {
-        List<AnalyzeJob> allAnalyzeJobs = Catalog.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
+        List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
         // The jobs need to be sorted in order of execution to avoid duplicate collections
         allAnalyzeJobs.sort(Comparator.comparing(AnalyzeJob::getId));
 
@@ -165,10 +165,10 @@ public class StatisticAutoCollector extends MasterDaemon {
         for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
             if (AnalyzeJob.DEFAULT_ALL_ID == analyzeJob.getDbId()) {
                 // all database
-                List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
 
                 for (Long dbId : dbIds) {
-                    Database db = Catalog.getCurrentCatalog().getDb(dbId);
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                     if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                         continue;
                     }
@@ -180,7 +180,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             } else if (AnalyzeJob.DEFAULT_ALL_ID == analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
                 // all table
-                Database db = Catalog.getCurrentCatalog().getDb(analyzeJob.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
                 if (null == db) {
                     continue;
                 }
@@ -192,7 +192,7 @@ public class StatisticAutoCollector extends MasterDaemon {
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
                 // all column
-                Database db = Catalog.getCurrentCatalog().getDb(analyzeJob.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
                 if (null == db) {
                     continue;
                 }
@@ -201,7 +201,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             } else if (!analyzeJob.getColumns().isEmpty() && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
                 // some column
-                Database db = Catalog.getCurrentCatalog().getDb(analyzeJob.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
                 if (null == db) {
                     continue;
                 }
@@ -270,10 +270,10 @@ public class StatisticAutoCollector extends MasterDaemon {
     }
 
     private void expireStatistic() {
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         List<Long> tables = Lists.newArrayList();
         for (Long dbId : dbIds) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                 continue;
             }

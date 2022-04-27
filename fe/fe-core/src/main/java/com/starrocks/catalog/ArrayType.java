@@ -125,7 +125,7 @@ public class ArrayType extends Type {
     }
 
     public boolean isNullTypeItem() {
-        return itemType.isNull(); 
+        return itemType.isNull();
     }
 }
 

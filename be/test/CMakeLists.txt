@@ -19,6 +19,7 @@ set(EXEC_FILES
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
+        ./common/tracer_test.cpp
         ./common/s3_uri_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
@@ -146,6 +147,7 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
+        ./storage/version_graph_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -339,6 +341,9 @@ ADD_BE_TEST(runtime/user_function_cache_test)
 ADD_BE_TEST(storage/delete_handler_test)
 ADD_BE_TEST(storage/options_test)
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+
+# you can simply add test case as single binary without adding `main`
+# ADD_BE_TEST(exec/vectorized/sorting_test)
 
 # =================================================
 # benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.

@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -14,6 +13,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.Constants.AnalyzeType;
 import com.starrocks.statistic.Constants.ScheduleStatus;
 import com.starrocks.statistic.Constants.ScheduleType;
@@ -173,7 +173,7 @@ public class AnalyzeJob implements Writable {
 
         row.set(0, String.valueOf(id));
         if (DEFAULT_ALL_ID != dbId) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
 
             if (db == null) {
                 throw new MetaNotFoundException("No found database: " + dbId);

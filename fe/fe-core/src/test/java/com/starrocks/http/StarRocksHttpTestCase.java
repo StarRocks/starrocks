@@ -24,7 +24,6 @@ package com.starrocks.http;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -49,6 +48,7 @@ import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -114,7 +114,7 @@ abstract public class StarRocksHttpTestCase {
     private static EditLog editLog;
 
     public static OlapTable newTable(String name) {
-        Catalog.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         List<Column> columns = new ArrayList<>();
@@ -190,11 +190,11 @@ abstract public class StarRocksHttpTestCase {
         return table;
     }
 
-    private static Catalog newDelegateCatalog() {
+    private static GlobalStateMgr newDelegateCatalog() {
         try {
-            Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
-            //EasyMock.expect(catalog.getAuth()).andReturn(starrocksAuth).anyTimes();
+            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
             Database db = new Database(testDbId, "default_cluster:testDb");
             OlapTable table = newTable(TABLE_NAME);
             db.createTable(table);
@@ -202,60 +202,60 @@ abstract public class StarRocksHttpTestCase {
             db.createTable(table1);
             EsTable esTable = newEsTable("es_table");
             db.createTable(esTable);
-            new Expectations(catalog) {
+            new Expectations(globalStateMgr) {
                 {
-                    catalog.getAuth();
+                    globalStateMgr.getAuth();
                     minTimes = 0;
                     result = auth;
 
-                    catalog.getDb(db.getId());
+                    globalStateMgr.getDb(db.getId());
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb("default_cluster:" + DB_NAME);
+                    globalStateMgr.getDb("default_cluster:" + DB_NAME);
                     minTimes = 0;
                     result = db;
 
-                    catalog.isMaster();
+                    globalStateMgr.isMaster();
                     minTimes = 0;
                     result = true;
 
-                    catalog.getDb("default_cluster:emptyDb");
+                    globalStateMgr.getDb("default_cluster:emptyDb");
                     minTimes = 0;
                     result = null;
 
-                    catalog.getDb(anyString);
+                    globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
 
-                    catalog.getDbNames();
+                    globalStateMgr.getDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList("default_cluster:testDb");
 
-                    catalog.getLoadInstance();
+                    globalStateMgr.getLoadInstance();
                     minTimes = 0;
                     result = new Load();
 
-                    catalog.getEditLog();
+                    globalStateMgr.getEditLog();
                     minTimes = 0;
                     result = editLog;
 
-                    catalog.getClusterDbNames("default_cluster");
+                    globalStateMgr.getClusterDbNames("default_cluster");
                     minTimes = 0;
                     result = Lists.newArrayList("default_cluster:testDb");
 
-                    catalog.changeDb((ConnectContext) any, "blockDb");
+                    globalStateMgr.changeDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
 
-                    catalog.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeDb((ConnectContext) any, anyString);
                     minTimes = 0;
 
-                    catalog.initDefaultCluster();
+                    globalStateMgr.initDefaultCluster();
                     minTimes = 0;
                 }
             };
 
-            return catalog;
+            return globalStateMgr;
         } catch (DdlException e) {
             return null;
         } catch (AnalysisException e) {
@@ -270,9 +270,9 @@ abstract public class StarRocksHttpTestCase {
         backend2.setBePort(9300);
         Backend backend3 = new Backend(testBackendId3, "node-3", 9308);
         backend3.setBePort(9300);
-        Catalog.getCurrentSystemInfo().addBackend(backend1);
-        Catalog.getCurrentSystemInfo().addBackend(backend2);
-        Catalog.getCurrentSystemInfo().addBackend(backend3);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
     }
 
     @BeforeClass
@@ -305,10 +305,10 @@ abstract public class StarRocksHttpTestCase {
 
     @Before
     public void setUp() {
-        Catalog catalog = newDelegateCatalog();
+        GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
                 return new SchemaChangeHandler();
@@ -320,8 +320,8 @@ abstract public class StarRocksHttpTestCase {
             }
 
             @Mock
-            Catalog getCurrentCatalog() {
-                return catalog;
+            GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
             }
 
             @Mock

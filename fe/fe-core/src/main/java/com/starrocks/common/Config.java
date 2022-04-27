@@ -47,8 +47,8 @@ public class Config extends ConfigBase {
      * sys_log_verbose_modules:
      * Verbose modules. VERBOSE level is implemented by log4j DEBUG level.
      * eg:
-     * sys_log_verbose_modules = com.starrocks.catalog
-     * This will only print debug log of files in package com.starrocks.catalog and all its sub packages.
+     * sys_log_verbose_modules = com.starrocks.globalStateMgr
+     * This will only print debug log of files in package com.starrocks.globalStateMgr and all its sub packages.
      * <p>
      * sys_log_roll_interval:
      * DAY:  log suffix is yyyyMMdd
@@ -886,7 +886,7 @@ public class Config extends ConfigBase {
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
     /**
-     * The tryLock timeout configuration of catalog lock.
+     * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
      */
     @ConfField(mutable = true)

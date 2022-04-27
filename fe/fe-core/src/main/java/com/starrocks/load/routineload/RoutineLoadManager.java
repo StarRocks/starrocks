@@ -32,7 +32,6 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StopRoutineLoadStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -53,6 +52,7 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -153,7 +153,7 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             Set<Long> aliveBeIds = Sets.newHashSet();
-            aliveBeIds.addAll(Catalog.getCurrentSystemInfo().getBackendIds(true));
+            aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
 
             // add new be
             for (Long beId : aliveBeIds) {
@@ -172,7 +172,7 @@ public class RoutineLoadManager implements Writable {
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt)
             throws UserException {
         // check load auth
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                 createRoutineLoadStmt.getDBName(),
                 createRoutineLoadStmt.getTableName(),
                 PrivPredicate.LOAD)) {
@@ -213,7 +213,7 @@ public class RoutineLoadManager implements Writable {
             }
 
             unprotectedAddJob(routineLoadJob);
-            Catalog.getCurrentCatalog().getEditLog().logCreateRoutineLoadJob(routineLoadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(routineLoadJob);
             LOG.info("create routine load job: id: {}, name: {}", routineLoadJob.getId(), routineLoadJob.getName());
         } finally {
             writeUnlock();
@@ -235,7 +235,7 @@ public class RoutineLoadManager implements Writable {
         }
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
-        Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         IDictManager.getInstance().forbidGlobalDict(routineLoadJob.getTableId());
     }
 
@@ -271,7 +271,7 @@ public class RoutineLoadManager implements Writable {
         } catch (MetaNotFoundException e) {
             throw new DdlException("The metadata of job has been changed. The job will be cancelled automatically", e);
         }
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                 dbFullName,
                 tableName,
                 PrivPredicate.LOAD)) {
@@ -380,7 +380,7 @@ public class RoutineLoadManager implements Writable {
             }
 
             long dbId = 0L;
-            Database database = Catalog.getCurrentCatalog().getDb(dbFullName);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
             if (database == null) {
                 throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
             }
@@ -620,7 +620,7 @@ public class RoutineLoadManager implements Writable {
             }
             jobs.add(routineLoadJob);
             if (!routineLoadJob.getState().isFinalState()) {
-                Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
             }
         }
     }

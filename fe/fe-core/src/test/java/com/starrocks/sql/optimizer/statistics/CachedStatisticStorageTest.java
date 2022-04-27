@@ -4,13 +4,13 @@ package com.starrocks.sql.optimizer.statistics;
 
 import avro.shaded.com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticExecutor;
@@ -26,7 +26,6 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -60,7 +59,7 @@ public class CachedStatisticStorageTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            Catalog.getCurrentCatalog().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }
@@ -100,7 +99,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistic(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getCatalog().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("t0");
 
         new Expectations() {{
@@ -131,7 +130,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getCatalog().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("t0");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
@@ -151,7 +150,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getCatalog().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         Table table = db.getTable("t0");
 
         new Expectations() {{
@@ -170,7 +169,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testConvert2ColumnStatistics() {
-        Database db = connectContext.getCatalog().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("t0");
         CachedStatisticStorage cachedStatisticStorage = Deencapsulation.newInstance(CachedStatisticStorage.class);
 
