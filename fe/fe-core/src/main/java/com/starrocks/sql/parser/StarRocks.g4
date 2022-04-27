@@ -29,6 +29,7 @@ statement
     | dropViewStatement                                                                     #dropView
 
     // Materialized View Statement
+    | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterialized
 
     // DML Statement
@@ -101,6 +102,10 @@ dropViewStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
+
+showMaterializedViewStatement
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+    ;
 
 dropMaterializedViewStatement
     : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName

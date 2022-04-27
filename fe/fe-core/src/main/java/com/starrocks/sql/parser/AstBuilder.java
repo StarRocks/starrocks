@@ -70,6 +70,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -287,6 +288,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
     @Override
+    public ParseNode visitShowMaterializedViewStatement(StarRocksParser.ShowMaterializedViewStatementContext context) {
+        String database = null;
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
+        }
+        return new ShowMaterializedViewStmt(database);
+    }
+
+    @Override
     public ParseNode visitDropMaterializedViewStatement(StarRocksParser.DropMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
@@ -413,7 +423,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return ret;
     }
-
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
@@ -1653,7 +1662,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ColumnAssignment(column, expr);
     }
 
-
     @Override
     public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -1674,11 +1682,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitMultiRangePartition(StarRocksParser.MultiRangePartitionContext context) {
         if (context.interval() != null) {
             IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
-
+            Expr expr = intervalLiteral.getValue();
+            long intervalVal;
+            if (expr instanceof IntLiteral) {
+                intervalVal = ((IntLiteral) expr).getLongValue();
+            } else {
+                throw new IllegalArgumentException("Unsupported interval expr: " + expr);
+            }
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
-                    Long.parseLong(intervalLiteral.getValue().toString()),
+                    intervalVal,
                     intervalLiteral.getUnitIdentifier().getDescription());
         } else {
             return new MultiRangePartitionDesc(

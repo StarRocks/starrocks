@@ -21,42 +21,44 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import mockit.Expectations;
-import mockit.Mocked;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 public class ShowMaterializedViewTest {
-    private Analyzer analyzer;
-    @Mocked
-    Auth auth;
+    private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        new Expectations() {
-            {
-                auth.checkDbPriv(ConnectContext.get(), anyString, PrivPredicate.SHOW);
-                result = true;
-            }
-        };
     }
 
     @Test
-    public void testNormal() throws AnalysisException {
-        // use default database
-        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("test");
-        try {
-            stmt.analyze(analyzer);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        Assert.assertEquals("testCluster:test", stmt.getDb());
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:test", stmt.toString());
+    public void testNormal() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setCluster("testCluster");
+        ctx.setDatabase("testDb");
+
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:testDb", stmt.toString());
+        Assert.assertEquals("testCluster:testDb", stmt.getDb());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testNoDb() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("No exception throws");
     }
 }
