@@ -47,17 +47,12 @@ public class BackendClause extends AlterClause {
         return hostPortPairs;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        for (String hostPort : hostPorts) {
-            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-            hostPortPairs.add(pair);
-        }
-
-        Preconditions.checkState(!hostPortPairs.isEmpty());
+    public List<String> getHostPorts() {
+        return hostPorts;
     }
 
-    public void transferHostPorts() throws AnalysisException{
+    @Override
+    public void analyze(Analyzer analyzer) throws AnalysisException {
         for (String hostPort : hostPorts) {
             Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
             hostPortPairs.add(pair);

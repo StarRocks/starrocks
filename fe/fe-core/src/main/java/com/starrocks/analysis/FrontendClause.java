@@ -57,6 +57,18 @@ public class FrontendClause extends AlterClause {
         return port;
     }
 
+    public String getHostPort() {
+        return hostPort;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
@@ -64,13 +76,6 @@ public class FrontendClause extends AlterClause {
                     analyzer.getQualifiedUser());
         }
 
-        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-        this.host = pair.first;
-        this.port = pair.second;
-        Preconditions.checkState(!Strings.isNullOrEmpty(host));
-    }
-
-    public void transferHostPort() throws AnalysisException{
         Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
         this.host = pair.first;
         this.port = pair.second;

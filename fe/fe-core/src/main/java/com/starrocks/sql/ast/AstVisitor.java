@@ -13,6 +13,7 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -57,6 +59,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.qe.ConnectContext;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -180,6 +183,9 @@ public abstract class AstVisitor<R, C> {
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
+    public abstract Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context);
+
     public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -361,4 +367,6 @@ public abstract class AstVisitor<R, C> {
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
+
+    public abstract Void visitBackendClause(BackendClause backendClause, ConnectContext context);
 }
