@@ -805,7 +805,7 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
-                case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN:{
+                case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
                     globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);

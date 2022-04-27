@@ -241,6 +241,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
@@ -254,7 +255,6 @@ import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.qe.AuditEventProcessor;
@@ -6355,7 +6355,7 @@ public class GlobalStateMgr {
     }
 
     public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
-        if (info.getDbName() == null){
+        if (info.getDbName() == null) {
             return;
         }
         String hiveExternalDb = info.getDbName();
