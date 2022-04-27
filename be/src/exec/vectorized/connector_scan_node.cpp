@@ -76,12 +76,17 @@ public:
         return Status::OK();
     }
     Status open(RuntimeState* state) {
+        if (_is_open) return Status::OK();
         RETURN_IF_ERROR(_data_source->open(state));
         _is_open = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
-    Status get_next(RuntimeState* state, ChunkPtr* chunk) { return _data_source->get_next(state, chunk); }
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) {
+        RETURN_IF_ERROR(_data_source->get_next(state, chunk));
+        // VLOG_FILE << "scanner get chunk size = " << (*chunk)->num_rows();
+        return Status::OK();
+    }
 
     int64_t raw_rows_read() const { return _data_source->raw_rows_read(); }
     int64_t num_rows_read() const { return _data_source->num_rows_read(); }

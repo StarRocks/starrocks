@@ -29,14 +29,14 @@ public:
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
-    THdfsScanNode _hdfs_scan_node;
+    const THdfsScanNode _hdfs_scan_node;
 };
 
 class HiveDataSource final : public DataSource {
 public:
     ~HiveDataSource() override = default;
 
-    HiveDataSource(HiveDataSourceProvider* provider, const TScanRange& scan_range);
+    HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
     Status init() override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -46,8 +46,8 @@ public:
     int64_t num_rows_read() const override;
 
 private:
-    HiveDataSourceProvider* _provider;
-    THdfsScanRange _scan_range;
+    const HiveDataSourceProvider* _provider;
+    const THdfsScanRange _scan_range;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);

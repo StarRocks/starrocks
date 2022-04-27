@@ -31,7 +31,7 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
 
 // ================================
 
-HiveDataSource::HiveDataSource(HiveDataSourceProvider* provider, const TScanRange& scan_range)
+HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
 Status HiveDataSource::init() {
