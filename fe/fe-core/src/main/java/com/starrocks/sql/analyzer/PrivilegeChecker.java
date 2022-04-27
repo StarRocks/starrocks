@@ -2,6 +2,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -11,6 +13,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -62,6 +65,24 @@ public class PrivilegeChecker {
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             check(statement.getQueryStatement(), session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt statement, ConnectContext session) {
+            // check auth
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
+            // check auth
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
             return null;
         }
 
@@ -154,6 +175,17 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "NODE");
+            }
+            return null;
+          
+        }
+        public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, ConnectContext session) {
+            String db = statement.getDb();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                        session.getQualifiedUser(),
+                        session.getRemoteIP(),
+                        db);
             }
             return null;
         }

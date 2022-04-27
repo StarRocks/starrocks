@@ -8,6 +8,7 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -73,6 +74,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -203,6 +205,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitShowMaterializedView(StarRocksParser.ShowMaterializedViewContext context) {
+        String database = null;
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
+        }
+        return new ShowMaterializedViewStmt(database);
+    }
+
+    @Override
     public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
         Map<String, String> configs = new HashMap<>();
         Property property = (Property) visitProperty(context.property());
@@ -264,6 +275,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return queryStatement;
+    }
+
+    @Override
+    public ParseNode visitAdminSetReplicaStatus(StarRocksParser.AdminSetReplicaStatusContext context) {
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AdminSetReplicaStatusStmt(properties);
     }
 
     @Override
@@ -418,11 +439,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitMultiRangePartition(StarRocksParser.MultiRangePartitionContext context) {
         if (context.interval() != null) {
             IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
-
+            Expr expr = intervalLiteral.getValue();
+            long intervalVal;
+            if (expr instanceof IntLiteral) {
+                intervalVal = ((IntLiteral) expr).getLongValue();
+            } else {
+                throw new IllegalArgumentException("Unsupported interval expr: " + expr);
+            }
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
-                    Long.parseLong(intervalLiteral.getValue().toString()),
+                    intervalVal,
                     intervalLiteral.getUnitIdentifier().getDescription());
         } else {
             return new MultiRangePartitionDesc(
