@@ -10,22 +10,22 @@ import javax.annotation.concurrent.GuardedBy;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class MetadataManager {
-    private static final Logger LOG = LogManager.getLogger(MetadataManager.class);
+public class MetadataMgr {
+    private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
     @GuardedBy("this")
-    private final ConcurrentHashMap<String, ConnectorMetadata> connectorsMetadata = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConnectorMetadata> connectorMetadatas = new ConcurrentHashMap<>();
 
     public void addMetadata(String catalogName, ConnectorMetadata metadata) {
-        connectorsMetadata.put(catalogName, metadata);
+        connectorMetadatas.put(catalogName, metadata);
     }
 
     public void removeMetadata(String catalogName) {
-        connectorsMetadata.remove(catalogName);
+        connectorMetadatas.remove(catalogName);
     }
 
     // get metadata by catalog name
     private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         // TODO: return local metastore for default internal catalog
-        return Optional.of(connectorsMetadata.get(catalogName));
+        return Optional.of(connectorMetadatas.get(catalogName));
     }
 }
