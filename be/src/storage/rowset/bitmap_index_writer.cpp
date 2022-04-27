@@ -79,7 +79,6 @@ public:
             if (LIKELY(_element_count < estimate_size_threshold)) {
                 *reverted_index_size += sizeof(uint32_t);
             } else {
-                // If _element_count equals to estimate_size_threshold
                 *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
                 _disable_estimate_size = true;
                 _size_changed = true;
