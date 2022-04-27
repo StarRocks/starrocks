@@ -39,6 +39,7 @@ statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -642,8 +643,8 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | ROLLUP | ROLLBACK | REPLICA
+    | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE

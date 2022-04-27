@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -98,6 +99,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         }
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     public long getTabletId() {
         return tabletId;
     }
@@ -113,5 +118,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminSetReplicaStatusStatement(this, context);
     }
 }

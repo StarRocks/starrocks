@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -96,6 +97,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

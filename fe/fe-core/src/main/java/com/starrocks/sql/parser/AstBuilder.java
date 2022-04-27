@@ -4,7 +4,82 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.ArrayElementExpr;
+import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BetweenPredicate;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CaseWhenClause;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.ColWithComment;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.ExistsPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.GroupByClause;
+import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.InsertTarget;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LargeIntLiteral;
+import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiRangePartitionDesc;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.OdbcScalarFunctionCall;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.OutFileClause;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.PartitionKeyDesc;
+import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.SelectList;
+import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.UseStmt;
+import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -211,6 +286,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitTableRenameClause(StarRocksParser.TableRenameClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new TableRenameClause(identifier.getValue());
+    }
+
+    @Override
+    public ParseNode visitAdminSetReplicaStatus(StarRocksParser.AdminSetReplicaStatusContext context) {
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AdminSetReplicaStatusStmt(properties);
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
