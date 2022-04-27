@@ -375,8 +375,7 @@ CONF_Int32(num_threads_per_disk, "0");
 // There is a trade off of latency and throughout, trying to keep disks busy but
 // not introduce seeks.  The literature seems to agree that with 8 MB reads, random
 // io and sequential io perform similarly.
-CONF_Int32(read_size, "8388608");    // 8 * 1024 * 1024, Read Size (in bytes)
-CONF_Int32(min_buffer_size, "1024"); // 1024, The minimum read buffer size (in bytes)
+CONF_Int32(read_size, "8388608"); // 8 * 1024 * 1024, Read Size (in bytes)
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
