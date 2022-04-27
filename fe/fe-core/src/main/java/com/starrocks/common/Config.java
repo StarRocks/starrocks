@@ -1403,6 +1403,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_bucket_num = 10;
 
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_mv = false;
+  
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
 }

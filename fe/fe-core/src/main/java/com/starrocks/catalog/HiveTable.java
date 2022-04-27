@@ -42,6 +42,7 @@ import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.hive.Utils;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -56,12 +57,14 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 import static com.starrocks.common.util.Util.validateMetastoreUris;
 
 /**
@@ -191,9 +194,78 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
+        Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
+        Map<String, Column> preNameToColumn = nameToColumn;
+        boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
+        if (!needRefreshColumn) {
+            refreshTableCache(nameToColumn);
+        } else {
+            refreshSchemaCache(preNameToColumn, updatedTableSchemas);
+            refreshTableCache(nameToColumn);
+            modifyTableSchema(dbName, tableName);
+        }
+    }
+
+    private void refreshTableCache(Map<String, Column> nameToColumn) throws DdlException {
+        HiveMetaStoreTableInfo hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
+                partColumnNames, new ArrayList<>(nameToColumn.keySet()), nameToColumn, TableType.HIVE);
         GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableCache(hmsTableInfo);
+    }
+
+    private Map<String, FieldSchema> getAllHiveColumns() throws DdlException {
+        org.apache.hadoop.hive.metastore.api.Table table = GlobalStateMgr.getCurrentState().getHiveRepository()
+                .getTable(resourceName, this.hiveDb, this.hiveTable);
+        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+        return allHiveColumns;
+    }
+
+    public boolean isRefreshColumn(Map<String, Column> preNameToColumn,
+                                   Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
+        boolean needRefreshColumn = updatedTableSchemas.size() != preNameToColumn.size();
+        if (!needRefreshColumn) {
+            for (Column column : preNameToColumn.values()) {
+                FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
+                if (fieldSchema == null) {
+                    needRefreshColumn = true;
+                    break;
+                }
+                PrimitiveType type = convertColumnType(fieldSchema.getType());
+                if (type != column.getType().getPrimitiveType()) {
+                    needRefreshColumn = true;
+                    break;
+                }
+            }
+        }
+        return needRefreshColumn;
+    }
+
+    private void refreshSchemaCache(Map<String, Column> preNameToColumn,
+                                    Map<String, FieldSchema> allHiveColumns) throws DdlException {
+        fullSchema.clear();
+        nameToColumn.clear();
+        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
+            FieldSchema fieldSchema = entry.getValue();
+            PrimitiveType srType = convertColumnType(fieldSchema.getType());
+            Column srColumn = preNameToColumn.get(entry.getKey());
+            Column column;
+            if (srColumn != null) {
+                column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
+                        srColumn.getAggregationType(), srColumn.isAllowNull(), NULL_DEFAULT_VALUE, srColumn.getComment());
+            } else {
+                column = new Column(fieldSchema.getName(), ScalarType.createType(srType),
+                        true, null, true, NULL_DEFAULT_VALUE, fieldSchema.getComment());
+            }
+            fullSchema.add(column);
+            nameToColumn.put(column.getName(), column);
+        }
     }
 
     @Override
@@ -206,6 +278,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void refreshTableColumnStats() throws DdlException {
         GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableColumnStats(hmsTableInfo);
+    }
+
+    @Override
+    public void modifyTableSchema(String dbName, String tableName) {
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            return;
+        }
+        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
     }
 
     /**
@@ -323,6 +404,43 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
+        }
+    }
+
+    private PrimitiveType convertColumnType(String hiveType) throws DdlException {
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        switch (typeUpperCase) {
+            case "TINYINT":
+                return PrimitiveType.TINYINT;
+            case "SMALLINT":
+                return PrimitiveType.SMALLINT;
+            case "INT":
+            case "INTEGER":
+                return PrimitiveType.INT;
+            case "BIGINT":
+                return PrimitiveType.BIGINT;
+            case "FLOAT":
+                return PrimitiveType.FLOAT;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                return PrimitiveType.DOUBLE;
+            case "DECIMAL":
+            case "NUMERIC":
+                return PrimitiveType.DECIMAL32;
+            case "TIMESTAMP":
+                return PrimitiveType.DATETIME;
+            case "DATE":
+                return PrimitiveType.DATE;
+            case "STRING":
+            case "VARCHAR":
+            case "BINARY":
+                return PrimitiveType.VARCHAR;
+            case "CHAR":
+                return PrimitiveType.CHAR;
+            case "BOOLEAN":
+                return PrimitiveType.BOOLEAN;
+            default:
+                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
         }
     }
 

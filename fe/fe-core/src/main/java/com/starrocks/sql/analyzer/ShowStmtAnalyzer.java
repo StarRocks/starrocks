@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -52,6 +53,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowTableStatusStmt(ShowTableStatusStmt node, ConnectContext context) {
+            String db = node.getDb();
+            db = getFullDatabaseName(db, context);
+            node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt node, ConnectContext context) {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);

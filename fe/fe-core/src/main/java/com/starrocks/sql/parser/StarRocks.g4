@@ -40,7 +40,9 @@ statement
         AS queryStatement                                                                   #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
     ;
 
 alterClause
@@ -553,8 +555,8 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | ROLLUP | ROLLBACK | REPLICA
+    | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
