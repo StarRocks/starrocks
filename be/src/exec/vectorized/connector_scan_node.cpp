@@ -228,13 +228,15 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     }
 
     {
-        std::lock_guard<std::mutex> l(_mtx);
+        std::unique_lock<std::mutex> l(_mtx);
         const int32_t num_closed = _closed_scanners.load(std::memory_order_acquire);
         const int32_t num_pending = _pending_scanners.size();
         const int32_t num_running = _num_scanners - num_pending - num_closed;
         if ((num_pending > 0) && (num_running < config::max_hdfs_scanner_num)) {
             if (_chunk_pool.size() >= (num_running + 1) * _chunks_per_scanner) {
-                (void)_submit_scanner(_pop_pending_scanner(), true);
+                ConnectorScanner* scanner = _pop_pending_scanner();
+                l.unlock();
+                (void)_submit_scanner(scanner, true);
             }
         }
     }
