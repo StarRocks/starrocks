@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.DdlStmt;
@@ -54,22 +53,6 @@ public class AlterSystemStmtAnalyzer {
 
 
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
-            AlterClause alterClause = statement.getAlterClause();
-            if (alterClause instanceof BackendClause) {
-                try {
-                    ((BackendClause) alterClause).transferHostPorts();
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-
-            if (alterClause instanceof FrontendClause) {
-                try {
-                    ((FrontendClause) alterClause).transferHostPort();
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
-                }
-            }
             return null;
         }
     }

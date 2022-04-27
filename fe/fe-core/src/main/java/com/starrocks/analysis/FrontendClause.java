@@ -32,6 +32,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -92,4 +93,8 @@ public class FrontendClause extends AlterClause {
         throw new NotImplementedException();
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitFrontendClause(this,context);
+    }
 }

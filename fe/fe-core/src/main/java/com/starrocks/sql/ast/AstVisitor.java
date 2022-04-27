@@ -59,7 +59,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.qe.ConnectContext;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -183,8 +182,6 @@ public abstract class AstVisitor<R, C> {
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
-    public abstract Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context);
 
     public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -368,5 +365,12 @@ public abstract class AstVisitor<R, C> {
         return null;
     }
 
-    public abstract Void visitBackendClause(BackendClause backendClause, ConnectContext context);
+    public R visitBackendClause(BackendClause backendClause, C context) {
+        return null;
+    }
+
+
+    public R visitFrontendClause(FrontendClause frontendClause, C context) {
+        return null;
+    }
 }
