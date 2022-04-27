@@ -340,9 +340,12 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
     }
 
     TAgentResult result;
+    // snapshot will hard link all required rowsets' segment files, the number of files may be very large(>1000),
+    // so it may take some time to process this rpc, so we increase rpc timeout from 5s to 20s to reduce the chance
+    // of timeout for now, we may need a smart way to estimate the time of make_snapshot in future
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<BackendServiceClient>(
-            ip, port,
-            [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); }));
+            ip, port, [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); },
+            config::make_snapshot_rpc_timeout_ms));
     if (result.status.status_code != TStatusCode::OK) {
         return Status(result.status);
     }
