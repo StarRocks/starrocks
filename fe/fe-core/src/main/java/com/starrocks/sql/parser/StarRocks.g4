@@ -43,6 +43,8 @@ statement
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ALTER SYSTEM alterClause                                                             #alterSystem
+    | GRANT identifierOrString TO user                                                      #grantRole
+    | REVOKE identifierOrString FROM user                                                   #revokeRole
     | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
     ;
 
@@ -424,6 +426,7 @@ specialFunctionExpression
     | MINUTE '(' expression ')'
     | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
+    | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
@@ -547,6 +550,17 @@ identifierList
     : '(' identifier (',' identifier)* ')'
     ;
 
+identifierOrString
+    : identifier
+    | string
+    ;
+
+user
+    : identifierOrString                                     # userWithoutHost
+    | identifierOrString '@' identifierOrString              # userWithHost
+    | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket
+    ;
+
 assignment
     : identifier EQ expressionOrDefault
     ;
@@ -576,6 +590,7 @@ nonReserved
     | NONE | NULLS
     | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
+    | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
     | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
@@ -583,4 +598,6 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | MATERIALIZED
     ;
+    

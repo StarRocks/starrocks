@@ -30,6 +30,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.MetaUtils;
@@ -148,6 +149,12 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            GrantRevokeRoleAnalyzer.analyze(stmt, session);
             return null;
         }
 

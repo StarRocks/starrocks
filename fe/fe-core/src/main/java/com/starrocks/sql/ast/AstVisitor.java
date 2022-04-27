@@ -61,6 +61,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -102,6 +103,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

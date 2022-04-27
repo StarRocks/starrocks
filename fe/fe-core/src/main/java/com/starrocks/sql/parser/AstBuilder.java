@@ -104,6 +104,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -113,12 +114,14 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -222,6 +225,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
+    public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    @Override
+    public ParseNode visitRevokeRole(StarRocksParser.RevokeRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
@@ -1491,6 +1508,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
+        } else if (context.QUARTER() != null) {
+            return new FunctionCallExpr("quarter", visit(context.expression(), Expr.class));
         } else if (context.REGEXP() != null) {
             return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
@@ -1785,6 +1804,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText());
+    }
+
+    @Override
+    public ParseNode visitIdentifierOrString(StarRocksParser.IdentifierOrStringContext context) {
+        String s = null;
+        if (context.identifier() != null) {
+            s = ((Identifier) visit(context.identifier())).getValue();
+        } else if (context.string() != null) {
+            s = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        return new Identifier(s);
+    }
+
+    @Override
+    public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), true);
+    }
+
+    @Override
+    public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), false);
+    }
+
+    @Override
+    public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString());
+        return new UserIdentifier(user.getValue(), "%", false);
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

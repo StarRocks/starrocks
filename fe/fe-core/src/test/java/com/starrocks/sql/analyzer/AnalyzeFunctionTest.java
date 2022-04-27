@@ -179,6 +179,7 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select second('2022-01-01 00:00:00')");
         //analyzeSuccess("select week('2022-01-01 00:00:00')");
         analyzeSuccess("select year('2022-01-01 00:00:00')");
+        analyzeSuccess("select quarter('2022-01-01 00:00:00')");
 
         analyzeSuccess("select password('root')");
 

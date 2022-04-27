@@ -36,9 +36,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -204,7 +206,9 @@ public class StatementPlanner {
                 || statement instanceof DmlStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RevokeRoleStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
