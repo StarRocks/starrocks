@@ -380,7 +380,7 @@ Status DataDir::load() {
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
-    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func, "");
+    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func);
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;

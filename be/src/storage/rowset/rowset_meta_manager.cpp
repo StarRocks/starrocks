@@ -67,8 +67,7 @@ string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
-        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func,
-        const std::string& prefix) {
+        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func) {
     auto traverse_rowset_meta_func = [&func](std::string_view key, std::string_view value) -> bool {
         // key format: rst_uuid_rowset_id
         std::vector<StringPiece> parts = strings::Split(StringPiece(key.data(), static_cast<int>(key.size())), "_");
@@ -84,7 +83,7 @@ Status RowsetMetaManager::traverse_rowset_metas(
         TabletUid tablet_uid(p1, p2);
         return func(tablet_uid, rowset_id, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX + prefix, traverse_rowset_meta_func);
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
 }
 
 } // namespace starrocks

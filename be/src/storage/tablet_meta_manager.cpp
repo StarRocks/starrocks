@@ -420,8 +420,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
 
 Status TabletMetaManager::walk(
         KVStore* meta,
-        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
-        const std::string& prefix) {
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -431,7 +430,7 @@ Status TabletMetaManager::walk(
         }
         return func(tablet_id, schema_hash, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX + prefix, traverse_header_func);
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
 }
 
 std::string json_to_string(const rapidjson::Value& val_obj) {
