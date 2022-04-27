@@ -44,6 +44,8 @@ statement
     //Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | GRANT identifierOrString TO user                                                      #grantRole
+    | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -624,6 +626,17 @@ identifier
 
 identifierList
     : '(' identifier (',' identifier)* ')'
+    ;
+
+identifierOrString
+    : identifier
+    | string
+    ;
+
+user
+    : identifierOrString                                     # userWithoutHost
+    | identifierOrString '@' identifierOrString              # userWithHost
+    | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket
     ;
 
 assignment
