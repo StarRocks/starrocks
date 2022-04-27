@@ -57,7 +57,11 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
@@ -190,7 +194,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
         Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
         Map<String, Column> preNameToColumn = nameToColumn;
         boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
@@ -199,7 +203,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         } else {
             refreshSchemaCache(preNameToColumn, updatedTableSchemas);
             refreshTableCache(nameToColumn);
-            updateFullSchema(dbName, tableName);
+            modifyTableSchema(dbName, tableName);
         }
     }
 
@@ -264,14 +268,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
     }
 
-    private void updateFullSchema(String dbName, String tableName) {
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
-            return;
-        }
-        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
-    }
-
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getHiveRepository()
@@ -282,6 +278,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void refreshTableColumnStats() throws DdlException {
         GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableColumnStats(hmsTableInfo);
+    }
+
+    @Override
+    public void modifyTableSchema(String dbName, String tableName) {
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            return;
+        }
+        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
     }
 
     /**

@@ -229,7 +229,32 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.persist.*;
+import com.starrocks.persist.AddPartitionsInfo;
+import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DropDbInfo;
+import com.starrocks.persist.DropInfo;
+import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
+import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.ReplacePartitionOperationLog;
+import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.SetReplicaStatusOperationLog;
+import com.starrocks.persist.Storage;
+import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.TableInfo;
+import com.starrocks.persist.TablePropertyInfo;
+import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.qe.AuditEventProcessor;
@@ -6798,7 +6823,7 @@ public class GlobalStateMgr {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache();
+            table.refreshTableCache(dbName, tableName);
         }
     }
 
