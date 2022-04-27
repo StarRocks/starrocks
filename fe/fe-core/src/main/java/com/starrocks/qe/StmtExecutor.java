@@ -591,7 +591,6 @@ public class StmtExecutor {
             Preconditions.checkState(false, "Shouldn't reach here");
         } else {
             try {
-                LOG.info("try analyze xxxx");
                 parsedStmt.analyze(new Analyzer(context.getGlobalStateMgr(), context));
             } catch (AnalysisException e) {
                 throw e;

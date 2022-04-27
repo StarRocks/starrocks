@@ -52,6 +52,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TFetchResourceResult;
 import org.apache.logging.log4j.LogManager;
@@ -126,6 +128,18 @@ public class Auth implements Writable {
         return tablePrivTable;
     }
 
+    /**
+     * check if role exist, this function can be used in analyze phrase to validate role
+     */
+    public boolean doesRoleExist(String roleName) {
+        readLock();
+        try {
+            return roleManager.getRole(roleName) != null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     private GlobalPrivEntry grantGlobalPrivs(UserIdentity userIdentity, boolean errOnExist, boolean errOnNonExist,
                                              PrivBitSet privs) throws DdlException {
         if (errOnExist && errOnNonExist) {
@@ -186,8 +200,25 @@ public class Auth implements Writable {
         dbPrivTable.revoke(entry, errOnNonExist, true /* delete entry when empty */);
     }
 
+    public List<String> getRoleNamesByUser(UserIdentity userIdentity) {
+        readLock();
+        try {
+            return roleManager.getRoleNamesByUser(userIdentity);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * this method merely return the first role name for compatibility
+     * TODO fix this after refactoring the whole user privilege framework
+     **/
     public String getRoleName(UserIdentity userIdentity) {
-        return roleManager.getRoleName(userIdentity);
+        List<String> roleNames = getRoleNamesByUser(userIdentity);
+        if (roleNames.isEmpty()) {
+            return null;
+        }
+        return roleNames.get(0);
     }
 
     private void grantTblPrivs(UserIdentity userIdentity, String db, String tbl, boolean errOnExist,
@@ -565,21 +596,7 @@ public class Auth implements Writable {
 
             // 4. grant privs of role to user
             if (role != null) {
-                for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
-                    // use PrivBitSet copy to avoid same object being changed synchronously
-                    grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                            false /* err on non exist */, true /* is replay */);
-                }
-                for (Map.Entry<ResourcePattern, PrivBitSet> entry : role.getResourcePatternToPrivs().entrySet()) {
-                    // use PrivBitSet copy to avoid same object being changed synchronously
-                    grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                            false /* err on non exist */, true /* is replay */);
-                }
-            }
-
-            if (role != null) {
-                // add user to this role
-                role.addUser(userIdent);
+                grantRoleInternal(role, userIdent, false);
             }
 
             // other user properties
@@ -666,6 +683,68 @@ public class Auth implements Writable {
         } finally {
             writeUnlock();
         }
+    }
+
+    public void grantRole(GrantRoleStmt stmt) throws DdlException {
+        writeLock();
+        try {
+            grantRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent(), true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * simply copy all privileges map from role to user.
+     * TODO this is a temporary implement that make it impossible to safely revoke privilege from role.
+     * We will refactor the whole user privilege framework later to ultimately fix this.
+     *
+     * @param role
+     * @param userIdent
+     * @throws DdlException
+     */
+    private void grantRoleInternal(Role role, UserIdentity userIdent, boolean errOnNonExist) throws DdlException {
+        for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
+            // use PrivBitSet copy to avoid same object being changed synchronously
+            grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
+                    errOnNonExist /* err on non exist */, true /* is replay */);
+        }
+        for (Map.Entry<ResourcePattern, PrivBitSet> entry : role.getResourcePatternToPrivs().entrySet()) {
+            // use PrivBitSet copy to avoid same object being changed synchronously
+            grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
+                    errOnNonExist /* err on non exist */, true /* is replay */);
+        }
+        role.addUser(userIdent);
+    }
+
+    public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
+        writeLock();
+        try {
+            revokeRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * simply remove all privileges of a role from user.
+     * TODO this is a temporary implement that make it impossible to safely revoke privilege from role.
+     * We will refactor the whole user privilege framework later to ultimately fix this.
+     *
+     * @param role
+     * @param userIdent
+     * @throws DdlException
+     */
+    private void revokeRoleInternal(Role role, UserIdentity userIdent) throws DdlException {
+        for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
+            revokeInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
+                    false /* err on non exist */, false /* is replay */);
+        }
+        for (Map.Entry<ResourcePattern, PrivBitSet> entry : role.getResourcePatternToPrivs().entrySet()) {
+            revokeInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
+                    false /* err on non exist */, false /* is replay */);
+        }
+        role.dropUser(userIdent);
     }
 
     // grant
