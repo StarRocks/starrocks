@@ -99,9 +99,7 @@ bool ScanOperator::has_output() const {
 
 bool ScanOperator::pending_finish() const {
     DCHECK(_is_finished);
-    // If there isn't next morsel, and any io task is active,
-    // we just wait for the io thread to end.
-    return _num_running_io_tasks > 0;
+    return false;
 }
 
 bool ScanOperator::is_finished() const {
@@ -177,25 +175,28 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _is_io_task_running[chunk_source_index] = true;
 
     bool offer_task_success = false;
+    std::weak_ptr<ScanOperator> wp = shared_from_this();
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [this, state, chunk_source_index](int worker_id) {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                size_t num_read_chunks = 0;
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
-                // TODO (by laotan332): More detailed information is needed
-                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-                _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+         workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp, state, chunk_source_index](int worker_id) {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    size_t num_read_chunks = 0;
+                    sp->_chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                            sp->_buffer_size, state, &num_read_chunks, worker_id, sp->_workgroup);
+                    // TODO (by laotan332): More detailed information is needed
+                    sp->_workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+                    sp->_workgroup->increment_real_runtime_ns(sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
-                // for big query check
-                COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
-                               _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-                _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                    // for big query check
+                    COUNTER_UPDATE(sp->_total_cost_cpu_time_ns_counter,
+                                sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                    sp->_last_scan_rows_num += sp->_chunk_sources[chunk_source_index]->last_scan_rows_num();
+                }
+
+                sp->_num_running_io_tasks--;
+                sp->_is_io_task_running[chunk_source_index] = false;
             }
-
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
         });
 
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
@@ -205,14 +206,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [this, state, chunk_source_index]() {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
-            }
+        task.work_function = [wp, state, chunk_source_index]() {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    sp->_chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(sp->_buffer_size, state);
+                }
 
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
+                sp->_num_running_io_tasks--;
+                sp->_is_io_task_running[chunk_source_index] = false;
+            }
         };
         // TODO(by satanson): set a proper priority
         task.priority = 20;

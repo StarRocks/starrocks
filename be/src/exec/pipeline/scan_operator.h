@@ -12,7 +12,7 @@ class ScanNode;
 
 namespace pipeline {
 
-class ScanOperator : public SourceOperator {
+class ScanOperator : public SourceOperator, public std::enable_shared_from_this<ScanOperator> {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
