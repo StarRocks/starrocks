@@ -68,9 +68,9 @@ alterTableStatement
     ;
 
 createIndexStatement
-    : CREATE FULLTEXT? INDEX indexName=identifier
+    : CREATE INDEX indexName=identifier
         ON qualifiedName identifierList indexType?
-        (WHERE expression)? comment?
+        comment?
     ;
 
 dropIndexStatement
@@ -127,7 +127,6 @@ createIndexClause
 
 dropIndexClause
     : DROP INDEX indexName=identifier
-    | DROP PRIMARY KEY
     ;
 
 tableRenameClause

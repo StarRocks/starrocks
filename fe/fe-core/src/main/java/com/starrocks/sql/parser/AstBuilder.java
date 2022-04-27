@@ -327,9 +327,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropIndexClause(StarRocksParser.DropIndexClauseContext context) {
-        if (context.PRIMARY() != null) {
-            return new DropIndexClause("PRIMARY", null, true);
-        }
         Identifier identifier = (Identifier) visit(context.identifier());
         return new DropIndexClause(identifier.getValue(), null, true);
     }

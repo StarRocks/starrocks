@@ -1850,10 +1850,6 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)
             throws DdlException {
         String indexName = alterClause.getIndexName();
-        //Mock syntax Alter table tbl drop primary key;
-        if (indexName.equals("PRIMARY")) {
-            return;
-        }
         List<Index> existedIndexes = olapTable.getIndexes();
         Index found = null;
         for (Index existedIdx : existedIndexes) {
