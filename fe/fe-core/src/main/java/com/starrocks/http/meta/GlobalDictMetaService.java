@@ -20,9 +20,9 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * eg:
- * POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=0
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=0
  * (mark disable test_basic use global dict)
- * POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=1
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=1
  * (mark enable test_basic use global dict)
  */
 
@@ -79,7 +79,8 @@ public class GlobalDictMetaService {
 
                 long isEnable = Long.parseLong(request.getSingleParameter(ENABLE).trim());
 
-                GlobalStateMgr.getCurrentState().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
+                GlobalStateMgr.getCurrentState()
+                        .setHasForbitGlobalDict("default_cluster:" + dbName, tableName, isEnable == 0);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
