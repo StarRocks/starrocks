@@ -333,6 +333,43 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     }
 }
 
+ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    const constexpr PrimitiveType TYPE = TYPE_INT;
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0]);
+    RunTimeColumnType<TYPE>::Container& element_container =
+            array_column->elements_column()->is_nullable()
+                    ? down_cast<RunTimeColumnType<TYPE>*>(
+                              down_cast<NullableColumn*>(array_column->elements_column().get())->data_column().get())
+                              ->get_data()
+                    : down_cast<RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
+    const auto& offsets = array_column->offsets_column()->get_data();
+
+    NullColumn::Container::pointer null_data =
+            array_column->elements_column()->is_nullable()
+                    ? down_cast<NullableColumn*>(array_column->elements_column().get())->null_column_data().data()
+                    : nullptr;
+
+    for (int row = 0; row < size; ++row) {
+        uint32_t offset = offsets[row];
+        uint32_t length = offsets[row + 1] - offsets[row];
+        if (null_data && null_data[row]) {
+            builder.append_null();
+            continue;
+        }
+        // build bitmap
+        BitmapValue bitmap;
+        for(int j = offset;j<length;j++) {
+            bitmap.add(element_container[j]);
+        }
+        // append bitmap
+        builder.append(&bitmap);
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 

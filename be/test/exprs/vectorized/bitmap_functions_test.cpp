@@ -1878,5 +1878,28 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
     free(src);
 }
 
+TEST_F(VecBitmapFunctionsTest, arrayToBitmapTest) {
+    {
+        Columns columns;
+
+        auto s = BinaryColumn::create();
+
+        s->append_datum(Datum(DatumArray{Datum("a")}));
+        s->append_datum(Datum(DatumArray{Datum("a"), Datum("b")}));
+        columns.push_back(s);
+
+
+        auto column = BitmapFunctions::array_to_bitmap(ctx, columns);
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(5, p->get_object(0)->serialize_size());
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+
+}
+
 } // namespace vectorized
 } // namespace starrocks
