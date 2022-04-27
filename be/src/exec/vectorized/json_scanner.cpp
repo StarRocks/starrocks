@@ -720,7 +720,7 @@ Status JsonReader::_read_and_parse_json() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << data[i] << "]";
-            return Status::EndOfFile("illegal json started with " + data[i]);
+            return Status::DataQualityError(fmt::format("illegal json started with {}", data[i]));
         }
     }
 
