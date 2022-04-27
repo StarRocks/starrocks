@@ -598,6 +598,5 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    | MATERIALIZED
     ;
     

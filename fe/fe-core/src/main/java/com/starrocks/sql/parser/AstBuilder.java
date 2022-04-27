@@ -622,7 +622,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.OBSERVER() != null) {
             return new AddObserverClause(cluster);
         } else {
-            Preconditions.checkState(false,"frontend clause error.");
+            Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
     }
@@ -635,7 +635,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.OBSERVER() != null) {
             return new DropObserverClause(cluster);
         } else {
-            Preconditions.checkState(false,"frontend clause error.");
+            Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
     }
