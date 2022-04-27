@@ -131,8 +131,6 @@ private:
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
-    _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
 ConnectorScanNode::~ConnectorScanNode() {
@@ -143,7 +141,9 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
-    _data_source_provider->init(state, tnode);
+
+    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _data_source_provider = c->create_data_source_provider(this, tnode);
     return Status::OK();
 }
 

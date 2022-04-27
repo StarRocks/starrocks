@@ -50,8 +50,6 @@ class DataSourceProvider {
 public:
     virtual ~DataSourceProvider() = default;
 
-    virtual Status init(RuntimeState* state, const TPlanNode& plan_node) { return Status::OK(); }
-
     // First version we use TScanRange to define scan range
     // Later version we could use user-defined data.
     virtual DataSourcePtr create_data_source(const TScanRange& scan_range) = 0;
