@@ -272,7 +272,7 @@ struct TypeDescriptor {
 
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
-    bool is_huge_type() const { return len >= 128; }
+    bool is_huge_type() const { return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL; }
 
     /// Returns the size of a slot for this type.
     inline int get_slot_size() const {
