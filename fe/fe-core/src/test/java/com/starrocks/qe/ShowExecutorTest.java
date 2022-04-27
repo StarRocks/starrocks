@@ -35,8 +35,10 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -505,6 +507,16 @@ public class ShowExecutorTest {
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("OLAP", resultSet.getString(0));
+    }
+
+    @Test
+    public void testShowUser() throws AnalysisException {
+        ctx.setQualifiedUser("root");
+        ShowUserStmt stmt = new ShowUserStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("root", resultSet.getString(0));
     }
 
     @Test

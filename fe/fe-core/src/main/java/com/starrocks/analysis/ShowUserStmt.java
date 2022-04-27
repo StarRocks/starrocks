@@ -23,35 +23,15 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.AuthProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 public class ShowUserStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA;
+    private static final ShowResultSetMetaData META_DATA =
+        ShowResultSetMetaData.builder()
+                .addColumn(new Column("User", ScalarType.createVarchar(50)))
+                .build();
 
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : AuthProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        META_DATA = builder.build();
-    }
-
-    private String user;
-
-    public ShowUserStmt() {
-
-    }
-
-    public String getUser() {
-        return user;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        user = analyzer.getQualifiedUser();
-    }
+    public ShowUserStmt() { }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
