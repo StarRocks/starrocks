@@ -405,6 +405,7 @@ specialFunctionExpression
     | MINUTE '(' expression ')'
     | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
+    | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
@@ -568,6 +569,7 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
+    | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
     | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
