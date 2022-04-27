@@ -324,7 +324,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     LOG(WARNING) << "find alter task but not find related tablet, "
                                  << "related_tablet_id=" << related_tablet_id
                                  << ", related_schema_hash=" << related_schema_hash;
-                    return Status::InternalError("Table not found");
+                    return res.status();
                     // if current tablet is new tablet, only push current tablet
                 } else if (tablet->creation_time() > related_tablet->creation_time()) {
                     LOG(INFO) << "current tablet is new, only push current tablet. "

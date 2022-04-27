@@ -49,7 +49,7 @@ Status EnginePublishVersionTask::finish() {
         return Status::NotFound(fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
                                             _tablet_info.tablet_id, _transaction_id));
     } else if (!res.ok()) {
-        LOG(WARNING) << "failed to get  tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
+        LOG(WARNING) << "failed to get tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
                      << ", txn_id: " << _transaction_id << " " << to_status(res);
         return res.status();
     }

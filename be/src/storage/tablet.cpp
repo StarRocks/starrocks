@@ -609,12 +609,12 @@ bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
         LOG(WARNING) << "tablet is migrating. tablet_id=" << tablet->tablet_id();
         return true;
     } else {
-        auto st = StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id());
-        if (!st.ok()) {
+        auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id());
+        if (!res.ok()) {
             LOG(WARNING) << "failed to get tablet " << tablet->tablet_id();
             return true;
         }
-        auto tablet_in_manager = st.value();
+        auto tablet_in_manager = res.value();
 
         if (tablet != tablet_in_manager) {
             LOG(WARNING) << "tablet has been migrated. tablet_id=" << tablet->tablet_id();

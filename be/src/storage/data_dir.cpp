@@ -444,7 +444,7 @@ Status DataDir::load() {
             //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
             continue;
         } else if (!res.ok()) {
-            return to_status(res);
+            return res.status();
         }
         TabletSharedPtr tablet = res.value();
         RowsetSharedPtr rowset;

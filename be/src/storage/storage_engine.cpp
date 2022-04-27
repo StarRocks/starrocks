@@ -544,15 +544,15 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
         // each tablet
         for (auto& tablet_info : tablet_infos) {
             // should use tablet uid to ensure clean txn correctly
-            auto st = _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
+            auto res = _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
             // The tablet may be dropped or altered, leave a INFO log and go on process other tablet
-            if (!st.ok()) {
+            if (!res.ok()) {
                 LOG(INFO) << "tablet is no longer exist, tablet_id=" << tablet_info.first.tablet_id
                           << " schema_hash=" << tablet_info.first.schema_hash
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
-            TabletSharedPtr tablet = st.value();
+            TabletSharedPtr tablet = res.value();
             StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
@@ -851,9 +851,8 @@ void StorageEngine::_clean_unused_txns() {
     std::set<TabletInfo> tablet_infos;
     _txn_manager->get_all_related_tablets(&tablet_infos);
     for (auto& tablet_info : tablet_infos) {
-        auto st = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
-        if (!st.ok()) {
-            TabletSharedPtr tablet = st.value();
+        auto res = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
+        if (!res.ok()) {
             // TODO(ygl) :  should check if tablet still in meta, it's a improvement
             // case 1: tablet still in meta, just remove from memory
             // case 2: tablet not in meta store, remove rowset from meta
@@ -1044,15 +1043,17 @@ Status StorageEngine::execute_task(EngineTask* task) {
             }
         });
         for (TabletInfo& tablet_info : tablet_infos) {
-            auto st = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (st.ok()) {
-                TabletSharedPtr tablet = st.value();
+            auto res = _tablet_manager->get_tablet(tablet_info.tablet_id);
+            if (res.ok()) {
+                TabletSharedPtr tablet = res.value();
                 tablet->obtain_header_wrlock();
                 ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
                 related_tablets.push_back(tablet);
                 release_guard.cancel();
-            } else {
+            } else if (res.status().is_not_found()) {
                 LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
+            } else {
+                return res.status();
             }
         }
         // add write lock to all related tablets
@@ -1077,15 +1078,17 @@ Status StorageEngine::execute_task(EngineTask* task) {
             }
         });
         for (TabletInfo& tablet_info : tablet_infos) {
-            auto st = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (st.ok()) {
-                TabletSharedPtr tablet = st.value();
+            auto res = _tablet_manager->get_tablet(tablet_info.tablet_id);
+            if (res.ok()) {
+                TabletSharedPtr tablet = res.value();
                 tablet->obtain_header_wrlock();
                 ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
                 related_tablets.push_back(tablet);
                 release_guard.cancel();
-            } else {
+            } else if (res.status().is_not_found()) {
                 LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
+            } else {
+                return res.status();
             }
         }
         // add write lock to all related tablets
