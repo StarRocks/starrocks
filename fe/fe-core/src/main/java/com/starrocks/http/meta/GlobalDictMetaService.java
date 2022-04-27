@@ -20,9 +20,9 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * eg:
- * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=0
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=false
  * (mark disable test_basic use global dict)
- * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=1
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=true
  * (mark enable test_basic use global dict)
  */
 
