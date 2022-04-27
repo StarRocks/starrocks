@@ -206,7 +206,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
         }
         return ptr;
     } catch (std::runtime_error& e) {
-        return Status::RuntimeError(fmt::format("Expr evaluate meet error:{}", e.what()));
+        return Status::RuntimeError(fmt::format("Expr evaluate meet error: {}", e.what()));
     }
 }
 
