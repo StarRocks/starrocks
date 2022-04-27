@@ -35,6 +35,7 @@ const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_ty
         {orc::DATE, TYPE_DATE},       {orc::TIMESTAMP, TYPE_DATETIME},
         {orc::STRING, TYPE_VARCHAR},  {orc::BINARY, TYPE_VARCHAR},
         {orc::CHAR, TYPE_CHAR},       {orc::VARCHAR, TYPE_VARCHAR},
+        {orc::TIMESTAMP_INSTANT, TYPE_DATETIME},
 };
 
 // NOLINTNEXTLINE

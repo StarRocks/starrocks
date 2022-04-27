@@ -229,7 +229,8 @@ public class IcebergTable extends Table {
             case DATE:
                 return primitiveType == PrimitiveType.DATE;
             case TIMESTAMP:
-                return primitiveType == PrimitiveType.DATETIME;
+                return !((Types.TimestampType)icebergType).shouldAdjustToUTC() &&
+                        primitiveType == PrimitiveType.DATETIME;
             case STRING:
             case UUID:
                 return primitiveType == PrimitiveType.VARCHAR ||
