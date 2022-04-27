@@ -203,4 +203,7 @@ public class OperationType {
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
+
+    // external hive table column change
+    public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
 }
