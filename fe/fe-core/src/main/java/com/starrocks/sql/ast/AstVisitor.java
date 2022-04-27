@@ -2,8 +2,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
