@@ -1408,4 +1408,7 @@ public class Config extends ConfigBase {
   
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_dict_optimize_stream_load = true;
 }
