@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -535,6 +536,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment);
     }
+
+    @Override
+    public ParseNode visitAlterSystem(StarRocksParser.AlterSystemContext context) {
+        return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
+    }
+
 
     // ------------------------------------------- Query Relation -------------------------------------------
     @Override

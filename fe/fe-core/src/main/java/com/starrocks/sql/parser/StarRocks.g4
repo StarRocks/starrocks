@@ -41,28 +41,45 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | ALTER SYSTEM alterClause                                                             #alterSystem
     ;
 
 alterClause
     : tableRenameClause
-    | backendClause
-    | frontendClause
+    | addBackendClause
+    | dropBackendClause
+    | addFollowerClause
+    | dropFollowerClause
+    | addObserverClause
+    | dropObserverClause
     ;
 
 tableRenameClause
     : RENAME identifier
     ;
 
-backendClause
+addBackendClause
     : ADD FREE? BACKEND (TO string)? string (',' string)*
-    | DROP BACKEND string (',' string)*
     ;
 
-frontendClause
+dropBackendClause
+    : DROP BACKEND string (',' string)*
+    ;
+
+addFollowerClause
     : ADD FOLLOWER string
-    | DROP FOLLOWER string
-    | ADD OBSERVER string
-    | DROP OBSERVER string
+    ;
+
+dropFollowerClause
+    : DROP FOLLOWER string
+    ;
+
+addObserverClause
+    : ADD OBSERVER string
+    ;
+
+dropObserverClause
+    : DROP OBSERVER string
     ;
 
 explainDesc
