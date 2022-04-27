@@ -290,7 +290,7 @@ private:
     // inc_rowset_expired_sec conf. In addition, the deletion is triggered periodically,
     // So at a certain time point (such as just after a base compaction), some rowsets in
     // _inc_rs_version_map may do not exist in _rs_version_map.
-    std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _rs_version_map;
+    std::map<Version, RowsetSharedPtr> _rs_version_map;
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _inc_rs_version_map;
     // This variable _stale_rs_version_map is used to record these rowsets which are be compacted.
     // These _stale rowsets are been removed when rowsets' pathVersion is expired,
