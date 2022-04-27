@@ -45,6 +45,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -154,6 +155,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowTableStmt(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
