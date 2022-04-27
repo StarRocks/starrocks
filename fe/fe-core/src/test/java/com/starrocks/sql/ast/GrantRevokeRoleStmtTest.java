@@ -5,7 +5,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,10 +41,6 @@ public class GrantRevokeRoleStmtTest {
                 auth.getUserPrivTable();
                 minTimes = 0;
                 result = userPrivTable;
-
-                auth.checkGlobalPriv(ctx, PrivPredicate.GRANT);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -73,7 +68,7 @@ public class GrantRevokeRoleStmtTest {
             }
         };
 
-        // suppose current role exists
+        // suppose current role exists and has GRANT privilege
         new Expectations(auth) {
             {
                 auth.doesRoleExist((String)any);

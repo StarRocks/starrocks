@@ -528,7 +528,8 @@ identifierList
     ;
 
 identifierOrString
-    : ( identifier | string )
+    : identifier
+    | string
     ;
 
 user

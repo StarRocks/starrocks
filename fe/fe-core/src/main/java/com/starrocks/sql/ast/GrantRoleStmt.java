@@ -9,23 +9,6 @@ import com.starrocks.analysis.UserIdentity;
 public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
 
     public GrantRoleStmt(String role, UserIdentity userIdent) {
-        super(role, userIdent);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("GRANT '").append(qualifiedRole).append("' TO ").append(userIdent);
-        return sb.toString();
-    }
-
-    @Override
-    public String getOperationName() {
-        return "GRANT";
-    }
-
-    @Override
-    public String getPrepositionName() {
-        return "TO";
+        super(role, userIdent, "GRANT", "TO");
     }
 }

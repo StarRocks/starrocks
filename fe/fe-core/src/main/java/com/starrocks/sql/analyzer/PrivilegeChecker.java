@@ -174,8 +174,7 @@ public class PrivilegeChecker {
             // check if current user has GRANT priv on GLOBAL level.
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
                     ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportSemanticException(
-                        ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, statement.getOperationName());
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }

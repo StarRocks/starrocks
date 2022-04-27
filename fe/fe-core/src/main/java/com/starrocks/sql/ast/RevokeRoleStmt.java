@@ -9,16 +9,6 @@ import com.starrocks.analysis.UserIdentity;
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
 
     public RevokeRoleStmt(String role, UserIdentity userIdent) {
-        super(role, userIdent);
-    }
-
-    @Override
-    public String getOperationName() {
-        return "GRANT";
-    }
-
-    @Override
-    public String getPrepositionName() {
-        return "TO";
+        super(role, userIdent, "REVOKE", "FROM");
     }
 }
