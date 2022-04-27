@@ -28,13 +28,21 @@ const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable);
 
 // NOLINTNEXTLINE
 const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_type_mapping = {
-        {orc::BOOLEAN, TYPE_BOOLEAN}, {orc::BYTE, TYPE_TINYINT},
-        {orc::SHORT, TYPE_SMALLINT},  {orc::INT, TYPE_INT},
-        {orc::LONG, TYPE_BIGINT},     {orc::FLOAT, TYPE_FLOAT},
-        {orc::DOUBLE, TYPE_DOUBLE},   {orc::DECIMAL, TYPE_DECIMALV2},
-        {orc::DATE, TYPE_DATE},       {orc::TIMESTAMP, TYPE_DATETIME},
-        {orc::STRING, TYPE_VARCHAR},  {orc::BINARY, TYPE_VARCHAR},
-        {orc::CHAR, TYPE_CHAR},       {orc::VARCHAR, TYPE_VARCHAR},
+        {orc::BOOLEAN, TYPE_BOOLEAN},
+        {orc::BYTE, TYPE_TINYINT},
+        {orc::SHORT, TYPE_SMALLINT},
+        {orc::INT, TYPE_INT},
+        {orc::LONG, TYPE_BIGINT},
+        {orc::FLOAT, TYPE_FLOAT},
+        {orc::DOUBLE, TYPE_DOUBLE},
+        {orc::DECIMAL, TYPE_DECIMALV2},
+        {orc::DATE, TYPE_DATE},
+        {orc::TIMESTAMP, TYPE_DATETIME},
+        {orc::STRING, TYPE_VARCHAR},
+        {orc::BINARY, TYPE_VARCHAR},
+        {orc::CHAR, TYPE_CHAR},
+        {orc::VARCHAR, TYPE_VARCHAR},
+        {orc::TIMESTAMP_INSTANT, TYPE_DATETIME},
 };
 
 // NOLINTNEXTLINE
