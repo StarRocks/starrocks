@@ -43,6 +43,7 @@
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
+const std::string TYPE_PARAMETER = "type";
 const std::string DB_PARAMETER = "db";
 const std::string LABEL_PARAMETER = "label";
 const std::string TOKEN_PARAMETER = "token";
@@ -62,7 +63,7 @@ DownloadAction::DownloadAction(ExecEnv* exec_env, const std::string& error_log_r
                   "canonicalize path " + error_log_root_dir + " failed");
 }
 
-void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_param) {
+void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_param, const std::string& type) {
     // check token
     Status status;
     if (config::enable_token_check) {
@@ -87,7 +88,7 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
         return;
     }
     if (*is_dir) {
-        do_dir_response(file_param, req);
+        do_dir_response(file_param, type, req);
     } else {
         do_file_response(file_param, req);
     }
@@ -130,10 +131,13 @@ void DownloadAction::handle(HttpRequest* req) {
         return;
     }
 
+    // Get 'type' parameter
+    const std::string& type = req->param(TYPE_PARAMETER);
+
     if (_download_type == ERROR_LOG) {
         handle_error_log(req, file_path);
     } else if (_download_type == NORMAL) {
-        handle_normal(req, file_path);
+        handle_normal(req, file_path, type);
     }
 
     LOG(INFO) << "Download method:" << to_method_desc(req->method()) << " " << file_path << " "

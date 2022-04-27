@@ -37,7 +37,7 @@ bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth);
 
 void do_file_response(const std::string& dir_path, HttpRequest* req);
 
-void do_dir_response(const std::string& dir_path, HttpRequest* req);
+void do_dir_response(const std::string& dir_path, const std::string& type, HttpRequest* req);
 
 std::string get_content_type(const std::string& file_name);
 } // namespace starrocks
