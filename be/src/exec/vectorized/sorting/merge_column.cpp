@@ -304,6 +304,31 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
+ChunkPtr SortedRun::steal_chunk(size_t size) {
+    if (empty()) {
+        return {};
+    }
+    if (size >= num_rows()) {
+        ChunkPtr res;
+        if (range.first == 0 && range.second == chunk->num_rows()) {
+            // No others reference this chunk
+            res = chunk;
+        } else {
+            res = chunk->clone_empty(num_rows());
+            res->append(*chunk, range.first, num_rows());
+        }
+        range.first = range.second = 0;
+        chunk.reset();
+        return res;
+    } else {
+        size_t required_rows = std::min(size, num_rows());
+        ChunkPtr res = chunk->clone_empty(required_rows);
+        res->append(*chunk, range.first, required_rows);
+        range.first += required_rows;
+        return res;
+    }
+}
+
 int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
     DCHECK_LT(lhs_row, range.second);
     DCHECK_LT(rhs_row, rhs.range.second);
