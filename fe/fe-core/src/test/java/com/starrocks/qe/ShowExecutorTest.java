@@ -34,6 +34,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
+import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;

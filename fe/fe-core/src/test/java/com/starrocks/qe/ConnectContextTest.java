@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -110,8 +111,12 @@ public class ConnectContextTest {
         ctx.setConnectScheduler(connectScheduler);
         Assert.assertNotNull(ctx.getConnectScheduler());
 
-        // connection id
+        // connection id && start time
+        long markerBefore = System.currentTimeMillis();
         ctx.setConnectionId(101);
+        long markerAfter = System.currentTimeMillis();
+        Assert.assertEquals(true, markerBefore <= ctx.getConnectionStartTime());
+        Assert.assertEquals(true, ctx.getConnectionStartTime() <= markerAfter);
         Assert.assertEquals(101, ctx.getConnectionId());
 
         // command
@@ -122,16 +127,17 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(9, row.size());
+        Assert.assertEquals(10, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
         Assert.assertEquals("testCluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getStartTime()) / 1000), row.get(6));
-        Assert.assertEquals("", row.get(7));
+        Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(7));
         Assert.assertEquals("", row.get(8));
+        Assert.assertEquals("", row.get(9));
 
         // Start time
         ctx.setStartTime();
