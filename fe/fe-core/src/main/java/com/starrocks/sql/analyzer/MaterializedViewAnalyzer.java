@@ -31,6 +31,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -38,6 +40,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(MaterializedViewAnalyzer.class);
 
     public static final Map<String, MVColumnPattern> FN_NAME_TO_PATTERN;
 
@@ -76,7 +80,7 @@ public class MaterializedViewAnalyzer {
                 } else if (!(selectListItem.getExpr() instanceof SlotRef)
                         && selectListItem.getAlias() == null) {
                     throw new SemanticException("Materialized view query statement select item " +
-                             selectListItem.getExpr().toSql() + " must has alias except base select item");
+                            selectListItem.getExpr().toSql() + " must has alias except base select item");
                 }
             }
             // analyze query statement, can check table and column is exists in meta
@@ -211,6 +215,7 @@ public class MaterializedViewAnalyzer {
                 distributionDesc.analyze(
                         mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
             } catch (AnalysisException e) {
+                LOG.error("distributionDesc " + distributionDesc + "analyze failed", e);
                 throw new SemanticException(e.getMessage());
             }
         }
