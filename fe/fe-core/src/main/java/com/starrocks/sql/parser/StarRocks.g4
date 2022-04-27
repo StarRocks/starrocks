@@ -44,6 +44,7 @@ statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
+    | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
     ;
 
 alterClause

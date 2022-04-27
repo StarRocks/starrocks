@@ -19,6 +19,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -175,6 +176,7 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt;
     }
 
@@ -206,6 +208,7 @@ public class StatementPlanner {
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
