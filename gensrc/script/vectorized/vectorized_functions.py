@@ -726,4 +726,7 @@ vectorized_functions = [
     [150259, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150260, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150261, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+
+    [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
+    [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
 ]

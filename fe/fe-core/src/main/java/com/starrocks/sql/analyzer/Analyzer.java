@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
@@ -67,6 +68,12 @@ public class Analyzer {
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             analyzeAnalyzeStmt(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
+            AdminSetReplicaStatusStmtAnalyzer.analyze(statement, session);
             return null;
         }
 

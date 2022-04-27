@@ -157,6 +157,9 @@ public:
     DEFINE_VECTORIZED_FN(array_max_datetime);
     DEFINE_VECTORIZED_FN(array_max_varchar);
 
+    DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
+    DEFINE_VECTORIZED_FN(array_cum_sum_double);
+
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 
 private:
