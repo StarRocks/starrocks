@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -21,6 +22,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -55,7 +57,7 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
         }
 
         return (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
-                        .anyMatch(call -> call.isDistinct());
+                .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }
 
     @Override
@@ -81,114 +83,23 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
         List<OptExpression> fistJoinOperatorInputsList = new ArrayList<>();
         // group count divided into pairs
         Map<ColumnRefOperator, CallOperator> countColumnMap = originalAllAggregationOperator.getAggregations();
-        Map<Integer, Map<ColumnRefOperator, CallOperator>> groupCountColumnMap = new HashMap<>();
-
-        int index = 0;
-        int num = 0;
 
         Map<String, ColumnRefOperator> columnMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : countColumnMap.entrySet()) {
             ColumnRefOperator crf = (ColumnRefOperator) entry.getValue().getChild(0);
             String columnName = crf.getName();
             columnMap.put(columnName, crf);
-            if (index % 2 == 0) {
-                Map<ColumnRefOperator, CallOperator> map = new HashMap<>();
-                map.put(entry.getKey(), entry.getValue());
-                groupCountColumnMap.put(num, map);
-            } else {
-                Map<ColumnRefOperator, CallOperator> map = groupCountColumnMap.get(num);
-                map.put(entry.getKey(), entry.getValue());
-                groupCountColumnMap.put(num, map);
-                num = num + 1;
-            }
-            index = index + 1;
         }
 
-        for (Map.Entry<Integer, Map<ColumnRefOperator, CallOperator>> entry : groupCountColumnMap.entrySet()) {
-            OptExpression methodInputs = null;
-            if (entry.getValue().size() < 2) {
+        Map<ColumnRefOperator, CallOperator> copyCountColumnMap = new HashMap<>();
+        copyCountColumnMap.putAll(countColumnMap);
+        OptExpression inputs = constructJoinOperatorInputs(null, copyCountColumnMap, columnMap,
+                columnRefFactory,
+                originalAllAggregationOperator,
+                cteId);
 
-                for (Map.Entry<ColumnRefOperator, CallOperator> ent : entry.getValue().entrySet()) {
-                    CallOperator oldCallOperator = ent.getValue();
-                    List<ScalarOperator> list = new ArrayList<>();
 
-                    Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
-                    for (Map.Entry<String, ColumnRefOperator> ent0 : columnMap.entrySet()) {
-                        String name = ((ColumnRefOperator) oldCallOperator.getChild(0)).getName();
-                        ColumnRefOperator newColumnRefOperator =
-                                columnRefFactory.create(ent0.getValue().getName(),
-                                        ent0.getValue().getType(), true);
-                        if (name.equals(ent0.getKey())) {
-                            list.add(newColumnRefOperator);
-                        }
-                        cteOutputColumnRefMap.put(newColumnRefOperator, ent0.getValue());
-                    }
-
-                    CallOperator newCallOperator = new CallOperator(
-                            oldCallOperator.getFnName(), oldCallOperator.getType(),
-                            list, oldCallOperator.getFunction(), oldCallOperator.isDistinct());
-
-                    Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
-                    aggregations.put(ent.getKey(), newCallOperator);
-                    LogicalAggregationOperator singleAggOperator = new LogicalAggregationOperator(
-                            originalAllAggregationOperator.getType(),
-                            originalAllAggregationOperator.getGroupingKeys(),
-                            aggregations);
-
-                    LogicalCTEConsumeOperator cteConsumeOperator = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
-                    OptExpression singleAggOperatorInputs = new OptExpression(cteConsumeOperator);
-
-                    methodInputs = OptExpression.create(singleAggOperator, singleAggOperatorInputs);
-
-                }
-            } else {
-                // Join -> project 1. count 2.count ; 1.count -> agg -> project metric column -> cte consumer
-                LogicalJoinOperator secondJoinOperator = new LogicalJoinOperator.Builder()
-                        .setJoinType(JoinOperator.CROSS_JOIN)
-                        .setOnPredicate(null)
-                        .build();
-                List<OptExpression> secondJoinOperatorInputsList = new ArrayList<>();
-
-                for (Map.Entry<ColumnRefOperator, CallOperator> ent : entry.getValue().entrySet()) {
-                    CallOperator oldCallOperator = ent.getValue();
-                    List<ScalarOperator> list = new ArrayList<>();
-
-                    Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
-                    for (Map.Entry<String, ColumnRefOperator> ent0 : columnMap.entrySet()) {
-                        String name = ((ColumnRefOperator) oldCallOperator.getChild(0)).getName();
-                        ColumnRefOperator newColumnRefOperator =
-                                columnRefFactory.create(ent0.getValue().getName(),
-                                        ent0.getValue().getType(), true);
-                        if (name.equals(ent0.getKey())) {
-                            list.add(newColumnRefOperator);
-                        }
-                        cteOutputColumnRefMap.put(newColumnRefOperator, ent0.getValue());
-                    }
-
-                    CallOperator newCallOperator = new CallOperator(
-                            oldCallOperator.getFnName(), oldCallOperator.getType(),
-                            list, oldCallOperator.getFunction(), oldCallOperator.isDistinct());
-
-                    Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
-                    aggregations.put(ent.getKey(), newCallOperator);
-                    LogicalAggregationOperator singleAggOperator = new LogicalAggregationOperator(
-                            originalAllAggregationOperator.getType(),
-                            originalAllAggregationOperator.getGroupingKeys(),
-                            aggregations);
-
-                    LogicalCTEConsumeOperator cteConsumeOperator = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
-                    OptExpression singleAggOperatorInputs = new OptExpression(cteConsumeOperator);
-
-                    OptExpression optExpression = OptExpression.create(singleAggOperator, singleAggOperatorInputs);
-                    secondJoinOperatorInputsList.add(optExpression);
-                }
-                methodInputs = OptExpression.create(
-                        secondJoinOperator, secondJoinOperatorInputsList);
-            }
-            fistJoinOperatorInputsList.add(methodInputs);
-        }
-
-        anchorOperatorInputsList.add(OptExpression.create(firstJoinOperator, fistJoinOperatorInputsList));
+        anchorOperatorInputsList.add(inputs);
 
         context.getSessionVariable().setCboCteReuse(true);
         context.getCteContext().setEnableCTE(true);
@@ -196,6 +107,85 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
                 Lists.newArrayList(OptExpression.create(anchorOperator, anchorOperatorInputsList));
 
         return result;
+    }
+
+    private OptExpression constructChildOptExpressions(Map.Entry<ColumnRefOperator, CallOperator> ent,
+                                                       Map<String, ColumnRefOperator> columnMap,
+                                                       ColumnRefFactory columnRefFactory,
+                                                       LogicalAggregationOperator originalAllAggregationOperator,
+                                                       Integer cteId) {
+        CallOperator oldCallOperator = ent.getValue();
+        List<ScalarOperator> list = new ArrayList<>();
+
+        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
+        for (Map.Entry<String, ColumnRefOperator> ent0 : columnMap.entrySet()) {
+            String name = ((ColumnRefOperator) oldCallOperator.getChild(0)).getName();
+            ColumnRefOperator newColumnRefOperator =
+                    columnRefFactory.create(ent0.getValue().getName(),
+                            ent0.getValue().getType(), true);
+            if (name.equals(ent0.getKey())) {
+                list.add(newColumnRefOperator);
+            }
+            cteOutputColumnRefMap.put(newColumnRefOperator, ent0.getValue());
+        }
+
+        CallOperator newCallOperator = new CallOperator(
+                oldCallOperator.getFnName(), oldCallOperator.getType(),
+                list, oldCallOperator.getFunction(), oldCallOperator.isDistinct());
+
+        Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
+        aggregations.put(ent.getKey(), newCallOperator);
+        LogicalAggregationOperator singleAggOperator = new LogicalAggregationOperator(
+                originalAllAggregationOperator.getType(),
+                originalAllAggregationOperator.getGroupingKeys(),
+                aggregations);
+
+        LogicalCTEConsumeOperator cteConsumeOperator = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
+        OptExpression singleAggOperatorInputs = new OptExpression(cteConsumeOperator);
+
+        return OptExpression.create(singleAggOperator, singleAggOperatorInputs);
+    }
+
+
+    private OptExpression constructJoinOperatorInputs(OptExpression optExpression,
+                               Map<ColumnRefOperator, CallOperator> countColumnMap,
+                               Map<String, ColumnRefOperator> columnMap,
+                               ColumnRefFactory columnRefFactory,
+                               LogicalAggregationOperator originalAllAggregationOperator,
+                               Integer cteId) {
+        Iterator<Map.Entry<ColumnRefOperator, CallOperator>> iter = countColumnMap.entrySet().iterator();
+        while (iter.hasNext()) {
+            Map.Entry<ColumnRefOperator, CallOperator> entry = iter.next();
+            OptExpression childOptExpression =
+                    constructChildOptExpressions(entry,
+                            columnMap, columnRefFactory, originalAllAggregationOperator, cteId);
+            if (optExpression == null) {
+                iter.remove();
+                return constructJoinOperatorInputs(childOptExpression,
+                        countColumnMap,
+                        columnMap,
+                        columnRefFactory,
+                        originalAllAggregationOperator,
+                        cteId);
+            }
+            LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
+                    .setJoinType(JoinOperator.CROSS_JOIN)
+                    .setOnPredicate(null)
+                    .build();
+            List<OptExpression> joinOperatorInputsList = new ArrayList<>();
+            joinOperatorInputsList.add(optExpression);
+            joinOperatorInputsList.add(childOptExpression);
+            OptExpression newOptExpression = OptExpression.create(
+                    joinOperator, joinOperatorInputsList);
+            iter.remove();
+            return constructJoinOperatorInputs(newOptExpression,
+                    countColumnMap,
+                    columnMap,
+                    columnRefFactory,
+                    originalAllAggregationOperator,
+                    cteId);
+        }
+        return optExpression;
     }
 
 }
