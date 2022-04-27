@@ -199,7 +199,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowMaterializedView(StarRocksParser.ShowMaterializedViewContext context) {
-        String database = context.db != null ? context.db.getText() : null;
+        String database = null;
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
+        }
         return new ShowMaterializedViewStmt(database);
     }
 
