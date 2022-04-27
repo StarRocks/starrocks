@@ -2,10 +2,32 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
+
+void FragmentContext::set_final_status(const Status& status) {
+    if (_final_status.load() != nullptr) {
+        return;
+    }
+    Status* old_status = nullptr;
+    if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+        _s_status = status;
+        if (_final_status.load()->is_cancelled()) {
+            LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
+                            << ", instance_id=" << print_id(_fragment_instance_id)
+                            << ", reason=" << final_status().to_string();
+            DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor() : _runtime_state->exec_env()->driver_executor();
+            for (auto& driver: _drivers) {
+                executor->cancel(driver.get());
+            }
+        }
+    }
+}
+
+
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);

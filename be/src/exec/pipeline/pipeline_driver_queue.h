@@ -26,6 +26,7 @@ public:
     virtual void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) = 0;
 
     virtual StatusOr<DriverRawPtr> take(int worker_id) = 0;
+    virtual void cancel(DriverRawPtr driver) = 0;
 
     // Update statistics of the driver's workgroup,
     // when yielding the driver in the executor thread.
@@ -49,7 +50,57 @@ public:
 
     double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
 
+    void put(const DriverRawPtr driver) {
+        if (driver->driver_state() == DriverState::CANCELED) {
+            queue.emplace_front(driver);
+        } else {
+            queue.emplace_back(driver);
+        }
+        driver_number++;
+    }
+
+    void cancel(const DriverRawPtr driver) {
+        DCHECK(cancelled_set.find(driver) == cancelled_set.end());
+        pending_cancel_queue.emplace(driver);
+    }
+
+    DriverRawPtr take() {
+        DCHECK(!empty());
+        if (!pending_cancel_queue.empty()) {
+            DriverRawPtr driver = pending_cancel_queue.front();
+            pending_cancel_queue.pop();
+            cancelled_set.insert(driver);
+            --driver_number;
+            return driver;
+        }
+
+        while (!queue.empty()) {
+            DriverRawPtr driver = queue.front();
+            queue.pop_front();
+            auto iter = cancelled_set.find(driver);
+            if (iter != cancelled_set.end()) {
+                cancelled_set.erase(iter);
+            } else {
+                --driver_number;
+                return driver;
+            }
+        }
+        return nullptr;
+    }
+
+    inline bool empty() const {
+        return driver_number == 0;
+    }
+
+    inline size_t size() const {
+        return driver_number;
+    }
+
     std::deque<DriverRawPtr> queue;
+    std::queue<DriverRawPtr> pending_cancel_queue;
+    std::unordered_set<DriverRawPtr> cancelled_set;
+    size_t driver_number = 0;
+
     // factor for normalization
     double factor_for_normal = 0;
 
@@ -88,6 +139,8 @@ public:
 
     // Return cancelled status, if the queue is closed.
     StatusOr<DriverRawPtr> take(int worker_id) override;
+
+    void cancel(DriverRawPtr driver) override;
 
     size_t size() override;
 
@@ -141,6 +194,8 @@ public:
     // Always return non-nullable value.
     StatusOr<DriverRawPtr> take(int worker_id) override;
 
+    void cancel(DriverRawPtr driver) override;
+
     void update_statistics(const DriverRawPtr driver) override;
 
     size_t size() override { return _size; }
@@ -184,6 +239,8 @@ public:
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take(int worker_id) override;
+
+    void cancel(DriverRawPtr driver) override;
 
     void update_statistics(const DriverRawPtr driver) override;
 

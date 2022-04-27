@@ -162,6 +162,14 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
     }
 }
 
+void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
+    // if driver is already in ready queue, we should cancel it
+    // otherwise, just ignore it and wait for the poller to schedule
+    if (driver->is_in_ready_queue()) {
+        this->_driver_queue->cancel(driver);
+    }
+}
+
 void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
     _update_profile_by_level(fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
