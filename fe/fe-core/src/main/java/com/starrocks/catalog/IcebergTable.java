@@ -43,9 +43,9 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    private static final String ICEBERG_CATALOG = "starrocks.globalStateMgr-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.globalStateMgr.hive.metastore.uris";
-    private static final String ICEBERG_IMPL = "iceberg.globalStateMgr-impl";
+    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
     private static final String ICEBERG_DB = "database";
     private static final String ICEBERG_TABLE = "table";
     private static final String ICEBERG_RESOURCE = "resource";
@@ -165,7 +165,7 @@ public class IcebergTable extends Table {
                         IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
                 break;
             default:
-                throw new DdlException("unsupported globalStateMgr type " + type.name());
+                throw new DdlException("unsupported catalog type " + type.name());
         }
         this.resourceName = resourceName;
 
