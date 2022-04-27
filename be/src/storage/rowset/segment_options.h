@@ -47,6 +47,7 @@ public:
     OlapReaderStatistics* stats = nullptr;
 
     RuntimeProfile* profile = nullptr;
+    RuntimeState* runtime_state = nullptr;
 
     bool use_page_cache = false;
 
