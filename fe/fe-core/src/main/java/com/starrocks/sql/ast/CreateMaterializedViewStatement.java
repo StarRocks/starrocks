@@ -15,18 +15,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * //todo add more comments
  * Materialized view is performed to materialize the results of query.
  * This clause is used to create a new materialized view for specified tables
  * through a specified query stmt.
- * <p>
- * Syntax:
- * CREATE MATERIALIZED VIEW [IF NOT EXISTS] mvName
- * [COMMENT]
- * PARTITION BY Table1.Column1
- * REFRESH ASYNC/SYNC
- * AS query_stmt
- * [PROPERTIES ("key" = "value")]
+ * The differences with CreateMaterializedViewStmt:
+ * 1. Supports querying materiazlied view directly and try best to keep the result consistent with querying base tables
+ * 2. Supports creating mvs on multi tables
+ * 3. partition and distribution desc can be specified for each mv independently.
+ * 4. Supports complex computation on columns
+ * 5. Supports adding predicate in sql for mvs
+ * 6. Supports making mvs on external tables
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
@@ -163,8 +161,4 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);
     }
-
-
-
-
 }
