@@ -77,10 +77,10 @@ public class GlobalDictMetaService {
                     return;
                 }
 
-                long isEnable = Long.parseLong(request.getSingleParameter(ENABLE).trim());
+                boolean isEnable = "true".equalsIgnoreCase(request.getSingleParameter(ENABLE).trim());
 
                 GlobalStateMgr.getCurrentState()
-                        .setHasForbitGlobalDict("default_cluster:" + dbName, tableName, isEnable == 0);
+                        .setHasForbitGlobalDict("default_cluster:" + dbName, tableName, isEnable);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
