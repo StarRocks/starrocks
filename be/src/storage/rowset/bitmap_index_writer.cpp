@@ -40,67 +40,81 @@ namespace starrocks {
 
 namespace {
 
-class RoaringWrapper {
-    static const size_t roaring_get_size_fastpath_threshold = 1024;
+class BitmapUpdateContext {
+    static const size_t estimate_size_threshold = 1024;
 
 public:
-    explicit RoaringWrapper(rowid_t rid)
+    explicit BitmapUpdateContext(rowid_t rid)
             : _roaring(Roaring::bitmapOf(1, rid)),
-              _old_size(0),
+              _previous_size(0),
               _element_count(1),
-              _size_changed(true),
-              _enable_get_size_in_bytes(false){};
+              _size_changed(false),
+              _disable_estimate_size(false){};
 
-    Roaring& roaring() { return _roaring; }
+    Roaring* roaring() { return &_roaring; }
 
-    void add_rid(const rowid_t rid, uint64_t* reverted_index_size, vector<RoaringWrapper*>* size_changed_roaring_vec) {
-        _roaring.add(rid);
-        if (_enable_get_size_in_bytes) {
-            if (!_size_changed) {
-                size_changed_roaring_vec->push_back(this);
-            }
-            _size_changed = true;
-        } else {
-            // roaring_get_size fastpath:
-            // If _element_count is less than roaring_get_size_fastpath_threshold, we use
-            // _old_size * (sizeof(uint32_t) + 1) + 1 to approximate estimated true size of roaring bitmap.
-            // The reason for this optimization here is that the getSizeInBytes function in roaring bitmap
-            // is very costly when roaring bitmap has a large number of nearly empty array container.
+    static uint64_t estimate_size(int element_count) {
+        // When _element_count is less than estimate_size_threshold, we use 
+        // (1 + _element_count + 1) * (sizeof(uint32_t)) to approximately estimate true size of roaring bitmap:
+        // one bit pre    4 bytes         4 bytes *  _element_count
+        // [ 1            cardinality      data ]
+        return (1 + sizeof(uint32_t) * (element_count + 1));
+    }
+
+    static void init_estimate_size(uint64_t* reverted_index_size) {
+        *reverted_index_size += BitmapUpdateContext::estimate_size(1);
+    }
+
+    void update_estimate_size(uint64_t* reverted_index_size, vector<BitmapUpdateContext*>* late_update_context_vector) {
+        if (!_disable_estimate_size) {
             _element_count++;
-            if (LIKELY(_element_count < roaring_get_size_fastpath_threshold)) {
+            if (LIKELY(_element_count < estimate_size_threshold)) {
+                // update the estimate size
                 *reverted_index_size += sizeof(uint32_t);
             } else {
-                *reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
+                // If _element_count equals to estimate_size_threshold, clear previous estimate size,
+                // and disable it. Later we will call `getSizeInBytes(false)` to get the exact size of roaring bitmap.
+                // For efficiency, we will not call the `getSizeInBytes(false)` each time when size changed.
+                // We will push the sized changed roaring bitmap into late_update_context_vector, delay calculation
+                // each time when `size()` of bitmap is called.
+                *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
+                _disable_estimate_size = true;
                 _size_changed = true;
-                _enable_get_size_in_bytes = true;
-                size_changed_roaring_vec->push_back(this);
+                late_update_context_vector->push_back(this);
             }
+        } else {
+            // Add BitmapUpdateContext to late_update_context_vector if and only
+            // it hash not been added to late_update_context_vector before.
+            if (!_size_changed) {
+                late_update_context_vector->push_back(this);
+            }
+            _size_changed = true;
         }
     }
 
-    void update_size(uint64_t* reverted_index_size) {
-        uint64_t new_size = _roaring.getSizeInBytes(false);
-        *reverted_index_size += (new_size - _old_size);
-        _old_size = new_size;
+    void late_update_size(uint64_t* reverted_index_size) {
+        uint64_t current_size = _roaring.getSizeInBytes(false);
+        *reverted_index_size += (current_size - _previous_size);
+        _previous_size = current_size;
         _size_changed = false;
     }
 
 private:
     Roaring _roaring;
-    uint64_t _old_size;
+    uint64_t _previous_size;
     uint32_t _element_count;
     bool _size_changed;
-    bool _enable_get_size_in_bytes;
+    bool _disable_estimate_size;
 };
 
 template <typename CppType>
 struct BitmapIndexTraits {
-    using MemoryIndexType = std::map<CppType, RoaringWrapper>;
+    using MemoryIndexType = std::map<CppType, std::unique_ptr<BitmapUpdateContext>>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using MemoryIndexType = std::map<Slice, RoaringWrapper, Slice::Comparator>;
+    using MemoryIndexType = std::map<Slice, std::unique_ptr<BitmapUpdateContext>, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -132,15 +146,14 @@ public:
             const CppType& value = unaligned_load<CppType>(p);
             auto it = _mem_index.find(value);
             if (it != _mem_index.end()) {
-                it->second.add_rid(_rid, &_reverted_index_size, &_size_changed_roaring_vec);
+                it->second->roaring()->add(_rid);
+                it->second->update_estimate_size(&_reverted_index_size, &late_update_context_vector);
             } else {
                 // new value, copy value and insert new key->bitmap pair
                 CppType new_value;
                 _typeinfo->deep_copy(&new_value, &value, &_pool);
-                _mem_index.emplace(new_value, RoaringWrapper(_rid));
-                // one bit indicating type    4 bytes         4 bytes data
-                // [ 1                        cardinality      data ]
-                _reverted_index_size += sizeof(uint32_t) * 2 + 1;
+                _mem_index.emplace(new_value, std::make_unique<BitmapUpdateContext>(_rid));
+                BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
             }
             _rid++;
             p++;
@@ -176,7 +189,7 @@ public:
         { // write bitmaps
             std::vector<Roaring*> bitmaps;
             for (auto& it : _mem_index) {
-                bitmaps.push_back(&(it.second.roaring()));
+                bitmaps.push_back(it.second->roaring());
             }
             if (!_null_bitmap.isEmpty()) {
                 bitmaps.push_back(&_null_bitmap);
@@ -221,10 +234,10 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        for (RoaringWrapper* roaring_wrapper : _size_changed_roaring_vec) {
-            roaring_wrapper->update_size(&_reverted_index_size);
+        for (BitmapUpdateContext* update_context : late_update_context_vector) {
+            update_context->late_update_size(&_reverted_index_size);
         }
-        _size_changed_roaring_vec.clear();
+        late_update_context_vector.clear();
         size += _reverted_index_size;
         size += _mem_index.size() * sizeof(CppType);
         size += _pool.total_allocated_bytes();
@@ -243,8 +256,7 @@ private:
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;
-    // size changed roaring bitmap in current block
-    mutable vector<RoaringWrapper*> _size_changed_roaring_vec;
+    mutable vector<BitmapUpdateContext*> late_update_context_vector;
 };
 
 } // namespace
