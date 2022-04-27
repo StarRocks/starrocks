@@ -112,11 +112,8 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.getConnectScheduler());
 
         // connection id && start time
-        long markerBefore = System.currentTimeMillis();
         ctx.setConnectionId(101);
-        long markerAfter = System.currentTimeMillis();
-        Assert.assertEquals(true, markerBefore <= ctx.getConnectionStartTime());
-        Assert.assertEquals(true, ctx.getConnectionStartTime() <= markerAfter);
+        ctx.resetConnectionStartTime();
         Assert.assertEquals(101, ctx.getConnectionId());
 
         // command

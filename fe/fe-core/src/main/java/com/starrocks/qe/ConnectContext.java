@@ -324,6 +324,9 @@ public class ConnectContext {
 
     public void setConnectionId(int connectionId) {
         this.connectionId = connectionId;
+    }
+
+    public void resetConnectionStartTime() {
         this.connectionStartTime = System.currentTimeMillis();
     }
 
