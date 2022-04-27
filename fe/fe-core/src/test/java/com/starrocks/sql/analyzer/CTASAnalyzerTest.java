@@ -213,6 +213,17 @@ public class CTASAnalyzerTest {
     }
 
     @Test
+    public void testCTASWithDatePartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String partitionSQL = "create table test2 " +
+                "PARTITION BY RANGE(`k1`)(" +
+                "START (\"2021-03-01\") END (\"2022-03-31\") EVERY (INTERVAL 1 MONTH)\n" +
+                ") AS select k1 from duplicate_table_with_null;";
+
+        UtFrameUtils.parseStmtWithNewParser(partitionSQL, ctx);
+    }
+
+    @Test
     public void testTPCH() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String CTASTPCH = "CREATE TABLE lineorder_flat \n" +
