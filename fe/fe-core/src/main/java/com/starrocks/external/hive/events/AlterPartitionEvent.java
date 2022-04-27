@@ -70,9 +70,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean canBeSkipped() {
-        Partition afterPartition = partitionAfter.deepCopy();
-        filterParameters(partitionBefore.getParameters(), afterPartition.getParameters());
-        return afterPartition.equals(partitionBefore);
+        return false;
     }
 
     @Override
