@@ -42,6 +42,7 @@ statement
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
     ;
 
 alterClause
