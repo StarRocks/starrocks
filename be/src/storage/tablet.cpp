@@ -328,17 +328,13 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
-    if (_contains_rowset(rowset->rowset_id())) {
-        return Status::OK();
-    }
     RETURN_IF_ERROR(_contains_version(rowset->version()));
     RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
+    RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
     _rs_version_map[rowset->version()] = rowset;
     _inc_rs_version_map[rowset->version()] = rowset;
 
     _timestamped_version_tracker.add_version(rowset->version());
-
-    RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
 
     // warm-up this rowset
     auto st = rowset->load();
@@ -826,15 +822,9 @@ void Tablet::_print_missed_versions(const std::vector<Version>& missed_versions)
 
 Status Tablet::_contains_version(const Version& version) {
     // check if there exist a rowset contains the added rowset
-    for (auto& it : _rs_version_map) {
-        if (it.first.contains(version)) {
-            // TODO(lingbin): Is this check unnecessary?
-            // because the value type is std::shared_ptr, when will it be nullptr?
-            // In addition, in this class, there are many places that do not make this judgment
-            // when access _rs_version_map's value.
-            CHECK(it.second != nullptr) << "there exist a version=" << it.first
-                                        << " contains the input rs with version=" << version
-                                        << ", but the related rs is null";
+    const auto& lower = _rs_version_map.lower_bound(version);
+    for (auto it = lower; it != _rs_version_map.end(); it++) {
+        if (it->first.contains(version)) {
             return Status::AlreadyExist("push version already exist");
         }
     }
