@@ -189,14 +189,14 @@ public class IcebergTable extends Table {
                 return Sets.newHashSet(PrimitiveType.BOOLEAN);
             case INTEGER:
                 return Sets.newHashSet(PrimitiveType.INT, PrimitiveType.TINYINT, PrimitiveType.SMALLINT);
-            case TIME:
-            case TIMESTAMP:
             case LONG:
                 return Sets.newHashSet(PrimitiveType.BIGINT);
             case FLOAT:
                 return Sets.newHashSet(PrimitiveType.FLOAT);
             case DOUBLE:
                 return Sets.newHashSet(PrimitiveType.DOUBLE);
+            case TIMESTAMP:
+                return Sets.newHashSet(PrimitiveType.DATETIME);
             case DATE:
                 return Sets.newHashSet(PrimitiveType.DATE, PrimitiveType.DATETIME);
             case STRING:
@@ -205,6 +205,7 @@ public class IcebergTable extends Table {
             case DECIMAL:
                 return Sets.newHashSet(PrimitiveType.DECIMALV2, PrimitiveType.DECIMAL32,
                         PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128);
+            case TIME:
             case FIXED:
             case BINARY:
             case STRUCT:
