@@ -27,27 +27,27 @@ public class AlterSystemStmtAnalyzer {
         @Override
         public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
             try {
-                    for (String hostPort : backendClause.getHostPorts()) {
-                        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-                        backendClause.getHostPortPairs().add(pair);
-                    }
-                    Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
+                for (String hostPort : backendClause.getHostPorts()) {
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    backendClause.getHostPortPairs().add(pair);
                 }
+                Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e);
+            }
             return null;
         }
 
         @Override
         public Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context) {
-                try {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(frontendClause.getHostPort());
-                    frontendClause.setHost(pair.first); ;
-                    frontendClause.setPort(pair.second);
-                    Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
-                }
+            try {
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(frontendClause.getHostPort());
+                frontendClause.setHost(pair.first);
+                frontendClause.setPort(pair.second);
+                Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e);
+            }
             return null;
         }
 

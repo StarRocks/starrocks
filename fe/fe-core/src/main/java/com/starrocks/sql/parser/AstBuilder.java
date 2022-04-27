@@ -571,11 +571,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
-        if (context.FOLLOWER() != null){
+        if (context.FOLLOWER() != null) {
             return new AddFollowerClause(cluster);
-        } else if (context.OBSERVER() != null){
+        } else if (context.OBSERVER() != null) {
             return new AddObserverClause(cluster);
-        } else{
+        } else {
             return null;
         }
     }
@@ -583,11 +583,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropFrontendClause(StarRocksParser.DropFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
-        if (context.FOLLOWER() != null){
+        if (context.FOLLOWER() != null) {
             return new DropFollowerClause(cluster);
-        } else if (context.OBSERVER() != null){
+        } else if (context.OBSERVER() != null) {
             return new DropObserverClause(cluster);
-        } else{
+        } else {
             return null;
         }
     }
