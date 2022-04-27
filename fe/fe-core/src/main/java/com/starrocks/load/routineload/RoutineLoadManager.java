@@ -236,7 +236,7 @@ public class RoutineLoadManager implements Writable {
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
-        if (Config.enable_dict_optimize_routine_load) {
+        if (!Config.enable_dict_optimize_routine_load) {
             IDictManager.getInstance().disableGlobalDict(routineLoadJob.getTableId());
         }
     }
