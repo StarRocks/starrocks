@@ -24,14 +24,14 @@
 
 namespace starrocks::vectorized {
 
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func)                         \
-    if (col->reach_capacity_limit()) {                                         \
-        col->reset_column();                                                   \
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func)                          \
+    if (col->reach_capacity_limit()) {                                          \
+        col->reset_column();                                                    \
         throw std::runtime_error("binary column exceed 4G in function " #func); \
     }
 
-#define RETURN_COLUMN(col, func_name)               \
-    auto VARNAME_LINENUM(res) = col;                \
+#define RETURN_COLUMN(col, func_name)                    \
+    auto VARNAME_LINENUM(res) = col;                     \
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name); \
     return VARNAME_LINENUM(res);
 
