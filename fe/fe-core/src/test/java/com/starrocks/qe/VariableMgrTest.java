@@ -88,7 +88,7 @@ public class VariableMgrTest {
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());
         Assert.assertEquals(false, var.isReportSucc());
-        Assert.assertEquals(0L, var.getSqlMode());
+        Assert.assertEquals(32L, var.getSqlMode());
 
         List<List<String>> rows = VariableMgr.dump(SetType.SESSION, var, null);
         Assert.assertTrue(rows.size() > 5);
@@ -100,7 +100,7 @@ public class VariableMgrTest {
             } else if (row.get(0).equalsIgnoreCase("query_timeout")) {
                 Assert.assertEquals("300", row.get(1));
             } else if (row.get(0).equalsIgnoreCase("sql_mode")) {
-                Assert.assertEquals("", row.get(1));
+                Assert.assertEquals("ONLY_FULL_GROUP_BY", row.get(1));
             }
         }
 

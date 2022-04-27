@@ -260,6 +260,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "@@tx_isolation AS tx_isolation, " +
                 "@@wait_timeout AS wait_timeout;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains(
                 "  |  <slot 2> : 1\n" +
                         "  |  <slot 3> : 'utf8'\n" +
@@ -276,7 +277,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                         "  |  <slot 14> : 60\n" +
                         "  |  <slot 15> : 1048576\n" +
                         "  |  <slot 16> : 0\n" +
-                        "  |  <slot 17> : ''\n" +
+                        "  |  <slot 17> : 'ONLY_FULL_GROUP_BY'\n" +
                         "  |  <slot 18> : 'Asia/Shanghai'\n" +
                         "  |  <slot 19> : 'Asia/Shanghai'\n" +
                         "  |  <slot 20> : 'REPEATABLE-READ'\n" +
