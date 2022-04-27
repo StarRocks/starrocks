@@ -87,6 +87,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 
 public class DdlExecutor {
     public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
@@ -147,6 +149,12 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropUserStmt) {
             DropUserStmt stmt = (DropUserStmt) ddlStmt;
             globalStateMgr.getAuth().dropUser(stmt);
+        } else if (ddlStmt instanceof RevokeRoleStmt) {
+            RevokeRoleStmt stmt = (RevokeRoleStmt) ddlStmt;
+            globalStateMgr.getAuth().revokeRole(stmt);
+        } else if (ddlStmt instanceof GrantRoleStmt) {
+            GrantRoleStmt stmt = (GrantRoleStmt) ddlStmt;
+            globalStateMgr.getAuth().grantRole(stmt);
         } else if (ddlStmt instanceof GrantStmt) {
             GrantStmt stmt = (GrantStmt) ddlStmt;
             globalStateMgr.getAuth().grant(stmt);

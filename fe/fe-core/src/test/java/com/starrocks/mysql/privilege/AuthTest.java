@@ -45,6 +45,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -126,6 +128,10 @@ public class AuthTest {
                 ConnectContext.get();
                 minTimes = 0;
                 result = ctx;
+
+                ctx.getClusterName();
+                minTimes = 0;
+                result = SystemInfoService.DEFAULT_CLUSTER;
 
                 ctx.getQualifiedUser();
                 minTimes = 0;
@@ -1190,6 +1196,91 @@ public class AuthTest {
         }
         Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
     }
+
+    @Test
+    public void testGrantRevokeRole() throws Exception {
+        // 1. create user with no role specified
+        UserIdentity userIdentity = new UserIdentity("test_user", "%");
+        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // check if select & load & spark resource usage privilege all not granted
+        String dbName = "default_cluster:db1";
+        String resouceName = "test_spark";
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(0, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 2. add a role with select privilege
+        String selectRoleName = new String("select_role");
+        CreateRoleStmt createRoleStmt = new CreateRoleStmt(selectRoleName);
+        createRoleStmt.analyze(analyzer);
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        auth.createRole(createRoleStmt);
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+
+        // 3. grant select privilege to role
+        TablePattern tablePattern = new TablePattern("db1", "*");
+        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
+        GrantStmt grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 4. grant role to user
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 5. add a new role with load privilege & spark resource usage
+        String loadRoleName = "load_role";
+        createRoleStmt = new CreateRoleStmt(loadRoleName);
+        createRoleStmt.analyze(analyzer);
+        auth.createRole(createRoleStmt);
+
+        // 6. grant load privilege to role
+        privileges = Lists.newArrayList(AccessPrivilege.LOAD_PRIV);
+        grantStmt = new GrantStmt(null, loadRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 8. grant resource to role
+        privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+        ResourcePattern resourcePattern = new ResourcePattern(resouceName);
+        grantStmt = new GrantStmt(null, loadRoleName, resourcePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 7. grant role to user
+        grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select & load privilege & spark resource usage all granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(true, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 8. revoke load & spark resource usage from user
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
+        auth.revokeRole(revokeRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+     }
 
     @Test
     public void testResource() {

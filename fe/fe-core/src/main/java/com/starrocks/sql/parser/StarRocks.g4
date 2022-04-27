@@ -42,6 +42,8 @@ statement
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | GRANT identifierOrString TO user                                                      #grantRole
+    | REVOKE identifierOrString FROM user                                                   #revokeRole
     | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
     ;
 
@@ -524,6 +526,17 @@ identifier
 
 identifierList
     : '(' identifier (',' identifier)* ')'
+    ;
+
+identifierOrString
+    : identifier
+    | string
+    ;
+
+user
+    : identifierOrString                                     # userWithoutHost
+    | identifierOrString '@' identifierOrString              # userWithHost
+    | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket
     ;
 
 assignment
