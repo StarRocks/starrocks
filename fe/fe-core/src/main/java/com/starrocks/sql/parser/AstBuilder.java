@@ -4,6 +4,7 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -542,7 +544,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
 
+    @Override
+    public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        if (context.TO() != null) {
+            return new AddBackendClause(clusters.subList(1, clusters.size() - 1), clusters.get(0));
+        }
+        if (context.FREE() != null) {
+            return new AddBackendClause(clusters, true);
+        }
+        return new AddBackendClause(clusters, false);
+    }
 
+    @Override
+    public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new DropBackendClause(clusters, false);
+    }
     // ------------------------------------------- Query Relation -------------------------------------------
     @Override
     public ParseNode visitQuery(StarRocksParser.QueryContext context) {

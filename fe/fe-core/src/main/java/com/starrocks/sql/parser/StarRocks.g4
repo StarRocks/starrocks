@@ -48,10 +48,8 @@ alterClause
     : tableRenameClause
     | addBackendClause
     | dropBackendClause
-    | addFollowerClause
-    | dropFollowerClause
-    | addObserverClause
-    | dropObserverClause
+    | addFrontendClause
+    | dropFrontendClause
     ;
 
 tableRenameClause
@@ -66,20 +64,12 @@ dropBackendClause
     : DROP BACKEND string (',' string)*
     ;
 
-addFollowerClause
-    : ADD FOLLOWER string
+addFrontendClause
+    : ADD (FOLLOWER | OBSERVER) string
     ;
 
-dropFollowerClause
-    : DROP FOLLOWER string
-    ;
-
-addObserverClause
-    : ADD OBSERVER string
-    ;
-
-dropObserverClause
-    : DROP OBSERVER string
+dropFrontendClause
+    : DROP (FOLLOWER | OBSERVER) string
     ;
 
 explainDesc
@@ -571,25 +561,24 @@ number
 
 nonReserved
     : AVG | ADMIN
-    | BUCKETS
+    | BUCKETS | BACKEND
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
     | MAX | MIN | MINUTE | MONTH | MERGE
     | NONE | NULLS
-    | OFFSET
+    | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | ROLLUP | ROLLBACK
     | SECOND | SESSION | SETS | START | SUM
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
+    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE | TO
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    | BACKEND | OBSERVER | FOLLOWER | FREE | TO
     ;
