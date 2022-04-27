@@ -27,6 +27,16 @@ private:
     ColumnPtr column;
 };
 
+static void compare_decimal_string(const std::string& expect, const std::string& actual, int scale) {
+    if (actual.size() == expect.size()) {
+        ASSERT_EQ(actual, expect);
+    } else {
+        ASSERT_EQ(actual.size() - scale - 1, expect.size());
+        ASSERT_EQ(actual.substr(0, actual.size() - scale - 1), expect);
+        ASSERT_EQ(actual[expect.size()], '.');
+        ASSERT_EQ(actual.substr(expect.size() + 1), std::string(scale, '0'));
+    }
+}
 // CastTestCase:
 // item 0-2: input precision, scale and value in string format
 // item 3-5: output precision, scale and value in string format
@@ -181,7 +191,7 @@ void assert_equal(std::string const& expect, std::string const& actual, [[maybe_
         double epsilon = abs(double(delta)) / double(expect_value + (expect_value == CppType(0)));
         ASSERT_TRUE(epsilon < 0.0000001);
     } else {
-        ASSERT_EQ(expect, actual);
+        compare_decimal_string(expect, actual, scale);
     }
 }
 template <PrimitiveType FromType, PrimitiveType ToType>
