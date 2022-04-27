@@ -61,6 +61,9 @@ import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.mv.MaterializedViewRefreshJob;
+import com.starrocks.mv.MaterializedViewRefreshJobStatusChange;
+import com.starrocks.mv.MaterializedViewSchedulerInfo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
@@ -699,6 +702,28 @@ public class EditLog {
                     globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
                     break;
                 }
+                case OperationType.OP_REGISTER_SCHEDULED_MV_JOB: {
+                    final MaterializedViewSchedulerInfo info = (MaterializedViewSchedulerInfo) journal.getData();
+                    globalStateMgr.getMaterializedViewJobManager().replayRegisterScheduledJob(info);
+                    break;
+                }
+                case OperationType.OP_DEREGISTER_SCHEDULED_MV_JOB: {
+                    String idString = journal.getData().toString();
+                    long scheduledId = Long.parseLong(idString);
+                    globalStateMgr.getMaterializedViewJobManager().replayDeregisterScheduledJob(scheduledId);
+                    break;
+                }
+                case OperationType.OP_ADD_PENDING_MV_JOB: {
+                    final MaterializedViewRefreshJob job = (MaterializedViewRefreshJob) journal.getData();
+                    globalStateMgr.getMaterializedViewJobManager().replayAddPendingJob(job);
+                    break;
+                }
+                case OperationType.OP_MV_JOB_STATUS_CHANGE: {
+                    final MaterializedViewRefreshJobStatusChange statusChange =
+                            (MaterializedViewRefreshJobStatusChange) journal.getData();
+                    globalStateMgr.getMaterializedViewJobManager().replayJobStatusChange(statusChange);
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -931,6 +956,22 @@ public class EditLog {
 
     public void logWorkGroupOp(WorkGroupOpEntry op) {
         logEdit(OperationType.OP_WORKGROUP, op);
+    }
+
+    public void logRegisterScheduledJob(MaterializedViewSchedulerInfo info) {
+        logEdit(OperationType.OP_REGISTER_SCHEDULED_MV_JOB, info);
+    }
+
+    public void logDeregisterScheduledJob(Long id) {
+        logEdit(OperationType.OP_DEREGISTER_SCHEDULED_MV_JOB, new Text(Long.toString(id)));
+    }
+
+    public void logAddPendingJob(MaterializedViewRefreshJob job) {
+        logEdit(OperationType.OP_ADD_PENDING_MV_JOB, job);
+    }
+
+    public void logRefreshJobStatusChange(MaterializedViewRefreshJobStatusChange statusChange) {
+        logEdit(OperationType.OP_MV_JOB_STATUS_CHANGE, statusChange);
     }
 
     public void logAddPartition(PartitionPersistInfo info) {

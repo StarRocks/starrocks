@@ -51,6 +51,9 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.master.Checkpoint;
+import com.starrocks.mv.MaterializedViewRefreshJob;
+import com.starrocks.mv.MaterializedViewRefreshJobStatusChange;
+import com.starrocks.mv.MaterializedViewSchedulerInfo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -148,7 +151,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ERASE_PARTITION:
             case OperationType.OP_META_VERSION:
             case OperationType.OP_DROP_ALL_BROKER:
-            case OperationType.OP_DROP_REPOSITORY: {
+            case OperationType.OP_DROP_REPOSITORY:
+            case OperationType.OP_DEREGISTER_SCHEDULED_MV_JOB: {
                 data = new Text();
                 ((Text) data).readFields(in);
                 isRead = true;
@@ -499,6 +503,18 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_REGISTER_SCHEDULED_MV_JOB:
+                data = MaterializedViewSchedulerInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ADD_PENDING_MV_JOB:
+                data = MaterializedViewRefreshJob.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MV_JOB_STATUS_CHANGE:
+                data = MaterializedViewRefreshJobStatusChange.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);

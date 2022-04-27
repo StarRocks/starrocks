@@ -203,4 +203,10 @@ public class OperationType {
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
+
+    // materialized view 10031 ~ 10050
+    public static final short OP_REGISTER_SCHEDULED_MV_JOB = 10031;
+    public static final short OP_DEREGISTER_SCHEDULED_MV_JOB = 10032;
+    public static final short OP_ADD_PENDING_MV_JOB = 10033;
+    public static final short OP_MV_JOB_STATUS_CHANGE = 10034;
 }

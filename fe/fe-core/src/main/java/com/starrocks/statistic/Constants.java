@@ -30,4 +30,42 @@ public class Constants {
         FINISH,
     }
 
+    // PENDING -> RUNNING -> FAILED
+    //                    -> SUCCESS
+    //                    -> PARTIAL_SUCCESS
+    //                    -> CANCELED
+    //         -> CANCELED
+    public enum MaterializedViewJobStatus {
+        PENDING,
+        RUNNING,
+        RETRYING,
+        CANCELED,
+        FAILED,
+        // all tasks are executed, but some task failed
+        PARTIAL_SUCCESS,
+        SUCCESS,
+    }
+
+    // PENDING -> RUNNING -> FAILED
+    //                    -> SUCCESS
+    //                    -> CANCELED
+    //         -> CANCELED
+    public enum MaterializedViewTaskStatus {
+        PENDING,
+        RUNNING,
+        CANCELED,
+        FAILED,
+        SUCCESS
+    }
+
+    public enum MaterializedViewRefreshTriggerType {
+        AUTO,
+        MANUAL
+    }
+
+    public enum MaterializedViewRefreshMode {
+        SYNC,
+        ASYNC
+    }
+
 }
