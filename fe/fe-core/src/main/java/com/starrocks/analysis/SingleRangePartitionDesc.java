@@ -30,10 +30,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.sql.optimizer.base.Property;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
@@ -111,7 +109,6 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         FeNameFormat.checkPartitionName(partName);
 
         partitionKeyDesc.analyze(partColNum);
-
 
         if (otherProperties != null) {
             if (properties == null) {

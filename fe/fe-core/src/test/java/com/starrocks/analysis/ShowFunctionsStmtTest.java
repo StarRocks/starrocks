@@ -21,13 +21,13 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -39,24 +39,24 @@ import org.junit.rules.ExpectedException;
 public class ShowFunctionsStmtTest {
     @Mocked
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Mocked
     private Auth auth;
     @Mocked
     private ConnectContext ctx;
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.188.3.1");
-        FakeCatalog.setCatalog(catalog);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         new Expectations() {
             {
@@ -66,7 +66,7 @@ public class ShowFunctionsStmtTest {
 
                 analyzer.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 analyzer.getClusterName();
                 minTimes = 0;

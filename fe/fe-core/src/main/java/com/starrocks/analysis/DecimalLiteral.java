@@ -34,7 +34,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import javassist.bytecode.ByteArray;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -422,7 +421,8 @@ public class DecimalLiteral extends LiteralExpr {
     // check decimal overflow in binary style, used in ArithmeticExpr and CastExpr.
     // binary-style overflow checking is high-performance, because it just check ALU flags
     // after computation.
-    public static void checkLiteralOverflowInBinaryStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+    public static void checkLiteralOverflowInBinaryStyle(BigDecimal value, ScalarType scalarType)
+            throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
         BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
@@ -449,7 +449,8 @@ public class DecimalLiteral extends LiteralExpr {
     // given an incorrect result that overflow checking should fail(in decimal style) expectedly but succeeds
     // (in decimal style)actually. When checkLiteralOverflowInDecimalStyle fails, proper cast exprs are interpolated
     // into Predicates to cast the type of decimal constant value to a type wider enough to holds the value.
-    public static void checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType) throws AnalysisException {
+    public static void checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType)
+            throws AnalysisException {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
         BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();

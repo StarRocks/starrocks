@@ -23,8 +23,10 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -156,6 +158,10 @@ public class PartitionInfo implements Writable {
         return "";
     }
 
+    public List<Column> getPartitionColumns() throws NotImplementedException {
+        throw new NotImplementedException("method not implemented yet");
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, type.name());
@@ -192,7 +198,7 @@ public class PartitionInfo implements Writable {
 
             short replicationNum = in.readShort();
             idToReplicationNum.put(partitionId, replicationNum);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_72) {
                 idToInMemory.put(partitionId, in.readBoolean());
             } else {
                 // for compatibility, default is false
@@ -212,7 +218,6 @@ public class PartitionInfo implements Writable {
                 buff.append(true);
             } else {
                 buff.append(false);
-
             }
             buff.append("data_property: ").append(entry.getValue().toString());
             buff.append("replica number: ").append(idToReplicationNum.get(entry.getKey()));

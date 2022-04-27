@@ -25,7 +25,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -35,6 +34,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.rewrite.ExprRewriter;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -810,7 +810,7 @@ public class TableRef implements ParseNode, Writable {
         name = new TableName();
         name.readFields(in);
         if (in.readBoolean()) {
-            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_77) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_77) {
                 List<String> partitions = Lists.newArrayList();
                 int size = in.readInt();
                 for (int i = 0; i < size; i++) {

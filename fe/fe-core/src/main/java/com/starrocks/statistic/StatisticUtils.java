@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -12,6 +11,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 
 import java.time.Clock;
@@ -37,7 +37,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
-        context.setCatalog(Catalog.getCurrentCatalog());
+        context.setCatalog(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
@@ -48,7 +48,7 @@ public class StatisticUtils {
     }
 
     public static Table getStatisticsTable() {
-        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
         if (db != null) {
             return db.getTable(Constants.StatisticsTableName);
         } else {
@@ -67,7 +67,7 @@ public class StatisticUtils {
 
     public static boolean statisticTableBlackListCheck(long tableId) {
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {
                 return true;
             }
@@ -77,7 +77,7 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
-        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
 
         // check database
         if (db == null) {

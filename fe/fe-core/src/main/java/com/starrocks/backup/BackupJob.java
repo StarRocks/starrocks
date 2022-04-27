@@ -31,7 +31,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.LocalTablet;
@@ -46,6 +45,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -120,8 +120,8 @@ public class BackupJob extends AbstractJob {
     }
 
     public BackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
-                     Catalog catalog, long repoId) {
-        super(JobType.BACKUP, label, dbId, dbName, timeoutMs, catalog, repoId);
+                     GlobalStateMgr globalStateMgr, long repoId) {
+        super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
     }
@@ -241,7 +241,7 @@ public class BackupJob extends AbstractJob {
 
     @Override
     public synchronized void replayRun() {
-        // Backup process does not change any current catalog state,
+        // Backup process does not change any current globalStateMgr state,
         // So nothing need to be done when replaying log
     }
 
@@ -276,7 +276,7 @@ public class BackupJob extends AbstractJob {
 
         // get repo if not set
         if (repo == null) {
-            repo = catalog.getBackupHandler().getRepoMgr().getRepo(repoId);
+            repo = globalStateMgr.getBackupHandler().getRepoMgr().getRepo(repoId);
             if (repo == null) {
                 status = new Status(ErrCode.COMMON_ERROR, "failed to get repository: " + repoId);
                 cancelInternal();
@@ -340,14 +340,14 @@ public class BackupJob extends AbstractJob {
     }
 
     private void prepareAndSendSnapshotTask() {
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
         }
 
         // generate job id
-        jobId = catalog.getNextId();
+        jobId = globalStateMgr.getNextId();
         AgentBatchTask batchTask = new AgentBatchTask();
         db.readLock();
         try {
@@ -462,7 +462,7 @@ public class BackupJob extends AbstractJob {
             state = BackupJobState.UPLOAD_SNAPSHOT;
 
             // log
-            catalog.getEditLog().logBackupJob(this);
+            globalStateMgr.getEditLog().logBackupJob(this);
             LOG.info("finished to make snapshots. {}", this);
             return;
         }
@@ -493,7 +493,7 @@ public class BackupJob extends AbstractJob {
             LOG.info("backend {} has {} batch, total {} tasks, {}", beId, batchNum, totalNum, this);
 
             List<FsBroker> brokers = Lists.newArrayList();
-            Status st = repo.getBrokerAddress(beId, catalog, brokers);
+            Status st = repo.getBrokerAddress(beId, globalStateMgr, brokers);
             if (!st.ok()) {
                 status = st;
                 return;
@@ -511,7 +511,7 @@ public class BackupJob extends AbstractJob {
                     String dest = repo.getRepoTabletPathBySnapshotInfo(label, info);
                     srcToDest.put(src, dest);
                 }
-                long signature = catalog.getNextId();
+                long signature = globalStateMgr.getNextId();
                 UploadTask task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
                         brokers.get(0), repo.getStorage().getProperties());
                 batchTask.addTask(task);
@@ -537,7 +537,7 @@ public class BackupJob extends AbstractJob {
             state = BackupJobState.SAVE_META;
 
             // log
-            catalog.getEditLog().logBackupJob(this);
+            globalStateMgr.getEditLog().logBackupJob(this);
             LOG.info("finished uploading snapshots. {}", this);
             return;
         }
@@ -606,7 +606,7 @@ public class BackupJob extends AbstractJob {
         snapshotInfos.clear();
 
         // log
-        catalog.getEditLog().logBackupJob(this);
+        globalStateMgr.getEditLog().logBackupJob(this);
         LOG.info("finished to save meta the backup job info file to local.[{}], [{}] {}",
                 localMetaInfoFilePath, localJobInfoFilePath, this);
     }
@@ -642,7 +642,7 @@ public class BackupJob extends AbstractJob {
         state = BackupJobState.FINISHED;
 
         // log
-        catalog.getEditLog().logBackupJob(this);
+        globalStateMgr.getEditLog().logBackupJob(this);
         LOG.info("job is finished. {}", this);
     }
 
@@ -729,7 +729,7 @@ public class BackupJob extends AbstractJob {
         state = BackupJobState.CANCELLED;
 
         // log
-        catalog.getEditLog().logBackupJob(this);
+        globalStateMgr.getEditLog().logBackupJob(this);
         LOG.info("finished to cancel backup job. current state: {}. {}", curState.name(), this);
     }
 

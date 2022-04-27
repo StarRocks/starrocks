@@ -3,12 +3,12 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -16,15 +16,11 @@ import com.starrocks.statistic.Constants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
-
 
 public class CTASAnalyzerTest {
     private static ConnectContext connectContext;
@@ -46,7 +42,7 @@ public class CTASAnalyzerTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            Catalog.getCurrentCatalog().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }
@@ -198,7 +194,7 @@ public class CTASAnalyzerTest {
         String SQL = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
-        Table table = ctx.getCatalog().getDb("default_cluster:ctas")
+        Table table = ctx.getGlobalStateMgr().getDb("default_cluster:ctas")
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -207,9 +203,20 @@ public class CTASAnalyzerTest {
         storage.addColumnStatistic(table, "k1", k1cs);
         storage.addColumnStatistic(table, "k2", k2cs);
 
-        ctx.getCatalog().setStatisticStorage(storage);
+        ctx.getGlobalStateMgr().setStatisticStorage(storage);
 
         UtFrameUtils.parseStmtWithNewParser(SQL, ctx);
+    }
+
+    @Test
+    public void testCTASWithDatePartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String partitionSQL = "create table test2 " +
+                "PARTITION BY RANGE(`k1`)(" +
+                "START (\"2021-03-01\") END (\"2022-03-31\") EVERY (INTERVAL 1 MONTH)\n" +
+                ") AS select k1 from duplicate_table_with_null;";
+
+        UtFrameUtils.parseStmtWithNewParser(partitionSQL, ctx);
     }
 
     @Test
@@ -297,12 +304,14 @@ public class CTASAnalyzerTest {
                 "SELECT  c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15 " +
                 "FROM     t2 WHERE     (NOT (false)) " +
                 "GROUP BY c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
-        CreateTableAsSelectStmt createTableStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
+        CreateTableAsSelectStmt createTableStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         try {
-            CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+            CreateTableAsSelectStmt createTableStmt2 =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Unsupported CTAS transform type: null"));
         }

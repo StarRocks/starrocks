@@ -32,7 +32,6 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -65,6 +64,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -123,7 +123,7 @@ public class EditLog {
         return journal;
     }
 
-    public static void loadJournal(Catalog catalog, JournalEntity journal) {
+    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID && opCode != OperationType.OP_TIMESTAMP) {
             LOG.debug("replay journal op code: {}", opCode);
@@ -133,66 +133,67 @@ public class EditLog {
                 case OperationType.OP_SAVE_NEXTID: {
                     String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
-                    catalog.setNextId(id + 1);
+                    globalStateMgr.setNextId(id + 1);
                     break;
                 }
                 case OperationType.OP_SAVE_TRANSACTION_ID: {
                     String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
-                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().initTransactionId(id + 1);
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                            .initTransactionId(id + 1);
                     break;
                 }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
-                    catalog.replayCreateDb(db);
+                    globalStateMgr.replayCreateDb(db);
                     break;
                 }
                 case OperationType.OP_DROP_DB: {
                     DropDbInfo dropDbInfo = (DropDbInfo) journal.getData();
-                    catalog.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
+                    globalStateMgr.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
                     break;
                 }
                 case OperationType.OP_ALTER_DB: {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect alter db info {}", dbName);
-                    catalog.replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
+                    globalStateMgr.replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.getData();
-                    catalog.replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    globalStateMgr.replayEraseDatabase(Long.parseLong(dbId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_DB: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    catalog.replayRecoverDatabase(info);
+                    globalStateMgr.replayRecoverDatabase(info);
                     break;
                 }
                 case OperationType.OP_RENAME_DB: {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect rename db {}", dbName);
-                    catalog.replayRenameDatabase(dbName, dbInfo.getNewDbName());
+                    globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
                 case OperationType.OP_CREATE_TABLE: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
-                    catalog.replayCreateTable(info.getDbName(), info.getTable());
+                    globalStateMgr.replayCreateTable(info.getDbName(), info.getTable());
                     break;
                 }
                 case OperationType.OP_DROP_TABLE: {
                     DropInfo info = (DropInfo) journal.getData();
-                    Database db = catalog.getDb(info.getDbId());
+                    Database db = globalStateMgr.getDb(info.getDbId());
                     if (db == null) {
                         LOG.warn("failed to get db[{}]", info.getDbId());
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getFullName() + " table = " + info.getTableId());
-                    catalog.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -200,13 +201,13 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
-                    catalog.replayAddPartition(info);
+                    globalStateMgr.replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS: {
                     AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
-                        catalog.replayAddPartition(info);
+                        globalStateMgr.replayAddPartition(info);
                     }
                     break;
                 }
@@ -215,105 +216,105 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartitionName());
-                    catalog.replayDropPartition(info);
+                    globalStateMgr.replayDropPartition(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION: {
                     ModifyPartitionInfo info = (ModifyPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
                             + " table = " + info.getTableId() + " partitionId = " + info.getPartitionId());
-                    catalog.getAlterInstance().replayModifyPartition(info);
+                    globalStateMgr.getAlterInstance().replayModifyPartition(info);
                     break;
                 }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.getData();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
-                        catalog.getAlterInstance().replayModifyPartition(modifyPartitionInfo);
+                        globalStateMgr.getAlterInstance().replayModifyPartition(modifyPartitionInfo);
                     }
                     break;
                 }
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
-                    catalog.replayEraseTable(Long.parseLong(tableId.toString()));
+                    globalStateMgr.replayEraseTable(Long.parseLong(tableId.toString()));
                     break;
                 }
                 case OperationType.OP_ERASE_MULTI_TABLES: {
                     MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
-                    catalog.replayEraseMultiTables(multiEraseTableInfo);
+                    globalStateMgr.replayEraseMultiTables(multiEraseTableInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
-                    catalog.replayErasePartition(Long.parseLong(partitionId.toString()));
+                    globalStateMgr.replayErasePartition(Long.parseLong(partitionId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    catalog.replayRecoverTable(info);
+                    globalStateMgr.replayRecoverTable(info);
                     break;
                 }
                 case OperationType.OP_RECOVER_PARTITION: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    catalog.replayRecoverPartition(info);
+                    globalStateMgr.replayRecoverPartition(info);
                     break;
                 }
                 case OperationType.OP_RENAME_TABLE: {
                     TableInfo info = (TableInfo) journal.getData();
-                    catalog.replayRenameTable(info);
+                    globalStateMgr.replayRenameTable(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    catalog.getAlterInstance().replayModifyViewDef(info);
+                    globalStateMgr.getAlterInstance().replayModifyViewDef(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION: {
                     TableInfo info = (TableInfo) journal.getData();
-                    catalog.replayRenamePartition(info);
+                    globalStateMgr.replayRenamePartition(info);
                     break;
                 }
                 case OperationType.OP_BACKUP_JOB: {
                     BackupJob job = (BackupJob) journal.getData();
-                    catalog.getBackupHandler().replayAddJob(job);
+                    globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
                 case OperationType.OP_RESTORE_JOB: {
                     RestoreJob job = (RestoreJob) journal.getData();
-                    job.setCatalog(catalog);
-                    catalog.getBackupHandler().replayAddJob(job);
+                    job.setCatalog(globalStateMgr);
+                    globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
                 case OperationType.OP_START_ROLLUP: {
                     RollupJob job = (RollupJob) journal.getData();
-                    catalog.getRollupHandler().replayInitJob(job, catalog);
+                    globalStateMgr.getRollupHandler().replayInitJob(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISHING_ROLLUP: {
                     RollupJob job = (RollupJob) journal.getData();
-                    catalog.getRollupHandler().replayFinishing(job, catalog);
+                    globalStateMgr.getRollupHandler().replayFinishing(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_ROLLUP: {
                     RollupJob job = (RollupJob) journal.getData();
-                    catalog.getRollupHandler().replayFinish(job, catalog);
+                    globalStateMgr.getRollupHandler().replayFinish(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_CANCEL_ROLLUP: {
                     RollupJob job = (RollupJob) journal.getData();
-                    catalog.getRollupHandler().replayCancel(job, catalog);
+                    globalStateMgr.getRollupHandler().replayCancel(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_DROP_ROLLUP: {
                     DropInfo info = (DropInfo) journal.getData();
-                    catalog.getRollupHandler().replayDropRollup(info, catalog);
+                    globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_BATCH_DROP_ROLLUP: {
                     BatchDropInfo batchDropInfo = (BatchDropInfo) journal.getData();
                     for (long indexId : batchDropInfo.getIndexIdSet()) {
-                        catalog.getRollupHandler().replayDropRollup(
+                        globalStateMgr.getRollupHandler().replayDropRollup(
                                 new DropInfo(batchDropInfo.getDbId(), batchDropInfo.getTableId(), indexId, false),
-                                catalog);
+                                globalStateMgr);
                     }
                     break;
                 }
@@ -321,118 +322,118 @@ public class EditLog {
                     SchemaChangeJob job = (SchemaChangeJob) journal.getData();
                     LOG.info("Begin to unprotect create schema change job. db = " + job.getDbId()
                             + " table = " + job.getTableId());
-                    catalog.getSchemaChangeHandler().replayInitJob(job, catalog);
+                    globalStateMgr.getSchemaChangeHandler().replayInitJob(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISHING_SCHEMA_CHANGE: {
                     SchemaChangeJob job = (SchemaChangeJob) journal.getData();
                     LOG.info("Begin to unprotect replay finishing schema change job. db = " + job.getDbId()
                             + " table = " + job.getTableId());
-                    catalog.getSchemaChangeHandler().replayFinishing(job, catalog);
+                    globalStateMgr.getSchemaChangeHandler().replayFinishing(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_SCHEMA_CHANGE: {
                     SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    catalog.getSchemaChangeHandler().replayFinish(job, catalog);
+                    globalStateMgr.getSchemaChangeHandler().replayFinish(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_CANCEL_SCHEMA_CHANGE: {
                     SchemaChangeJob job = (SchemaChangeJob) journal.getData();
                     LOG.debug("Begin to unprotect cancel schema change. db = " + job.getDbId()
                             + " table = " + job.getTableId());
-                    catalog.getSchemaChangeHandler().replayCancel(job, catalog);
+                    globalStateMgr.getSchemaChangeHandler().replayCancel(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                     ConsistencyCheckInfo info = (ConsistencyCheckInfo) journal.getData();
-                    catalog.getConsistencyChecker().replayFinishConsistencyCheck(info, catalog);
+                    globalStateMgr.getConsistencyChecker().replayFinishConsistencyCheck(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_CLEAR_ROLLUP_INFO: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    catalog.getLoadInstance().replayClearRollupInfo(info, catalog);
+                    globalStateMgr.getLoadInstance().replayClearRollupInfo(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_RENAME_ROLLUP: {
                     TableInfo info = (TableInfo) journal.getData();
-                    catalog.replayRenameRollup(info);
+                    globalStateMgr.replayRenameRollup(info);
                     break;
                 }
                 case OperationType.OP_EXPORT_CREATE: {
                     ExportJob job = (ExportJob) journal.getData();
-                    ExportMgr exportMgr = catalog.getExportMgr();
+                    ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
                     break;
                 }
                 case OperationType.OP_EXPORT_UPDATE_STATE:
                     ExportJob.StateTransfer op = (ExportJob.StateTransfer) journal.getData();
-                    ExportMgr exportMgr = catalog.getExportMgr();
+                    ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
                 case OperationType.OP_FINISH_DELETE: {
                     DeleteInfo info = (DeleteInfo) journal.getData();
-                    DeleteHandler deleteHandler = catalog.getDeleteHandler();
-                    deleteHandler.replayDelete(info, catalog);
+                    DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+                    deleteHandler.replayDelete(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_MULTI_DELETE: {
                     MultiDeleteInfo info = (MultiDeleteInfo) journal.getData();
-                    DeleteHandler deleteHandler = catalog.getDeleteHandler();
-                    deleteHandler.replayMultiDelete(info, catalog);
+                    DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+                    deleteHandler.replayMultiDelete(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_ADD_REPLICA: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    catalog.replayAddReplica(info);
+                    globalStateMgr.replayAddReplica(info);
                     break;
                 }
                 case OperationType.OP_UPDATE_REPLICA: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    catalog.replayUpdateReplica(info);
+                    globalStateMgr.replayUpdateReplica(info);
                     break;
                 }
                 case OperationType.OP_DELETE_REPLICA: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    catalog.replayDeleteReplica(info);
+                    globalStateMgr.replayDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND: {
                     Backend be = (Backend) journal.getData();
-                    Catalog.getCurrentSystemInfo().replayAddBackend(be);
+                    GlobalStateMgr.getCurrentSystemInfo().replayAddBackend(be);
                     break;
                 }
                 case OperationType.OP_DROP_BACKEND: {
                     Backend be = (Backend) journal.getData();
-                    Catalog.getCurrentSystemInfo().replayDropBackend(be);
+                    GlobalStateMgr.getCurrentSystemInfo().replayDropBackend(be);
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE: {
                     Backend be = (Backend) journal.getData();
-                    Catalog.getCurrentSystemInfo().updateBackendState(be);
+                    GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
                     break;
                 }
                 case OperationType.OP_START_DECOMMISSION_BACKEND: {
                     DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
                     LOG.debug("{}: {}", opCode, job.getTableId());
-                    catalog.getClusterHandler().replayInitJob(job, catalog);
+                    globalStateMgr.getClusterHandler().replayInitJob(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
                     DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
                     LOG.debug("{}: {}", opCode, job.getTableId());
-                    catalog.getClusterHandler().replayFinish(job, catalog);
+                    globalStateMgr.getClusterHandler().replayFinish(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND: {
                     Frontend fe = (Frontend) journal.getData();
-                    catalog.replayAddFrontend(fe);
+                    globalStateMgr.replayAddFrontend(fe);
                     break;
                 }
                 case OperationType.OP_REMOVE_FRONTEND: {
                     Frontend fe = (Frontend) journal.getData();
-                    catalog.replayDropFrontend(fe);
-                    if (fe.getNodeName().equals(Catalog.getCurrentCatalog().getNodeName())) {
+                    globalStateMgr.replayDropFrontend(fe);
+                    if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
                         System.out.println("current fe " + fe + " is removed. will exit");
                         LOG.info("current fe " + fe + " is removed. will exit");
                         System.exit(-1);
@@ -441,52 +442,52 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_USER: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replayCreateUser(privInfo);
+                    globalStateMgr.getAuth().replayCreateUser(privInfo);
                     break;
                 }
                 case OperationType.OP_NEW_DROP_USER: {
                     UserIdentity userIdent = (UserIdentity) journal.getData();
-                    catalog.getAuth().replayDropUser(userIdent);
+                    globalStateMgr.getAuth().replayDropUser(userIdent);
                     break;
                 }
                 case OperationType.OP_GRANT_PRIV: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replayGrant(privInfo);
+                    globalStateMgr.getAuth().replayGrant(privInfo);
                     break;
                 }
                 case OperationType.OP_REVOKE_PRIV: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replayRevoke(privInfo);
+                    globalStateMgr.getAuth().replayRevoke(privInfo);
                     break;
                 }
                 case OperationType.OP_SET_PASSWORD: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replaySetPassword(privInfo);
+                    globalStateMgr.getAuth().replaySetPassword(privInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_ROLE: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replayCreateRole(privInfo);
+                    globalStateMgr.getAuth().replayCreateRole(privInfo);
                     break;
                 }
                 case OperationType.OP_DROP_ROLE: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
-                    catalog.getAuth().replayDropRole(privInfo);
+                    globalStateMgr.getAuth().replayDropRole(privInfo);
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROPERTY: {
                     UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
-                    catalog.getAuth().replayUpdateUserProperty(propertyInfo);
+                    globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
                     break;
                 }
                 case OperationType.OP_TIMESTAMP: {
                     Timestamp stamp = (Timestamp) journal.getData();
-                    catalog.setSynchronizedTime(stamp.getTimestamp());
+                    globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
                     break;
                 }
                 case OperationType.OP_MASTER_INFO_CHANGE: {
                     MasterInfo info = (MasterInfo) journal.getData();
-                    catalog.setMaster(info);
+                    globalStateMgr.setMaster(info);
                     break;
                 }
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
@@ -524,12 +525,12 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE: {
                     SessionVariable variable = (SessionVariable) journal.getData();
-                    catalog.replayGlobalVariable(variable);
+                    globalStateMgr.replayGlobalVariable(variable);
                     break;
                 }
                 case OperationType.OP_CREATE_CLUSTER: {
                     final Cluster value = (Cluster) journal.getData();
-                    catalog.replayCreateCluster(value);
+                    globalStateMgr.replayCreateCluster(value);
                     break;
                 }
                 case OperationType.OP_DROP_CLUSTER:
@@ -542,180 +543,180 @@ public class EditLog {
                     break;
                 case OperationType.OP_UPDATE_DB: {
                     final DatabaseInfo param = (DatabaseInfo) journal.getData();
-                    catalog.replayUpdateDb(param);
+                    globalStateMgr.replayUpdateDb(param);
                     break;
                 }
                 case OperationType.OP_DROP_LINKDB: {
                     final DropLinkDbAndUpdateDbInfo param = (DropLinkDbAndUpdateDbInfo) journal.getData();
-                    catalog.replayDropLinkDb(param);
+                    globalStateMgr.replayDropLinkDb(param);
                     break;
                 }
                 case OperationType.OP_ADD_BROKER: {
                     final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.getData();
-                    catalog.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
+                    globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
                     break;
                 }
                 case OperationType.OP_DROP_BROKER: {
                     final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.getData();
-                    catalog.getBrokerMgr().replayDropBrokers(param.brokerName, param.brokerAddresses);
+                    globalStateMgr.getBrokerMgr().replayDropBrokers(param.brokerName, param.brokerAddresses);
                     break;
                 }
                 case OperationType.OP_DROP_ALL_BROKER: {
                     final String param = journal.getData().toString();
-                    catalog.getBrokerMgr().replayDropAllBroker(param);
+                    globalStateMgr.getBrokerMgr().replayDropAllBroker(param);
                     break;
                 }
                 case OperationType.OP_SET_LOAD_ERROR_HUB: {
                     final LoadErrorHub.Param param = (LoadErrorHub.Param) journal.getData();
-                    catalog.getLoadInstance().setLoadErrorHubInfo(param);
+                    globalStateMgr.getLoadInstance().setLoadErrorHubInfo(param);
                     break;
                 }
                 case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
                     final BackendIdsUpdateInfo info = (BackendIdsUpdateInfo) journal.getData();
-                    catalog.replayUpdateClusterAndBackends(info);
+                    globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
-                    Catalog.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
-                    Catalog.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
                 case OperationType.OP_CREATE_REPOSITORY: {
                     Repository repository = (Repository) journal.getData();
-                    catalog.getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repository, true);
+                    globalStateMgr.getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repository, true);
                     break;
                 }
                 case OperationType.OP_DROP_REPOSITORY: {
                     String repoName = ((Text) journal.getData()).toString();
-                    catalog.getBackupHandler().getRepoMgr().removeRepo(repoName, true);
+                    globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(repoName, true);
                     break;
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
                     TruncateTableInfo info = (TruncateTableInfo) journal.getData();
-                    catalog.replayTruncateTable(info);
+                    globalStateMgr.replayTruncateTable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_ADD_TABLE: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    catalog.getColocateTableIndex().replayAddTableToGroup(info);
+                    globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_REMOVE_TABLE: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    catalog.getColocateTableIndex().replayRemoveTable(info);
+                    globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    catalog.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
+                    globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    catalog.getColocateTableIndex().replayMarkGroupUnstable(info);
+                    globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_MARK_STABLE: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
-                    catalog.getColocateTableIndex().replayMarkGroupStable(info);
+                    globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_TABLE_COLOCATE: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
-                    catalog.replayModifyTableColocate(info);
+                    globalStateMgr.replayModifyTableColocate(info);
                     break;
                 }
                 case OperationType.OP_HEARTBEAT: {
                     final HbPackage hbPackage = (HbPackage) journal.getData();
-                    Catalog.getCurrentHeartbeatMgr().replayHearbeat(hbPackage);
+                    GlobalStateMgr.getCurrentHeartbeatMgr().replayHearbeat(hbPackage);
                     break;
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    Catalog.getCurrentCatalog().replayCreateFunction(function);
+                    GlobalStateMgr.getCurrentState().replayCreateFunction(function);
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    Catalog.getCurrentCatalog().replayDropFunction(function);
+                    GlobalStateMgr.getCurrentState().replayDropFunction(function);
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
                     BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
-                    Catalog.getCurrentCatalog().replayBackendTabletsInfo(backendTabletsInfo);
+                    GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
-                    Catalog.getCurrentCatalog().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
+                    GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
-                    Catalog.getCurrentCatalog().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
+                    GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
                     break;
                 }
                 case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
-                    catalog.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
+                    globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
-                    catalog.getLoadManager().replayCreateLoadJob(loadJob);
+                    globalStateMgr.getLoadManager().replayCreateLoadJob(loadJob);
                     break;
                 }
                 case OperationType.OP_END_LOAD_JOB: {
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
-                    catalog.getLoadManager().replayEndLoadJob(operation);
+                    globalStateMgr.getLoadManager().replayEndLoadJob(operation);
                     break;
                 }
                 case OperationType.OP_UPDATE_LOAD_JOB: {
                     LoadJobStateUpdateInfo info = (LoadJobStateUpdateInfo) journal.getData();
-                    catalog.getLoadManager().replayUpdateLoadJobStateInfo(info);
+                    globalStateMgr.getLoadManager().replayUpdateLoadJobStateInfo(info);
                     break;
                 }
                 case OperationType.OP_CREATE_RESOURCE: {
                     final Resource resource = (Resource) journal.getData();
-                    catalog.getResourceMgr().replayCreateResource(resource);
+                    globalStateMgr.getResourceMgr().replayCreateResource(resource);
                     break;
                 }
                 case OperationType.OP_DROP_RESOURCE: {
                     final DropResourceOperationLog operationLog = (DropResourceOperationLog) journal.getData();
-                    catalog.getResourceMgr().replayDropResource(operationLog);
+                    globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
                 case OperationType.OP_WORKGROUP: {
                     final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
-                    catalog.getWorkGroupMgr().replayWorkGroupOp(entry);
+                    globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
-                    catalog.getSmallFileMgr().replayCreateFile(smallFile);
+                    globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
                 case OperationType.OP_DROP_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
-                    catalog.getSmallFileMgr().replayRemoveFile(smallFile);
+                    globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
                     break;
                 }
                 case OperationType.OP_ALTER_JOB_V2: {
                     AlterJobV2 alterJob = (AlterJobV2) journal.getData();
                     switch (alterJob.getType()) {
                         case ROLLUP:
-                            catalog.getRollupHandler().replayAlterJobV2(alterJob);
+                            globalStateMgr.getRollupHandler().replayAlterJobV2(alterJob);
                             break;
                         case SCHEMA_CHANGE:
-                            catalog.getSchemaChangeHandler().replayAlterJobV2(alterJob);
+                            globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                             break;
                         default:
                             break;
@@ -725,54 +726,54 @@ public class EditLog {
                 case OperationType.OP_BATCH_ADD_ROLLUP: {
                     BatchAlterJobPersistInfo batchAlterJobV2 = (BatchAlterJobPersistInfo) journal.getData();
                     for (AlterJobV2 alterJobV2 : batchAlterJobV2.getAlterJobV2List()) {
-                        catalog.getRollupHandler().replayAlterJobV2(alterJobV2);
+                        globalStateMgr.getRollupHandler().replayAlterJobV2(alterJobV2);
                     }
                     break;
                 }
                 case OperationType.OP_MODIFY_DISTRIBUTION_TYPE: {
                     TableInfo tableInfo = (TableInfo) journal.getData();
-                    catalog.replayConvertDistributionType(tableInfo);
+                    globalStateMgr.replayConvertDistributionType(tableInfo);
                     break;
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
-                case OperationType.OP_MODIFY_REPLICATION_NUM: 
+                case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
-                    catalog.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+                    globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
                     break;
                 }
                 case OperationType.OP_REPLACE_TEMP_PARTITION: {
                     ReplacePartitionOperationLog replaceTempPartitionLog =
                             (ReplacePartitionOperationLog) journal.getData();
-                    catalog.replayReplaceTempPartition(replaceTempPartitionLog);
+                    globalStateMgr.replayReplaceTempPartition(replaceTempPartitionLog);
                     break;
                 }
                 case OperationType.OP_INSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
-                    catalog.replayInstallPlugin(pluginInfo);
+                    globalStateMgr.replayInstallPlugin(pluginInfo);
                     break;
                 }
                 case OperationType.OP_UNINSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
-                    catalog.replayUninstallPlugin(pluginInfo);
+                    globalStateMgr.replayUninstallPlugin(pluginInfo);
                     break;
                 }
                 case OperationType.OP_SET_REPLICA_STATUS: {
                     SetReplicaStatusOperationLog log = (SetReplicaStatusOperationLog) journal.getData();
-                    catalog.replaySetReplicaStatus(log);
+                    globalStateMgr.replaySetReplicaStatus(log);
                     break;
                 }
                 case OperationType.OP_REMOVE_ALTER_JOB_V2: {
                     RemoveAlterJobV2OperationLog log = (RemoveAlterJobV2OperationLog) journal.getData();
                     switch (log.getType()) {
                         case ROLLUP:
-                            catalog.getRollupHandler().replayRemoveAlterJobV2(log);
+                            globalStateMgr.getRollupHandler().replayRemoveAlterJobV2(log);
                             break;
                         case SCHEMA_CHANGE:
-                            catalog.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
+                            globalStateMgr.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
                             break;
                         default:
                             break;
@@ -781,27 +782,33 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.getData();
-                    catalog.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
+                    globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
                     break;
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
-                    catalog.replayGlobalVariableV2(info);
+                    globalStateMgr.replayGlobalVariableV2(info);
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {
                     SwapTableOperationLog log = (SwapTableOperationLog) journal.getData();
-                    catalog.getAlterInstance().replaySwapTable(log);
+                    globalStateMgr.getAlterInstance().replaySwapTable(log);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
                     AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    catalog.getAnalyzeManager().replayAddAnalyzeJob(analyzeJob);
+                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeJob(analyzeJob);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZER_JOB: {
                     AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    catalog.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
+                    globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
+                    break;
+                }
+                case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
+                    ModifyTableColumnOperationLog modifyTableColumnOperationLog =
+                            (ModifyTableColumnOperationLog) journal.getData();
+                    globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
                 default: {
@@ -847,7 +854,7 @@ public class EditLog {
 
         long start = System.currentTimeMillis();
 
-        Preconditions.checkState(Catalog.getCurrentCatalog().isMaster(),
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isMaster(),
                 "non-master fe can not write bdb log");
 
         try {
@@ -1376,5 +1383,9 @@ public class EditLog {
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
+    }
+
+    public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 }

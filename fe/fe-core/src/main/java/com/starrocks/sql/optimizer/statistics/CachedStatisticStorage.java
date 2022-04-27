@@ -8,7 +8,6 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -18,6 +17,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
@@ -49,8 +49,9 @@ public class CachedStatisticStorage implements StatisticStorage {
     private final AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>> loader =
             new AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>>() {
                 @Override
-                public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull CacheKey cacheKey,
-                                                                                       @NonNull Executor executor) {
+                public @NonNull
+                CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull CacheKey cacheKey,
+                                                                       @NonNull Executor executor) {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
                             List<TStatisticData> statisticData = queryStatisticsData(cacheKey.tableId, cacheKey.column);
@@ -136,7 +137,7 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {
-        Database db = Catalog.getCurrentCatalog().getDb(statisticData.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, statisticData.dbId);
         }

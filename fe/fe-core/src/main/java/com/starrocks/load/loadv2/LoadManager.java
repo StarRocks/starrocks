@@ -27,7 +27,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
@@ -44,6 +43,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -112,7 +112,7 @@ public class LoadManager implements Writable {
         } finally {
             writeUnlock();
         }
-        Catalog.getCurrentCatalog().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -131,7 +131,7 @@ public class LoadManager implements Writable {
         addLoadJob(loadJob);
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
     }
 
     private void addLoadJob(LoadJob loadJob) {
@@ -152,7 +152,7 @@ public class LoadManager implements Writable {
             throws MetaNotFoundException {
 
         // get db id
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -167,11 +167,11 @@ public class LoadManager implements Writable {
         }
         addLoadJob(loadJob);
         // persistent
-        Catalog.getCurrentCatalog().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
-        Database db = Catalog.getCurrentCatalog().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -474,7 +474,7 @@ public class LoadManager implements Writable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -586,7 +586,7 @@ public class LoadManager implements Writable {
             // The commit and visible txn will callback the unfinished load job.
             // Otherwise, the load job always does not be completed while the txn is visible.
             if (!loadJob.isCompleted()) {
-                Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
             }
         }
     }

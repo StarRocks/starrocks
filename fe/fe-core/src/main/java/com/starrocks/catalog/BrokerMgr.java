@@ -35,6 +35,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -201,7 +202,7 @@ public class BrokerMgr {
                 }
                 addedBrokerAddress.add(new FsBroker(pair.first, pair.second));
             }
-            Catalog.getCurrentCatalog().getEditLog().logAddBroker(new ModifyBrokerInfo(name, addedBrokerAddress));
+            GlobalStateMgr.getCurrentState().getEditLog().logAddBroker(new ModifyBrokerInfo(name, addedBrokerAddress));
             for (FsBroker address : addedBrokerAddress) {
                 brokerAddrsMap.put(address.ip, address);
             }
@@ -253,7 +254,7 @@ public class BrokerMgr {
                     throw new DdlException("Broker(" + pair.first + ":" + pair.second + ") has not in brokers.");
                 }
             }
-            Catalog.getCurrentCatalog().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));
+            GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));
             for (FsBroker address : dropedAddressList) {
                 brokerAddrsMap.remove(address.ip, address);
             }
@@ -284,7 +285,7 @@ public class BrokerMgr {
             if (!brokersMap.containsKey(name)) {
                 throw new DdlException("Unknown broker name(" + name + ")");
             }
-            Catalog.getCurrentCatalog().getEditLog().logDropAllBroker(name);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropAllBroker(name);
             brokersMap.remove(name);
             brokerListMap.remove(name);
         } finally {

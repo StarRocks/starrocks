@@ -22,7 +22,7 @@
 package com.starrocks.common;
 
 /**
- * Thrown for authorization errors encountered when accessing Catalog objects.
+ * Thrown for authorization errors encountered when accessing GlobalStateMgr objects.
  */
 public class AuthenticationException extends UserException {
     public AuthenticationException(String msg, Throwable cause) {

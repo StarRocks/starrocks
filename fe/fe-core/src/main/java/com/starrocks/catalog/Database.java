@@ -38,6 +38,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,7 +59,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.zip.Adler32;
 
 /**
- * Internal representation of db-related metadata. Owned by Catalog instance.
+ * Internal representation of db-related metadata. Owned by GlobalStateMgr instance.
  * Not thread safe.
  * <p/>
  * The static initialization method loadDb is the only way to construct a Db
@@ -74,8 +75,10 @@ public class Database extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Database.class);
 
     // empirical value.
-    // assume that the time a lock is held by thread is less then 100ms
+    // assume that the time a lock is held by thread is less than 100ms
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
+    public static final long SLOW_LOCK_MS = 3000L;
+    public static final long SLOW_LOCK_LOG_EVERY_MS = 3000L;
 
     private long id;
     private String fullQualifiedName;
@@ -92,6 +95,8 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
 
     private volatile long replicaQuotaSize;
+
+    private long lastSlowLockLogTime = 0;
 
     public enum DbState {
         NORMAL, LINK, MOVE
@@ -121,7 +126,14 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void readLock() {
+        long startMs = System.nanoTime() / 1000000;
         this.rwLock.readLock().lock();
+        long endMs = System.nanoTime() / 1000000;
+        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
+            lastSlowLockLogTime = endMs;
+            LOG.warn("slow read lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
+                    new Exception());
+        }
     }
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
@@ -145,7 +157,14 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void writeLock() {
+        long startMs = System.nanoTime() / 1000000;
         this.rwLock.writeLock().lock();
+        long endMs = System.nanoTime() / 1000000;
+        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
+            lastSlowLockLogTime = endMs;
+            LOG.warn("slow write lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
+                    new Exception());
+        }
     }
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
@@ -307,7 +326,7 @@ public class Database extends MetaObject implements Writable {
                 if (!isReplay) {
                     // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
-                    Catalog.getCurrentCatalog().getEditLog().logCreateTable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
                 }
 
                 table.onCreate();
@@ -468,7 +487,7 @@ public class Database extends MetaObject implements Writable {
         super.readFields(in);
 
         id = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             fullQualifiedName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             fullQualifiedName = Text.readString(in);
@@ -483,7 +502,7 @@ public class Database extends MetaObject implements Writable {
 
         // read quota
         dataQuotaBytes = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         } else {
             clusterName = Text.readString(in);
@@ -491,7 +510,7 @@ public class Database extends MetaObject implements Writable {
             attachDbName = Text.readString(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_47) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
             int numEntries = in.readInt();
             for (int i = 0; i < numEntries; ++i) {
                 String name = Text.readString(in);
@@ -505,7 +524,7 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             replicaQuotaSize = in.readLong();
         } else {
             replicaQuotaSize = FeConstants.default_db_replica_quota_size;
@@ -574,7 +593,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void addFunction(Function function) throws UserException {
         addFunctionImpl(function, false);
-        Catalog.getCurrentCatalog().getEditLog().logAddFunction(function);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
 
     public synchronized void replayAddFunction(Function function) {
@@ -599,7 +618,7 @@ public class Database extends MetaObject implements Writable {
             }
             // Get function id for this UDF, use CatalogIdGenerator. Only get function id
             // when isReplay is false
-            long functionId = Catalog.getCurrentCatalog().getNextId();
+            long functionId = GlobalStateMgr.getCurrentState().getNextId();
             // all user-defined functions id are negative to avoid conflicts with the builtin function
             function.setFunctionId(-functionId);
         }
@@ -614,7 +633,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void dropFunction(FunctionSearchDesc function) throws UserException {
         dropFunctionImpl(function);
-        Catalog.getCurrentCatalog().getEditLog().logDropFunction(function);
+        GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {

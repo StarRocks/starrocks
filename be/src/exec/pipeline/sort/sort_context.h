@@ -49,7 +49,9 @@ public:
         return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
     }
 
-    bool is_output_finished() const { return _is_merge_finish; }
+    bool is_output_finished() const {
+        return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
+    }
 
     ChunkPtr pull_chunk();
 

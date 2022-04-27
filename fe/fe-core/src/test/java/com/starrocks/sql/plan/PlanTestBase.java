@@ -61,7 +61,7 @@ public class PlanTestBase {
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(1));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -211,6 +211,27 @@ public class PlanTestBase {
                 "  `id_datetime` datetime NULL COMMENT \"\",\n" +
                 "  `id_date` date NULL COMMENT \"\", \n" +
                 "  `id_decimal` decimal(10,2) NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_all_type_not_null` (\n" +
+                "  `t1a` varchar(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NOT NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1e` float NOT NULL COMMENT \"\",\n" +
+                "  `t1f` double NOT NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
+                "  `id_date` date NOT NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NOT NULL COMMENT \"\" \n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`t1a`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -598,14 +619,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                "  `id` int(11) NULL COMMENT \"\",\n" +
-                "  `id2` bitmap bitmap_union NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`id`)\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\"\n" +
-                ");")
+                        "  `id` int(11) NULL COMMENT \"\",\n" +
+                        "  `id2` bitmap bitmap_union NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`id`)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -759,14 +780,14 @@ public class PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
-                "PROPERTIES (\n" +
-                "\"type\"=\"jdbc\",\n" +
-                "\"user\"=\"test_user\",\n" +
-                "\"password\"=\"test_passwd\",\n" +
-                "\"driver_url\"=\"test_driver_url\",\n" +
-                "\"driver_class\"=\"test.driver.class\",\n" +
-                "\"jdbc_uri\"=\"test_uri\"\n" +
-                ");")
+                        "PROPERTIES (\n" +
+                        "\"type\"=\"jdbc\",\n" +
+                        "\"user\"=\"test_user\",\n" +
+                        "\"password\"=\"test_passwd\",\n" +
+                        "\"driver_url\"=\"test_driver_url\",\n" +
+                        "\"driver_class\"=\"test.driver.class\",\n" +
+                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
@@ -924,9 +945,9 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +

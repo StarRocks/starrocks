@@ -15,6 +15,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
+#include "util/fixed_hash_map.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -28,7 +29,7 @@ using AggDataPtr = uint8_t*;
 // =====================
 // one level agg hash map
 template <PhmapSeed seed>
-using Int8AggHashMap = phmap::flat_hash_map<int8_t, AggDataPtr, StdHashWithSeed<int8_t, seed>>;
+using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr>;
 template <PhmapSeed seed>
 using Int16AggHashMap = phmap::flat_hash_map<int16_t, AggDataPtr, StdHashWithSeed<int16_t, seed>>;
 template <PhmapSeed seed>

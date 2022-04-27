@@ -31,6 +31,8 @@ public:
 
     ObjectColumn() = default;
 
+    explicit ObjectColumn(size_t size) : _pool(size) {}
+
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 
     ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}

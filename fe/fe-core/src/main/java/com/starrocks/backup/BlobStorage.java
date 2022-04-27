@@ -24,7 +24,6 @@ package com.starrocks.backup;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
@@ -33,6 +32,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCheckPathExistResponse;
@@ -148,7 +148,7 @@ public class BlobStorage implements Writable {
         if (localFile.exists()) {
             try {
                 Files.walk(Paths.get(localFilePath),
-                        FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                                FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                         .forEach(File::delete);
             } catch (IOException e) {
                 return new Status(ErrCode.COMMON_ERROR, "failed to delete exist local file: " + localFilePath);
@@ -652,7 +652,7 @@ public class BlobStorage implements Writable {
         FsBroker broker = null;
         try {
             String localIP = FrontendOptions.getLocalHostAddress();
-            broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(brokerName, localIP);
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, localIP);
         } catch (AnalysisException e) {
             return new Status(ErrCode.COMMON_ERROR, "failed to get a broker address: " + e.getMessage());
         }

@@ -25,7 +25,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
@@ -39,6 +38,7 @@ import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerListPathRequest;
 import com.starrocks.thrift.TBrokerListResponse;
@@ -406,7 +406,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test
-    public void testGetEtlFilePaths(@Mocked TFileBrokerService.Client client, @Mocked Catalog catalog,
+    public void testGetEtlFilePaths(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                                     @Injectable BrokerMgr brokerMgr) throws Exception {
         // list response
         TBrokerListResponse response = new TBrokerListResponse();
@@ -439,7 +439,7 @@ public class SparkEtlJobHandlerTest {
             {
                 client.listPath((TBrokerListPathRequest) any);
                 result = response;
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.getBroker(anyString, anyString);
                 result = fsBroker;

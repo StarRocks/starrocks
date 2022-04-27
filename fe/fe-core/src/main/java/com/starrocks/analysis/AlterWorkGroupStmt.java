@@ -4,11 +4,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.Relation;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,7 +62,7 @@ public class AlterWorkGroupStmt extends DdlStmt {
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
                     changedProperties.getBigQueryCpuCoreSecondLimit() == null &&
-                    changedProperties.getBigQueryMemLimit() == null && 
+                    changedProperties.getBigQueryMemLimit() == null &&
                     changedProperties.getBigQueryScanRowsLimit() == null) {
                 throw new SemanticException(
                         "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit','big_query_mem_limit' , 'big_query_scan_rows_limit', 'big_query_cpu_core_second_limit', hould be specified");

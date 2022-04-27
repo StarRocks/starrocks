@@ -101,6 +101,15 @@ public:
     void trunc_to_week(int days);
     void trunc_to_quarter();
 
+    void floor_to_second_period(int period);
+    void floor_to_minute_period(int period);
+    void floor_to_hour_period(int period);
+    void floor_to_day_period(int period);
+    void floor_to_month_period(int period);
+    void floor_to_year_period(int period);
+    void floor_to_week_period(int period);
+    void floor_to_quarter_period(int period);
+
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;

@@ -9,14 +9,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.List;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -74,7 +71,8 @@ public class AnalyzeSetOperationTest {
         QueryRelation queryRelation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);
+        LogicalPlan logicalPlan =
+                new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);
         List<ColumnRefOperator> outColumns = logicalPlan.getOutputColumn();
 
         Assert.assertEquals(2, outColumns.size());

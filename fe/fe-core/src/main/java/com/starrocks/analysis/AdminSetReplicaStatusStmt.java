@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -29,6 +28,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -59,7 +60,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         super.analyze(analyzer);
 
         // check auth
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
         }
 
@@ -98,6 +99,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         }
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     public long getTabletId() {
         return tabletId;
     }
@@ -113,5 +118,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminSetReplicaStatusStatement(this, context);
     }
 }

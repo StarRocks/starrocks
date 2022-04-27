@@ -247,7 +247,8 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
                 Assert.fail("should throw exception");
-            } catch (Exception ignored){}
+            } catch (Exception ignored) {
+            }
         }
 
         BigDecimal decimal64Values[] = {
@@ -261,7 +262,8 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
                 Assert.fail("should throw exception");
-            }catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
 
         BigDecimal decimal128Values[] = {
@@ -275,7 +277,8 @@ public class DecimalLiteralTest {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
                 Assert.fail("should throw exception");
-            }catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -297,7 +300,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec32 : decimal32Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec32, decimal32p4s3);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
@@ -317,7 +320,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec64 : decimal64Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec64, decimal64p10s6);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
@@ -337,7 +340,7 @@ public class DecimalLiteralTest {
         for (BigDecimal dec128 : decimal128Values) {
             try {
                 DecimalLiteral.checkLiteralOverflowInBinaryStyle(dec128, decimal128p36s11);
-            }catch (Exception ignored) {
+            } catch (Exception ignored) {
                 Assert.fail("should not throw exception");
             }
         }
@@ -456,7 +459,7 @@ public class DecimalLiteralTest {
 
     @Test
     public void testPackDecimal() {
-        BigInteger[] bigIntegers = new BigInteger[]{
+        BigInteger[] bigIntegers = new BigInteger[] {
                 BigInteger.ZERO,
                 BigInteger.ONE,
                 BigInteger.ONE.shiftLeft(31).subtract(BigInteger.ONE),

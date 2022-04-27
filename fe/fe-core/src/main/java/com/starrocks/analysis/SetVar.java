@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -34,6 +33,7 @@ import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatFlags;
 
 // change one variable.
@@ -92,7 +92,8 @@ public class SetVar {
         }
 
         if (type == SetType.GLOBAL) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "ADMIN");
             }

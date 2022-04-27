@@ -10,7 +10,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.net.util.SubnetUtils;
@@ -26,10 +25,12 @@ public class WorkGroupAnalyzer {
     // 2. role = operator
     // 3. query_type in ('select', 'insert')
     // 4. source_ip = "192.168.1.1/24"
-    public static WorkGroupClassifier convertPredicateToClassifier(List<Predicate> predicates) throws SemanticException {
+    public static WorkGroupClassifier convertPredicateToClassifier(List<Predicate> predicates)
+            throws SemanticException {
         WorkGroupClassifier classifier = new WorkGroupClassifier();
         for (Predicate pred : predicates) {
-            if (pred instanceof BinaryPredicate && ((BinaryPredicate) pred).getOp().equals(BinaryPredicate.Operator.EQ)) {
+            if (pred instanceof BinaryPredicate &&
+                    ((BinaryPredicate) pred).getOp().equals(BinaryPredicate.Operator.EQ)) {
                 BinaryPredicate eqPred = (BinaryPredicate) pred;
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);
@@ -41,13 +42,15 @@ public class WorkGroupAnalyzer {
                 if (key.equalsIgnoreCase(WorkGroup.USER)) {
                     if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
                         throw new SemanticException(
-                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.USER, eqPred.toSql()));
+                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.USER,
+                                        eqPred.toSql()));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(WorkGroup.ROLE)) {
                     if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
                         throw new SemanticException(
-                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.ROLE, eqPred.toSql()));
+                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.ROLE,
+                                        eqPred.toSql()));
                     }
                     classifier.setRole(value);
                 } else if (key.equalsIgnoreCase(WorkGroup.SOURCE_IP)) {
@@ -67,13 +70,16 @@ public class WorkGroupAnalyzer {
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 Set<String> values = rhs.stream().map(e -> ((StringLiteral) e).getValue()).collect(Collectors.toSet());
-                boolean allMatch = values.stream().allMatch(v -> WorkGroupClassifier.QUERY_TYPES.contains(v.toUpperCase()));
+                boolean allMatch =
+                        values.stream().allMatch(v -> WorkGroupClassifier.QUERY_TYPES.contains(v.toUpperCase()));
                 if (!key.equalsIgnoreCase(WorkGroup.QUERY_TYPE) || !allMatch) {
                     throw new SemanticException(
-                            String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.QUERY_TYPE, inPred.toSql()));
+                            String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.QUERY_TYPE,
+                                    inPred.toSql()));
                 }
                 classifier.setQueryTypes(values.stream()
-                        .map(String::toUpperCase).map(WorkGroupClassifier.QueryType::valueOf).collect(Collectors.toSet()));
+                        .map(String::toUpperCase).map(WorkGroupClassifier.QueryType::valueOf)
+                        .collect(Collectors.toSet()));
             } else {
                 throw new SemanticException(String.format("Illegal classifier specifier: '%s'", pred.toSql()));
             }

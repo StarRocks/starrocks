@@ -2,6 +2,9 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -9,17 +12,20 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -157,8 +163,10 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewParser(StatementBase statement) {
-        return statement instanceof AlterViewStmt
+        return  isNewAlterTable(statement)
+                || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -166,12 +174,26 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt;
     }
 
+    private static boolean isNewAlterTable(StatementBase statement) {
+        boolean isAlterTable = false;
+        if (statement instanceof AlterTableStmt) {
+            List<AlterClause> alterClauses = ((AlterTableStmt) statement).getOps();
+            if (alterClauses.stream().allMatch(alterClause -> isNewAlterTableClause(alterClause))) {
+                isAlterTable = true;
+            }
+        }
+        return isAlterTable;
+    }
+
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
-        return statement instanceof AlterViewStmt
+        return isNewAlterTable(statement)
+                || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
@@ -182,9 +204,15 @@ public class StatementPlanner {
                 || statement instanceof QueryStatement
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof DropMaterializedViewStmt;
+    }
+
+    public static boolean isNewAlterTableClause(AlterClause clause) {
+        return clause instanceof TableRenameClause;
     }
 }

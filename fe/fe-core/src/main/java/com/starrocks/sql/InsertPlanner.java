@@ -59,7 +59,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-
 public class InsertPlanner {
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -73,7 +72,8 @@ public class InsertPlanner {
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, session).transform(insertStmt.getQueryStatement().getQueryRelation());
+                new RelationTransformer(columnRefFactory, session).transform(
+                        insertStmt.getQueryStatement().getQueryRelation());
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
@@ -145,7 +145,8 @@ public class InsertPlanner {
     }
 
     void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
-        Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation, "must values");
+        Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
+                "must values");
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();

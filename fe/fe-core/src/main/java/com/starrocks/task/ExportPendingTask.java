@@ -21,12 +21,12 @@
 
 package com.starrocks.task;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;
@@ -61,7 +61,7 @@ public class ExportPendingTask extends MasterTask {
         }
 
         long dbId = job.getDbId();
-        db = Catalog.getCurrentCatalog().getDb(dbId);
+        db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "database does not exist");
             return;
@@ -104,12 +104,12 @@ public class ExportPendingTask extends MasterTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
                 if (backend == null) {
                     return Status.CANCELLED;
                 }
                 long backendId = backend.getId();
-                if (!Catalog.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+                if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
                 TSnapshotRequest snapshotRequest = new TSnapshotRequest();
