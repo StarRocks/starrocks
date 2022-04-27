@@ -8,7 +8,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
-import org.apache.spark.sql.catalyst.plans.logical.Except;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -85,7 +84,7 @@ public class ListPartitionDescTest {
         return supportedProperties;
     }
 
-    public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException, DdlException {
+    public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", this.findSupportedProperties(null));
         listPartitionDesc.analyze(this.findColumnDefList(), null);
@@ -96,7 +95,7 @@ public class ListPartitionDescTest {
         return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
-    public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
+    public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", this.findSupportedProperties(null));
         listPartitionDesc.analyze(this.findColumnDefList(), null);

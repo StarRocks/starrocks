@@ -137,10 +137,8 @@ public class ListPartitionInfo extends PartitionInfo {
             Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
-                sb.append("  PARTITION ").append(partitionName).append(" VALUES IN (");
-                sb.append(values.stream().map(value -> "\'" + value + "\'")
-                        .collect(Collectors.joining(",")));
-                sb.append(")");
+                sb.append("  PARTITION ").append(partitionName).append(" VALUES IN ");
+                sb.append(this.valuesToString(values));
 
                 if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
                     sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
@@ -152,6 +150,11 @@ public class ListPartitionInfo extends PartitionInfo {
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
 
+    private String valuesToString(List<String> values) {
+        return "(" + values.stream().map(value -> "\'" + value + "\'")
+                .collect(Collectors.joining(", ")) + ")";
+    }
+
     private String multiListPartitionSql(OlapTable table, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         idToMultiValues.forEach((partitionId, multiValues) -> {
@@ -159,10 +162,7 @@ public class ListPartitionInfo extends PartitionInfo {
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
                 sb.append("  PARTITION ").append(partitionName).append(" VALUES IN (");
-                String items = multiValues.stream()
-                        .map(values -> "(" + values.stream().map(value -> "\'" + value + "\'")
-                                .collect(Collectors.joining(",")) + ")")
-                        .collect(Collectors.joining(","));
+                String items = this.multiValuesToString(multiValues);
                 sb.append(items);
                 sb.append(")");
 
@@ -177,8 +177,25 @@ public class ListPartitionInfo extends PartitionInfo {
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
 
+    private String multiValuesToString(List<List<String>> multiValues) {
+        return multiValues.stream()
+                .map(values -> "(" + values.stream().map(value -> "\'" + value + "\'")
+                        .collect(Collectors.joining(", ")) + ")")
+                .collect(Collectors.joining(", "));
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return this.partitionColumns;
+    }
+
+    public String getValueFormat(long partitionId) {
+        if (!this.idToValues.isEmpty()) {
+            return this.valuesToString(this.idToValues.get(partitionId));
+        }
+        if (!this.idToMultiValues.isEmpty()) {
+            return this.multiValuesToString(this.idToMultiValues.get(partitionId));
+        }
+        return "";
     }
 }
