@@ -146,12 +146,15 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
+    _query_statistics.reset(new QueryStatistics());
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
         RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
                                                    request.fragment.output_exprs, params, row_desc(), &_sink));
+        DCHECK(_sink != nullptr);
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
+        _sink->set_query_statistics(_query_statistics);
 
         RuntimeProfile* sink_profile = _sink->profile();
 
@@ -174,11 +177,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
-
-    _query_statistics.reset(new QueryStatistics());
-    if (_sink != nullptr) {
-        _sink->set_query_statistics(_query_statistics);
-    }
 
     return Status::OK();
 }
