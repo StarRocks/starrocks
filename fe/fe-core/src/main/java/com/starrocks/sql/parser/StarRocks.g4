@@ -23,6 +23,8 @@ statement
         distributionDesc?
         properties?
         AS queryStatement                                                                   #createTableAsSelect
+    | ALTER TABLE qualifiedName
+                alterClause (',' alterClause)*                                              #alterTable
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
     | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
     | USE schema=identifier                                                                 #use
@@ -38,8 +40,17 @@ statement
         AS queryStatement                                                                   #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
+    ;
+
+alterClause
+    : tableRenameClause
+    ;
+
+tableRenameClause
+    : RENAME identifier
     ;
 
 explainDesc
@@ -544,8 +555,8 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | ROLLUP | ROLLBACK | REPLICA
+    | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
