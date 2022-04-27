@@ -338,7 +338,7 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
     ColumnBuilder<TYPE_OBJECT> builder(size);
 
     const constexpr PrimitiveType TYPE = TYPE_INT;
-    ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0]);
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0].get());
     RunTimeColumnType<TYPE>::Container& element_container =
             array_column->elements_column()->is_nullable()
                     ? down_cast<RunTimeColumnType<TYPE>*>(
@@ -361,11 +361,11 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
         }
         // build bitmap
         BitmapValue bitmap;
-        for(int j = offset;j<length;j++) {
+        for (int j = offset; j < length; j++) {
             bitmap.add(element_container[j]);
         }
         // append bitmap
-        builder.append(&bitmap);
+        builder.append(std::move(bitmap));
     }
     return builder.build(ColumnHelper::is_all_const(columns));
 }
