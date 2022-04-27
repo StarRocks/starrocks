@@ -174,7 +174,7 @@ public class PrivilegeChecker {
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "NODE");
+                        session.getQualifiedUser());
             }
             return null;
           

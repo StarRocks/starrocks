@@ -59,11 +59,11 @@ tableRenameClause
     ;
 
 addBackendClause
-    : ADD FREE? BACKEND (TO string)? string (',' string)*
+    : ADD FREE? BACKEND (TO identifier)? string (',' string)*
     ;
 
 dropBackendClause
-    : DROP BACKEND string (',' string)*
+    : DROP BACKEND string (',' string)* FORCE?
     ;
 
 addFrontendClause
@@ -577,8 +577,8 @@ nonReserved
     | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | ROLLUP | ROLLBACK | REPLICA
-    | SECOND | SESSION | SETS | START | SUM | STATUS | SYSTEM
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE | TO
+    | SECOND | SESSION | SETS | START | SUM | STATUS
+    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | WEEK

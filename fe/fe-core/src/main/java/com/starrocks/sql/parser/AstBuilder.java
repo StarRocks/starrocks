@@ -592,7 +592,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new DropBackendClause(clusters, false);
+        return new DropBackendClause(clusters, context.FORCE() != null);
     }
 
     @Override

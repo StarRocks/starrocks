@@ -33,7 +33,7 @@ public class AlterSystemStmtAnalyzer {
                 }
                 Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
             } catch (AnalysisException e) {
-                throw new RuntimeException(e);
+                throw new SemanticException("backend host or port is wrong!");
             }
             return null;
         }
@@ -46,13 +46,8 @@ public class AlterSystemStmtAnalyzer {
                 frontendClause.setPort(pair.second);
                 Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
             } catch (AnalysisException e) {
-                throw new RuntimeException(e);
+                throw new SemanticException("frontend host or port is wrong!");
             }
-            return null;
-        }
-
-
-        public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
             return null;
         }
     }
