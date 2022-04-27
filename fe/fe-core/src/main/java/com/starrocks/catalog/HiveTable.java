@@ -440,7 +440,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             case "BOOLEAN":
                 return PrimitiveType.BOOLEAN;
             default:
-                throw new DdlException("hive table column type [" + typeUpperCase + "] cast failed.");
+                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
         }
     }
 
