@@ -20,6 +20,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.Map;
@@ -144,6 +145,17 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
                     statement.getMvName(), PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext session) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
+                    ConnectContext.get(), PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, statement.getOperationName());
             }
             return null;
         }

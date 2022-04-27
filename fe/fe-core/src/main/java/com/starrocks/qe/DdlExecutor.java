@@ -67,7 +67,6 @@ import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
@@ -78,7 +77,6 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.RevokeRoleStmt;
 import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -89,6 +87,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 
 public class DdlExecutor {
     public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
@@ -150,7 +150,6 @@ public class DdlExecutor {
             DropUserStmt stmt = (DropUserStmt) ddlStmt;
             globalStateMgr.getAuth().dropUser(stmt);
         } else if (ddlStmt instanceof RevokeRoleStmt) {
-            // this condition must go first because RevokeRoleStmt is a subclass of GrantRoleStmt
             RevokeRoleStmt stmt = (RevokeRoleStmt) ddlStmt;
             globalStateMgr.getAuth().revokeRole(stmt);
         } else if (ddlStmt instanceof GrantRoleStmt) {

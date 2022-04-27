@@ -2,16 +2,13 @@
 package com.starrocks.sql.analyzer;
 
 
-import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public class GrantRevokeRoleAnalyzer {
 
@@ -48,10 +45,6 @@ public class GrantRevokeRoleAnalyzer {
         }
         stmt.setQualifiedRole(qualifiedRole);
 
-        // check if current user has GRANT priv on GLOBAL level.
-        if (!auth.checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-            // notice that this method is shared with REVOKE ROLE statment
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT/REVOKE ROLE");
-        }
+
     }
 }

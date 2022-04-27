@@ -14,10 +14,8 @@ import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -35,9 +33,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -200,7 +200,7 @@ public class StatementPlanner {
                 || statement instanceof DropWorkGroupStmt
                 || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
-                || statement instanceof RevokeStmt
+                || statement instanceof RevokeRoleStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowTableStmt

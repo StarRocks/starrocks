@@ -41,8 +41,8 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | GRANT identifierOrString TO userIdentifier                                            #grantRole
-    | REVOKE identifierOrString FROM userIdentifier                                         #revokeRole
+    | GRANT identifierOrString TO user                                                      #grantRole
+    | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
 
 alterClause
@@ -527,11 +527,10 @@ identifierList
     ;
 
 identifierOrString
-    : identifier        # identifierOfIdentifierOrString
-    | string            # stringOfIdentifierOrString
+    : ( identifier | string )
     ;
 
-userIdentifier
+user
     : identifierOrString                                     # userWithoutHost
     | identifierOrString '@' identifierOrString              # userWithHost
     | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket

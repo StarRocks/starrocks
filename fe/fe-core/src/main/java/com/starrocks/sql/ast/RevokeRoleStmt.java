@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
+
+import com.starrocks.analysis.UserIdentity;
 
 // REVOKE Role 'role' FROM 'user'
 // share the same parameter and check logic with GrantRoleStmt
@@ -11,9 +13,12 @@ public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
     }
 
     @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("REVOKE '").append(qualifiedRole).append("' FROM ").append(userIdent);
-        return sb.toString();
+    public String getOperationName() {
+        return "GRANT";
+    }
+
+    @Override
+    public String getPrepositionName() {
+        return "TO";
     }
 }

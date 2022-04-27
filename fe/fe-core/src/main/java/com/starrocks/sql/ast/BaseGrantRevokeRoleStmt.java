@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.UserIdentity;
 
 // GrantRoleStmt and RevokeRoleStmt share the same parameter and check logic with GrantRoleStmt
-public class BaseGrantRevokeRoleStmt extends DdlStmt {
+public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     protected String role;
     protected UserIdentity userIdent;
     protected String qualifiedRole;
@@ -14,7 +15,6 @@ public class BaseGrantRevokeRoleStmt extends DdlStmt {
         this.role = role;
         this.userIdent = userIdent;
     }
-
 
     public UserIdentity getUserIdent() {
         return userIdent;
@@ -32,9 +32,21 @@ public class BaseGrantRevokeRoleStmt extends DdlStmt {
         this.qualifiedRole = qualifiedRole;
     }
 
+    /**
+     * return GRANT or REVOKE
+     */
+    public abstract String getOperationName();
+
+    /**
+     * return TO or FROM
+     */
+    public abstract String getPrepositionName();
+
+
     @Override
     public String toString() {
-        return toSql();
+        return String.format("%s '%s' %s %s",
+                getOperationName(), qualifiedRole, getPrepositionName(), userIdent.getQualifiedUser());
     }
 
     @Override

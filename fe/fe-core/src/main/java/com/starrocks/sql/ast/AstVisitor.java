@@ -12,7 +12,6 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -57,6 +56,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {

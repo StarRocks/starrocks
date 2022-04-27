@@ -1,7 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.mysql.privilege.PrivPredicate;

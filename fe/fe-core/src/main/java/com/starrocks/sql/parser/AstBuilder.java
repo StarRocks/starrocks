@@ -37,7 +37,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
@@ -63,7 +62,6 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
-import com.starrocks.analysis.RevokeRoleStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -96,6 +94,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -105,6 +104,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -210,14 +210,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
-        UserIdentifier user = (UserIdentifier) visit(context.userIdentifier());
+        UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
     public ParseNode visitRevokeRole(StarRocksParser.RevokeRoleContext context) {
-        UserIdentifier user = (UserIdentifier) visit(context.userIdentifier());
+        UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
@@ -1719,18 +1719,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitIdentifierOfIdentifierOrString(StarRocksParser.IdentifierOfIdentifierOrStringContext context) {
-        return (Identifier) visit(context.identifier());
-    }
-
-    @Override
-    public ParseNode visitStringOfIdentifierOrString(StarRocksParser.StringOfIdentifierOrStringContext context) {
-        String raw = context.string().getText();
-        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\''
-                || raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
-            raw = raw.substring(1, raw.length() - 1);
+    public ParseNode visitIdentifierOrString(StarRocksParser.IdentifierOrStringContext context) {
+        String s = null;
+        if (context.identifier() != null) {
+            s = ((Identifier) visit(context.identifier())).getValue();
+        } else if (context.string() != null) {
+            s = ((StringLiteral) visit(context.string())).getStringValue();
         }
-        return new Identifier(raw);
+        return new Identifier(s);
     }
 
     @Override

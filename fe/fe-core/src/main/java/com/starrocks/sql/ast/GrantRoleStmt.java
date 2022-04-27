@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
+
+import com.starrocks.analysis.UserIdentity;
 
 // GRANT Role 'role' TO 'user'
 // share the same parameter and check logic with RevokeRoleStmt
@@ -11,9 +13,19 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
     }
 
     @Override
-    public String toSql() {
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("GRANT '").append(qualifiedRole).append("' TO ").append(userIdent);
         return sb.toString();
+    }
+
+    @Override
+    public String getOperationName() {
+        return "GRANT";
+    }
+
+    @Override
+    public String getPrepositionName() {
+        return "TO";
     }
 }
