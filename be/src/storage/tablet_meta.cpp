@@ -567,20 +567,7 @@ Version TabletMeta::max_version() const {
 }
 
 Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
-    for (auto& rs : _rs_metas) {
-        if (rs->version() == rs_meta->version()) {
-            if (rs->rowset_id() != rs_meta->rowset_id()) {
-                LOG(WARNING) << "version already exist. rowset_id=" << rs->rowset_id() << " version=" << rs->version()
-                             << ", tablet=" << full_name();
-                return Status::AlreadyExist("publish version");
-            } else {
-                // rowsetid,version is equal, it is a duplicate req, skip it
-                return Status::OK();
-            }
-        }
-    }
-
+    // consistency is guarantee by tablet
     _rs_metas.push_back(rs_meta);
     if (rs_meta->has_delete_predicate()) {
         add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
@@ -644,14 +631,7 @@ void TabletMeta::revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) 
 }
 
 Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
-    for (const auto& rs : _inc_rs_metas) {
-        if (rs->version() == rs_meta->version()) {
-            LOG(WARNING) << "rowset already exist. rowset_id=" << rs->rowset_id();
-            return Status::AlreadyExist("rowset meta already exist");
-        }
-    }
-
+    // consistency is guarantee by tablet
     _inc_rs_metas.push_back(rs_meta);
     return Status::OK();
 }
