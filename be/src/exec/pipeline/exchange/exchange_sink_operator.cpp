@@ -386,6 +386,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     if (num_rows == 0) {
         return Status::OK();
     }
+    DCHECK_LE(num_rows, state->chunk_size());
 
     vectorized::Chunk temp_chunk;
     vectorized::Chunk* send_chunk = chunk.get();
