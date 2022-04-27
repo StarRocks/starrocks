@@ -5,6 +5,8 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddFollowerClause;
+import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -33,7 +35,9 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -562,6 +566,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new DropBackendClause(clusters, false);
+    }
+
+    @Override
+    public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null){
+            return new AddFollowerClause(cluster);
+        } else if (context.OBSERVER() != null){
+            return new AddObserverClause(cluster);
+        } else{
+            return null;
+        }
+    }
+
+    @Override
+    public ParseNode visitDropFrontendClause(StarRocksParser.DropFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null){
+            return new DropFollowerClause(cluster);
+        } else if (context.OBSERVER() != null){
+            return new DropObserverClause(cluster);
+        } else{
+            return null;
+        }
     }
     // ------------------------------------------- Query Relation -------------------------------------------
     @Override
