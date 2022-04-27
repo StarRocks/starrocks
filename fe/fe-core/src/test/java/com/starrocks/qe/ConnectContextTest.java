@@ -111,10 +111,12 @@ public class ConnectContextTest {
         ctx.setConnectScheduler(connectScheduler);
         Assert.assertNotNull(ctx.getConnectScheduler());
 
-        // connection id && start time
+        // connection id
         ctx.setConnectionId(101);
-        ctx.resetConnectionStartTime();
         Assert.assertEquals(101, ctx.getConnectionId());
+
+        // set connect start time to now
+        ctx.resetConnectionStartTime();
 
         // command
         ctx.setCommand(MysqlCommand.COM_PING);
