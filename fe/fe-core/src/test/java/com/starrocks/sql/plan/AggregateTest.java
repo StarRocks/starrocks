@@ -886,4 +886,14 @@ public class AggregateTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
     }
+
+    @Test
+    public void testOnlyFullGroupBy() throws Exception {
+        long sqlmode = connectContext.getSessionVariable().getSqlMode();
+        connectContext.getSessionVariable().setSqlMode(0);
+        String sql = "select v1, v2 from t0 group by v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(2: v2)");
+        connectContext.getSessionVariable().setSqlMode(sqlmode);
+    }
 }

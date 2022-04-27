@@ -127,11 +127,11 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
-            new QueryAnalyzer(session).analyze(stmt);
+        public Void visitQueryStatement(QueryStatement stmt, ConnectContext context) {
+            new QueryAnalyzer(context).analyze(stmt);
 
             QueryRelation queryRelation = stmt.getQueryRelation();
-            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+            long selectLimit = context.getSessionVariable().getSqlSelectLimit();
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 queryRelation.setLimit(new LimitElement(selectLimit));
             }

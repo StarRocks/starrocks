@@ -29,6 +29,9 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -61,26 +64,31 @@ public class AggregationAnalyzer {
 
     private final Scope orderByScope;
 
+    private final ConnectContext context;
+
     /**
      * Verify whether output expression is semantically valid for aggregation
      */
-    public static void verifySourceAggregations(List<Expr> groupByExpressions, List<Expr> outputExpressions,
+    public static void verifySourceAggregations(ConnectContext context,
+                                                List<Expr> groupByExpressions, List<Expr> outputExpressions,
                                                 Scope sourceScope,
                                                 AnalyzeState analyzeState) {
-        AggregationAnalyzer analyzer = new AggregationAnalyzer(analyzeState, groupByExpressions, sourceScope, null);
+        AggregationAnalyzer analyzer = new AggregationAnalyzer(context, analyzeState, groupByExpressions, sourceScope, null);
         outputExpressions.forEach(analyzer::analyze);
     }
 
-    public static void verifyOrderByAggregations(List<Expr> groupByExpressions, List<Expr> orderByExpression,
+    public static void verifyOrderByAggregations(ConnectContext context,
+                                                 List<Expr> groupByExpressions, List<Expr> orderByExpression,
                                                  Scope sourceScope,
                                                  Scope orderByScope, AnalyzeState analyzeState) {
         AggregationAnalyzer analyzer =
-                new AggregationAnalyzer(analyzeState, groupByExpressions, sourceScope, orderByScope);
+                new AggregationAnalyzer(context, analyzeState, groupByExpressions, sourceScope, orderByScope);
         orderByExpression.forEach(analyzer::analyze);
     }
 
-    private AggregationAnalyzer(AnalyzeState analyzeState, List<Expr> groupingExpressions, Scope sourceScope,
+    private AggregationAnalyzer(ConnectContext context, AnalyzeState analyzeState, List<Expr> groupingExpressions, Scope sourceScope,
                                 Scope orderByScope) {
+        this.context = context;
         this.sourceScope = sourceScope;
         this.orderByScope = orderByScope;
         this.analyzeState = analyzeState;
@@ -126,7 +134,23 @@ public class AggregationAnalyzer {
                 return true;
             }
 
-            return groupingFields.contains(fieldId);
+            long sqlMode = context.getSessionVariable().getSqlMode();
+            if (groupingFields.contains(fieldId)) {
+                return true;
+            } else if (!SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)){
+                // For sql: select c1, c2 from table group by c1;
+                // when sql_mode isn't ONLY_FULL_GROUP_BY,
+                // we rewrite the sql to select c1, any_value(c2) from table group by c1;
+                FunctionCallExpr anyValue = new FunctionCallExpr(FunctionSet.ANY_VALUE, Lists.newArrayList(node));
+                ExpressionAnalyzer.analyzeExpression(anyValue, analyzeState, sourceScope, context);
+                analyzeState.getAggregate().add(anyValue);
+
+                // Also need to change the output expressions
+                analyzeState.getOutputExpressions().remove(node);
+                analyzeState.getOutputExpressions().add(anyValue);
+                return true;
+            }
+            return false;
         }
 
         @Override

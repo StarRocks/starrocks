@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import scala.collection.mutable.MutableList;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -92,10 +93,10 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
-            verifySourceAggregations(groupByExpressions, sourceExpressions, sourceScope, analyzeState);
+            verifySourceAggregations(session, groupByExpressions, sourceExpressions, sourceScope, analyzeState);
 
             if (orderByElements.size() > 0) {
-                verifyOrderByAggregations(groupByExpressions, orderByExpressions, sourceScope, sourceAndOutputScope,
+                verifyOrderByAggregations(session, groupByExpressions, orderByExpressions, sourceScope, sourceAndOutputScope,
                         analyzeState);
             }
         }
@@ -156,7 +157,7 @@ public class SelectAnalyzer {
 
     private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
                                      AnalyzeState analyzeState, Scope scope) {
-        ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
+        List<Expr> outputExpressionBuilder = Lists.newArrayList();
         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
 
         for (SelectListItem item : selectList.getItems()) {
@@ -204,7 +205,7 @@ public class SelectAnalyzer {
             }
 
             if (selectList.isDistinct()) {
-                outputExpressionBuilder.build().forEach(expr -> {
+                outputExpressionBuilder.forEach(expr -> {
                     if (!expr.getType().canDistinct()) {
                         throw new SemanticException("DISTINCT can only be applied to comparable types : %s",
                                 expr.getType());
@@ -222,10 +223,9 @@ public class SelectAnalyzer {
             }
         }
 
-        List<Expr> outputExpr = outputExpressionBuilder.build();
-        analyzeState.setOutputExpression(outputExpr);
+        analyzeState.setOutputExpression(outputExpressionBuilder);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
-        return outputExpressionBuilder.build();
+        return outputExpressionBuilder;
     }
 
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
