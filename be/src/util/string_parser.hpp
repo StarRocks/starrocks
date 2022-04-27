@@ -727,8 +727,8 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
             if (shift <= decimal_precision_limit<T>) {
                 T divisor = starrocks::get_scale_factor<T>(shift);
                 if (LIKELY(divisor >= 0)) {
-                    value /= divisor;
                     T remainder = value % divisor;
+                    value /= divisor;
                     if (abs(remainder) >= (divisor >> 1)) {
                         value += 1;
                     }
