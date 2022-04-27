@@ -31,7 +31,7 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
         comment?
-        PARTITION BY primaryExpression
+        (PARTITION BY '(' primaryExpression (',' primaryExpression)* ')')?
         distributionDesc?
         refreshSchemeDesc
         AS queryStatement
@@ -501,7 +501,7 @@ number
     ;
 
 nonReserved
-    : ARRAY | AVG
+    : ARRAY | AVG | ASYNC
     | BUCKETS
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
@@ -511,12 +511,12 @@ nonReserved
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MAX | MIN | MINUTE | MONTH | MERGE
+    | MAX | MIN | MINUTE | MONTH | MERGE | MANUAL | MATERIALIZED
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | REFRESH | ROLLUP | ROLLBACK
+    | SECOND | SESSION | SETS | START | SUM | SYNC
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE

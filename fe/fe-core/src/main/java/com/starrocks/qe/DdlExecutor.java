@@ -232,8 +232,6 @@ public class DdlExecutor {
             catalog.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterWorkGroupStmt) {
             catalog.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
-            //todo we need add catalog operation here
         } else {
             throw new DdlException("Unknown statement.");
         }

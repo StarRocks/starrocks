@@ -116,11 +116,13 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), statement.getTableName().getDb(),
-                    statement.getTableName().getTbl(), PrivPredicate.CREATE)) {
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
+                    tableName.getTbl(), PrivPredicate.CREATE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
             }
+            check(statement.getQueryStatement(), session);
             return null;
         }
     }

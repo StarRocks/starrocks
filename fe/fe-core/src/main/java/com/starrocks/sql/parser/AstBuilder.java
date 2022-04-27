@@ -47,6 +47,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ManualRefreshSchemeDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
@@ -163,12 +164,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        Expr expr = (Expr) visit(context.primaryExpression());
-        if (!(expr instanceof SlotRef)) {
-            throw new IllegalArgumentException("Partition exp must be alias of select item");
+        List<StarRocksParser.PrimaryExpressionContext> primaryExpressionContexts = context.primaryExpression();
+        if (primaryExpressionContexts.size() > 1) {
+            throw new IllegalArgumentException("Partition expressions currently only support one");
         }
-        PartitionExpDesc partitionExpDesc = new PartitionExpDesc((SlotRef) expr);
-
+        List<SlotRef> partitionExpressions = Lists.newArrayList();
+        for (StarRocksParser.PrimaryExpressionContext primaryExpressionContext : primaryExpressionContexts) {
+            Expr expr = (Expr) visit(primaryExpressionContext);
+            if (!(expr instanceof SlotRef)) {
+                throw new IllegalArgumentException("Partition exp " + expr.toSql() + " must be alias of select item");
+            }
+            partitionExpressions.add(((SlotRef) expr));
+        }
+        PartitionExpDesc partitionExpDesc = new PartitionExpDesc(partitionExpressions);
         RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         // get query statement
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -199,20 +207,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                 } catch (AnalysisException e) {
                     throw new IllegalArgumentException(
-                            "Refresh type: " + context.SYNC().getText() + " start is incorrect");
+                            "Refresh type: " + context.ASYNC().getText() + " start " +
+                                    stringLiteral.getStringValue() + " is incorrect");
                 }
             }
             if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
                 if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                    throw new IllegalArgumentException("Refresh interval step must be int");
+                    throw new IllegalArgumentException("Refresh interval " + intervalLiteral.getValue() + " must be IntLiteral");
                 }
             }
             return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
             throw new IllegalArgumentException("Unsupported refresh type: " + context.SYNC().getText());
         } else if (context.MANUAL() != null) {
-            throw new IllegalArgumentException("Unsupported refresh type: " + context.MANUAL().getText());
+            return new ManualRefreshSchemeDesc();
         }
         return null;
     }
