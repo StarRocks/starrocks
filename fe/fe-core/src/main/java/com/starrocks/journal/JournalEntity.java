@@ -88,6 +88,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WorkGroupOpEntry;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.statistic.AnalyzeJob;
@@ -575,6 +576,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
                 data = AnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
+                data = ModifyTableColumnOperationLog.read(in);
                 isRead = true;
                 break;
             }
