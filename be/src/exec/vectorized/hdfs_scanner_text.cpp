@@ -2,7 +2,7 @@
 
 #include "exec/vectorized/hdfs_scanner_text.h"
 
-#include "exec/vectorized/hdfs_scan_node.h"
+#include "exec/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
 #include "util/utf8_check.h"

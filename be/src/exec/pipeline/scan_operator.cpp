@@ -3,7 +3,8 @@
 #include "exec/pipeline/scan_operator.h"
 
 #include "column/chunk.h"
-#include "exec/pipeline/hdfs_scan_operator.h"
+#include "connector_scan_operator.h"
+#include "exec/pipeline/connector_scan_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -197,7 +198,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             _is_io_task_running[chunk_source_index] = false;
         });
 
-        if (dynamic_cast<HdfsScanOperator*>(this) != nullptr) {
+        if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
             offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
         } else {
             offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));

@@ -39,6 +39,7 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
+    mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -99,6 +100,7 @@ set(EXEC_FILES
     vectorized/es_http_components.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
+    vectorized/mysql_scan_node.cpp
     vectorized/schema_scanner/schema_tables_scanner.cpp
     vectorized/schema_scanner/schema_dummy_scanner.cpp
     vectorized/schema_scanner/schema_schemata_scanner.cpp
@@ -121,6 +123,7 @@ set(EXEC_FILES
     vectorized/sorting/merge_cascade.cpp
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
+    vectorized/connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
@@ -139,9 +142,7 @@ set(EXEC_FILES
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
     pipeline/olap_scan_operator.cpp
-    pipeline/hdfs_scan_operator.cpp
     pipeline/connector_scan_operator.cpp
-    pipeline/hdfs_chunk_source.cpp
     pipeline/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
@@ -194,13 +195,6 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
     set_source_files_properties(vectorized/json_parser.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
 endif()
-
-set(EXEC_FILES
-    ${EXEC_FILES}
-    vectorized/mysql_scan_node.cpp
-    mysql_scanner.cpp
-    vectorized/connector_scan_node.cpp
-    vectorized/hdfs_scan_node.cpp)
 
 add_library(Exec STATIC
     ${EXEC_FILES}

@@ -5,11 +5,11 @@
 #include <unordered_map>
 
 #include "exec/exchange_node.h"
+#include "exec/pipeline/connector_scan_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -281,7 +281,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                     scan_operator->set_workgroup(wg);
                 } else {
-                    if (dynamic_cast<HdfsScanOperator*>(scan_operator) != nullptr) {
+                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
                     } else {
                         scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
