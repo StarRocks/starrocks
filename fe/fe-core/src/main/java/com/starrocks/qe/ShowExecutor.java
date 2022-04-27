@@ -75,6 +75,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
+import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.backup.AbstractJob;
@@ -258,6 +259,8 @@ public class ShowExecutor {
             handleShowAnalyze();
         } else if (stmt instanceof ShowWorkGroupStmt) {
             handleShowWorkGroup();
+        } else if (stmt instanceof ShowUserStmt) {
+            handleShowUser();
         } else {
             handleEmtpy();
         }
@@ -339,6 +342,14 @@ public class ShowExecutor {
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
+    private void handleShowUser() {
+        List<List<String>> rowSet = Lists.newArrayList();
+        List<String> row = Lists.newArrayList();
+        row.add(ctx.getQualifiedUser());
+        rowSet.add(row);
+        resultSet = new ShowResultSet(stmt.getMetaData(), rowSet);
     }
 
     // Handle show authors
