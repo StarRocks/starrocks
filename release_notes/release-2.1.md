@@ -86,3 +86,17 @@ The following bugs are fixed:
 - When data is loading to a StarRocks external table, if the configured FE of the target StarRocks cluster is not a Leader, it will cause the FE to stop working. [#4573](https://github.com/StarRocks/starrocks/issues/4573)
 - The results of `CAST` function are different in StarRocks version 1.19 and 2.1. [#4701](https://github.com/StarRocks/starrocks/pull/4701)
 - Query results may be incorrect, when a Duplicate Key table performs schema change and creates materialized view at the same time. [#4839](https://github.com/StarRocks/starrocks/issues/4839)
+
+## 2.1.5
+
+Release date: April 27, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The calculation result is not correct when decimal multiplication overflows. After the bug is fixed, NULL is returned when decimal multiplication overflows.
+- When statistics have a considerable deviation from the actual statistics, the priority of Collocate Join may be lower than Broadcast Join. As a result, the query planner may not choose Colocate Join as the more appropriate Join strategy. [#4817](https://github.com/StarRocks/starrocks/pull/4817)
+- Query fails because the plan for complex expressions is wrong when there are more than 4 tables to join.
+- BEs may stop working under Shuffle Join when the shuffle column is a low-cardinality column. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- BEs may stop working when the SPLIT function uses a NULL parameter. [#4092](https://github.com/StarRocks/starrocks/issues/4092)
