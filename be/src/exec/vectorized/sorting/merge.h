@@ -76,7 +76,7 @@ struct SortedRuns {
     ~SortedRuns() = default;
     SortedRuns(SortedRun run) : chunks{run} {}
 
-    SortedRun& get_run(int i) { return chunks[i]; }
+    const SortedRun& get_run(int i) const { return chunks[i]; }
     ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }
     size_t num_chunks() const { return chunks.size(); }
     size_t num_rows() const;

@@ -482,6 +482,19 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     if (queue.empty()) {
         return Status::OK();
     }
+    
+    // Sort the runs according to [start, end], to improve merge locality
+    std::sort(queue.begin(), queue.end(), [&](const SortedRuns& lhs, const SortedRuns& rhs) {
+        auto& lhs_first = lhs.get_run(0);
+        auto& rhs_first = rhs.get_run(0);
+        int x = lhs_first.compare_row(descs, rhs_first, lhs_first.start_index(), rhs_first.start_index());
+        if (x != 0) {
+            return x < 0;
+        }
+        return lhs_first.compare_row(descs, rhs_first, lhs_first.end_index()-1, rhs_first.end_index()-1) < 0;
+    });
+
+    // Do multi-pass merge
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();
