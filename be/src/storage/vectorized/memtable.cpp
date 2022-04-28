@@ -227,10 +227,10 @@ Status MemTable::flush() {
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
-        if (!_deletes || _deletes->empty()) {
-            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
-        } else {
+        if (_deletes) {
             RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+        } else {
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
