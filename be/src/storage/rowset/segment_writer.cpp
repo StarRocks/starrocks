@@ -148,8 +148,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
-        if (column.type() == FieldType::OLAP_FIELD_TYPE_CHAR && column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR,
-            _opts.global_dicts != nullptr) {
+        if (column.type() == FieldType::OLAP_FIELD_TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second;
