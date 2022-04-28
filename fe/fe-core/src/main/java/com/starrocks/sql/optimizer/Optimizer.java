@@ -34,8 +34,6 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -44,7 +42,6 @@ import java.util.List;
  * Optimizer's entrance class
  */
 public class Optimizer {
-    private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private OptimizerContext context;
 
     public OptimizerContext getContext() {
@@ -67,14 +64,11 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         // Phase 1: none
-        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
         Memo memo = new Memo();
         memo.init(logicOperatorTree);
-        OptimizerTraceUtil.log(connectContext, "initial root group:\n%s", memo.getRootGroup());
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
-        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
 
@@ -82,7 +76,6 @@ public class Optimizer {
         // so we should always get root group and root group expression
         // directly from memo.
         logicalRuleRewrite(memo, rootTaskContext);
-        OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -106,12 +99,8 @@ public class Optimizer {
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
         }
-        OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
-        OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
-        OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
-        OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
-        return finalPlan;
+        return physicalRuleRewrite(rootTaskContext, result);
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
@@ -168,12 +157,14 @@ public class Optimizer {
 
         cleanUpMemoGroup(memo);
 
+        // 测试我自己写的MULTI_DISTINCT_REWRITE_OPTIMIZED
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE_OPTIMIZED);
+        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE_OPTIMIZED);
         // ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks

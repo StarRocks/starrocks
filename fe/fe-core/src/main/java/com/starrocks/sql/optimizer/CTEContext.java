@@ -63,6 +63,8 @@ public class CTEContext {
 
     private double inlineCTERatio = 2.0;
 
+    private boolean forcedCTE;
+
     public CTEContext() {
     }
 
@@ -81,6 +83,11 @@ public class CTEContext {
     public void setEnableCTE(boolean enableCTE) {
         this.enableCTE = enableCTE;
     }
+
+    public void setForcedCTE(boolean forcedCTE) {
+        this.forcedCTE = forcedCTE;
+    }
+
 
     public void setInlineCTERatio(double ratio) {
         this.inlineCTERatio = ratio;
@@ -182,6 +189,10 @@ public class CTEContext {
      *
      */
     public boolean needInline(int cteId) {
+        if (forcedCTE) {
+            return false;
+        }
+
         // 1. Disable CTE reuse
         // 2. CTE consume only use once
         if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
@@ -193,8 +204,8 @@ public class CTEContext {
             return false;
         }
 
-        Preconditions.checkState(produceCosts.containsKey(cteId));
-        Preconditions.checkState(consumeInlineCosts.containsKey(cteId));
+        // Preconditions.checkState(produceCosts.containsKey(cteId));
+        // Preconditions.checkState(consumeInlineCosts.containsKey(cteId));
 
         if (inlineCTERatio <= 0) {
             return false;

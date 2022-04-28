@@ -74,16 +74,7 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
         anchorOperatorInputsList.add(OptExpression.create(logicalCTEProduceOperator, aggChildOptExpressionList));
         // get all aggregation operator
         LogicalAggregationOperator originalAllAggregationOperator = (LogicalAggregationOperator) input.getOp();
-
-        // get metric method operator
-        LogicalJoinOperator firstJoinOperator = new LogicalJoinOperator.Builder()
-                .setJoinType(JoinOperator.CROSS_JOIN)
-                .setOnPredicate(null)
-                .build();
-        List<OptExpression> fistJoinOperatorInputsList = new ArrayList<>();
-        // group count divided into pairs
         Map<ColumnRefOperator, CallOperator> countColumnMap = originalAllAggregationOperator.getAggregations();
-
         Map<String, ColumnRefOperator> columnMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : countColumnMap.entrySet()) {
             ColumnRefOperator crf = (ColumnRefOperator) entry.getValue().getChild(0);
@@ -103,6 +94,9 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
 
         context.getSessionVariable().setCboCteReuse(true);
         context.getCteContext().setEnableCTE(true);
+        // add forced identifier
+        context.getCteContext().setForcedCTE(true);
+        context.getSessionVariable().setEnablePipelineEngine(true);
         List<OptExpression> result =
                 Lists.newArrayList(OptExpression.create(anchorOperator, anchorOperatorInputsList));
 
