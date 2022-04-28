@@ -43,11 +43,7 @@ docker pull starrocks/dev-env:{version}
   --name {container-name} \
   -d starrocks/dev-env:{version}
   
-  docker exec -it {container-name} /bin/bash
-  
-  cd /root/starrocks
-  
-  ./build.sh
+  docker exec -it {container-name} /root/starrocks/build.sh
   ```
 
 ## 三方工具
