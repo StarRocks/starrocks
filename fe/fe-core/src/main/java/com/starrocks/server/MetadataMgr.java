@@ -6,12 +6,13 @@ import com.starrocks.connector.ConnectorMetadata;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.annotation.concurrent.GuardedBy;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.annotation.concurrent.GuardedBy;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
+
     @GuardedBy("this")
     private final ConcurrentHashMap<String, ConnectorMetadata> connectorMetadatas = new ConcurrentHashMap<>();
 
