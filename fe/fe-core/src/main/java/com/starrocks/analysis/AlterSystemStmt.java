@@ -31,19 +31,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterSystemStmt extends DdlStmt {
-
-    private AlterClause alterClause;
+    private final AlterClause alterClause;
 
     public AlterSystemStmt(AlterClause alterClause) {
         this.alterClause = alterClause;
-    }
-
-    public static boolean isSupportNewAnalyzer(StatementBase statement) {
-        return statement != null && statement instanceof AlterSystemStmt && (
-                ((AlterSystemStmt) statement).getAlterClause() instanceof AddBackendClause ||
-                ((AlterSystemStmt) statement).getAlterClause() instanceof DropBackendClause ||
-                ((AlterSystemStmt) statement).getAlterClause() instanceof FrontendClause
-        );
     }
 
     public AlterClause getAlterClause() {
@@ -83,9 +74,19 @@ public class AlterSystemStmt extends DdlStmt {
         return toSql();
     }
 
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterSystemStmt(this,context);
+        return visitor.visitAlterSystemStmt(this, context);
+    }
+
+    public static boolean isSupportNewPlanner(StatementBase statement) {
+        return statement instanceof AlterSystemStmt &&
+                isNewAlterSystemClause(((AlterSystemStmt) statement).getAlterClause());
+    }
+
+    private static boolean isNewAlterSystemClause(AlterClause clause) {
+        return clause instanceof AddBackendClause
+                || clause instanceof DropBackendClause
+                || clause instanceof FrontendClause;
     }
 }
