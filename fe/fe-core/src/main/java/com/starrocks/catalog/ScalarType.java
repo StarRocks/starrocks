@@ -79,6 +79,10 @@ public class ScalarType extends Type implements Cloneable {
         this.type = type;
     }
 
+    public ScalarType() {
+        this.type = PrimitiveType.INVALID_TYPE;
+    }
+
     public static ScalarType createType(PrimitiveType type, int len, int precision, int scale) {
         switch (type) {
             case CHAR:

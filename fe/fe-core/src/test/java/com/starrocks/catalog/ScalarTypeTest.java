@@ -2,6 +2,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -134,5 +135,18 @@ public class ScalarTypeTest {
             actualResult = ScalarType.getCommonTypeForDecimalV3(rhs, lhs);
             Assert.assertEquals(expectResult, actualResult);
         }
+    }
+
+    @Test
+    public void testInvalidType() {
+        // deserialize a not exist type
+        String jsonStr = "{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\",\"len\":65530,\"precision\":0,\"scale\":0}";
+        ScalarType type = GsonUtils.GSON.fromJson(jsonStr, ScalarType.class);
+        Assert.assertEquals(PrimitiveType.INVALID_TYPE, type.getPrimitiveType());
+
+        // deserialize a null type
+        jsonStr = "{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\",\"len\":65530,\"precision\":0,\"scale\":0}";
+        type = GsonUtils.GSON.fromJson(jsonStr, ScalarType.class);
+        Assert.assertEquals(PrimitiveType.INVALID_TYPE, type.getPrimitiveType());
     }
 }

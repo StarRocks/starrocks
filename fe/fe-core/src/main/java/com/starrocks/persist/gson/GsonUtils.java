@@ -59,6 +59,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Resource;
@@ -147,6 +148,8 @@ public class GsonUtils {
 
     private static final JsonDeserializer<QueryDumpInfo> dumpInfoDeserializer = new QueryDumpDeserializer();
 
+    private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeSerializer();
+
     // the builder of GSON instance.
     // Add any other adapters if necessary.
     private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
@@ -163,7 +166,8 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
-            .registerTypeAdapter(QueryDumpInfo.class, dumpInfoDeserializer);
+            .registerTypeAdapter(QueryDumpInfo.class, dumpInfoDeserializer)
+            .registerTypeAdapter(PrimitiveType.class, primitiveTypeDeserializer);
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -390,4 +394,15 @@ public class GsonUtils {
         }
     }
 
+    private static class PrimitiveTypeSerializer implements JsonDeserializer<PrimitiveType> {
+        @Override
+        public PrimitiveType deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            try {
+                return PrimitiveType.valueOf(json.getAsJsonPrimitive().getAsString());
+            } catch (Throwable t) {
+                return PrimitiveType.INVALID_TYPE;
+            }
+        }
+    }
 }
