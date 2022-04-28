@@ -266,6 +266,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -306,6 +307,7 @@ import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.mortbay.log.Log;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -5879,6 +5881,37 @@ public class GlobalStateMgr {
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
         this.alter.processCreateMaterializedView(stmt);
+    }
+
+    public void createMaterializedView(CreateMaterializedViewStatement statement)
+            throws DdlException {
+        // check Mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = statement.getTableName().getTbl();
+        String dbName = statement.getTableName().getDb();
+        Log.debug("begin create materialized view: {}", mvName);
+        // check if db exists
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(mvName) != null) {
+                if (statement.isIfNotExists()) {
+                    LOG.info("create materialized view [{}] which already exists", mvName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
+        // todo need mv entity, can't do now
+        // generate some partition desc partitionExpDesc -> rangePartitionDesc or other
+        // check properties, need table info which in meta
+        // convert query Statement to sql
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {

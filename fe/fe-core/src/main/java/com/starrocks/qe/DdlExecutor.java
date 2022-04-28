@@ -87,6 +87,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -110,6 +111,8 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropTableStmt) {
             globalStateMgr.dropTable((DropTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
+            globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
             globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
             globalStateMgr.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);

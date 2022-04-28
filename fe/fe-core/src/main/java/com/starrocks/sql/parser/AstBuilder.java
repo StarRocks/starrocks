@@ -21,6 +21,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.AsyncRefreshSchemeDesc;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -66,6 +67,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ManualRefreshSchemeDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
@@ -105,9 +107,11 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
@@ -117,6 +121,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -125,10 +130,12 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
@@ -154,6 +161,8 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -398,6 +407,45 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
+    @Override
+    public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
+        if (!Config.enable_experimental_mv) {
+            throw new ParsingException("The experimental mv is disabled");
+        }
+        boolean ifNotExist = context.IF() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.mvName);
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        String comment =
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
+        List<StarRocksParser.PrimaryExpressionContext> primaryExpressionContexts = context.primaryExpression();
+        if (primaryExpressionContexts.size() > 1) {
+            throw new IllegalArgumentException("Partition expressions currently only support one");
+        }
+        List<SlotRef> partitionExpressions = Lists.newArrayList();
+        for (StarRocksParser.PrimaryExpressionContext primaryExpressionContext : primaryExpressionContexts) {
+            Expr expr = (Expr) visit(primaryExpressionContext);
+            if (!(expr instanceof SlotRef)) {
+                throw new IllegalArgumentException("Partition exp " + expr.toSql() + " must be alias of select item");
+            }
+            partitionExpressions.add(((SlotRef) expr));
+        }
+        PartitionExpDesc partitionExpDesc = new PartitionExpDesc(partitionExpressions);
+        RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        // get query statement
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        // get properties if exists
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        DistributionDesc distributionDesc =
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc());
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
+                refreshSchemeDesc, partitionExpDesc, distributionDesc, properties, queryStatement);
+    }
 
     @Override
     public ParseNode visitShowMaterializedViewStatement(StarRocksParser.ShowMaterializedViewStatementContext context) {
@@ -2116,6 +2164,45 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
 
         return new HashDistributionDesc(buckets, identifierList.stream().map(Identifier::getValue).collect(toList()));
+    }
+
+    @Override
+    public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
+        LocalDateTime startTime = LocalDateTime.now();
+        IntervalLiteral intervalLiteral = null;
+        if (context.ASYNC() != null) {
+            if (context.string() != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+                DateTimeFormatter dateTimeFormatter = null;
+                try {
+                    dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
+                    LocalDateTime tempStartTime = DateUtils.
+                            parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                    if (tempStartTime.isBefore(LocalDateTime.now())) {
+                        throw new IllegalArgumentException("Refresh start must be after current time");
+                    }
+                    startTime = tempStartTime;
+                } catch (AnalysisException e) {
+                    throw new IllegalArgumentException(
+                            "Refresh start " +
+                                    stringLiteral.getStringValue() + " is incorrect");
+                }
+            }
+            if (context.interval() == null) {
+                throw new IllegalArgumentException("Refresh every must be specified");
+            }
+            intervalLiteral = (IntervalLiteral) visit(context.interval());
+            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                throw new IllegalArgumentException(
+                        "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+            }
+            return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
+        } else if (context.SYNC() != null) {
+            throw new IllegalArgumentException("Unsupported refresh type: " + context.SYNC().getText());
+        } else if (context.MANUAL() != null) {
+            return new ManualRefreshSchemeDesc();
+        }
+        return null;
     }
 
     @Override
