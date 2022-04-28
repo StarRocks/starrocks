@@ -39,12 +39,6 @@ public:
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
-        if (final_status().is_cancelled()) {
-            int64_t elapsed_time = _sw.elapsed_time();
-            StarRocksMetrics::instance()->fragment_cancel_total.increment(1);
-            StarRocksMetrics::instance()->fragment_cancel_duration_ns.increment(elapsed_time);
-            LOG(INFO) << "release cancelled fragment cost " << elapsed_time << "ns, fragment_instance_id: " << print_id(_fragment_instance_id);
-        }
     }
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
@@ -74,9 +68,6 @@ public:
     }
 
     bool count_down_drivers() {
-        if (final_status().is_cancelled()) {
-            LOG(INFO) << "cancel driver cost " << _sw.elapsed_time() << "ns, fragment_instance_id: " << print_id(_fragment_instance_id);
-        }
         return _num_drivers.fetch_sub(1) == 1;
     }
 
@@ -88,7 +79,6 @@ public:
     }
 
     void cancel(const Status& status) {
-        _sw.start();
         _runtime_state->set_is_cancelled(true);
         set_final_status(status);
     }
@@ -163,7 +153,6 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
-    MonotonicStopWatch _sw;
 };
 
 class FragmentContextManager {

@@ -587,6 +587,7 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 }
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
+    // runtime_state will only be set when querying
     if (_opts.runtime_state != nullptr && _opts.runtime_state->is_cancelled()) {
         return Status::Cancelled("cancelled state");
     }

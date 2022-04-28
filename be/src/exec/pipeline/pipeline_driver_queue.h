@@ -42,6 +42,26 @@ protected:
     static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 };
 
+// SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
+// It guarantees the following characteristics:
+// 1. the running drivers are executed in FIFO order.
+// 2. the cancelled drivers have the highest priority and are executed first.
+// The cancelled drivers are all equal and the order of execution is not guaranteed,
+// this may not be a big problem because the finalize operation is fast enough.
+// 
+// We use some data structures to maintain the above properties:
+// 1. std::deque<DriverRawPtr> queue
+//   store the drivers added by PipelineDriverPoller, cancelled driver are added to the head and the others are added to the tail
+// 2. std::queue<DriverRawPtr> pending_cancel_queue
+//   store the drivers that are already in `queue` but cancelled, the drivers will only be added when the query is cancelled externally
+// 3. std::unordered_set<DriverRawPtr> cancelled_set
+//   record drivers that have been taken in pending_cancel_queue
+//
+// When taking a driver from SubQuerySharedDriverQueue, we try to take it from `pending_cancel_queue` first.
+// if `pending_cancel_queue` is not empty, we take it from the head and record it in `cancelled_set`.
+// Otherwise, we take it from `queue`.
+// It should be noted that the driver in `queue` may already be taken from `pending_cancel_queue`,
+// we should ignore such drivers and try to get the next one.
 class SubQuerySharedDriverQueue {
 public:
     void update_accu_time(const DriverRawPtr driver) {
