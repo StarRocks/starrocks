@@ -291,6 +291,26 @@ Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk&
 }
 
 Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
+    // 1. pure upsert
+    // once upsert, subsequent flush can only do upsert
+    switch (_flush_chunk_state) {
+    case FlushChunkState::UNKNOWN:
+        _flush_chunk_state = FlushChunkState::UPSERT;
+        break;
+    case FlushChunkState::UPSERT:
+        break;
+    default: {
+        std::string msg =
+                "multi-segment only supported by pure upsert/delete, so pure upsert after another "
+                "operation is illegal";
+        LOG(WARNING) << msg;
+        return Status::Cancelled(msg);
+    }
+    }
+    return _flush_chunk(chunk);
+}
+
+Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) {
     auto segment_writer = _create_segment_writer();
     if (!segment_writer.ok()) {
         return segment_writer.status();
@@ -328,22 +348,6 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     // 2. pure delete, support multi-segment
     // 3. mixed upsert/delete, do not support multi-segment
     if (!upserts.is_empty() && deletes.empty()) {
-        // 1. pure upsert
-        // once upsert, subsequent flush can only do upsert
-        switch (_flush_chunk_state) {
-        case FlushChunkState::UNKNOWN:
-            _flush_chunk_state = FlushChunkState::UPSERT;
-            break;
-        case FlushChunkState::UPSERT:
-            break;
-        default: {
-            std::string msg =
-                    "multi-segment only supported by pure upsert/delete, so pure upsert after another "
-                    "operation is illegal";
-            LOG(WARNING) << msg;
-            return Status::Cancelled(msg);
-        }
-        }
         return flush_chunk(upserts);
     } else if (upserts.is_empty() && !deletes.empty()) {
         // 2. pure delete
@@ -381,7 +385,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         }
         }
         RETURN_IF_ERROR(flush_del_file(deletes));
-        return flush_chunk(upserts);
+        return _flush_chunk(upserts);
     }
     return flush_chunk(upserts);
 }

@@ -112,6 +112,8 @@ private:
 
     Status _final_merge();
 
+    Status _flush_chunk(const vectorized::Chunk& chunk);
+
     std::unique_ptr<SegmentWriter> _segment_writer;
 };
 
