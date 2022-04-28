@@ -3,6 +3,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -13,6 +14,7 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -31,6 +33,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -194,6 +197,11 @@ public abstract class AstVisitor<R, C> {
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
+    public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {
@@ -369,6 +377,15 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitGroupByClause(GroupByClause node, C context) {
+        return null;
+    }
+
+    public R visitBackendClause(BackendClause backendClause, C context) {
+        return null;
+    }
+
+
+    public R visitFrontendClause(FrontendClause frontendClause, C context) {
         return null;
     }
 }

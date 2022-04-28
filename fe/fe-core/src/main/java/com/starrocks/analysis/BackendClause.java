@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -47,6 +48,10 @@ public class BackendClause extends AlterClause {
         return hostPortPairs;
     }
 
+    public List<String> getHostPorts() {
+        return hostPorts;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         for (String hostPort : hostPorts) {
@@ -65,5 +70,10 @@ public class BackendClause extends AlterClause {
     @Override
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBackendClause(this,context);
     }
 }
