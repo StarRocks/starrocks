@@ -20,9 +20,9 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * eg:
- * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=0
- * (mark forbit test_basic use global dict)
- * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=1
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=false
+ * (mark disable test_basic use global dict)
+ * POST    /api/global_dict/table/enable?db_name=test&table_name=test_basic&enable=true
  * (mark enable test_basic use global dict)
  */
 
@@ -61,7 +61,7 @@ public class GlobalDictMetaService {
 
         public static void registerAction(ActionController controller) throws IllegalArgException {
             ForbitTableAction action = new ForbitTableAction(controller);
-            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table/forbit", action);
+            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table/enable", action);
         }
 
         @Override
@@ -77,13 +77,15 @@ public class GlobalDictMetaService {
                     return;
                 }
 
-                long isEnable = Long.valueOf(request.getSingleParameter(ENABLE).trim());
+                boolean isEnable = "true".equalsIgnoreCase(request.getSingleParameter(ENABLE).trim());
 
-                GlobalStateMgr.getCurrentState().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
+                GlobalStateMgr.getCurrentState()
+                        .setHasForbitGlobalDict("default_cluster:" + dbName, tableName, isEnable);
+                response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
-                writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             }
+            writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             sendResult(request, response);
         }
     }

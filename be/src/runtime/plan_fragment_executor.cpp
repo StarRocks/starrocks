@@ -107,6 +107,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
+    if (request.fragment.__isset.load_global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+    }
+
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
         _is_runtime_filter_merge_node = true;
         _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
@@ -142,12 +146,15 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
+    _query_statistics.reset(new QueryStatistics());
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
         RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
                                                    request.fragment.output_exprs, params, row_desc(), &_sink));
+        DCHECK(_sink != nullptr);
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
+        _sink->set_query_statistics(_query_statistics);
 
         RuntimeProfile* sink_profile = _sink->profile();
 
@@ -170,11 +177,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
-
-    _query_statistics.reset(new QueryStatistics());
-    if (_sink != nullptr) {
-        _sink->set_query_statistics(_query_statistics);
-    }
 
     return Status::OK();
 }

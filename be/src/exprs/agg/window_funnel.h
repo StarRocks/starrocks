@@ -31,17 +31,22 @@ struct ComparePairFirst final {
     }
 };
 
+template <PrimitiveType PT>
 struct WindowFunnelState {
+    // Use to identify timestamp(datetime/date)
+    using TimeType = typename RunTimeTypeTraits<PT>::CppType;
+    using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
+
     // first args is timestamp, second is event position.
-    using TimestampEvent = std::pair<int64_t, uint8_t>;
-    std::vector<TimestampEvent> events_list;
+    using TimestampEvent = std::pair<typename TimeType::type, uint8_t>;
+    mutable std::vector<TimestampEvent> events_list;
     int64_t window_size;
     uint8_t events_size;
     bool sorted = true;
 
-    void sort() { std::stable_sort(std::begin(events_list), std::end(events_list)); }
+    void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
-    void update(int64_t timestamp, uint8_t event_level) {
+    void update(typename TimeType::type timestamp, uint8_t event_level) {
         // keep only one as a placeholder for someone group.
         if (events_list.size() > 0 && event_level == 0) {
             return;
@@ -56,18 +61,18 @@ struct WindowFunnelState {
         events_list.emplace_back(std::make_pair(timestamp, event_level));
     }
 
-    void deserialize_and_merge(DatumArray& datum_array) {
+    void deserialize_and_merge(FunctionContext* ctx, DatumArray& datum_array) {
         if (datum_array.size() == 0) {
             return;
         }
 
         std::vector<TimestampEvent> other_list;
-        window_size = datum_array[0].get_int64();
-        events_size = (uint8_t)datum_array[1].get_int64();
-        bool other_sorted = (uint8_t)datum_array[2].get_int64();
+        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
+        events_size = (uint8_t)datum_array[0].get_int64();
+        bool other_sorted = (uint8_t)datum_array[1].get_int64();
 
-        for (size_t i = 3; i < datum_array.size() - 1; i += 2) {
-            int64_t timestamp = datum_array[i].get_int64();
+        for (size_t i = 2; i < datum_array.size() - 1; i += 2) {
+            typename TimeType::type timestamp = (typename TimeType::type)datum_array[i].get_int64();
             int64_t event_level = datum_array[i + 1].get_int64();
             other_list.emplace_back(std::make_pair(timestamp, uint8_t(event_level)));
         }
@@ -96,8 +101,7 @@ struct WindowFunnelState {
         if (!events_list.empty()) {
             size_t size = events_list.size();
             DatumArray array;
-            array.reserve(size * 2 + 3);
-            array.emplace_back(window_size);
+            array.reserve(size * 2 + 2);
             array.emplace_back((int64_t)events_size);
             array.emplace_back((int64_t)sorted);
             for (int i = 0; i < size; i++) {
@@ -109,9 +113,13 @@ struct WindowFunnelState {
     }
 
     int32_t get_event_level() const {
-        std::vector<int64_t> events_timestamp(events_size, -1);
+        if (!sorted) {
+            sort();
+        }
+
+        std::vector<typename TimeType::type> events_timestamp(events_size, -1);
         for (size_t i = 0; i < events_list.size(); i++) {
-            int64_t timestamp = (events_list)[i].first;
+            typename TimeType::type timestamp = (events_list)[i].first;
             uint8_t event_idx = (events_list)[i].second;
 
             // this row match no conditions.
@@ -120,10 +128,10 @@ struct WindowFunnelState {
             }
 
             event_idx -= 1;
-            if (event_idx == 0)
+            if (event_idx == 0) {
                 events_timestamp[0] = timestamp;
-            else if (events_timestamp[event_idx - 1] >= 0 &&
-                     timestamp <= events_timestamp[event_idx - 1] + window_size) {
+            } else if (events_timestamp[event_idx - 1] >= 0 &&
+                       timestamp <= events_timestamp[event_idx - 1] + window_size) {
                 events_timestamp[event_idx] = events_timestamp[event_idx - 1];
                 if (event_idx + 1 == events_size) return events_size;
             }
@@ -135,16 +143,28 @@ struct WindowFunnelState {
     }
 };
 
+template <PrimitiveType PT>
 class WindowFunnelAggregateFunction final
-        : public AggregateFunctionBatchHelper<WindowFunnelState, WindowFunnelAggregateFunction> {
+        : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
+    using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
+    using TimeType = typename WindowFunnelState<PT>::TimeType;
+
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
-        const auto* window_size_column = down_cast<const Int64Column*>(columns[0]);
-        this->data(state).window_size = window_size_column->get(row_num).get_int64();
+        this->data(state).window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(0));
 
         // get timestamp
-        const auto* timestamp_column = down_cast<const TimestampColumn*>(columns[1]);
-        auto tv = timestamp_column->get(row_num).get_timestamp();
+        TimeType tv;
+        if (!columns[1]->is_constant()) {
+            const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
+            if constexpr (PT == TYPE_DATETIME) {
+                tv = timestamp_column->get(row_num).get_timestamp();
+            } else if constexpr (PT == TYPE_DATE) {
+                tv = timestamp_column->get(row_num).get_date();
+            }
+        } else {
+            tv = ColumnHelper::get_const_value<PT>(columns[1]);
+        }
 
         // get event
         uint8_t event_level = 0;
@@ -157,13 +177,17 @@ public:
             }
         }
         this->data(state).events_size = ele_vector.size();
-        this->data(state).update(tv.to_unix_second(), event_level);
+        if constexpr (PT == TYPE_DATETIME) {
+            this->data(state).update(tv.to_unix_second(), event_level);
+        } else if constexpr (PT == TYPE_DATE) {
+            this->data(state).update(tv.to_date_literal(), event_level);
+        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto ele_vector = input_column->get(row_num).get_array();
-        this->data(state).deserialize_and_merge(ele_vector);
+        this->data(state).deserialize_and_merge(ctx, ele_vector);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -180,15 +204,17 @@ public:
         auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
         dst_column->reserve(chunk_size);
 
-        const auto* window_size_column = down_cast<const Int64Column*>(src[0].get());
-        const auto* timestamp_column = down_cast<const TimestampColumn*>(src[1].get());
-        const auto* bool_array_column = down_cast<const ArrayColumn*>(src[2].get());
+        const TimeTypeColumn* timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
+        const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
-            // get 1st value: window_size
-            int64_t window_size = window_size_column->get(i).get_int64();
-            // get 2nd value: timestamp
-            int64_t tv = timestamp_column->get(i).get_timestamp().to_unix_second();
-            // get 3th value: event cond array
+            typename TimeType::type tv;
+            if constexpr (PT == TYPE_DATETIME) {
+                tv = timestamp_column->get(i).get_timestamp().to_unix_second();
+            } else if constexpr (PT == TYPE_DATE) {
+                tv = timestamp_column->get(i).get_date().to_date_literal();
+            }
+
+            // get 4th value: event cond array
             auto ele_vector = bool_array_column->get(i).get_array();
             uint8_t event_level = 0;
             for (uint8_t j = 0; j < ele_vector.size(); j++) {
@@ -201,11 +227,10 @@ public:
             DatumArray array;
             size_t events_size = ele_vector.size();
             bool sorted = false;
-            array.reserve(1 + 1 + 1 + 2);
-            array.emplace_back(window_size);
+            array.reserve(1 + 1 + 2);
             array.emplace_back((int64_t)events_size);
             array.emplace_back((int64_t)sorted);
-            array.emplace_back(tv);
+            array.emplace_back((int64_t)tv);
             array.emplace_back((int64_t)event_level);
             dst_column->append_datum(array);
         }

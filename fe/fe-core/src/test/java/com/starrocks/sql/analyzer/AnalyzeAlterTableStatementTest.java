@@ -55,6 +55,7 @@ public class AnalyzeAlterTableStatementTest {
         AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
     }
 
+
     @Test
     public void testCreateIndex() {
         String sql = "CREATE INDEX index1 ON `db`.`table` (`col1`) USING BITMAP COMMENT 'balabala'";
@@ -64,6 +65,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess(sql);
 
         sql = "create fulltext index in_1 on t0(v1)";
+        analyzeSuccess(sql);
+
+        sql = "alter table t0 add index index1 (v2)";
         analyzeSuccess(sql);
     }
 
