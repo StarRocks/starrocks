@@ -8,8 +8,8 @@ namespace starrocks::pipeline {
 // EmptySetOperator returns an empty result set.
 class EmptySetOperator final : public SourceOperator {
 public:
-    EmptySetOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id)
-            : SourceOperator(factory, id, "empty_set", plan_node_id) {}
+    EmptySetOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
+            : SourceOperator(factory, id, "empty_set", plan_node_id, driver_sequence) {}
 
     ~EmptySetOperator() override = default;
 
@@ -29,7 +29,7 @@ public:
     ~EmptySetOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<EmptySetOperator>(this, _id, _plan_node_id);
+        return std::make_shared<EmptySetOperator>(this, _id, _plan_node_id, driver_sequence);
     }
 };
 

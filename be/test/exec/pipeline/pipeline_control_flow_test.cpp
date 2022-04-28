@@ -70,8 +70,9 @@ std::atomic<size_t> lifecycle_error_num;
 
 class TestOperator : public Operator {
 public:
-    TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
-            : Operator(factory, id, name, plan_node_id) {}
+    TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                 int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
     ~TestOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
@@ -129,9 +130,9 @@ private:
 
 class TestSourceOperator : public SourceOperator {
 public:
-    TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, size_t chunk_num, size_t chunk_size,
-                       CounterPtr counter, int32_t pending_finish_cnt)
-            : SourceOperator(factory, id, "test_source", plan_node_id),
+    TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                       size_t chunk_num, size_t chunk_size, CounterPtr counter, int32_t pending_finish_cnt)
+            : SourceOperator(factory, id, "test_source", plan_node_id, driver_sequence),
               _counter(counter),
               _pending_finish_cnt(pending_finish_cnt) {
         for (size_t i = 0; i < chunk_num; ++i) {
@@ -232,8 +233,8 @@ public:
     ~TestSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, _chunk_num, _chunk_size, _counter,
-                                                    _pending_finish_cnt);
+        return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, driver_sequence, _chunk_num, _chunk_size,
+                                                    _counter, _pending_finish_cnt);
     }
 
 private:
@@ -245,8 +246,9 @@ private:
 
 class TestNormalOperator : public TestOperator {
 public:
-    TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : TestOperator(factory, id, "test_normal", plan_node_id), _counter(counter) {}
+    TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                       CounterPtr counter)
+            : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence), _counter(counter) {}
     ~TestNormalOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -288,7 +290,7 @@ public:
     ~TestNormalOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestNormalOperator>(this, _id, _plan_node_id, _counter);
+        return std::make_shared<TestNormalOperator>(this, _id, _plan_node_id, driver_sequence, _counter);
     }
 
 private:
@@ -297,8 +299,9 @@ private:
 
 class TestSinkOperator : public TestOperator {
 public:
-    TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : TestOperator(factory, id, "test_sink", plan_node_id), _counter(counter) {}
+    TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                     CounterPtr counter)
+            : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(counter) {}
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -335,7 +338,7 @@ public:
     ~TestSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TestSinkOperator>(this, _id, _plan_node_id, _counter);
+        return std::make_shared<TestSinkOperator>(this, _id, _plan_node_id, driver_sequence, _counter);
     }
 
 private:
