@@ -277,26 +277,35 @@ public class StarRocksFE {
         // go on
     }
 
-    private static boolean createAndLockPidFile(String pidFilePath) throws IOException {
+    private static boolean createAndLockPidFile(String pidFilePath) {
         File pid = new File(pidFilePath);
-        try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
-            FileLock lock = file.getChannel().tryLock();
-            if (lock == null) {
-                return false;
+        for (int i = 0; i < 3; i++) {
+            try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
+                FileLock lock = file.getChannel().tryLock();
+                if (lock == null) {
+                    LOG.warn("get pid file lock failed, time retried: {}", i);
+                    Thread.sleep(10000L);
+                    continue;
+                }
+
+                pid.deleteOnExit();
+
+                String name = ManagementFactory.getRuntimeMXBean().getName();
+                file.setLength(0);
+                file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
+
+                return true;
+            } catch (Throwable t) {
+                try {
+                    LOG.warn("get pid file lock failed, time retried: {}", i, t);
+                    Thread.sleep(10000L);
+                    Thread.sleep(10000L);
+                } catch (InterruptedException ie) {
+                }
             }
-
-            pid.deleteOnExit();
-
-            String name = ManagementFactory.getRuntimeMXBean().getName();
-            file.setLength(0);
-            file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
-
-            return true;
-        } catch (OverlappingFileLockException e) {
-            return false;
-        } catch (IOException e) {
-            throw e;
         }
+
+        return false;
     }
 }
 
