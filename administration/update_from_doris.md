@@ -184,7 +184,7 @@ ps aux | grep supervisor
 # 启动新 BE
 sh /home/doris/Starrocks/be/bin/start_be.sh --daemon
 # 检查：以及进程存在（新进程名为 Starrocks_be)
-ps aux | grep Starrocks_be
+ps aux | grep starrocks_be
 # 检查：mysql 中 alive 为 true（见下图）
 mysql> show backends;
 ```
@@ -261,7 +261,7 @@ cp -r /home/doris/doris/fe/palo-meta /home/doris/doris/fe/doris-meta
 # 启动新 FE 
 sh /home/doris/Starrocks/fe/bin/start_fe.sh --daemon
 # 检查：进程是否已经存在
-ps aux | grep Starrocks/fe
+ps aux | grep StarRocksFE
 # 检查：用当前 FE 登录 mysql，并且其中alive 为 true
 #  ，ReplayedJournalId 在同步甚至增长，以及进程存在
 mysql> show frontends;

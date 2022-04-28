@@ -109,7 +109,7 @@ cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .
 cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
 sh bin/stop_fe.sh
 sh bin/start_fe.sh --daemon
-ps aux | grep StarRocksFe
+ps aux | grep StarRocksFE
 ```
 
 #### Broker 升级
@@ -157,7 +157,7 @@ mv lib.bak lib
 mv bin.bak bin 
 sh bin/stop_fe.sh
 sh bin/start_fe.sh --daemon
-ps aux | grep StarRocksFe
+ps aux | grep StarRocksFE
 ```
 
 #### BE 回滚
