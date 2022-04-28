@@ -46,7 +46,7 @@ private:
 
 class ManagedAggrState {
 public:
-    ~ManagedAggrState() { _func->destroy(_ctx, _state); }
+    ~ManagedAggrState() { _func->destroy(_state); }
     static std::unique_ptr<ManagedAggrState> create(FunctionContext* ctx, const AggregateFunction* func) {
         return std::make_unique<ManagedAggrState>(ctx, func);
     }
@@ -55,7 +55,7 @@ public:
 private:
     ManagedAggrState(FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
         _state = _mem_pool.allocate_aligned(func->size(), func->alignof_size());
-        _func->create(_ctx, _state);
+        _func->create(_state);
     }
     FunctionContext* _ctx;
     const AggregateFunction* _func;
@@ -222,9 +222,8 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
 
 template <PrimitiveType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                               TResult update_result2, TResult merge_result) {
+                               TResult update_result2, TResult merge_result, FunctionContext::TypeDesc result_type) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
-    const auto& result_type = ctx->get_return_type();
     auto result_column = ResultColumn::create(result_type.precision, result_type.scale);
 
     // update input column 1
@@ -326,31 +325,31 @@ TEST_F(AggregateTest, test_sum) {
 
 TEST_F(AggregateTest, test_decimal_sum) {
     {
-        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL32, .precision = 9, .scale = 9}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 524076, 2499500, 3023576);
+        test_decimal_agg_function<TYPE_DECIMAL32>(
+                ctx, func, 524076, 2499500, 3023576,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 9});
     }
     {
-        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL64, .precision = 9, .scale = 3}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 524076, 2499500, 3023576);
+        test_decimal_agg_function<TYPE_DECIMAL64>(
+                ctx, func, 524076, 2499500, 3023576,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 3});
     }
     {
-        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 524076, 2499500, 3023576);
+        test_decimal_agg_function<TYPE_DECIMAL128>(
+                ctx, func, 524076, 2499500, 3023576,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15});
     }
 }
 
@@ -388,40 +387,40 @@ TEST_F(AggregateTest, test_avg) {
 
 TEST_F(AggregateTest, test_decimal_avg) {
     {
-        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL32, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 12});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL32, .precision = 9, .scale = 9}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 9);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 9);
         auto merge_result = decimal_div_integer<int128_t>(3023576, 2026, 9);
-        test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, update_result1, update_result2, merge_result);
+        test_decimal_agg_function<TYPE_DECIMAL32>(
+                ctx, func, update_result1, update_result2, merge_result,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 12});
     }
     {
-        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL64, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL64, .precision = 9, .scale = 3}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 3);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 3);
         auto merge_result = decimal_div_integer<int128_t>(3023576, 2026, 3);
-        test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, update_result1, update_result2, merge_result);
+        test_decimal_agg_function<TYPE_DECIMAL64>(
+                ctx, func, update_result1, update_result2, merge_result,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 9});
     }
     {
-        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL128, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 15);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 15);
         auto merge_result = decimal_div_integer<int128_t>(3023576, 2026, 15);
-        test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, update_result1, update_result2, merge_result);
+        test_decimal_agg_function<TYPE_DECIMAL128>(
+                ctx, func, update_result1, update_result2, merge_result,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15});
     }
 }
 
@@ -779,31 +778,34 @@ TEST_F(AggregateTest, test_sum_distinct) {
 
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
     {
-        const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func =
+                get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL32, .precision = 9, .scale = 9}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 523776, 2499500, 3023276);
+        test_decimal_agg_function<TYPE_DECIMAL32>(
+                ctx, func, 523776, 2499500, 3023276,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 9});
     }
     {
-        const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func =
+                get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL64, .precision = 9, .scale = 3}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 523776, 2499500, 3023276);
+        test_decimal_agg_function<TYPE_DECIMAL64>(
+                ctx, func, 523776, 2499500, 3023276,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 3});
     }
     {
-        const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
-                                                  TFunctionBinaryType::BUILTIN, 3);
+        const auto* func =
+                get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false, 3);
         auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+                {FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15}});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
-        test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 523776, 2499500, 3023276);
+        test_decimal_agg_function<TYPE_DECIMAL128>(
+                ctx, func, 523776, 2499500, 3023276,
+                FunctionContext::TypeDesc{.type = FunctionContext::TYPE_DECIMAL128, .precision = 38, .scale = 15});
     }
 }
 
@@ -986,7 +988,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR));
-    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types)));
 
     const AggregateFunction* group_concat_function =
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
