@@ -81,3 +81,17 @@ flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
 - `CAST`函数在 StarRocks 1.19 和 2.1 版本中的执行结果不一致。[#4701](https://github.com/StarRocks/starrocks/pull/4701)
 - 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
+
+## 2.1.5
+
+发布日期： 2022年4月27日
+
+### Bug Fixes
+
+修复了如下 Bug：
+
+- 原先 Decimal 乘法溢出，计算结果错误，修复后，Decimal 乘法溢出时返回 NULL。
+- 统计信息误差较大时，执行计划中 Colocate Join 的优先级可能低于 Broadcast Join，导致实际执行时 Colocate Join 未生效。[#4817](https://github.com/StarRocks/starrocks/pull/4817)
+- 当 4 张表以上进行 Join 时，复杂表达式规划错误，导致查询报错。
+- Shuffle Join 下，如果 Shuffle 的列是低基数列，可能会导致 BE 停止服务。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- SPLIT 函数使用 NULL 参数时，会导致 BE 停止服务。[#4092](https://github.com/StarRocks/starrocks/issues/4092)
