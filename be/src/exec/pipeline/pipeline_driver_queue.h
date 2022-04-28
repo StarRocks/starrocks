@@ -80,7 +80,6 @@ public:
     }
 
     void cancel(const DriverRawPtr driver) {
-        DCHECK(cancelled_set.find(driver) == cancelled_set.end());
         pending_cancel_queue.emplace(driver);
     }
 
