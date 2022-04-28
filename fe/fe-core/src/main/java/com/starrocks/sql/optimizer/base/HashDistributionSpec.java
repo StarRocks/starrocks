@@ -83,20 +83,15 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionSpec other = (HashDistributionSpec) spec;
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
         HashDistributionDesc.SourceType otherSourceType = other.hashDistributionDesc.getSourceType();
-        // shuffle_local may satisfy shuffle_agg or shuffle_join
-        if (!thisSourceType.equals(otherSourceType) &&
-                thisSourceType != HashDistributionDesc.SourceType.LOCAL) {
-            return false;
-        }
+
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
             long tableId = propertyInfo.tableId;
             // Disable use colocate/bucket join when table with empty partition
-            boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
+            boolean satisfyColocate = propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
                     !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
-                    !propertyInfo.isEmptyPartition())
-                    || propertyInfo.isSinglePartition();
+                    !propertyInfo.isEmptyPartition());
             if (!satisfyColocate) {
                 return false;
             }

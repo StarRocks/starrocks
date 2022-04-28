@@ -102,11 +102,10 @@ select v2, min(v1) from t0 group by v2 having exists (select v4 from t1 where v5
 RIGHT SEMI JOIN (join-predicate [6: v5 = 2: v2] post-join-predicate [null])
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: v5] predicate[null])
-    EXCHANGE SHUFFLE[2]
-        AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
-            EXCHANGE SHUFFLE[2]
-                AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
+        EXCHANGE SHUFFLE[2]
+            AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
+                SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
 [sql]

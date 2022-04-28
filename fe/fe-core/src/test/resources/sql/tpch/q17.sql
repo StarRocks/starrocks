@@ -28,7 +28,7 @@ AGGREGATE ([GLOBAL] aggregate [{48: sum=sum(48: sum)}] group by [[]] having [nul
                             EXCHANGE SHUFFLE[29]
                                 AGGREGATE ([LOCAL] aggregate [{45: avg=avg(32: L_QUANTITY)}] group by [[29: L_PARTKEY]] having [null]
                                     SCAN (columns[29: L_PARTKEY, 32: L_QUANTITY] predicate[null])
-                        EXCHANGE BROADCAST
+                        EXCHANGE SHUFFLE[18]
                             SCAN (columns[18: P_PARTKEY, 21: P_BRAND, 24: P_CONTAINER] predicate[21: P_BRAND = Brand#35 AND 24: P_CONTAINER = JUMBO CASE])
 [end]
 
