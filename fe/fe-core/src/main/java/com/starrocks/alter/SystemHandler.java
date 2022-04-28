@@ -38,6 +38,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.ModifyBrokerClause;
 import com.starrocks.analysis.UpdateBackendAddressClause;
+import com.starrocks.analysis.UpdateFrontendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -182,6 +183,10 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AddFollowerClause) {
             AddFollowerClause clause = (AddFollowerClause) alterClause;
             GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
+        } else if (alterClause instanceof UpdateFrontendAddressClause) {
+            // update Frontend Address
+            UpdateFrontendAddressClause updateFrontendAddressClause = (UpdateFrontendAddressClause) alterClause;
+            GlobalStateMgr.getCurrentState().updateFrontendHost(updateFrontendAddressClause);
         } else if (alterClause instanceof DropFollowerClause) {
             DropFollowerClause clause = (DropFollowerClause) alterClause;
             GlobalStateMgr.getCurrentState()

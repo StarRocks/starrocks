@@ -42,7 +42,7 @@ public class CancelAlterSystemStmt extends CancelStmt {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         for (String hostPort : hostPorts) {
-            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, true);
             this.hostPortPairs.add(pair);
         }
 
