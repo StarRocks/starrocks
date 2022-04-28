@@ -6,6 +6,6 @@ public class InternalCatalog extends Catalog {
     private static final String INTERNAL_CATALOG_NAME = "default";
 
     public InternalCatalog() {
-        super(CatalogName.of(INTERNAL_CATALOG_NAME));
+        super(INTERNAL_CATALOG_NAME);
     }
 }

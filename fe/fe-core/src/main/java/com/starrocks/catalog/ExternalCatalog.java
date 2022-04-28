@@ -12,7 +12,7 @@ public class ExternalCatalog extends Catalog {
     private final String type;
 
     public ExternalCatalog(String name, Map<String, String> config) {
-        super(CatalogName.of(name));
+        super(name);
         this.config = config;
         this.type = Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }

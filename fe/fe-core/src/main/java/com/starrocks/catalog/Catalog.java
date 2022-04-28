@@ -9,13 +9,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public abstract class Catalog implements Writable {
-    private final CatalogName name;
+    private final String name;
 
-    public Catalog(CatalogName name) {
+    public Catalog(String name) {
         this.name = name;
     }
 
-    public CatalogName getName() {
+    public String getName() {
         return name;
     }
 
