@@ -656,6 +656,13 @@ public abstract class Type implements Cloneable {
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType();
     }
 
+    /**
+     * Can be a key of materialized view
+     */
+    public boolean canBeMVKey() {
+        return canDistributedBy();
+    }
+
     public boolean supportBloomFilter() {
         return isScalarType() && !isFloatingPointType() && !isTinyint() && !isBoolean() && !isDecimalV3() &&
                 !isJsonType() && !isOnlyMetricType();
