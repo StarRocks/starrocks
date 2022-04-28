@@ -405,13 +405,11 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         const std::string& name = it->col_name();
         if (known_column_names.find(name) == known_column_names.end()) continue;
         if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
-            // VLOG_FILE << "[ORC] lazy load field = " << it->col_name();
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
-            // VLOG_FILE << "[ORC] active load field = " << it->col_name();
             _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
