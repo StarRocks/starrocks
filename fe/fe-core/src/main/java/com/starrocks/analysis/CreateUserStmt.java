@@ -29,6 +29,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -134,6 +135,8 @@ public class CreateUserStmt extends DdlStmt {
         // convert password to hashed password
         if (!Strings.isNullOrEmpty(password)) {
             if (isPasswordPlain) {
+                // plain password validation
+                Auth.validPassword(password);
                 // convert plain password to scramble
                 scramblePassword = MysqlPassword.makeScrambledPassword(password);
             } else {

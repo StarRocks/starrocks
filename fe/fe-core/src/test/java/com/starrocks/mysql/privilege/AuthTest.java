@@ -37,6 +37,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
@@ -157,6 +158,7 @@ public class AuthTest {
     @Test
     public void test() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         // 1. create cmy@%
+        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1284,6 +1286,7 @@ public class AuthTest {
 
     @Test
     public void testResource() {
+        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("testUser", "%");
         String role = "role0";
         String resourceName = "spark0";
@@ -1787,4 +1790,70 @@ public class AuthTest {
                 auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", new byte[0], seed,
                         currentUser));
     }
-}
+
+    @Test
+    public void testPasswordReuseNormal() throws Exception {
+        String password = "123456AAbb";
+        UserIdentity user = new UserIdentity("test_user", "%");
+        user.analyze("test_cluster");
+        UserDesc userDesc = new UserDesc(user, password, true);
+        // 1. create user with no role
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // enable_password_reuse is false allow same password
+        Config.enable_password_reuse = true;
+        auth.checkPasswordReuse(user, password);
+
+        // enable_password_reuse is false, check different password
+        Config.enable_password_reuse = false;
+        auth.checkPasswordReuse(user, password + "ss");
+    }
+
+    @Test
+    public void testPasswordValidationNormal() throws Exception {
+        String badPassword = "123456";
+        String goodPassword = "1234Star";
+
+        Config.enable_validate_password = false;
+        // enable_auth_check is false, allow bad password
+        auth.validPassword(badPassword);
+
+       // enable_password_reuse is true for a good password
+        Config.enable_validate_password = true;
+        auth.validPassword(goodPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationShortPasssword() throws Exception {
+        // length 5 < 8
+        String badPassword = "Aa123";
+        Config.enable_validate_password = true;
+        auth.validPassword(badPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationAllNumberPasssword() throws Exception {
+        // no lowercase letter or uppercase letter
+        String badPassword = "123456789";
+        Config.enable_validate_password = true;
+        auth.validPassword(badPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationPasswordReuse() throws Exception {
+        String password = "123456AAbb";
+        UserIdentity user = new UserIdentity("test_user", "%");
+        user.analyze("test_cluster");
+        UserDesc userDesc = new UserDesc(user, password, true);
+        // 1. create user with no role
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // 2. check reuse
+        Config.enable_password_reuse = false;
+        auth.checkPasswordReuse(user, password);
+    }
+ }
