@@ -1553,6 +1553,11 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof CreateIndexClause) {
                 processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof DropIndexClause) {
+                String indexName = ((DropIndexClause) alterClause).getIndexName();
+                //Mock syntax Alter table tbl drop primary key;
+                if (indexName.equals("PRIMARY")) {
+                    return;
+                }
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else {
                 Preconditions.checkState(false);
