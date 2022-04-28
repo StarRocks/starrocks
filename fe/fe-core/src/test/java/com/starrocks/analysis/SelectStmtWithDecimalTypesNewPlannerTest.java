@@ -125,9 +125,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testMultiply() throws Exception {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
-        Assert.assertTrue(plan.contains("TScalarType(type:DECIMAL128, precision:38, scale:5)"));
+        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:23, scale:5)"));
         Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:20, scale:3)"));
-        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:38, scale:2)"));
+        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:3, scale:2)"));
     }
 
     @Test
