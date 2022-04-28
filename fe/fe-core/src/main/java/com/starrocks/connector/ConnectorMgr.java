@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.concurrent.GuardedBy;
 
-// ConnectorManager is responsible for managing all ConnectorFactory, and for creating Connector
-public class ConnectorManager {
+// ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
+public class ConnectorMgr {
     @GuardedBy("this")
     private final ConcurrentMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
 
