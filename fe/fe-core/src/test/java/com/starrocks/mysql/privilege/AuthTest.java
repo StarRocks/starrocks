@@ -1818,11 +1818,11 @@ public class AuthTest {
 
         Config.enable_validate_password = false;
         // enable_auth_check is false, allow bad password
-        auth.validPassword(badPassword);
+        auth.validatePassword(badPassword);
 
        // enable_password_reuse is true for a good password
         Config.enable_validate_password = true;
-        auth.validPassword(goodPassword);
+        auth.validatePassword(goodPassword);
     }
 
     @Test(expected = DdlException.class)
@@ -1830,7 +1830,7 @@ public class AuthTest {
         // length 5 < 8
         String badPassword = "Aa123";
         Config.enable_validate_password = true;
-        auth.validPassword(badPassword);
+        auth.validatePassword(badPassword);
     }
 
     @Test(expected = DdlException.class)
@@ -1838,7 +1838,7 @@ public class AuthTest {
         // no lowercase letter or uppercase letter
         String badPassword = "123456789";
         Config.enable_validate_password = true;
-        auth.validPassword(badPassword);
+        auth.validatePassword(badPassword);
     }
 
     @Test(expected = DdlException.class)

@@ -136,7 +136,7 @@ public class CreateUserStmt extends DdlStmt {
         if (!Strings.isNullOrEmpty(password)) {
             if (isPasswordPlain) {
                 // plain password validation
-                Auth.validPassword(password);
+                Auth.validatePassword(password);
                 // convert plain password to scramble
                 scramblePassword = MysqlPassword.makeScrambledPassword(password);
             } else {

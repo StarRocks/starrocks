@@ -1042,7 +1042,7 @@ public class Auth implements Writable {
      *      We will refactor the whole user privilege framework later to ultimately fix this.
      *
      **/
-    public static void validPassword(String password) throws DdlException {
+    public static void validatePassword(String password) throws DdlException {
         if (!Config.enable_validate_password) {
             return;
         }

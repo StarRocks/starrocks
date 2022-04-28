@@ -68,7 +68,7 @@ public class AlterUserStmt extends DdlStmt {
         if (!Strings.isNullOrEmpty(password)) {
             if (isPasswordPlain) {
                 // plain password should check for validation & reuse
-                Auth.validPassword(password);
+                Auth.validatePassword(password);
                 GlobalStateMgr.getCurrentState().getAuth().checkPasswordReuse(userIdent, password);
                 // convert plain password to scramble
                 scramblePassword = MysqlPassword.makeScrambledPassword(password);
