@@ -42,7 +42,7 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                         .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
-        boolean hasGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
+        boolean hasNoGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
 
         boolean hasMultiColumns = false;
         for (CallOperator callOperator : distinctAggOperatorList) {
@@ -52,7 +52,8 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
             }
         }
 
-        boolean isCheck = hasGroup && (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
+        boolean isCheck = hasNoGroup && (distinctAggOperatorList.size() > 1
+                && !hasMultiColumns) || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
         if (isCheck) {
             context.getSessionVariable().setCboCteReuse(true);
