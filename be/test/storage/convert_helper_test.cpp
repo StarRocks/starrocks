@@ -24,7 +24,8 @@ static std::string trim_trailing_zeros(const std::string& s) {
 
 PARALLEL_TEST(ConvertHelperTest, testVoidPtr) {
     std::vector<std::string> test_cases = {
-            "0", "999999999999999999.999999999", "-999999999999999999.999999999", "1.001000000", "123456789.987654321",
+            "0.000000000", "999999999999999999.999999999", "-999999999999999999.999999999",
+            "1.001000000", "123456789.987654321",
     };
     for (auto i = 0; i < test_cases.size(); ++i) {
         auto& tc = test_cases[i];
@@ -66,7 +67,8 @@ PARALLEL_TEST(ConvertHelperTest, testVoidPtr) {
 
 PARALLEL_TEST(ConvertHelperTest, testDatum) {
     std::vector<std::string> test_cases = {
-            "0", "999999999999999999.999999999", "-999999999999999999.999999999", "1.001000000", "123456789.987654321",
+            "0.000000000", "999999999999999999.999999999", "-999999999999999999.999999999",
+            "1.001000000", "123456789.987654321",
     };
     for (auto i = 0; i < test_cases.size(); ++i) {
         auto& tc = test_cases[i];
