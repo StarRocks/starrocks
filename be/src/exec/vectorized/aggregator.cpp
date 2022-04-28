@@ -173,9 +173,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             }
 
             // Because windowfunnel have more two input types.
-            // functions registry use 4th args.
+            // functions registry use 2th args(datetime/date).
             if (fn.name.function_name == "window_funnel") {
-                arg_type = TypeDescriptor::from_thrift(fn.arg_types[3]);
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
@@ -391,7 +391,7 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
             _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                             _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
         } else {
-            DCHECK_EQ(_agg_intput_columns[i].size(), 1);
+            DCHECK_GE(_agg_intput_columns[i].size(), 1);
             _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_intput_columns[i][0]->size(), _agg_states_offsets[i],
                                            _agg_intput_columns[i][0].get(), _tmp_agg_states.data());
         }
@@ -405,7 +405,7 @@ void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
                                                         _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
                                                         _streaming_selection);
         } else {
-            DCHECK_EQ(_agg_intput_columns[i].size(), 1);
+            DCHECK_GE(_agg_intput_columns[i].size(), 1);
             _agg_functions[i]->merge_batch_selectively(_agg_fn_ctxs[i], _agg_intput_columns[i][0]->size(),
                                                        _agg_states_offsets[i], _agg_intput_columns[i][0].get(),
                                                        _tmp_agg_states.data(), _streaming_selection);

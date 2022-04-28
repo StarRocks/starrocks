@@ -41,6 +41,9 @@ statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
 
+    // Cluster Mangement Statement
+    | alterSystemStatement                                                                  #alterSystem
+
     //Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
@@ -113,12 +116,23 @@ dropMaterializedViewStatement
     : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
     ;
 
+// ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
+
+alterSystemStatement
+    : ALTER SYSTEM alterClause
+    ;
+
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
     : createIndexClause
     | dropIndexClause
     | tableRenameClause
+
+    | addBackendClause
+    | dropBackendClause
+    | addFrontendClause
+    | dropFrontendClause
     ;
 
 createIndexClause
@@ -132,6 +146,22 @@ dropIndexClause
 tableRenameClause
     : RENAME identifier
     ;
+
+addBackendClause
+   : ADD FREE? BACKEND (TO identifier)? string (',' string)*
+   ;
+
+dropBackendClause
+   : DROP BACKEND string (',' string)* FORCE?
+   ;
+
+addFrontendClause
+   : ADD (FOLLOWER | OBSERVER) string
+   ;
+
+dropFrontendClause
+   : DROP (FOLLOWER | OBSERVER) string
+   ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
@@ -439,6 +469,7 @@ specialFunctionExpression
     | MINUTE '(' expression ')'
     | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
+    | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
@@ -654,19 +685,20 @@ number
 
 nonReserved
     : AVG | ADMIN
-    | BUCKETS
+    | BUCKETS | BACKEND
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MAX | MIN | MINUTE | MONTH | MERGE
+    | MATERIALIZED | MAX | MIN | MINUTE | MONTH | MERGE
     | NONE | NULLS
-    | OFFSET
+    | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
+    | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
     | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
@@ -674,5 +706,4 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    | MATERIALIZED
     ;

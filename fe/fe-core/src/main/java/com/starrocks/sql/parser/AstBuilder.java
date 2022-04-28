@@ -2,11 +2,16 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddFollowerClause;
+import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -32,8 +37,11 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -306,6 +314,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
     }
 
+    // ------------------------------------------- Cluster Mangement Statement -----------------------------------------
+
+    @Override
+    public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
+        return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
+    }
+
     // ------------------------------------------- Alter Clause --------------------------------------------------------
 
     @Override
@@ -345,6 +360,55 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties.put(property.getKey(), property.getValue());
         }
         return new AdminSetReplicaStatusStmt(properties);
+    }
+
+
+
+    @Override
+    public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        if (context.TO() != null) {
+            Identifier identifier = (Identifier) visit(context.identifier());
+            return new AddBackendClause(clusters, identifier.getValue());
+        }
+        if (context.FREE() != null) {
+            return new AddBackendClause(clusters, true);
+        }
+        return new AddBackendClause(clusters, false);
+    }
+
+    @Override
+    public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new DropBackendClause(clusters, context.FORCE() != null);
+    }
+
+    @Override
+    public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null) {
+            return new AddFollowerClause(cluster);
+        } else if (context.OBSERVER() != null) {
+            return new AddObserverClause(cluster);
+        } else {
+            Preconditions.checkState(false, "frontend clause error.");
+            return null;
+        }
+    }
+
+    @Override
+    public ParseNode visitDropFrontendClause(StarRocksParser.DropFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null) {
+            return new DropFollowerClause(cluster);
+        } else if (context.OBSERVER() != null) {
+            return new DropObserverClause(cluster);
+        } else {
+            Preconditions.checkState(false, "frontend clause error.");
+            return null;
+        }
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -1363,6 +1427,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
+        } else if (context.QUARTER() != null) {
+            return new FunctionCallExpr("quarter", visit(context.expression(), Expr.class));
         } else if (context.REGEXP() != null) {
             return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {

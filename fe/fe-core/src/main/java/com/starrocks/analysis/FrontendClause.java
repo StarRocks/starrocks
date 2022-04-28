@@ -32,6 +32,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -57,6 +58,18 @@ public class FrontendClause extends AlterClause {
         return port;
     }
 
+    public String getHostPort() {
+        return hostPort;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
@@ -80,4 +93,8 @@ public class FrontendClause extends AlterClause {
         throw new NotImplementedException();
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitFrontendClause(this,context);
+    }
 }

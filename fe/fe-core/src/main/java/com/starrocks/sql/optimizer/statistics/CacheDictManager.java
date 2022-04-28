@@ -205,9 +205,14 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public void forbidGlobalDict(long tableId) {
+    public void disableGlobalDict(long tableId) {
         LOG.debug("remove dict for table {}", tableId);
         forbiddenDictTableIds.add(tableId);
+    }
+
+    @Override
+    public void enableGlobalDict(long tableId) {
+        forbiddenDictTableIds.remove(tableId);
     }
 
     @Override

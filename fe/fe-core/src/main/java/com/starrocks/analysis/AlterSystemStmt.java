@@ -28,10 +28,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterSystemStmt extends DdlStmt {
-
-    private AlterClause alterClause;
+    private final AlterClause alterClause;
 
     public AlterSystemStmt(AlterClause alterClause) {
         this.alterClause = alterClause;
@@ -72,5 +72,21 @@ public class AlterSystemStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterSystemStmt(this, context);
+    }
+
+    public static boolean isSupportNewPlanner(StatementBase statement) {
+        return statement instanceof AlterSystemStmt &&
+                isNewAlterSystemClause(((AlterSystemStmt) statement).getAlterClause());
+    }
+
+    private static boolean isNewAlterSystemClause(AlterClause clause) {
+        return clause instanceof AddBackendClause
+                || clause instanceof DropBackendClause
+                || clause instanceof FrontendClause;
     }
 }
