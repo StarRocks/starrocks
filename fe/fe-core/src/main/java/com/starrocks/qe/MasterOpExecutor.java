@@ -24,11 +24,11 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -74,15 +74,10 @@ public class MasterOpExecutor {
 
     public void execute() throws Exception {
         forward();
-<<<<<<< HEAD
-        LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-        ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
-=======
-        if (!Catalog.getCurrentCatalog().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
             LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-            ctx.getCatalog().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+            ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
         }
->>>>>>> f90e64d35... add
 
         if (result.state != null) {
             MysqlStateType state = MysqlStateType.fromString(result.state);
@@ -139,8 +134,8 @@ public class MasterOpExecutor {
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         for (int i = 0; i < RETRY_TIMES; i++) {
-            TNetworkAddress thriftAddress = new TNetworkAddress(ctx.getCatalog().getMasterIp(),
-                    ctx.getCatalog().getMasterRpcPort());
+            TNetworkAddress thriftAddress = new TNetworkAddress(ctx.getGlobalStateMgr().getMasterIp(),
+                    ctx.getGlobalStateMgr().getMasterRpcPort());
             LOG.info("Forward statement {} to Master {}, retried times: {}", ctx.getStmtId(), thriftAddress, i);
             try {
                 result = FrontendServiceProxy.call(thriftAddress, thriftTimeoutMs,
