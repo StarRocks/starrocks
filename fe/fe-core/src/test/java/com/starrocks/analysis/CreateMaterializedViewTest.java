@@ -22,6 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.RefreshType;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -39,12 +41,20 @@ import static org.junit.Assert.assertNotNull;
 
 public class CreateMaterializedViewTest {
 
+    private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+
+        FeConstants.runningUnitTest = true;
+        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.dynamic_partition_enable = true;
+        Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
         // create connect context
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -143,10 +153,9 @@ public class CreateMaterializedViewTest {
                 .useDatabase("test");
     }
 
-
     @Test
-    public void testFullDescPartitionByFunction() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testDisabled(){
+        Config.enable_materialized_view = false;
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -156,15 +165,33 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "The experimental mv is disabled");
+        } finally {
+            Config.enable_materialized_view = true;
+        }
+    }
+
+    @Test
+    public void testFullDescPartitionByFunction() {
+        String sql = "create materialized view mv1 " +
+                "partition by (ss) " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testFullDescPartitionNoDataBase() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionNoDataBase() {
         starRocksAssert.withoutUseDatabase();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
@@ -175,7 +202,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "No database selected");
         } finally {
@@ -184,8 +211,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testFullDescPartitionHasDataBase() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionHasDataBase() {
         starRocksAssert.withoutUseDatabase();
         String sql = "create materialized view test.mv1 " +
                 "partition by (ss) " +
@@ -196,7 +222,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
@@ -204,10 +230,8 @@ public class CreateMaterializedViewTest {
         }
     }
 
-
     @Test
-    public void testMultiPartitionByExpression(){
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testMultiPartitionByExpression() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss, k2) " +
                 "distributed by hash(k2) " +
@@ -217,15 +241,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Partition expressions currently only support one");
         }
     }
 
     @Test
-    public void testPartitionKeyNoBaseTablePartitionKey(){
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testPartitionKeyNoBaseTablePartitionKey() {
         String sql = "create materialized view mv1 " +
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
@@ -235,15 +258,15 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view partition key in partition exp must be base table partition key");
+            assertEquals(e.getMessage(),
+                    "Materialized view partition key in partition exp must be base table partition key");
         }
     }
 
     @Test
-    public void testBaseTableNoPartitionKey(){
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testBaseTableNoPartitionKey() {
         String sql = "create materialized view mv1 " +
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
@@ -253,15 +276,15 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view partition key in partition exp must be base table partition key");
+            assertEquals(e.getMessage(),
+                    "Materialized view partition key in partition exp must be base table partition key");
         }
     }
 
     @Test
-    public void testFullDescPartitionByColumn() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionByColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
@@ -271,15 +294,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testFullDescPartitionByColumnNoAlias() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionByColumnNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
@@ -289,15 +311,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testFullDescPartitionByColumnMixAlias1() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionByColumnMixAlias1() {
         String sql = "create materialized view mv1 " +
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
@@ -307,15 +328,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testFullDescPartitionByColumnMixAlias2() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testFullDescPartitionByColumnMixAlias2() {
         String sql = "create materialized view mv1 " +
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
@@ -325,7 +345,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -333,12 +353,23 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testNoPartitionExp() {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1, tbl1.k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
 
     }
 
     @Test
-    public void testSelectHasStar() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testSelectHasStar() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(ss) " +
@@ -348,15 +379,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Select * is not supported in materialized view");
         }
     }
 
     @Test
-    public void testPartitionByFunctionNotInSelect() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testPartitionByFunctionNotInSelect() {
         String sql = "create materialized view mv1 " +
                 "partition by (s8) " +
                 "distributed by hash(k2) " +
@@ -366,15 +396,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view partition exp column can't find in query statement");
         }
     }
 
     @Test
-    public void testPartitionByAllowedFunctionNoNeedParams() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testPartitionByAllowedFunctionNoNeedParams() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -384,15 +413,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "No matching function with signature: date_format(date).");
         }
     }
 
     @Test
-    public void testPartitionByNoAllowedFunction() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testPartitionByNoAllowedFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -402,15 +430,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view partition function sqrt is not support");
         }
     }
 
     @Test
-    public void testPartitionByNoAlias() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testPartitionByNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by (date_format(k1,'%Y%m')) " +
                 "distributed by hash(k2) " +
@@ -420,15 +447,14 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Partition exp date_format(k1, '%Y%m') must be alias of select item");
         }
     }
 
     @Test
-    public void testDistributeByIsNull1() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
+    public void testDistributeByIsNull1() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -437,16 +463,15 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view should contain distribution desc");
         }
     }
 
     @Test
-    public void testDistributeByIsNull2() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        ctx.getSessionVariable().setAllowDefaultPartition(true);
+    public void testDistributeByIsNull2() {
+        connectContext.getSessionVariable().setAllowDefaultPartition(true);
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -455,16 +480,16 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setAllowDefaultPartition(false);
         }
     }
 
-
     @Test
     public void testRefreshAsyncNoArgs() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -474,8 +499,9 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
@@ -500,7 +526,8 @@ public class CreateMaterializedViewTest {
                 ");";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
@@ -516,7 +543,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testRefreshAsyncOnlyEvery() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -526,8 +552,9 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
@@ -541,7 +568,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testRefreshSync() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -551,7 +577,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Unsupported refresh type: sync");
         }
@@ -559,7 +585,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testRefreshManual() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -569,7 +594,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Unsupported refresh type: manual");
         }
@@ -577,7 +602,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testQueryStatementNoSelectRelation() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -587,7 +611,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view query statement only support select");
         }
@@ -595,7 +619,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testTableNotInOneDatabase() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -605,7 +628,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view do not support table which is in other database");
         }
@@ -613,7 +636,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testTableNoOlapTable() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -623,7 +645,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Materialized view only support olap tables");
         }
@@ -632,7 +654,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testSelectItemNoAlias() {
-        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
@@ -642,12 +663,12 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view query statement select item date_format(`tbl1`.`k1`, '%Y%m') must has alias except base select item");
+            assertEquals(e.getMessage(),
+                    "Materialized view query statement select item date_format(`tbl1`.`k1`, '%Y%m') must has alias except base select item");
         }
     }
-
 
 }
 

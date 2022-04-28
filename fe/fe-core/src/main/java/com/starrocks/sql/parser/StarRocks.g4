@@ -31,6 +31,13 @@ statement
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+            comment?
+            (PARTITION BY '(' primaryExpression (',' primaryExpression)* ')')?
+            distributionDesc?
+            refreshSchemeDesc
+            AS queryStatement
+            properties?                                                                     #createMaterializedView
     | DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName                              #dropMaterialized
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
@@ -90,6 +97,12 @@ partitionValue
 
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? (EVERY '(' interval ')')?
+    | MANUAL)
     ;
 
 properties
@@ -541,7 +554,7 @@ number
     ;
 
 nonReserved
-    : AVG | ADMIN
+    : AVG | ADMIN | ASYNC
     | BUCKETS
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
@@ -551,16 +564,15 @@ nonReserved
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MAX | MIN | MINUTE | MONTH | MERGE
+    | MAX | MIN | MINUTE | MONTH | MERGE | MANUAL | MATERIALIZED
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK | REPLICA
-    | SECOND | SESSION | SETS | START | SUM | STATUS
+    | REFRESH | ROLLUP | ROLLBACK | REPLICA
+    | SECOND | SESSION | SETS | START | SUM | STATUS | SYNC
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    | MATERIALIZED
     ;
