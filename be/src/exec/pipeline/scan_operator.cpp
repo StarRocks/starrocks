@@ -52,10 +52,12 @@ void ScanOperator::close(RuntimeState* state) {
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    for (auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr) {
-            chunk_source->close(state);
-            chunk_source = nullptr;
+    // for the running io task, we can't close its chunk source.
+    // this should be done by default in the chunk source's destructor
+    for (size_t i = 0;i < _chunk_sources.size();i ++) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
         }
     }
 
