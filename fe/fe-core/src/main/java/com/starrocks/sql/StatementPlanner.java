@@ -3,7 +3,6 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -26,7 +25,6 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -166,8 +164,8 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewParser(StatementBase statement) {
-        return  isNewAlterTable(statement)
-                || AlterSystemStmt.isSupportNewAnalyzer(statement)
+        return AlterTableStmt.isSupportNewPlanner(statement)
+                || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
@@ -182,20 +180,9 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt;
     }
 
-    private static boolean isNewAlterTable(StatementBase statement) {
-        boolean isAlterTable = false;
-        if (statement instanceof AlterTableStmt) {
-            List<AlterClause> alterClauses = ((AlterTableStmt) statement).getOps();
-            if (alterClauses.stream().allMatch(alterClause -> isNewAlterTableClause(alterClause))) {
-                isAlterTable = true;
-            }
-        }
-        return isAlterTable;
-    }
-
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
-        return isNewAlterTable(statement)
-                || AlterSystemStmt.isSupportNewAnalyzer(statement)
+        return AlterTableStmt.isSupportNewPlanner(statement)
+                || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
@@ -217,9 +204,5 @@ public class StatementPlanner {
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
                 || statement instanceof DropMaterializedViewStmt;
-    }
-
-    public static boolean isNewAlterTableClause(AlterClause clause) {
-        return clause instanceof TableRenameClause;
     }
 }

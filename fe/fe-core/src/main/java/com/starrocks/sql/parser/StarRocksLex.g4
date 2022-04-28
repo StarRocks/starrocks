@@ -92,6 +92,7 @@ HLL: 'HLL';
 HOUR: 'HOUR';
 IF: 'IF';
 IN: 'IN';
+INDEX: 'INDEX';
 INNER: 'INNER';
 INSERT: 'INSERT';
 INT: 'INT';

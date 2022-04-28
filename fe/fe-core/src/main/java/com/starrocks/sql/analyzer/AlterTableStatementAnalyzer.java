@@ -4,19 +4,19 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.Index;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.List;
 
@@ -35,12 +35,7 @@ public class AlterTableStatementAnalyzer {
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
         for (AlterClause alterClause : alterClauseList) {
-            if (StatementPlanner.isNewAlterTableClause(alterClause)) {
-                alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
-            } else {
-                throw new StarRocksPlannerException(alterClause.getOpType().name() + " clause not support new Analyzer",
-                        ErrorType.INTERNAL_ERROR);
-            }
+            alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
     }
 
@@ -50,8 +45,21 @@ public class AlterTableStatementAnalyzer {
         }
 
         @Override
-        public Void visitTableRenameClause(TableRenameClause statement, ConnectContext context) {
-            String newTableName = statement.getNewTableName();
+        public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
+            IndexDef indexDef = clause.getIndexDef();
+            try {
+                indexDef.analyze();
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment()));
+            return null;
+        }
+
+        @Override
+        public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
+            String newTableName = clause.getNewTableName();
             if (Strings.isNullOrEmpty(newTableName)) {
                 throw new SemanticException("New Table name is not set");
             }
@@ -63,6 +71,4 @@ public class AlterTableStatementAnalyzer {
             return null;
         }
     }
-
-
 }

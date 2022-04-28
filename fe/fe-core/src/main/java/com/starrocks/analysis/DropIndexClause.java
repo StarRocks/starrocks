@@ -22,55 +22,22 @@
 package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
-import org.apache.commons.lang.StringUtils;
-
-import java.util.Map;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class DropIndexClause extends AlterTableClause {
     private final String indexName;
-    private final TableName tableName;
-    private boolean alter;
 
     public DropIndexClause(String indexName, TableName tableName, boolean alter) {
         super(AlterOpType.SCHEMA_CHANGE);
         this.indexName = indexName;
-        this.tableName = tableName;
-        this.alter = alter;
     }
 
     public String getIndexName() {
         return indexName;
     }
 
-    public TableName getTableName() {
-        return tableName;
-    }
-
-    public boolean isAlter() {
-        return alter;
-    }
-
     @Override
-    public Map<String, String> getProperties() {
-        return null;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        if (StringUtils.isEmpty(indexName)) {
-            throw new AnalysisException("index name is excepted");
-        }
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("DROP INDEX ").append(indexName);
-        if (!alter) {
-            stringBuilder.append(" ON ").append(tableName.toSql());
-        }
-        return stringBuilder.toString();
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropIndexClause(this, context);
     }
 }

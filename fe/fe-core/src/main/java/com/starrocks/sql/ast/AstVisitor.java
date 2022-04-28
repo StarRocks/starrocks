@@ -22,12 +22,14 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -86,12 +88,12 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+    public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitTableRenameClause(TableRenameClause statement, C context) {
-        return visitNode(statement, context);
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
@@ -198,8 +200,27 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
-        return visitDDLStatement(statement, context);
+    // ----------------- Alter Clause ---------------
+
+    public R visitCreateIndexClause(CreateIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDropIndexClause(DropIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitBackendClause(BackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+
+    public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
     }
 
     // ----------------- Relation ---------------
@@ -377,15 +398,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitGroupByClause(GroupByClause node, C context) {
-        return null;
-    }
-
-    public R visitBackendClause(BackendClause backendClause, C context) {
-        return null;
-    }
-
-
-    public R visitFrontendClause(FrontendClause frontendClause, C context) {
         return null;
     }
 }
