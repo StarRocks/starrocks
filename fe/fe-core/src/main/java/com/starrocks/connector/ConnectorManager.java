@@ -17,7 +17,7 @@ public class ConnectorManager {
      *
      * @param connectorFactory - a connector factory instance
      */
-    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory) {
+    public void addConnectorFactory(ConnectorFactory connectorFactory) {
         connectorFactories.putIfAbsent(connectorFactory.name(), connectorFactory);
     }
 
@@ -28,7 +28,7 @@ public class ConnectorManager {
      * @param properties    - a map of string kv for instantiate a connector
      * @return a connector instance
      */
-    public synchronized Connector createConnector(String connectorName, Map<String, String> properties) {
+    public Connector createConnector(String connectorName, Map<String, String> properties) {
         Connector.Context context = new Connector.Context(properties);
 
         ConnectorFactory connectorFactory = connectorFactories.get(connectorName);
