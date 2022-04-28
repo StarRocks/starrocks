@@ -19,23 +19,13 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fid, url, checksum, &libpath));
     auto* udaf_ctx = context->impl()->udaf_ctxs();
-    udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
-    RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
-    udaf_ctx->analyzer = std::make_unique<ClassAnalyzer>();
+    auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+    auto analyzer = std::make_unique<ClassAnalyzer>();
+    RETURN_IF_ERROR(udf_classloader->init());
 
-    udaf_ctx->udaf_class = udaf_ctx->udf_classloader->getClass(symbol);
-    if (udaf_ctx->udaf_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("couldn't found clazz:{}", symbol));
-    }
-
-    udaf_ctx->udaf_state_class = udaf_ctx->udf_classloader->getClass(state);
-    if (udaf_ctx->udaf_state_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("couldn't found clazz:{}", state));
-    }
-
-    RETURN_IF_ERROR(udaf_ctx->udaf_class.newInstance(&udaf_ctx->handle));
-
-    auto* analyzer = udaf_ctx->analyzer.get();
+    ASSIGN_OR_RETURN(udaf_ctx->udaf_class, udf_classloader->getClass(symbol));
+    ASSIGN_OR_RETURN(udaf_ctx->udaf_state_class, udf_classloader->getClass(state));
+    ASSIGN_OR_RETURN(udaf_ctx->handle, udaf_ctx->udaf_class.newInstance());
 
     auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
         std::string method_name = name;
@@ -57,7 +47,7 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     RETURN_IF_ERROR(add_method("finalize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->finalize));
     RETURN_IF_ERROR(add_method("windowUpdate", udaf_ctx->udaf_class.clazz(), &udaf_ctx->window_update));
 
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, context, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();
 }

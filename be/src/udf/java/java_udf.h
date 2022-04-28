@@ -187,20 +187,43 @@ private:
     int _capacity;
 };
 
+class JavaGlobalRef {
+public:
+    JavaGlobalRef(jobject&& handle) : _handle(std::move(handle)) {}
+    ~JavaGlobalRef();
+    JavaGlobalRef(const JavaGlobalRef&) = delete;
+
+    JavaGlobalRef(JavaGlobalRef&& other) {
+        _handle = other._handle;
+        other._handle = nullptr;
+    }
+
+    JavaGlobalRef& operator=(JavaGlobalRef&& other) {
+        JavaGlobalRef tmp(std::move(other));
+        std::swap(this->_handle, tmp._handle);
+        return *this;
+    }
+
+    jobject handle() const { return _handle; }
+
+    jobject& handle() { return _handle; }
+
+    void clear();
+
+private:
+    jobject _handle;
+};
+
 // A Class object created from the ClassLoader that can be accessed by multiple threads
 class JVMClass {
 public:
     JVMClass(jobject&& clazz) : _clazz(std::move(clazz)) {}
-    ~JVMClass();
     JVMClass(const JVMClass&) = delete;
 
     JVMClass& operator=(const JVMClass&&) = delete;
     JVMClass& operator=(const JVMClass& other) = delete;
 
-    JVMClass(JVMClass&& other) {
-        _clazz = other._clazz;
-        other._clazz = nullptr;
-    }
+    JVMClass(JVMClass&& other) : _clazz(nullptr) { _clazz = std::move(other._clazz); }
 
     JVMClass& operator=(JVMClass&& other) {
         JVMClass tmp(std::move(other));
@@ -208,13 +231,13 @@ public:
         return *this;
     }
 
-    jclass clazz() const { return (jclass)_clazz; }
+    jclass clazz() const { return (jclass)_clazz.handle(); }
 
     // Create a new instance using the default constructor
-    Status newInstance(jobject* object) const;
+    StatusOr<JavaGlobalRef> newInstance() const;
 
 private:
-    jobject _clazz;
+    JavaGlobalRef _clazz;
 };
 
 // For loading UDF Class
@@ -228,7 +251,7 @@ public:
     ClassLoader& operator=(const ClassLoader& other) = delete;
     ClassLoader(const ClassLoader&) = delete;
     // get class
-    JVMClass getClass(const std::string& className);
+    StatusOr<JVMClass> getClass(const std::string& className);
     Status init();
 
 private:
@@ -272,7 +295,7 @@ struct JavaUDFContext {
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
     JVMClass udf_class = nullptr;
-    jobject udf_handle;
+    JavaGlobalRef udf_handle = nullptr;
 
     // Java Method
     std::unique_ptr<JavaMethodDescriptor> prepare;
@@ -288,9 +311,9 @@ public:
     UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
             : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
-    jobject create();
+    JavaGlobalRef create();
     // destroy state
-    void destroy(jobject state);
+    void destroy(JavaGlobalRef state);
     // UDAF Update Function
     void update(jvalue* val);
     // UDAF merge
@@ -309,14 +332,13 @@ public:
                                 int col_sz, jobject* cols);
 
 private:
+    // not owned udaf function handle
     jobject _udaf_handle;
     FunctionContext* _function_context;
     JavaUDAFContext* _ctx;
 };
 
 struct JavaUDAFContext {
-    std::unique_ptr<ClassLoader> udf_classloader;
-    std::unique_ptr<ClassAnalyzer> analyzer;
     JVMClass udaf_class = nullptr;
     JVMClass udaf_state_class = nullptr;
     std::unique_ptr<JavaMethodDescriptor> create;
@@ -333,7 +355,7 @@ struct JavaUDAFContext {
 
     std::unique_ptr<DirectByteBuffer> buffer;
     // handle for UDAF object
-    jobject handle;
+    JavaGlobalRef handle = nullptr;
     std::vector<uint8_t> buffer_data;
 
     std::unique_ptr<UDAFFunction> _func;

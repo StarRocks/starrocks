@@ -131,6 +131,11 @@ void JVMFunctionHelper::_add_class_path(const std::string& path) {
     jmethodID urlConstructor = _env->GetMethodID(urlCls, "<init>", "(Ljava/lang/String;)V");
     jobject urlInstance = _env->NewObject(urlCls, urlConstructor, _env->NewStringUTF(urlPath.c_str()));
     _env->CallVoidMethod(classLoaderInstance, addUrlMethod, urlInstance);
+    if (auto e = _env->ExceptionOccurred()) {
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);
+        LOG(WARNING) << "Exception: " << msg;
+        _env->ExceptionClear();
+    }
 }
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {
@@ -150,12 +155,20 @@ void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) 
     }
 }
 
+#define CHECK_FUNCTION_EXCEPTION(_env, name)                  \
+    if (_env->ExceptionOccurred()) {                          \
+        _env->ExceptionClear();                               \
+        LOG(WARNING) << "Exception happend when call " #name; \
+        return "";                                            \
+    }
+
 std::string JVMFunctionHelper::array_to_string(jobject object) {
     std::string value;
     jmethodID arrayToStringMethod =
             _env->GetStaticMethodID(_jarrays_class, "toString", "([Ljava/lang/Object;)Ljava/lang/String;");
     DCHECK(arrayToStringMethod != nullptr);
     jobject jstr = _env->CallStaticObjectMethod(_jarrays_class, arrayToStringMethod, object);
+    CHECK_FUNCTION_EXCEPTION(_env, "array_to_string")
     value = to_cxx_string((jstring)jstr);
     _env->DeleteLocalRef(jstr);
     return value;
@@ -165,6 +178,7 @@ std::string JVMFunctionHelper::to_string(jobject obj) {
     std::string value;
     auto method = getToStringMethod(_object_class);
     auto res = _env->CallObjectMethod(obj, method);
+    CHECK_FUNCTION_EXCEPTION(_env, "to_string")
     value = to_cxx_string((jstring)res);
     _env->DeleteLocalRef(res);
     return value;
@@ -189,6 +203,7 @@ std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
     jmethodID getStackTrace = _env->GetMethodID(_throwable_class, "getStackTrace", "()[Ljava/lang/StackTraceElement;");
     CHECK(getStackTrace != nullptr) << "Not Found JNI method getStackTrace";
     jobject stack_traces = _env->CallObjectMethod((jobject)throwable, getStackTrace);
+    CHECK_FUNCTION_EXCEPTION(_env, "dump_string")
     ss << array_to_string(stack_traces);
     _env->DeleteLocalRef(stack_traces);
     return ss.str();
@@ -342,22 +357,26 @@ DirectByteBuffer::~DirectByteBuffer() {
     }
 }
 
-JVMClass::~JVMClass() {
-    if (_clazz) {
-        JNIEnv* env = getJNIEnv();
-        env->DeleteLocalRef(_clazz);
+JavaGlobalRef::~JavaGlobalRef() {
+    clear();
+}
+
+void JavaGlobalRef::clear() {
+    if (_handle) {
+        JVMFunctionHelper::getInstance().getEnv()->DeleteGlobalRef(_handle);
+        _handle = nullptr;
     }
 }
 
-Status JVMClass::newInstance(jobject* object) const {
+StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
     JNIEnv* env = getJNIEnv();
     // get default constructor
-    jmethodID constructor = env->GetMethodID((jclass)_clazz, "<init>", "()V");
+    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
     if (constructor == nullptr) {
         return Status::InternalError("couldn't found default constructor for Java Object");
     }
-    *object = env->NewObject((jclass)_clazz, constructor);
-    return Status::OK();
+    auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
+    return env->NewGlobalRef(local_ref);
 }
 
 ClassLoader::~ClassLoader() {
@@ -411,7 +430,7 @@ Status ClassLoader::init() {
     return Status::OK();
 }
 
-JVMClass ClassLoader::getClass(const std::string& className) {
+StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     CHECK(env != nullptr) << "couldn't got a JNIEnv";
@@ -427,9 +446,10 @@ JVMClass ClassLoader::getClass(const std::string& className) {
     // check exception
     jthrowable jthr = env->ExceptionOccurred();
     if (jthr) {
-        LOG(WARNING) << "exception happened when get class:" << helper.dumpExceptionString(jthr);
+        std::string msg = fmt::format("exception happened when get class: {}", helper.dumpExceptionString(jthr));
+        LOG(WARNING) << msg;
         env->ExceptionClear();
-        return JVMClass(nullptr);
+        return Status::RuntimeError(msg);
     }
     // no exception happened, class exists
     DCHECK(loaded_clazz != nullptr);
@@ -523,7 +543,9 @@ StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::stri
     if (method_object == nullptr) {
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
-    return method_object;
+    auto res = env->NewGlobalRef(method_object);
+    env->DeleteLocalRef(method_object);
+    return res;
 }
 
 Status ClassAnalyzer::get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc) {
@@ -606,27 +628,22 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
     return Status::OK();
 }
 
-JavaUDFContext::~JavaUDFContext() {
-    auto& helper = JVMFunctionHelper::getInstance();
-    if (udf_handle) {
-        helper.getEnv()->DeleteLocalRef(udf_handle);
-    }
-}
+JavaUDFContext::~JavaUDFContext() = default;
 
-jobject UDAFFunction::create() {
+JavaGlobalRef UDAFFunction::create() {
     JNIEnv* env = getJNIEnv();
     jmethodID create = _ctx->create->get_method_id();
     auto obj = env->CallObjectMethod(_udaf_handle, create);
     JVMFunctionHelper::check_call_exception(env, _function_context);
-    return obj;
+    return JavaGlobalRef(std::move(obj));
 }
 
-void UDAFFunction::destroy(jobject state) {
+void UDAFFunction::destroy(JavaGlobalRef state) {
     JNIEnv* env = getJNIEnv();
     jmethodID destory = _ctx->destory->get_method_id();
-    env->CallVoidMethod(_udaf_handle, destory, state);
-    env->DeleteLocalRef(state);
+    env->CallVoidMethod(_udaf_handle, destory, state.handle());
     JVMFunctionHelper::check_call_exception(env, _function_context);
+    state.clear();
 }
 
 jvalue UDAFFunction::finalize(jobject state) {

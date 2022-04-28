@@ -79,8 +79,8 @@ struct UDFFunctionCallHelper {
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
                                                       &input_col_objs);
         // call UDF method
-        jobject res = helper.batch_call(ctx, fn_desc->udf_handle, fn_desc->evaluate->method, input_col_objs.data(),
-                                        input_col_objs.size(), size);
+        jobject res = helper.batch_call(ctx, fn_desc->udf_handle.handle(), fn_desc->evaluate->method,
+                                        input_col_objs.data(), input_col_objs.size(), size);
 
         env->PushLocalFrame(size * (num_cols + 1));
         // get result
@@ -231,10 +231,8 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
         RETURN_IF_ERROR(_func_desc->udf_classloader->init());
         _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
-        _func_desc->udf_class = _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol);
-        if (_func_desc->udf_class.clazz() == nullptr) {
-            return Status::InternalError(fmt::format("Not found symbol:{}", _fn.scalar_fn.symbol));
-        }
+
+        ASSIGN_OR_RETURN(_func_desc->udf_class, _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
 
         auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
             bool has_method = false;
@@ -262,7 +260,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
 
         // create UDF function instance
-        RETURN_IF_ERROR(_func_desc->udf_class.newInstance(&_func_desc->udf_handle));
+        ASSIGN_OR_RETURN(_func_desc->udf_handle, _func_desc->udf_class.newInstance());
 
         _call_helper = std::make_shared<UDFFunctionCallHelper>();
         _call_helper->fn_desc = _func_desc.get();
@@ -300,7 +298,7 @@ void JavaFunctionCallExpr::_call_udf_close() {
     JNIEnv* env = helper.getEnv();
     jmethodID methodID = env->GetMethodID(_func_desc->udf_class.clazz(), _func_desc->close->name.c_str(),
                                           _func_desc->close->signature.c_str());
-    env->CallVoidMethod(_func_desc->udf_handle, methodID);
+    env->CallVoidMethod(_func_desc->udf_handle.handle(), methodID);
     if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
         LOG(WARNING) << "Exception occur:" << helper.dumpExceptionString(jthr);
         env->ExceptionClear();
