@@ -42,6 +42,7 @@ statement
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | ALTER SYSTEM alterClause                                                             #alterSystem
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?                                #showMaterializedView
@@ -49,10 +50,30 @@ statement
 
 alterClause
     : tableRenameClause
+    | addBackendClause
+    | dropBackendClause
+    | addFrontendClause
+    | dropFrontendClause
     ;
 
 tableRenameClause
     : RENAME identifier
+    ;
+
+addBackendClause
+    : ADD FREE? BACKEND (TO identifier)? string (',' string)*
+    ;
+
+dropBackendClause
+    : DROP BACKEND string (',' string)* FORCE?
+    ;
+
+addFrontendClause
+    : ADD (FOLLOWER | OBSERVER) string
+    ;
+
+dropFrontendClause
+    : DROP (FOLLOWER | OBSERVER) string
     ;
 
 explainDesc
@@ -556,18 +577,18 @@ number
 
 nonReserved
     : AVG | ADMIN
-    | BUCKETS
+    | BUCKETS | BACKEND
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MAX | MIN | MINUTE | MONTH | MERGE
+    | MAX | MIN | MINUTE | MONTH | MERGE | MATERIALIZED
     | NONE | NULLS
-    | OFFSET
+    | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
@@ -577,5 +598,5 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    | MATERIALIZED
     ;
+    
