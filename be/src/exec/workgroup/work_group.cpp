@@ -85,8 +85,8 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 }
 
 void WorkGroup::init() {
-    _mem_limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
-    _mem_tracker = std::make_shared<starrocks::MemTracker>(_mem_limit, _name,
+    _memory_limit_bytes = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+    _mem_tracker = std::make_shared<starrocks::MemTracker>(_memory_limit_bytes, _name,
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_queue = std::make_unique<pipeline::QuerySharedDriverQueueWithoutLock>();
     _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
@@ -101,7 +101,7 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
 }
 
 int64_t WorkGroup::mem_limit() const {
-    return _mem_limit;
+    return _memory_limit_bytes;
 }
 
 WorkGroupManager::WorkGroupManager()

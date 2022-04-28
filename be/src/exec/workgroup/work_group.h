@@ -159,7 +159,7 @@ private:
 
     size_t _cpu_limit;
     double _memory_limit;
-    int64_t _mem_limit = -1;
+    int64_t _memory_limit_bytes = -1;
     size_t _concurrency;
     WorkGroupType _type;
 

@@ -62,9 +62,6 @@ public class ResourceGroupMetricTest {
 
         ResourceGroupMetricMgr.updateQueryLatency(queryDetails);
 
-//      private static final String QUERY_RESOURCE_GROUP = "query_resource_group";
-//      private static final String QUERY_RESOURCE_GROUP_LATENCY = "query_resource_group_latency";
-//      private static final String QUERY_RESOURCE_GROUP_ERR = "query_resource_group_err";
         List<Metric> metricsResourceGroup = MetricRepo.getMetricsByName("query_resource_group");
         List<Metric> metricsResourceGroupErr = MetricRepo.getMetricsByName("query_resource_group_err");
         List<Metric> metricsResourceGroupLatency = MetricRepo.getMetricsByName("query_resource_group_latency");
