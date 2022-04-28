@@ -4,6 +4,7 @@
 
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
@@ -256,6 +257,17 @@ public:
         return Status::OK();
     }
 };
+
+SortedRun::SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs)
+        : chunk(ichunk), range(0, ichunk->num_rows()) {
+    DCHECK(ichunk);
+    if (!ichunk->is_empty()) {
+        for (auto& expr : *exprs) {
+            auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), ichunk.get());
+            orderby.push_back(column);
+        }
+    }
+}
 
 void SortedRun::reset() {
     chunk->reset();

@@ -53,8 +53,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
         _sort_permutation.resize(0);
-        sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_order_flag, _null_first_flag,
-                             &_sort_permutation);
+        RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_order_flag,
+                                             _null_first_flag, &_sort_permutation));
         ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
         append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
 

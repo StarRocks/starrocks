@@ -29,16 +29,7 @@ struct SortedRun {
 
     SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
 
-    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs) : chunk(ichunk), range(0, ichunk->num_rows()) {
-        DCHECK(ichunk);
-        if (!ichunk->is_empty()) {
-            for (auto& expr : *exprs) {
-                auto maybe_column = expr->evaluate(ichunk.get());
-                CHECK(maybe_column.ok());
-                orderby.push_back(maybe_column.value());
-            }
-        }
-    }
+    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs);
 
     SortedRun& operator=(const SortedRun& rhs) {
         if (&rhs == this) return *this;

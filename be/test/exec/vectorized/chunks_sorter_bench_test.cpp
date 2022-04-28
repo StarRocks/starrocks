@@ -403,33 +403,17 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
 }
 
 // Sort full data: ORDER BY
-static void BM_fullsort_row_wise(benchmark::State& state) {
-    do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1));
-}
-static void BM_fullsort_column_wise(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnWise, TYPE_INT, state.range(0), state.range(1));
-}
-static void BM_fullsort_column_incr(benchmark::State& state) {
+static void BM_fullsort_notnull(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1));
 }
-static void BM_fullsort_varchar_column_wise(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnWise, TYPE_VARCHAR, state.range(0), state.range(1));
+static void BM_fullsort_nullable(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
 }
 static void BM_fullsort_varchar_column_incr(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_VARCHAR, state.range(0), state.range(1));
 }
-static void BM_fullsort_column_incr_nullable(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
-}
 
 // Low cardinality
-static void BM_fullsort_low_card_rowwise(benchmark::State& state) {
-    do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1), SortParameters::with_low_card(true));
-}
-static void BM_fullsort_low_card_colwise(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnWise, TYPE_INT, state.range(0), state.range(1),
-             SortParameters::with_low_card(true));
-}
 static void BM_fullsort_low_card_colinc(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), SortParameters::with_low_card(true));
 }
@@ -451,15 +435,11 @@ static void BM_topn_limit_heapsort(benchmark::State& state) {
     do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1),
              SortParameters::with_limit(state.range(2)));
 }
-static void BM_topn_limit_mergesort_rowwise(benchmark::State& state) {
-    do_bench(state, MergeSort, RowWise, TYPE_INT, state.range(0), state.range(1),
-             SortParameters::with_limit(state.range(2)));
-}
-static void BM_topn_limit_mergesort_colwise(benchmark::State& state) {
+static void BM_topn_limit_mergesort_notnull(benchmark::State& state) {
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1),
              SortParameters::with_limit(state.range(2)));
 }
-static void BM_topn_limit_mergesort_colwise_nullable(benchmark::State& state) {
+static void BM_topn_limit_mergesort_nullable(benchmark::State& state) {
     SortParameters params = SortParameters::with_limit(state.range(2));
     params.nullable = true;
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), params);
@@ -508,16 +488,11 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 }
 
 // Full sort
-BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_column_incr)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_column_incr_nullable)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_varchar_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_notnull)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_nullable)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 
 // Low-Cardinality Sort
-BENCHMARK(BM_fullsort_low_card_rowwise)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_low_card_colwise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_colinc)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_nullable)->Apply(CustomArgsFull);
 
@@ -526,9 +501,10 @@ BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 
 // TopN sort
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
-BENCHMARK(BM_topn_limit_mergesort_rowwise)->Apply(CustomArgsLimit);
-BENCHMARK(BM_topn_limit_mergesort_colwise)->Apply(CustomArgsLimit);
-BENCHMARK(BM_topn_limit_mergesort_colwise_nullable)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort_notnull)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort_nullable)->Apply(CustomArgsLimit);
+
+// Tunning the parameter buffered_chunks of TopN
 BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 
