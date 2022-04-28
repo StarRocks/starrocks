@@ -235,6 +235,8 @@ private:
         }
         return mem_usage;
     }
+    bool _check_schema_unique_id(const TabletSchemaPB& schema_pb,
+                                 const std::shared_ptr<const TabletSchema>& schema_ptr);
 
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
