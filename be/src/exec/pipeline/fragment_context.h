@@ -20,8 +20,8 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
-#include "util/uid_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -67,9 +67,7 @@ public:
         _final_status.store(nullptr);
     }
 
-    bool count_down_drivers() {
-        return _num_drivers.fetch_sub(1) == 1;
-    }
+    bool count_down_drivers() { return _num_drivers.fetch_sub(1) == 1; }
 
     void set_final_status(const Status& status);
 
@@ -85,9 +83,7 @@ public:
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() {
-        return _runtime_state->is_cancelled();
-    }
+    bool is_canceled() { return _runtime_state->is_cancelled(); }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
 

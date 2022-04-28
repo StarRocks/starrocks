@@ -340,12 +340,8 @@ public:
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
-    inline bool is_in_ready_queue() const {
-        return _in_ready_queue.load(std::memory_order_acquire);
-    }
-    void set_in_ready_queue(bool v) {
-        _in_ready_queue.store(v, std::memory_order_release);
-    }
+    inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
+    void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
 private:
     // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.

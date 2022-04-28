@@ -177,7 +177,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     bool offer_task_success = false;
     std::weak_ptr<ScanOperator> wp = shared_from_this();
     if (_workgroup != nullptr) {
-         workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp, state, chunk_source_index](int worker_id) {
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp, state, chunk_source_index](int worker_id) {
             if (auto sp = wp.lock()) {
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
@@ -186,11 +186,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                             sp->_buffer_size, state, &num_read_chunks, worker_id, sp->_workgroup);
                     // TODO (by laotan332): More detailed information is needed
                     sp->_workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-                    sp->_workgroup->increment_real_runtime_ns(sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                    sp->_workgroup->increment_real_runtime_ns(
+                            sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
                     // for big query check
                     COUNTER_UPDATE(sp->_total_cost_cpu_time_ns_counter,
-                                sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                                   sp->_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
                     sp->_last_scan_rows_num += sp->_chunk_sources[chunk_source_index]->last_scan_rows_num();
                 }
 

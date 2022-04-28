@@ -28,8 +28,8 @@ public:
     virtual ~DriverExecutor() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
-    virtual void submit(DriverRawPtr driver) {};
-    virtual void cancel(DriverRawPtr driver) {};
+    virtual void submit(DriverRawPtr driver){};
+    virtual void cancel(DriverRawPtr driver){};
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but

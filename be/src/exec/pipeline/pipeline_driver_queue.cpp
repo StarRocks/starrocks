@@ -26,12 +26,12 @@ void QuerySharedDriverQueue::put(const DriverRawPtr driver) {
 
 void QuerySharedDriverQueue::put(const std::vector<DriverRawPtr>& drivers) {
     std::vector<int> levels(drivers.size());
-    for (int i = 0;i < drivers.size();i ++) {
+    for (int i = 0; i < drivers.size(); i++) {
         levels[i] = _compute_driver_level(drivers[i]);
         drivers[i]->set_driver_queue_level(levels[i]);
     }
     std::lock_guard<std::mutex> lock(_global_mutex);
-    for (int i = 0;i < drivers.size();i ++) {
+    for (int i = 0; i < drivers.size(); i++) {
         _queues[levels[i]].put(drivers[i]);
         drivers[i]->set_in_ready_queue(true);
         _cv.notify_one();

@@ -123,9 +123,9 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
-                                  bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                                  bool build_tie, size_t limit)
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+                                  bool is_asc_order, bool is_null_first, Permutation& permutation, Tie& tie,
+                                  std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _is_asc_order(is_asc_order),

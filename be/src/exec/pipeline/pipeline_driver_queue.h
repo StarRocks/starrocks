@@ -48,7 +48,7 @@ protected:
 // 2. the cancelled drivers have the highest priority and are executed first.
 // The cancelled drivers are all equal and the order of execution is not guaranteed,
 // this may not be a big problem because the finalize operation is fast enough.
-// 
+//
 // We use some data structures to maintain the above properties:
 // 1. std::deque<DriverRawPtr> queue
 //   store the drivers added by PipelineDriverPoller, cancelled driver are added to the head and the others are added to the tail
@@ -108,13 +108,9 @@ public:
         return nullptr;
     }
 
-    inline bool empty() const {
-        return driver_number == 0;
-    }
+    inline bool empty() const { return driver_number == 0; }
 
-    inline size_t size() const {
-        return driver_number;
-    }
+    inline size_t size() const { return driver_number; }
 
     std::deque<DriverRawPtr> queue;
     std::queue<DriverRawPtr> pending_cancel_queue;
