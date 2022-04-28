@@ -131,7 +131,6 @@ set(EXEC_FILES
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
-    pipeline/operator_with_dependency.cpp
     pipeline/limit_operator.cpp
     pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp

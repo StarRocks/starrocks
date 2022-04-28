@@ -70,7 +70,7 @@ public:
     ~TestNormalOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TableFunctionOperator>(this, _id, _plan_node_id, *_tnode);
+        return std::make_shared<TableFunctionOperator>(this, _id, _plan_node_id, driver_sequence, *_tnode);
     }
 
 private:
@@ -155,7 +155,7 @@ void TableFunctionOperatorTest::SetUp() {
 TEST_F(TableFunctionOperatorTest, check_mem_leak) {
     CounterPtr counter_ptr = std::make_shared<Counter>();
     TestNormalOperatorFactory factory(1, 1, counter_ptr, &_tnode);
-    TableFunctionOperator op(&factory, 1, 1, _tnode);
+    TableFunctionOperator op(&factory, 1, 1, 0, _tnode);
     ASSERT_TRUE(op.prepare(&_runtime_state).ok());
     op.close(&_runtime_state);
 }

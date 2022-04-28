@@ -23,7 +23,7 @@ public:
 
 class HdfsScanOperator final : public ScanOperator {
 public:
-    HdfsScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
+    HdfsScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~HdfsScanOperator() override = default;
 

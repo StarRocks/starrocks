@@ -25,9 +25,9 @@ namespace starrocks::pipeline {
 // for each child, and a ExceptOutputSourceOperator.
 class ExceptBuildSinkOperator final : public Operator {
 public:
-    ExceptBuildSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    ExceptBuildSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                             std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs)
-            : Operator(factory, id, "except_build_sink", plan_node_id),
+            : Operator(factory, id, "except_build_sink", plan_node_id, driver_sequence),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs) {
         _except_ctx->ref();
@@ -70,8 +70,9 @@ public:
               _dst_exprs(dst_exprs) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ExceptBuildSinkOperator>(
-                this, _id, _plan_node_id, _except_partition_ctx_factory->get_or_create(driver_sequence), _dst_exprs);
+        return std::make_shared<ExceptBuildSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                         _except_partition_ctx_factory->get_or_create(driver_sequence),
+                                                         _dst_exprs);
     }
 
     Status prepare(RuntimeState* state) override;

@@ -28,7 +28,7 @@ public:
 
 class OlapScanOperator final : public ScanOperator {
 public:
-    OlapScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
+    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~OlapScanOperator() override = default;
 

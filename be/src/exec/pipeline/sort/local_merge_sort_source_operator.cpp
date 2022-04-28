@@ -40,7 +40,8 @@ bool LocalMergeSortSourceOperator::is_finished() const {
 }
 OperatorPtr LocalMergeSortSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto sort_context = _sort_context_factory->create(driver_sequence);
-    return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, sort_context.get());
+    return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                          sort_context.get());
 }
 
 } // namespace starrocks::pipeline
