@@ -43,6 +43,8 @@ class TimestampValue;
  */
 class DateValue {
 public:
+    using type = JulianDate;
+
     inline static DateValue create(int year, int month, int day);
 
 public:
