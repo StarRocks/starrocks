@@ -4,6 +4,7 @@ package com.starrocks.sql;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -166,6 +167,7 @@ public class StatementPlanner {
 
     public static boolean supportedByNewParser(StatementBase statement) {
         return  isNewAlterTable(statement)
+                || AlterSystemStmt.isSupportNewAnalyzer(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
@@ -193,6 +195,7 @@ public class StatementPlanner {
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return isNewAlterTable(statement)
+                || AlterSystemStmt.isSupportNewAnalyzer(statement)
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
