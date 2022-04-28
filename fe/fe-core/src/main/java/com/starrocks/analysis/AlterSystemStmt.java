@@ -57,6 +57,7 @@ public class AlterSystemStmt extends DdlStmt {
                 || (alterClause instanceof DropObserverClause)
                 || (alterClause instanceof AddFollowerClause)
                 || (alterClause instanceof DropFollowerClause)
+                || (alterClause instanceof UpdateFrontendAddressClause)
                 || (alterClause instanceof ModifyBrokerClause)
                 || (alterClause instanceof AlterLoadErrorUrlClause));
 

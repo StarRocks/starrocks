@@ -666,7 +666,7 @@ public class SystemInfoService {
         this.idToReportVersionRef = null;
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean needTransToIp) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -685,15 +685,13 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host)) {
+            if (!InetAddressValidator.getInstance().isValid(host) && needTransToIp && !Config.enable_fqdn) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
                 // UnknownHostException
                 InetAddress inetAddress = InetAddress.getByName(host);
-                if (!Config.enable_fqdn) {
-                    host = inetAddress.getHostAddress();
-                }
+                host = inetAddress.getHostAddress();
             }
 
             // validate port

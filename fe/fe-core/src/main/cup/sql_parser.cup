@@ -269,7 +269,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_UNCOMMITTED, KW_UNBOUNDED, KW_UNION, KW_UNIQUE, KW_UNSIGNED, KW_USE, KW_USER, KW_USING, KW_UNINSTALL,
     KW_VALUE, KW_VALUES, KW_VARCHAR, KW_VARIABLES, KW_VERBOSE, KW_VIEW,
     KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
-    KW_YEAR, KW_EVERY, KW_BACKEND_HOST;
+    KW_YEAR, KW_EVERY, KW_BACKEND_HOST, KW_FRONTEND_HOST;
 
 terminal COMMA, DOT, DOTDOTDOT, AT, STAR, LPAREN, RPAREN, COLON, SEMICOLON, LBRACE, RBRACE, LBRACKET, RBRACKET, DIVIDE, MOD, ADD, SUBTRACT;
 terminal BITAND, BITOR, BITXOR, BITNOT;
@@ -1082,6 +1082,10 @@ alter_system_clause ::=
     | KW_DROP KW_FOLLOWER STRING_LITERAL:hostPort
     {:
         RESULT = new DropFollowerClause(hostPort);
+    :}
+    | KW_MODIFY KW_FRONTEND_HOST STRING_LITERAL:discardedHostPort KW_TO STRING_LITERAL:newlyEffectiveHostPort
+    {:
+        RESULT = new UpdateFrontendAddressClause(discardedHostPort, newlyEffectiveHostPort);
     :}
     /* Broker manipulation */
     | KW_ADD KW_BROKER ident_or_text:brokerName string_list:hostPorts

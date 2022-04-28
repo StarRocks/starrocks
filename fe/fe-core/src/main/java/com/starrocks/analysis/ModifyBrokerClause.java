@@ -87,7 +87,7 @@ public class ModifyBrokerClause extends AlterClause {
         if (op != ModifyOp.OP_DROP_ALL) {
             hostPortPairs = Sets.newHashSet();
             for (String hostPort : hostPorts) {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, true);
                 hostPortPairs.add(pair);
             }
             Preconditions.checkState(!hostPortPairs.isEmpty());

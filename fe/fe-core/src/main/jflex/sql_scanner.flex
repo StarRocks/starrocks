@@ -202,6 +202,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("from", new Integer(SqlParserSymbols.KW_FROM));
         keywordMap.put("frontend", new Integer(SqlParserSymbols.KW_FRONTEND));
         keywordMap.put("frontends", new Integer(SqlParserSymbols.KW_FRONTENDS));
+        keywordMap.put("frontend_host", new Integer(SqlParserSymbols.KW_FRONTEND_HOST));
         keywordMap.put("full", new Integer(SqlParserSymbols.KW_FULL));
         keywordMap.put("fn", new Integer(SqlParserSymbols.KW_FN));
         keywordMap.put("function", new Integer(SqlParserSymbols.KW_FUNCTION));

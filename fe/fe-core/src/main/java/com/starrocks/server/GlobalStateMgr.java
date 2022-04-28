@@ -76,6 +76,7 @@ import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
+import com.starrocks.analysis.UpdateFrontendAddressClause;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
@@ -1734,6 +1735,35 @@ public class GlobalStateMgr {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
 
+    public void updateFrontendHost(UpdateFrontendAddressClause updateFrontendAddressClause) throws DdlException {
+        Pair<String, Integer> dPair = updateFrontendAddressClause.getDiscardedHostPort();
+        Pair<String, Integer> nPair = updateFrontendAddressClause.getNewlyEffectiveHostPort();
+        if (dPair.first.equals(selfNode.first) && dPair.second == selfNode.second && feType == FrontendNodeType.MASTER) {
+            throw new DdlException("can not modify current master node.");
+        }
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            Frontend fe = checkFeExist(dPair.first, dPair.second);
+            if (fe == null) {
+                throw new DdlException("frontend does not exist[" + dPair.first + ":" + dPair.second + "]");
+            }
+
+            // step 1
+            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(fe.getNodeName(), nPair.first, nPair.second);
+            // step 2
+            fe.updateHostAndPort(nPair.first, nPair.second);
+            frontends.put(fe.getNodeName(), fe);
+            
+            // editLog
+            editLog.logUpdateFrontend(fe);
+            LOG.info("send update fe editlog success, fe info is [{}]", fe.toString());
+        } finally {
+            unlock();
+        }
+    }
+
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
         nodeMgr.dropFrontend(role, host, port);
     }
@@ -2257,6 +2287,23 @@ public class GlobalStateMgr {
 
     public void replayDropFrontend(Frontend frontend) {
         nodeMgr.replayDropFrontend(frontend);
+    }
+
+    public void replayUpdateFrontend(Frontend frontend) {
+        tryLock(true);
+        try {
+            Frontend fe = frontends.get(frontend.getNodeName());
+            if (fe == null) {
+                LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
+                System.exit(-1);
+                return;
+            }
+            fe.updateHostAndPort(frontend.getHost(), frontend.getEditLogPort());
+            frontends.put(fe.getNodeName(), fe);
+            LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
+        } finally {
+            unlock();
+        }
     }
 
     public int getClusterId() {
