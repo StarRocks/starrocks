@@ -42,6 +42,8 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                         .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
+        boolean hasGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
+
         boolean hasMultiColumns = false;
         for (CallOperator callOperator : distinctAggOperatorList) {
             if (callOperator.getChildren().size() > 1) {
@@ -50,8 +52,16 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
             }
         }
 
-        return (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
+        boolean isCheck = hasGroup && (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
+        if (isCheck) {
+            context.getSessionVariable().setCboCteReuse(true);
+            context.getCteContext().setEnableCTE(true);
+            // add forced identifier
+            context.getCteContext().setForcedCTE(true);
+            context.getSessionVariable().setEnablePipelineEngine(true);
+        }
+        return isCheck;
     }
 
     @Override
@@ -83,14 +93,8 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
                 originalAllAggregationOperator,
                 cteId);
 
-
         anchorOperatorInputsList.add(inputs);
 
-        context.getSessionVariable().setCboCteReuse(true);
-        context.getCteContext().setEnableCTE(true);
-        // add forced identifier
-        context.getCteContext().setForcedCTE(true);
-        context.getSessionVariable().setEnablePipelineEngine(true);
         List<OptExpression> result =
                 Lists.newArrayList(OptExpression.create(anchorOperator, anchorOperatorInputsList));
 

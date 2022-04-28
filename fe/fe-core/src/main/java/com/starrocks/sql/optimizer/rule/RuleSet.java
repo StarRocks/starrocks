@@ -261,14 +261,8 @@ public class RuleSet {
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
                 new RewriteMultiDistinctRule(),
+                new RewriteMultiDistinctOptimizedRule(),
                 new RewriteDuplicateAggregateFnRule()
-        ));
-
-        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE_OPTIMIZED, ImmutableList.of(
-                new RewriteBitmapCountDistinctRule(),
-                new RewriteHllCountDistinctRule(),
-                new RewriteDuplicateAggregateFnRule(),
-                new RewriteMultiDistinctOptimizedRule()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
