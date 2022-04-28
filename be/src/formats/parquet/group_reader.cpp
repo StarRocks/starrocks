@@ -5,6 +5,7 @@
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/types.h"
 #include "simd/simd.h"

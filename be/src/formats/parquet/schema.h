@@ -79,6 +79,8 @@ public:
         return nullptr;
     }
 
+    void get_field_names(std::unordered_set<std::string>* names) const;
+
 private:
     void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                        ParquetField* field);
