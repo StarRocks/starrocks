@@ -131,6 +131,8 @@ private:
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
+    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
 ConnectorScanNode::~ConnectorScanNode() {
@@ -141,9 +143,6 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
-
-    auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
-    _data_source_provider = c->create_data_source_provider(this, tnode);
     return Status::OK();
 }
 
@@ -199,7 +198,6 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TS
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
-    data_source->init();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source)));
     scanner->init(state);
     _push_pending_scanner(scanner);

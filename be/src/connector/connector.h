@@ -22,7 +22,6 @@ namespace connector {
 class DataSource {
 public:
     virtual ~DataSource() = default;
-    virtual Status init() { return Status::OK(); }
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }

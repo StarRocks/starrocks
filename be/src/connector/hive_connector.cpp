@@ -34,7 +34,7 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
-Status HiveDataSource::init() {
+Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
     // otherwise be will crash because of failure to create JVM.
@@ -42,10 +42,6 @@ Status HiveDataSource::init() {
     if (p == nullptr) {
         return Status::RuntimeError("env 'JAVA_HOME' is not set");
     }
-    return Status::OK();
-}
-
-Status HiveDataSource::open(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (_scan_range.file_length == 0) {
         _no_data = true;
