@@ -29,7 +29,7 @@ public class ConnectorManager {
      * @return a connector instance
      */
     public Connector createConnector(String connectorName, Map<String, String> properties) {
-        Connector.Context context = new Connector.Context(properties);
+        ConnectorContext context = new ConnectorContext(properties);
 
         ConnectorFactory connectorFactory = connectorFactories.get(connectorName);
         return connectorFactory.createConnector(context);

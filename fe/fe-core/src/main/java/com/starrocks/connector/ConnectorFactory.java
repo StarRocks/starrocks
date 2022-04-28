@@ -5,13 +5,15 @@ package com.starrocks.connector;
 public interface ConnectorFactory {
     /**
      * create a connector instance
+     *
      * @param context - encapsulate all information needed to create a connector
      * @return a connector instance
      */
-    Connector createConnector(Connector.Context context);
+    Connector createConnector(ConnectorContext context);
 
     /**
      * a unique string represents a kinds of connector
+     *
      * @return a string of connector name
      */
     String name();
