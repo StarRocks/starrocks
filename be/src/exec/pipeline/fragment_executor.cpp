@@ -129,6 +129,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->init_mem_trackers(query_id);
+    int func_version = request.__isset.func_version ? request.func_version : 2;
+    runtime_state->set_func_version(func_version);
     runtime_state->set_be_number(backend_num);
 
     // RuntimeFilterWorker::open_query is idempotent

@@ -256,5 +256,8 @@ public:
 
     std::string get_name() const override { return "avg"; }
 };
+template <PrimitiveType PT, typename = DecimalPTGuard<PT>>
+using DecimalAvgAggregateFunction =
+        AvgAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
 } // namespace starrocks::vectorized

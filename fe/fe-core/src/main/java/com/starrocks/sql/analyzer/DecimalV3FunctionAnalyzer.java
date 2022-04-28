@@ -68,14 +68,11 @@ public class DecimalV3FunctionAnalyzer {
                 return ScalarType.INVALID;
             }
             ScalarType argScalarType = (ScalarType) argType;
-            // use a wider type to prevent accumulation from overflowing
-            PrimitiveType widerPrimitiveType = PrimitiveType.getWiderDecimalV3Type(
-                    PrimitiveType.DECIMAL64, argScalarType.getPrimitiveType());
-            int precision = PrimitiveType.getMaxPrecisionOfDecimal(widerPrimitiveType);
+            int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
             int scale = argScalarType.getScalarScale();
             // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
             //  casting the narrower type to the wider type is sound and efficient.
-            return ScalarType.createDecimalV3Type(widerPrimitiveType, precision, scale);
+            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
         }
 
         boolean hasDecimalImpl = false;

@@ -123,7 +123,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
-                                                            is_input_nullable);
+                                                            is_input_nullable, state->func_version());
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -150,7 +150,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable);
+                                                            is_input_nullable, state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));

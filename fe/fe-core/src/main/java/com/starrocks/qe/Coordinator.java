@@ -1958,6 +1958,7 @@ public class Coordinator {
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
                 params.setResource_info(tResourceInfo);
+                params.setFunc_version(3);
                 params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);
                 params.params.setFragment_instance_id(instanceExecParam.instanceId);
