@@ -645,7 +645,7 @@ public class AlterTest {
 
         String dropFollowerSql = "ALTER SYSTEM DROP FOLLOWER \"192.168.1.1:8080\"";
         AlterSystemStmt dropFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropFollowerSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(dropFollowerStmt);
+//        GlobalStateMgr.getCurrentState().alterCluster(dropFollowerStmt);
 
 
     }
