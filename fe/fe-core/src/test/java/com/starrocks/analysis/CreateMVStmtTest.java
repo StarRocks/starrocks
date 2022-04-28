@@ -148,31 +148,28 @@ public class CreateMVStmtTest {
 
     @Test
     public void testCreateMVColumns() throws Exception {
-        String columnName1 = "k1";
-        String columnName2 = "v1";
-        String columnName3 = "k1";
-        String sql = "create materialized view star_view as select k1, v1 from tbl1;";
+        String sql = "create materialized view star_view as select k1, sum(v1), min(v2) from agg_tbl group by k1;";
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, starRocksAssert.getCtx());
 
         Assert.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
         Assert.assertEquals(3, mvColumns.size());
+
         MVColumnItem mvColumn0 = mvColumns.get(0);
         Assert.assertTrue(mvColumn0.isKey());
         Assert.assertFalse(mvColumn0.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName1, mvColumn0.getName());
         Assert.assertEquals(null, mvColumn0.getAggregationType());
+
         MVColumnItem mvColumn1 = mvColumns.get(1);
-        Assert.assertTrue(mvColumn1.isKey());
+        Assert.assertFalse(mvColumn1.isKey());
         Assert.assertFalse(mvColumn1.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName2, mvColumn1.getName());
-        Assert.assertEquals(null, mvColumn1.getAggregationType());
+        Assert.assertEquals(AggregateType.SUM, mvColumn1.getAggregationType());
+
         MVColumnItem mvColumn2 = mvColumns.get(2);
         Assert.assertFalse(mvColumn2.isKey());
         Assert.assertFalse(mvColumn2.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName3, mvColumn2.getName());
-        Assert.assertEquals(AggregateType.SUM, mvColumn2.getAggregationType());
+        Assert.assertEquals(AggregateType.MIN, mvColumn2.getAggregationType());
         Assert.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
     }
 
