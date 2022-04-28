@@ -14,17 +14,18 @@ public class ConnectorManager {
 
     /**
      * add connectorFactory
+     *
      * @param connectorFactory - a connector factory instance
      */
-    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory)
-    {
+    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory) {
         connectorFactories.putIfAbsent(connectorFactory.name(), connectorFactory);
     }
 
     /**
      * create a connector provided by connector name
+     *
      * @param connectorName - a string specify a kind of connector
-     * @param properties - a map of string kv for instantiate a connector
+     * @param properties    - a map of string kv for instantiate a connector
      * @return a connector instance
      */
     public synchronized Connector createConnector(String connectorName, Map<String, String> properties) {
