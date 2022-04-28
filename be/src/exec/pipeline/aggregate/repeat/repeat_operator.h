@@ -14,14 +14,14 @@ namespace pipeline {
 using namespace vectorized;
 class RepeatOperator : public Operator {
 public:
-    RepeatOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    RepeatOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                    const std::vector<std::set<SlotId>>& slot_id_set_list, const std::set<SlotId>& all_slot_ids,
                    const std::vector<std::vector<SlotId>>& null_slot_ids, const std::vector<int64_t>& repeat_id_list,
                    uint64_t repeat_times_required, uint64_t repeat_times_last, const ColumnPtr& column_null,
                    const std::vector<std::vector<ColumnPtr>>& grouping_columns,
                    const std::vector<std::vector<int64_t>>& grouping_list, const TupleId& output_tuple_id,
                    const TupleDescriptor* tuple_desc, const std::vector<ExprContext*>& conjunct_ctxs)
-            : Operator(factory, id, "repeat", plan_node_id),
+            : Operator(factory, id, "repeat", plan_node_id, driver_sequence),
               _slot_id_set_list(slot_id_set_list),
               _all_slot_ids(all_slot_ids),
               _null_slot_ids(null_slot_ids),
@@ -139,8 +139,8 @@ public:
     ~RepeatOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<RepeatOperator>(this, _id, _plan_node_id, _slot_id_set_list, _all_slot_ids,
-                                                _null_slot_ids, _repeat_id_list, _repeat_times_required,
+        return std::make_shared<RepeatOperator>(this, _id, _plan_node_id, driver_sequence, _slot_id_set_list,
+                                                _all_slot_ids, _null_slot_ids, _repeat_id_list, _repeat_times_required,
                                                 _repeat_times_last, _column_null, _grouping_columns, _grouping_list,
                                                 _output_tuple_id, _tuple_desc, _conjunct_ctxs);
     }
