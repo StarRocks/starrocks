@@ -1,30 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exec/vectorized/connector_scan_node.h"
+
 #include <atomic>
 #include <memory>
 
-// #include "env/env.h"
-// #include "exec/pipeline/hdfs_scan_operator.h"
-// #include "exec/vectorized/hdfs_scan_node.h"
-// #include "exec/vectorized/hdfs_scanner.h"
-// #include "exec/vectorized/hdfs_scanner_orc.h"
-// #include "exec/vectorized/hdfs_scanner_parquet.h"
-// #include "exec/vectorized/hdfs_scanner_text.h"
-// #include "exprs/expr.h"
-// #include "exprs/expr_context.h"
-// #include "exprs/vectorized/runtime_filter.h"
-// #include "fmt/core.h"
-// #include "glog/logging.h"
-// #include "gutil/map_util.h"
-// #include "runtime/hdfs/hdfs_fs_cache.h"
-// #include "runtime/runtime_state.h"
-// #include "storage/chunk_helper.h"
-// #include "util/defer_op.h"
-// #include "util/hdfs_util.h"
-
 #include "common/config.h"
 #include "exec/pipeline/connector_scan_operator.h"
-#include "exec/vectorized/connector_scan_node.h"
 #include "runtime/current_thread.h"
 #include "util/priority_thread_pool.hpp"
 
