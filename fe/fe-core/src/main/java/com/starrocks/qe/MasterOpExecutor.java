@@ -24,11 +24,11 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.thrift.FrontendService;
+import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -42,6 +42,7 @@ import java.nio.ByteBuffer;
 public class MasterOpExecutor {
     private static final Logger LOG = LogManager.getLogger(MasterOpExecutor.class);
 
+    private static final int RETRY_TIMES = 2;
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private final ConnectContext ctx;
@@ -51,7 +52,7 @@ public class MasterOpExecutor {
     // the total time of thrift connectTime add readTime and writeTime
     private int thriftTimeoutMs;
 
-    private boolean shouldNotRetry;
+    private boolean isQuery;
 
     public MasterOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status, boolean isQuery) {
         this(null, originStmt, ctx, status, isQuery);
@@ -67,15 +68,16 @@ public class MasterOpExecutor {
             this.waitTimeoutMs = 0;
         }
         this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
-        // if isQuery=false, we shouldn't retry twice when catch exception because of Idempotency
-        this.shouldNotRetry = !isQuery;
+        this.isQuery = isQuery;
         this.parsedStmt = parsedStmt;
     }
 
     public void execute() throws Exception {
         forward();
-        LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-        ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
+            ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        }
 
         if (result.state != null) {
             MysqlStateType state = MysqlStateType.fromString(result.state);
@@ -109,17 +111,6 @@ public class MasterOpExecutor {
 
     // Send request to Master
     private void forward() throws Exception {
-        String masterHost = ctx.getGlobalStateMgr().getMasterIp();
-        int masterRpcPort = ctx.getGlobalStateMgr().getMasterRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
-
-        FrontendService.Client client = null;
-        try {
-            client = ClientPool.frontendPool.borrowObject(thriftAddress, thriftTimeoutMs);
-        } catch (Exception e) {
-            // may throw NullPointerException. add err msg
-            throw new Exception("Failed to get master client.", e);
-        }
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(ctx.getClusterName());
         params.setSql(originStmt.originStmt);
@@ -142,32 +133,24 @@ public class MasterOpExecutor {
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
+        for (int i = 0; i < RETRY_TIMES; i++) {
+            TNetworkAddress thriftAddress = new TNetworkAddress(ctx.getGlobalStateMgr().getMasterIp(),
+                    ctx.getGlobalStateMgr().getMasterRpcPort());
+            LOG.info("Forward statement {} to Master {}, retried times: {}", ctx.getStmtId(), thriftAddress, i);
+            try {
+                result = FrontendServiceProxy.call(thriftAddress, thriftTimeoutMs,
+                        client -> client.forward(params));
+                break;
+            } catch (TTransportException e) {
+                LOG.warn("Forward statement {} to Master {} failed, error type {}",
+                        ctx.getStmtId(), thriftAddress, e.getType(), e);
 
-        boolean isReturnToPool = false;
-        try {
-            result = client.forward(params);
-            isReturnToPool = true;
-        } catch (TTransportException e) {
-            LOG.warn("Forward statement {} to Master {} failed, error type {}",
-                    ctx.getStmtId(), thriftAddress, e.getType(), e);
-            boolean ok = ClientPool.frontendPool.reopen(client, thriftTimeoutMs);
-            if (!ok) {
-                throw e;
-            }
-            // NOTE: master execute timeout will return TTransportException.UNKNOWN not TTransportException.TIMED_OUT
-            if (shouldNotRetry || e.getType() == TTransportException.TIMED_OUT) {
-                throw e;
-            } else {
-                LOG.info("Retry Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
-                result = client.forward(params);
-                isReturnToPool = true;
-            }
-        } finally {
-            if (isReturnToPool) {
-                ClientPool.frontendPool.returnObject(thriftAddress, client);
-            } else {
-                ClientPool.frontendPool.invalidateObject(thriftAddress, client);
+                // END_OF_FILE means server is stopped, only retry on this case
+                if (!isQuery && e.getType() != TTransportException.END_OF_FILE) {
+                    break;
+                } else {
+                    Thread.sleep(10000);
+                }
             }
         }
     }

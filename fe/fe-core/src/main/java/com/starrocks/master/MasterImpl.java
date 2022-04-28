@@ -1202,8 +1202,8 @@ public class MasterImpl {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("beginRemoteTxn as follower, forward it to master. Label: {}, master: {}",
-                        request.getLabel(), addr.toString());
-                response = FrontendServiceProxy.call(addr, 10000,
+                         request.getLabel(), addr.toString());
+                response = FrontendServiceProxy.call(addr, 10000, 3,
                         client -> client.beginRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during beginRemoteTxn, label: {}, exception: {}",
@@ -1256,8 +1256,8 @@ public class MasterImpl {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
-                        request.getTxn_id(), addr.toString());
-                response = FrontendServiceProxy.call(addr, 10000,
+                         request.getTxn_id(), addr.toString());
+                response = FrontendServiceProxy.call(addr, 10000, 3,
                         client -> client.commitRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during commitRemoteTxn, txn_id: {}, exception: {}",
@@ -1319,8 +1319,8 @@ public class MasterImpl {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("abortRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
-                        request.getTxn_id(), addr.toString());
-                response = FrontendServiceProxy.call(addr, 10000,
+                         request.getTxn_id(), addr.toString());
+                response = FrontendServiceProxy.call(addr, 10000, 3,
                         client -> client.abortRemoteTxn(request));
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during abortRemoteTxn, txn_id: {}, exception: {}",
