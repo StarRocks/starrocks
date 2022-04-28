@@ -16,10 +16,10 @@ TEST(VersionGraphTest, capture) {
         rs_meta.back()->set_end_version(i);
     }
 
-    for (int i = 0; i < 10; i=i+2) {
+    for (int i = 0; i < 10; i = i + 2) {
         rs_meta.emplace_back(std::make_shared<RowsetMeta>());
         rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i+1);
+        rs_meta.back()->set_end_version(i + 1);
     }
 
     rs_meta.emplace_back(std::make_shared<RowsetMeta>());
@@ -118,7 +118,7 @@ TEST(VersionGraphTest, capture) {
         EXPECT_EQ(graph.capture_consistent_versions(Version(0, 12), &version_path).ok(), false);
     }
 
-    graph.add_version_to_graph(Version(10,10));
+    graph.add_version_to_graph(Version(10, 10));
 
     {
         std::vector<Version> version_path;
@@ -150,7 +150,7 @@ TEST(VersionGraphTest, capture) {
         EXPECT_EQ(version_path[4].second, 11);
     }
 
-    EXPECT_EQ(graph.delete_version_from_graph(Version(1,1)).ok(), true);
+    EXPECT_EQ(graph.delete_version_from_graph(Version(1, 1)).ok(), true);
 
     {
         std::vector<Version> version_path;
@@ -168,7 +168,7 @@ TEST(VersionGraphTest, capture) {
         EXPECT_EQ(version_path[4].second, 11);
     }
 
-    EXPECT_EQ(graph.delete_version_from_graph(Version(8,9)).ok(), true);
+    EXPECT_EQ(graph.delete_version_from_graph(Version(8, 9)).ok(), true);
 
     {
         std::vector<Version> version_path;
@@ -188,7 +188,7 @@ TEST(VersionGraphTest, capture) {
         EXPECT_EQ(version_path[5].second, 11);
     }
 
-    EXPECT_EQ(graph.delete_version_from_graph(Version(10,10)).ok(), true);
+    EXPECT_EQ(graph.delete_version_from_graph(Version(10, 10)).ok(), true);
 
     {
         std::vector<Version> version_path;
