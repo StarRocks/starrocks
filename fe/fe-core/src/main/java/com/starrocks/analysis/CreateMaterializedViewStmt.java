@@ -163,7 +163,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     + " limit " + selectStmt.getLimit());
         }
         for (MVColumnItem mvColumnItem : mvColumnItemList) {
-            if (!this.isReplay && mvColumnItem.isKey() && mvColumnItem.getType().isFloatingPointType()) {
+            if (!this.isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
                 throw new AnalysisException(
                         String.format("Invalid data type of materialized key column '%s': '%s'",
                                 mvColumnItem.getName(), mvColumnItem.getType()));
@@ -353,7 +353,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     }
                     break;
                 }
-                if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                if (!column.getType().canBeMVKey()) {
                     break;
                 }
                 if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
