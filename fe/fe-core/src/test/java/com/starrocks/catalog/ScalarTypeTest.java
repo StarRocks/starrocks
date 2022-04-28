@@ -154,8 +154,14 @@ public class ScalarTypeTest {
 
     @Test
     public void testInvalidType() {
+        // deserialize a not exist type
         String jsonStr = "{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\",\"len\":65530,\"precision\":0,\"scale\":0}";
         ScalarType type = GsonUtils.GSON.fromJson(jsonStr, ScalarType.class);
+        Assert.assertEquals(PrimitiveType.INVALID_TYPE, type.getPrimitiveType());
+
+        // deserialize a null type
+        jsonStr = "{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\",\"len\":65530,\"precision\":0,\"scale\":0}";
+        type = GsonUtils.GSON.fromJson(jsonStr, ScalarType.class);
         Assert.assertEquals(PrimitiveType.INVALID_TYPE, type.getPrimitiveType());
     }
 }
