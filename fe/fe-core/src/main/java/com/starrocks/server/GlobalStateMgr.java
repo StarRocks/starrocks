@@ -6796,7 +6796,7 @@ public class GlobalStateMgr {
             request.setTable_name(tableName);
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout, 3,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -7253,6 +7253,7 @@ public class GlobalStateMgr {
                         .call(new TNetworkAddress(fe.getHost(),
                                         fe.getRpcPort()),
                                 timeout,
+                                3,
                                 client -> client.setConfig(request)
                         );
                 TStatus status = response.getStatus();
