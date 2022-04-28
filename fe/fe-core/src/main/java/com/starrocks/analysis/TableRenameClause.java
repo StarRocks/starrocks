@@ -22,14 +22,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 
-import java.util.Map;
-
-// rename table
 public class TableRenameClause extends AlterTableClause {
-    private String newTableName;
+    private final String newTableName;
 
     public TableRenameClause(String newTableName) {
         super(AlterOpType.RENAME);
@@ -39,25 +35,6 @@ public class TableRenameClause extends AlterTableClause {
 
     public String getNewTableName() {
         return newTableName;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
-    }
-
-    @Override
-    public String toSql() {
-        return "RENAME " + newTableName;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

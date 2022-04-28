@@ -116,4 +116,15 @@ public class AlterTableStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterTableStatement(this, context);
     }
+
+    public static boolean isSupportNewPlanner(StatementBase statement) {
+        return statement instanceof AlterTableStmt &&
+                ((AlterTableStmt) statement).getOps().stream().allMatch(AlterTableStmt::isNewAlterTableClause);
+    }
+
+    private static boolean isNewAlterTableClause(AlterClause clause) {
+        return clause instanceof CreateIndexClause
+                || clause instanceof DropIndexClause
+                || clause instanceof TableRenameClause;
+    }
 }
