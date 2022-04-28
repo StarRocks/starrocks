@@ -625,27 +625,21 @@ public class AlterTest {
 
         String addBackendSql = "ALTER SYSTEM ADD BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
         AlterSystemStmt addBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addBackendSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(addBackendStmt);
 
         String dropBackendSql = "ALTER SYSTEM DROP BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
         AlterSystemStmt dropBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropBackendSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(dropBackendStmt);
 
         String addObserverSql = "ALTER SYSTEM ADD OBSERVER \"192.168.1.1:8080\"";
         AlterSystemStmt addObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addObserverSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(addObserverStmt);
 
         String dropObserverSql = "ALTER SYSTEM DROP OBSERVER \"192.168.1.1:8080\"";
         AlterSystemStmt dropObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropObserverSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(dropObserverStmt);
 
         String addFollowerSql = "ALTER SYSTEM ADD FOLLOWER \"192.168.1.1:8080\"";
         AlterSystemStmt addFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addFollowerSql, ctx);
-        GlobalStateMgr.getCurrentState().alterCluster(addFollowerStmt);
 
         String dropFollowerSql = "ALTER SYSTEM DROP FOLLOWER \"192.168.1.1:8080\"";
         AlterSystemStmt dropFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropFollowerSql, ctx);
-//        GlobalStateMgr.getCurrentState().alterCluster(dropFollowerStmt);
 
 
     }
