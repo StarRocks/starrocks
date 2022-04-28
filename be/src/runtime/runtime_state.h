@@ -295,7 +295,7 @@ private:
     std::shared_ptr<RuntimeProfile> _profile;
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
-    int _func_version;
+    int _func_version = 0;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
@@ -382,7 +382,7 @@ private:
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;
 
-    RuntimeFilterPort* _runtime_filter_port;
+    RuntimeFilterPort* _runtime_filter_port = nullptr;
 
     vectorized::GlobalDictMaps _query_global_dicts;
     vectorized::GlobalDictMaps _load_global_dicts;
