@@ -675,6 +675,11 @@ public class TabletScheduler extends MasterDaemon {
         Preconditions.checkNotNull(destPath);
         tabletCtx.setDest(destPath.getBeId(), destPath.getPathHash());
 
+        if (Config.recover_with_empty_tablet && tabletCtx.getReplicas().size() == 1) {
+            batchTask.addTask(tabletCtx.createEmptyReplicaAndTask());
+            return;
+        }
+
         // choose a source replica for cloning from
         tabletCtx.chooseSrcReplica(backendsWorkingSlots);
 
