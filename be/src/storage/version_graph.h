@@ -64,14 +64,14 @@ public:
 
 private:
     /// Private method add a version to graph.
-    std::shared_ptr<Vertex>& _add_vertex_to_graph(int64_t vertex_value);
+    std::unique_ptr<Vertex>& _add_vertex_to_graph(int64_t vertex_value);
 
     // OLAP version contains two parts, [start_version, end_version]. In order
     // to construct graph, the OLAP version has two corresponding vertex, one
     // vertex's value is version.start_version, the other is
     // version.end_version + 1.
     // Use adjacency list to describe version graph.
-    std::unordered_map<int64_t, std::shared_ptr<Vertex>> _version_graph;
+    std::unordered_map<int64_t, std::unique_ptr<Vertex>> _version_graph;
 };
 
 /// TimestampedVersion class which is implemented to maintain multi-version path of rowsets.

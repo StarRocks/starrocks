@@ -275,7 +275,7 @@ Status VersionGraph::delete_version_from_graph(const Version& version) {
     return Status::OK();
 }
 
-std::shared_ptr<Vertex>& VersionGraph::_add_vertex_to_graph(int64_t vertex_value) {
+std::unique_ptr<Vertex>& VersionGraph::_add_vertex_to_graph(int64_t vertex_value) {
     // Vertex with vertex_value already exists.
     auto iter = _version_graph.find(vertex_value);
     if (iter != _version_graph.end()) {
@@ -283,7 +283,7 @@ std::shared_ptr<Vertex>& VersionGraph::_add_vertex_to_graph(int64_t vertex_value
         return iter->second;
     }
 
-    _version_graph[vertex_value] = std::make_shared<Vertex>(vertex_value);
+    _version_graph[vertex_value] = std::make_unique<Vertex>(vertex_value);
 
     return _version_graph[vertex_value];
 }
@@ -306,10 +306,16 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
     }
 
     int64_t end_value = spec_version.second + 1;
-    auto cur_vertex = start_vertex_iter->second;
-    while (cur_vertex->value != end_value) {
+    auto cur_vertex_value = start_vertex_iter->second->value;
+    while (cur_vertex_value != end_value) {
         int64_t next_vertex_value = -1;
-        for (const auto edge : cur_vertex->edges) {
+        auto cur_vertex_iter = _version_graph.find(cur_vertex_value);
+        if (cur_vertex_iter == _version_graph.end()) {
+            LOG(WARNING) << "fail to find path in version_graph. "
+                         << "version: " << cur_vertex_value;
+            return Status::NotFound("Version not found");
+        }
+        for (const auto edge : cur_vertex_iter->second->edges) {
             auto edge_iter = _version_graph.find(edge);
             if (edge_iter == _version_graph.end()) {
                 LOG(WARNING) << "fail to find path in version_graph. "
@@ -319,7 +325,7 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
             auto& vertex = edge_iter->second;
 
             // reverse edge
-            if (vertex->value < cur_vertex->value) {
+            if (vertex->value < cur_vertex_value) {
                 break;
             }
 
@@ -334,15 +340,9 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
 
         if (next_vertex_value != -1) {
             if (version_path != nullptr) {
-                version_path->emplace_back(cur_vertex->value, next_vertex_value - 1);
+                version_path->emplace_back(cur_vertex_value, next_vertex_value - 1);
             }
-            auto iter = _version_graph.find(next_vertex_value);
-            if (iter == _version_graph.end()) {
-                LOG(WARNING) << "fail to find path in version_graph. "
-                             << "version: " << next_vertex_value << " not exists";
-                return Status::NotFound("Version not found");
-            }
-            cur_vertex = iter->second;
+            cur_vertex_value = next_vertex_value;
         } else {
             LOG(WARNING) << "fail to find path in version_graph. "
                          << "spec_version: " << spec_version.first << "-" << spec_version.second;
