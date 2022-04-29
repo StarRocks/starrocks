@@ -101,12 +101,12 @@ StatusOr<vectorized::ChunkPtr> ConnectorChunkSource::get_next_chunk_from_buffer(
     return chunk;
 }
 
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
     }
 
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         vectorized::ChunkPtr chunk;
         _status = _read_chunk(&chunk);
         if (!_status.ok()) {
@@ -120,7 +120,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size
     }
     return _status;
 }
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
                                                                              size_t* num_read_chunks, int worker_id,
                                                                              workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
@@ -128,7 +128,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
     }
 
     int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent);
 
