@@ -134,12 +134,16 @@ public class OlapTable extends Table {
     protected TempPartitions tempPartitions = new TempPartitions();
 
     // bloom filter columns
+    @SerializedName(value = "bfColumns")
     protected Set<String> bfColumns;
 
+    @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
+    @SerializedName(value = "indexes")
     protected TableIndexes indexes;
 
     // In former implementation, base index id is same as table id.
