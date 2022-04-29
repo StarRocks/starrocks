@@ -45,11 +45,7 @@ class BitmapUpdateContext {
 
 public:
     explicit BitmapUpdateContext(rowid_t rid)
-            : _roaring(Roaring::bitmapOf(1, rid)),
-              _previous_size(0),
-              _element_count(1),
-              _size_changed(false),
-              _disable_estimate_size(false){};
+            : _roaring(Roaring::bitmapOf(1, rid)), _previous_size(0), _element_count(1), _size_changed(false){};
 
     Roaring* roaring() { return &_roaring; }
 
@@ -74,18 +70,15 @@ public:
     // Return value in this function indicates whether this BitmapUpdateContext needs to be added to the _late_update_context_vector
     bool update_estimate_size(uint64_t* reverted_index_size) {
         bool need_add = false;
-        if (!_disable_estimate_size) {
-            _element_count++;
-            if (LIKELY(_element_count < estimate_size_threshold)) {
-                *reverted_index_size += sizeof(uint32_t);
-            } else {
-                *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
-                _disable_estimate_size = true;
-                _size_changed = true;
-                need_add = true;
-            }
+        _element_count++;
+        if (_element_count < estimate_size_threshold) {
+            *reverted_index_size += sizeof(uint32_t);
+        } else if (_element_count == estimate_size_threshold) {
+            *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
+            _size_changed = true;
+            need_add = true;
         } else {
-            // Add BitmapUpdateContext to _late_update_context_vector if and only
+            // Add BitmapUpdateContext to _late_update_context_vector iff
             // it hash not been added to _late_update_context_vector before.
             if (!_size_changed) {
                 need_add = true;
@@ -107,7 +100,6 @@ private:
     uint64_t _previous_size;
     uint32_t _element_count;
     bool _size_changed;
-    bool _disable_estimate_size;
 };
 
 template <typename CppType>
