@@ -38,6 +38,7 @@ import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.MaterializedViewManager;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
@@ -396,6 +397,7 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
+    private MaterializedViewManager materializedViewManager;
 
     private TaskManager taskManager;
 
@@ -553,6 +555,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
+        this.materializedViewManager = new MaterializedViewManager();
     }
 
     public static void destroyCheckpoint() {
@@ -703,6 +706,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public MaterializedViewManager getMaterializedViewManager() {
+        return materializedViewManager;
     }
 
     // Use tryLock to avoid potential dead lock

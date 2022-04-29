@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
@@ -48,10 +49,13 @@ import java.util.Set;
 public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
+    @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
+    @SerializedName(value = "idToRange")
     private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
+    @SerializedName(value = "idToTempRange")
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
 
     public RangePartitionInfo() {
