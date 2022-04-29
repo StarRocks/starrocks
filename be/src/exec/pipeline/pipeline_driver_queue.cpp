@@ -92,6 +92,9 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
     if (_is_closed) {
         return;
     }
+    if (!driver->is_in_ready_queue()) {
+        return;
+    }
     int level = driver->get_driver_queue_level();
     _queues[level].cancel(driver);
     _cv.notify_one();
@@ -169,6 +172,9 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
 }
 
 void QuerySharedDriverQueueWithoutLock::cancel(DriverRawPtr driver) {
+    if (!driver->is_in_ready_queue()) {
+        return;
+    }
     int level = driver->get_driver_queue_level();
     _queues[level].cancel(driver);
 }
@@ -259,6 +265,9 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int worker_id) {
 void DriverQueueWithWorkGroup::cancel(DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
     if (_is_closed) {
+        return;
+    }
+    if (!driver->is_in_ready_queue()) {
         return;
     }
     auto* wg = driver->workgroup();

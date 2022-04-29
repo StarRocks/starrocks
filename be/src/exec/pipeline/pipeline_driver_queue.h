@@ -79,7 +79,10 @@ public:
         driver_number++;
     }
 
-    void cancel(const DriverRawPtr driver) { pending_cancel_queue.emplace(driver); }
+    void cancel(const DriverRawPtr driver) {
+        DCHECK(driver->is_in_ready_queue());
+        pending_cancel_queue.emplace(driver);
+    }
 
     DriverRawPtr take() {
         DCHECK(!empty());
