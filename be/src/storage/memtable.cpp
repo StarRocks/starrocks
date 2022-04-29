@@ -24,6 +24,19 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
+bool MemTable::_is_aggregate_needed() {
+    return _keys_type != KeysType::DUP_KEYS;
+}
+
+void MemTable::_init_aggregator_if_needed() {
+    if (_is_aggregate_needed()) {
+        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
+        // which is not suitable for obtaining Chunk from ColumnPool,
+        // otherwise it will take up a lot of memory and may not be released.
+        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
+    }
+}
+
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
                    RowsetWriter* rowset_writer, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
@@ -42,13 +55,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
         _vectorized_schema.append(op_column);
         _has_op_slot = true;
     }
-
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
@@ -63,12 +70,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset
           _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
           _mem_tracker(mem_tracker) {
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::~MemTable() = default;
@@ -161,7 +163,7 @@ Status MemTable::finalize() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
 
-        if (_keys_type != DUP_KEYS) {
+        if (_is_aggregate_needed()) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
                 _merge();
@@ -235,7 +237,7 @@ Status MemTable::flush() {
 }
 
 void MemTable::_merge() {
-    if (_chunk == nullptr || _keys_type == KeysType::DUP_KEYS) {
+    if (_chunk == nullptr || !_is_aggregate_needed()) {
         return;
     }
 
