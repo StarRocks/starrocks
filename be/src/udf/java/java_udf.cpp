@@ -44,25 +44,15 @@ namespace starrocks::vectorized {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
 
-class JavaLocalRefGuard {
-public:
-    JavaLocalRefGuard(jobject handle) : _handle(handle), _env(nullptr) {}
-    JavaLocalRefGuard(jobject handle, JNIEnv* env) : _handle(handle), _env(env) {}
-    JavaLocalRefGuard(const JavaLocalRefGuard& other) = delete;
-    ~JavaLocalRefGuard() {
-        if (_env == nullptr) {
-            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(_handle);
-        } else {
-            _env->DeleteLocalRef(_handle);
-        }
-    }
-
-private:
-    jobject _handle;
-    JNIEnv* _env;
-};
-
-#define LOCAL_REF_GUARD(lref) auto VARNAME_LINENUM(guard) = JavaLocalRefGuard(lref);
+// local object reference guard.
+// The objects inside are automatically call DeleteLocalRef in the life object.
+#define LOCAL_REF_GUARD(lref)                                                \
+    DeferOp VARNAME_LINENUM(guard)([&lref]() {                               \
+        if (lref) {                                                          \
+            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(lref); \
+            lref = nullptr;                                                  \
+        }                                                                    \
+    })
 
 JVMFunctionHelper& JVMFunctionHelper::getInstance() {
     static thread_local std::unique_ptr<JVMFunctionHelper> helper;

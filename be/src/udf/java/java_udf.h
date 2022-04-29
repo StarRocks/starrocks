@@ -185,6 +185,7 @@ private:
     int _capacity;
 };
 
+// A global ref of the guard, handle can be shared across threads
 class JavaGlobalRef {
 public:
     JavaGlobalRef(jobject&& handle) : _handle(std::move(handle)) {}
