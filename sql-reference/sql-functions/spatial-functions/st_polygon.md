@@ -1,16 +1,24 @@
-# ST_Polygon,ST_PolyFromText,ST_PolygonFromText
+# ST_Polygon, ST_PolyFromText, ST_PolygonFromText
 
-## description
+## 功能
 
-### Syntax
+将一个 WKT（Well Known Text）转化为对应的多边形内存形式
+
+## 语法
 
 ```Haskell
-GEOMETRY ST_Polygon(VARCHAR wkt)
+ST_Polygon(wkt)
 ```
 
-将一个WKT（Well Known Text）转化为对应的多边形内存形式
+## 参数说明
 
-## example
+`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 GEOMETRY
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"));
@@ -21,6 +29,6 @@ MySQL > SELECT ST_AsText(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"));
 +------------------------------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_POLYGON,ST_POLYFROMTEXT,ST_POLYGONFROMTEXT,ST,POLYGON,POLYFROMTEXT,POLYGONFROMTEXT
+ST_POLYGON, ST_POLYFROMTEXT, ST_POLYGONFROMTEXT, ST, POLYGON, POLYFROMTEXT, POLYGONFROMTEXT

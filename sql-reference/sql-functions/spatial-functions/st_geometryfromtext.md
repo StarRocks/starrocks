@@ -1,16 +1,24 @@
-# ST_GeometryFromText,ST_GeomFromText
+# ST_GeometryFromText, ST_GeomFromText
 
-## description
+## 功能
 
-### Syntax
+将一个 WKT（Well Known Text）转化为对应的内存的几何形式
+
+## 语法
 
 ```Haskell
-GEOMETRY ST_GeometryFromText(VARCHAR wkt)
+ST_GeometryFromText(wkt)
 ```
 
-将一个WKT（Well Known Text）转化为对应的内存的几何形式
+## 参数说明
 
-## example
+`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 GEOMETRY
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));
@@ -21,6 +29,6 @@ MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));
 +---------------------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_GEOMETRYFROMTEXT,ST_GEOMFROMTEXT,ST,GEOMETRYFROMTEXT,GEOMFROMTEXT
+ST_GEOMETRYFROMTEXT, ST_GEOMFROMTEXT, ST, GEOMETRYFROMTEXT, GEOMFROMTEXT

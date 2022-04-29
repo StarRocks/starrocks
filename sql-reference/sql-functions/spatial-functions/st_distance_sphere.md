@@ -1,26 +1,40 @@
 # ST_Distance_Sphere
 
-## description
+## 功能
 
-### Syntax
+计算地球两点之间的球面距离, 单位是「米」
+
+## 语法
 
 ```Haskell
-DOUBLE ST_Distance_Sphere(DOUBLE x_lng, DOUBLE x_lat, DOUBLE y_lng, DOUBLE x_lat)
+ST_Distance_Sphere(x_lng, x_lat, y_lng, y_lat)
 ```
 
-计算地球两点之间的球面距离，单位是「米」。传入的参数分别为X点的经度，X点的纬度，Y点的经度，Y点的纬度。
+## 参数说明
 
-## example
+`x_lng`: X 点的经度, 支持的数据类型为 DOUBLE
+
+`x_lat`: X 点的纬度, 支持的数据类型为 DOUBLE
+
+`y_lng`: Y 点的经度, 支持的数据类型为 DOUBLE
+
+`y_lat`: Y 点的纬度, 支持的数据类型为 DOUBLE
+
+## 返回值说明
+
+返回值的数据类型为 DOUBLE
+
+## 示例
 
 ```Plain Text
 MySQL > select st_distance_sphere(116.35620117, 39.939093, 116.4274406433, 39.9020987219);
 +----------------------------------------------------------------------------+
 | st_distance_sphere(116.35620117, 39.939093, 116.4274406433, 39.9020987219) |
 +----------------------------------------------------------------------------+
-|                                                         7336.9135549995917 |
+|                                                          7336.913554999592 |
 +----------------------------------------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_DISTANCE_SPHERE,ST,DISTANCE,SPHERE
+ST_DISTANCE_SPHERE, ST, DISTANCE, SPHERE

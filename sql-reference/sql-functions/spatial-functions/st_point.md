@@ -1,18 +1,26 @@
 # ST_Point
 
-## description
+## 功能
 
-### Syntax
+通过给定的 X 坐标值、Y 坐标值返回对应的 Point, 当前这个值只在球面集合上有意义, X/Y 对应的是经度/纬度(longitude/latitude)
+
+## 语法
 
 ```Haskell
-POINT ST_Point(DOUBLE x, DOUBLE y)
+ST_Point(x, y)
 ```
 
-通过给定的X坐标值、Y坐标值返回对应的Point。
-当前这个值只是在球面集合上有意义，X/Y对应的是经度/纬度(longitude/latitude)。
-> 直接select ST_Point()会卡住，慎重！！！
+## 参数说明
 
-## example
+`x`: X 坐标值, 支持数据类型为 DOUBLE
+
+`y`: Y 坐标值, 支持数据类型为 DOUBLE
+
+## 返回值说明
+
+返回值的数据类型为 POINT
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
@@ -23,6 +31,6 @@ MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
 +---------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_POINT,ST,POINT
+ST_POINT, ST, POINT

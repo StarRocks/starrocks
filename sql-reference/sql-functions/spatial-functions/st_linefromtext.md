@@ -1,16 +1,24 @@
-# ST_LineFromText,ST_LineStringFromText
+# ST_LineFromText, ST_LineStringFromText
 
-## description
+## 功能
 
-### Syntax
+将一个 WKT（Well Known Text）转化为一个 Line 形式的内存表现形式
+
+## 语法
 
 ```Haskell
-GEOMETRY ST_LineFromText(VARCHAR wkt)
+ST_LineFromText(wkt)
 ```
 
-将一个WKT（Well Known Text）转化为一个Line形式的内存表现形式
+## 参数说明
 
-## example
+`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 GEOMETRY
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));
@@ -21,6 +29,6 @@ MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));
 +---------------------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_LINEFROMTEXT,ST_LINESTRINGFROMTEXT,ST,LINEFROMTEXT,LINESTRINGFROMTEXT
+ST_LINEFROMTEXT, ST_LINESTRINGFROMTEXT, ST, LINEFROMTEXT, LINESTRINGFROMTEXT

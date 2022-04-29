@@ -1,16 +1,24 @@
 # ST_X
 
-## description
+## 功能
 
-### Syntax
+当 point 是一个合法的 POINT 类型时, 返回对应的 X 坐标值
+
+## 语法
 
 ```Haskell
-DOUBLE ST_X(POINT point)
+ST_X(point)
 ```
 
-当point是一个合法的POINT类型时，返回对应的X坐标值
+## 参数说明
 
-## example
+`point`: 支持的数据类型为 POINT
+
+## 返回值说明
+
+返回值的数据类型为 DOUBLE
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_X(ST_Point(24.7, 56.7));
@@ -21,6 +29,6 @@ MySQL > SELECT ST_X(ST_Point(24.7, 56.7));
 +----------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_X,ST,X
+ST_X, ST, X

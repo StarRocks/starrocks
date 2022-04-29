@@ -1,20 +1,28 @@
 # ST_Circle
 
-## description
+## 功能
 
-### Syntax
+将一个 WKT(Well Known Text)转化为地球球面上的一个圆
+
+## 语法
 
 ```Haskell
-GEOMETRY ST_Circle(DOUBLE center_lng, DOUBLE center_lat, DOUBLE radius)
+ST_Circle(center_lng, center_lat, radius)
 ```
 
-将一个WKT（Well Known Text）转化为地球球面上的一个圆。
+## 参数说明
 
-* center_lng 表示的圆心的经度
-* center_lat 表示的是圆心的纬度
-* radius 表示的是圆的半径，单位是「米」，最大支持9999999
+`center_lng`: 表示圆心的经度, 支持的数据类型为 DOUBLE
 
-## example
+`center_lat`: 表示圆心的纬度, 支持的数据类型为 DOUBLE
+
+`radius`: 表示的是圆的半径, 单位是「米」, 最大支持 9999999, 支持的数据类型为 DOUBLE
+
+## 返回值说明
+
+返回值的数据类型为 GEOMETRY
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Circle(111, 64, 10000));
@@ -25,6 +33,6 @@ MySQL > SELECT ST_AsText(ST_Circle(111, 64, 10000));
 +--------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-ST_CIRCLE,ST,CIRCLE
+ST_CIRCLE, ST, CIRCLE
