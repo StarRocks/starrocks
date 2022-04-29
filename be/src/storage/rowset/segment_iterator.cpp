@@ -17,7 +17,6 @@
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "runtime/external_scan_context_mgr.h"
-#include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -587,10 +586,6 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 }
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
-    // runtime_state will only be set when querying
-    if (_opts.runtime_state != nullptr && _opts.runtime_state->is_cancelled()) {
-        return Status::Cancelled("cancelled state");
-    }
     size_t read_num = 0;
     SparseRange range;
     size_t cur_rowid = _cur_rowid;
@@ -674,7 +669,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     Chunk* chunk = _context->_read_chunk.get();
 
-    while ((chunk_start < chunk_capacity) && _range_iter.has_more()) {
+    while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();

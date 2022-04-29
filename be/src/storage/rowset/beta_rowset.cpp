@@ -243,7 +243,6 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
-    seg_options.runtime_state = options.runtime_state;
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
