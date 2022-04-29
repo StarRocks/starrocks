@@ -1,5 +1,7 @@
 # Spark StarRocks Connector
 
+## Spark StarRocks Connector 总览
+
 Spark StarRocks Connector 可以支持通过 Spark 读取 StarRocks 中存储的数据。
 
 - 当前版本只支持从`StarRocks`中读取数据。
@@ -27,10 +29,10 @@ Spark StarRocks Connector 可以支持通过 Spark 读取 StarRocks 中存储的
 CREATE TEMPORARY VIEW spark_starrocks
 USING starrocks
 OPTIONS(
-  "table.identifier" = "$YOUR_STARROCKS_DATABASE_NAME.$YOUR_STARROCKS_TABLE_NAME",
-  "fenodes" = "$YOUR_STARROCKS_FE_HOSTNAME:$YOUR_STARROCKS_FE_RESTFUL_PORT",
-  "user" = "$YOUR_STARROCKS_USERNAME",
-  "password" = "$YOUR_STARROCKS_PASSWORD"
+  "table.identifier" = "$STARROCKS_DATABASE_NAME.$STARROCKS_TABLE_NAME",
+  "fenodes" = "$STARROCKS_FE_HOSTNAME:$STARROCKS_FE_RESTFUL_PORT",
+  "user" = "$STARROCKS_USERNAME",
+  "password" = "$STARROCKS_PASSWORD"
 );
 
 SELECT * FROM spark_starrocks;
@@ -40,10 +42,10 @@ SELECT * FROM spark_starrocks;
 
 ```scala
 val starrocksSparkDF = spark.read.format("starrocks")
-  .option("starrocks.table.identifier", "$YOUR_STARROCKS_DATABASE_NAME.$YOUR_STARROCKS_TABLE_NAME")
-  .option("starrocks.fenodes", "$YOUR_STARROCKS_FE_HOSTNAME:$YOUR_STARROCKS_FE_RESTFUL_PORT")
-  .option("user", "$YOUR_STARROCKS_USERNAME")
-  .option("password", "$YOUR_STARROCKS_PASSWORD")
+  .option("starrocks.table.identifier", "$STARROCKS_DATABASE_NAME.$STARROCKS_TABLE_NAME")
+  .option("starrocks.fenodes", "$STARROCKS_FE_HOSTNAME:$STARROCKS_FE_RESTFUL_PORT")
+  .option("user", "$STARROCKS_USERNAME")
+  .option("password", "$STARROCKS_PASSWORD")
   .load()
 
 starrocksSparkDF.show(5)
@@ -54,11 +56,11 @@ starrocksSparkDF.show(5)
 ```scala
 import com.starrocks.connector.spark._
 val starrocksSparkRDD = sc.starrocksRDD(
-  tableIdentifier = Some("$YOUR_STARROCKS_DATABASE_NAME.$YOUR_STARROCKS_TABLE_NAME"),
+  tableIdentifier = Some("$STARROCKS_DATABASE_NAME.$STARROCKS_TABLE_NAME"),
   cfg = Some(Map(
-    "starrocks.fenodes" -> "$YOUR_STARROCKS_FE_HOSTNAME:$YOUR_STARROCKS_FE_RESTFUL_PORT",
-    "starrocks.request.auth.user" -> "$YOUR_STARROCKS_USERNAME",
-    "starrocks.request.auth.password" -> "$YOUR_STARROCKS_PASSWORD"
+    "starrocks.fenodes" -> "$STARROCKS_FE_HOSTNAME:$STARROCKS_FE_RESTFUL_PORT",
+    "starrocks.request.auth.user" -> "$STARROCKS_USERNAME",
+    "starrocks.request.auth.password" -> "$STARROCKS_PASSWORD"
   ))
 )
 
