@@ -133,8 +133,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
     _plan->collect_scan_nodes(&scan_nodes);
-    VLOG(1) << "scan_nodes.size()=" << scan_nodes.size();
-    VLOG(1) << "params.per_node_scan_ranges.size()=" << params.per_node_scan_ranges.size();
 
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);

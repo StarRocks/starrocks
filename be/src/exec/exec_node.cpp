@@ -40,13 +40,13 @@
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 #include "exec/vectorized/analytic_node.h"
 #include "exec/vectorized/assert_num_rows_node.h"
+#include "exec/vectorized/connector_scan_node.h"
 #include "exec/vectorized/cross_join_node.h"
 #include "exec/vectorized/dict_decode_node.h"
 #include "exec/vectorized/es_http_scan_node.h"
 #include "exec/vectorized/except_node.h"
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
-#include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/jdbc_scan_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
@@ -469,8 +469,13 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         *node = pool->add(new vectorized::TableFunctionNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::HDFS_SCAN_NODE:
-        *node = pool->add(new vectorized::HdfsScanNode(pool, tnode, descs));
+    case TPlanNodeType::HDFS_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::HIVE;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+    }
         return Status::OK();
     case TPlanNodeType::MYSQL_SCAN_NODE:
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));

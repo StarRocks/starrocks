@@ -2,7 +2,7 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-#include "exec/vectorized/hdfs_scan_node.h"
+#include "exec/exec_node.h"
 
 namespace starrocks::vectorized {
 

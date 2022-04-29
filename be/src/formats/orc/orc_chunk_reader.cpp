@@ -1414,6 +1414,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             _num_rows_filtered = _broker_load_filter->size();
         }
     }
+
     return Status::OK();
 }
 
@@ -1440,8 +1441,9 @@ ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_s
 
 ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
                                      const std::vector<int>* indices) {
-    ChunkPtr cast_chunk = std::make_shared<Chunk>();
     ChunkPtr& src = (*chunk);
+    size_t chunk_size = src->num_rows();
+    ChunkPtr cast_chunk = std::make_shared<Chunk>();
     int column_size = src_slot_descriptors.size();
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
         auto slot = src_slot_descriptors[column_pos];
@@ -1453,7 +1455,8 @@ ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDesc
             src_index = (*indices)[src_index];
         }
         ColumnPtr col = _cast_exprs[src_index]->evaluate(nullptr, src.get());
-        col = ColumnHelper::unfold_const_column(slot->type(), src->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+        DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
     }
     return cast_chunk;

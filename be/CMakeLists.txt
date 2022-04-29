@@ -452,6 +452,7 @@ set(STARROCKS_LINK_LIBS
     Agent
     Common
     Column
+    Connector
     Env
     Exec
     Exprs

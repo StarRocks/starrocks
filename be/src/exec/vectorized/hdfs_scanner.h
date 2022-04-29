@@ -8,8 +8,10 @@
 #include "column/chunk.h"
 #include "env/env.h"
 #include "env/env_hdfs.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
@@ -17,7 +19,6 @@ class FileReader;
 }
 namespace starrocks::vectorized {
 
-class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
