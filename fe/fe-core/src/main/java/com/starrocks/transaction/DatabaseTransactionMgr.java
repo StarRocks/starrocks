@@ -682,6 +682,10 @@ public class DatabaseTransactionMgr {
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
                                         ++successHealthyReplicaNum;
+                                    // replica report version has greater cur transaction commit version
+                                    // This can happen when the BE publish succeeds but fails to send a response to FE
+                                    } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                        ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
                                             && unfinishedBackends.contains(replica.getBackendId())) {
                                         errReplicas.add(replica.getId());
