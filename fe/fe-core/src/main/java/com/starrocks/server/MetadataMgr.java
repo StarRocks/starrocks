@@ -8,12 +8,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import javax.annotation.concurrent.GuardedBy;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
 
-    @GuardedBy("this")
     private final ConcurrentHashMap<String, ConnectorMetadata> connectorMetadatas = new ConcurrentHashMap<>();
 
     public void addMetadata(String catalogName, ConnectorMetadata metadata) {
