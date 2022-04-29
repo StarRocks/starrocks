@@ -25,8 +25,8 @@
 #include <filesystem>
 
 #include "common/logging.h"
-#include "env/env.h"
-#include "env/env_broker.h"
+#include "fs/fs.h"
+#include "fs/fs_broker.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -160,11 +160,11 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             auto tmp_broker_file_name = full_remote_file + ".part";
             auto local_file_path = src_path + "/" + local_file;
 
-            EnvBroker env_broker(broker_addr, broker_prop);
+            BrokerFileSystem fs_broker(broker_addr, broker_prop);
             std::unique_ptr<WritableFile> broker_file;
-            ASSIGN_OR_RETURN(broker_file, env_broker.new_writable_file(tmp_broker_file_name));
+            ASSIGN_OR_RETURN(broker_file, fs_broker.new_writable_file(tmp_broker_file_name));
 
-            ASSIGN_OR_RETURN(auto input_file, Env::Default()->new_sequential_file(local_file_path));
+            ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
 
             auto res = FileUtils::copy(input_file.get(), broker_file.get(), 1024 * 1024);
             if (!res.ok()) {
@@ -311,8 +311,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
                 return Status::InternalError("capacity limit reached");
             }
 
-            EnvBroker env_broker(broker_addr, broker_prop);
-            ASSIGN_OR_RETURN(auto broker_file, env_broker.new_sequential_file(full_remote_file));
+            BrokerFileSystem fs_broker(broker_addr, broker_prop);
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(full_remote_file));
 
             // remove file which will be downloaded now.
             // this file will be added to local_files if it be downloaded successfully.
@@ -320,7 +320,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // 3. open local file for write
             std::unique_ptr<WritableFile> local_file;
-            ASSIGN_OR_RETURN(local_file, Env::Default()->new_writable_file(full_local_file));
+            ASSIGN_OR_RETURN(local_file, FileSystem::Default()->new_writable_file(full_local_file));
 
             auto res = FileUtils::copy(broker_file.get(), local_file.get(), 1024 * 1024);
             if (!res.ok()) {
@@ -626,7 +626,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 
 Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_path,
                                                       std::vector<std::string>* local_files) {
-    Status status = FileUtils::list_files(Env::Default(), local_path, local_files);
+    Status status = FileUtils::list_files(FileSystem::Default(), local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();

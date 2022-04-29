@@ -249,7 +249,7 @@ public:
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = dest_tablet->schema_hash_path() + "/" + f;
-            st = Env::Default()->link_file(src, dst);
+            st = FileSystem::Default()->link_file(src, dst);
             if (st.ok()) {
                 LOG(INFO) << "Linked " << src << " to " << dst;
             } else if (st.is_already_exist()) {
@@ -301,7 +301,7 @@ public:
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = new_tablet_path + "/" + f;
-            Status st = Env::Default()->link_file(src, dst);
+            Status st = FileSystem::Default()->link_file(src, dst);
             if (st.ok()) {
                 LOG(INFO) << "Linked " << src << " to " << dst;
             } else if (st.is_already_exist()) {
@@ -1200,7 +1200,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet1->schema_hash_path() + "/" + f;
-        st = Env::Default()->link_file(src, dst);
+        st = FileSystem::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
     }
@@ -1274,7 +1274,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet1->schema_hash_path() + "/" + f;
-        st = Env::Default()->link_file(src, dst);
+        st = FileSystem::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
     }
@@ -1348,7 +1348,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet1->schema_hash_path() + "/" + f;
-        st = Env::Default()->link_file(src, dst);
+        st = FileSystem::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
     }
@@ -1472,7 +1472,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet1->schema_hash_path() + "/" + f;
-        st = Env::Default()->link_file(src, dst);
+        st = FileSystem::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
     }
@@ -1655,7 +1655,7 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet1->schema_hash_path() + "/" + f;
-        st = Env::Default()->link_file(src, dst);
+        st = FileSystem::Default()->link_file(src, dst);
         ASSERT_TRUE(st.ok()) << st;
         LOG(INFO) << "Linked " << src << " to " << dst;
     }

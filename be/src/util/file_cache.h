@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-class Env;
+class FileSystem;
 
 // A "smart" retrieved LRU cache handle.
 //

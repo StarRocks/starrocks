@@ -32,7 +32,7 @@
 #include <iomanip>
 #include <sstream>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
@@ -42,35 +42,35 @@ namespace starrocks {
 
 using strings::Substitute;
 
-Status FileUtils::create_dir(Env* env, const std::string& path) {
+Status FileUtils::create_dir(FileSystem* fs, const std::string& path) {
     if (path.empty()) {
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", path));
     }
-    return env->create_dir_recursive(path);
+    return fs->create_dir_recursive(path);
 }
 
 Status FileUtils::create_dir(const std::string& path) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
-    return create_dir(env.get(), path);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return create_dir(fs.get(), path);
 }
 
-Status FileUtils::remove_all(Env* env, const std::string& file_path) {
-    return env->delete_dir_recursive(file_path);
+Status FileUtils::remove_all(FileSystem* fs, const std::string& file_path) {
+    return fs->delete_dir_recursive(file_path);
 }
 
 Status FileUtils::remove_all(const std::string& file_path) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(file_path));
-    return remove_all(env.get(), file_path);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(file_path));
+    return remove_all(fs.get(), file_path);
 }
 
-Status FileUtils::remove(Env* env, const std::string& dir_path) {
-    ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(dir_path));
-    return is_dir ? env->delete_dir(dir_path) : env->delete_file(dir_path);
+Status FileUtils::remove(FileSystem* fs, const std::string& dir_path) {
+    ASSIGN_OR_RETURN(const bool is_dir, fs->is_directory(dir_path));
+    return is_dir ? fs->delete_dir(dir_path) : fs->delete_file(dir_path);
 }
 
 Status FileUtils::remove(const std::string& path) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
-    return remove(env.get(), path);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return remove(fs.get(), path);
 }
 
 Status FileUtils::remove_paths(const std::vector<std::string>& paths) {
@@ -80,38 +80,38 @@ Status FileUtils::remove_paths(const std::vector<std::string>& paths) {
     return Status::OK();
 }
 
-Status FileUtils::remove_paths(Env* env, const std::vector<std::string>& paths) {
+Status FileUtils::remove_paths(FileSystem* fs, const std::vector<std::string>& paths) {
     for (const std::string& p : paths) {
-        RETURN_IF_ERROR(remove(env, p));
+        RETURN_IF_ERROR(remove(fs, p));
     }
     return Status::OK();
 }
 
-Status FileUtils::list_files(Env* env, const std::string& dir, std::vector<std::string>* files) {
+Status FileUtils::list_files(FileSystem* fs, const std::string& dir, std::vector<std::string>* files) {
     auto cb = [files](std::string_view name) -> bool {
         if (!is_dot_or_dotdot(name)) {
             files->emplace_back(name);
         }
         return true;
     };
-    return env->iterate_dir(dir, cb);
+    return fs->iterate_dir(dir, cb);
 }
 
 Status FileUtils::list_files(const std::string& dir, std::vector<std::string>* files) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(dir));
-    return list_files(env.get(), dir, files);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dir));
+    return list_files(fs.get(), dir, files);
 }
 
-Status FileUtils::list_dirs_files(Env* env, const std::string& path, std::set<std::string>* dirs,
+Status FileUtils::list_dirs_files(FileSystem* fs, const std::string& path, std::set<std::string>* dirs,
                                   std::set<std::string>* files) {
-    auto cb = [path, dirs, files, env](std::string_view name) -> bool {
+    auto cb = [path, dirs, files, fs](std::string_view name) -> bool {
         if (is_dot_or_dotdot(name)) {
             return true;
         }
 
         std::string temp_path = fmt::format("{}/{}", path, name);
 
-        auto status_or = env->is_directory(temp_path);
+        auto status_or = fs->is_directory(temp_path);
         if (status_or.ok()) {
             if (status_or.value()) {
                 if (dirs != nullptr) {
@@ -127,36 +127,36 @@ Status FileUtils::list_dirs_files(Env* env, const std::string& path, std::set<st
         return true;
     };
 
-    return env->iterate_dir(path, cb);
+    return fs->iterate_dir(path, cb);
 }
 
 Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
-    return list_dirs_files(env.get(), path, dirs, files);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return list_dirs_files(fs.get(), path, dirs, files);
 }
 
-Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* count) {
+Status FileUtils::get_children_count(FileSystem* fs, const std::string& dir, int64_t* count) {
     auto cb = [count](std::string_view name) -> bool {
         if (!is_dot_or_dotdot(name)) {
             *count += 1;
         }
         return true;
     };
-    return env->iterate_dir(dir, cb);
+    return fs->iterate_dir(dir, cb);
 }
 
-bool FileUtils::is_dir(Env* env, const std::string& file_path) {
-    const auto status_or = env->is_directory(file_path);
+bool FileUtils::is_dir(FileSystem* fs, const std::string& file_path) {
+    const auto status_or = fs->is_directory(file_path);
     return status_or.ok() ? status_or.value() : false;
 }
 
 Status FileUtils::get_children_count(const std::string& dir, int64_t* count) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(dir));
-    return get_children_count(env.get(), dir, count);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dir));
+    return get_children_count(fs.get(), dir, count);
 }
 
 bool FileUtils::is_dir(const std::string& file_path) {
-    auto res = Env::CreateSharedFromString(file_path);
+    auto res = FileSystem::CreateSharedFromString(file_path);
     if (!res.ok()) return false;
     return is_dir(res.value().get(), file_path);
 }
@@ -206,10 +206,10 @@ Status FileUtils::split_pathes(const char* path, std::vector<std::string>* path_
 }
 
 Status FileUtils::copy_file(const std::string& src_path, const std::string& dst_path) {
-    ASSIGN_OR_RETURN(auto src_env, Env::CreateSharedFromString(src_path));
-    ASSIGN_OR_RETURN(auto dst_env, Env::CreateSharedFromString(dst_path));
-    ASSIGN_OR_RETURN(auto src_file, src_env->new_sequential_file(src_path));
-    ASSIGN_OR_RETURN(auto dst_file, dst_env->new_writable_file(dst_path));
+    ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
+    ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
+    ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_path));
+    ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(dst_path));
     RETURN_IF_ERROR(copy(src_file.get(), dst_file.get()));
     RETURN_IF_ERROR(dst_file->sync());
     RETURN_IF_ERROR(dst_file->close());
@@ -268,18 +268,18 @@ Status FileUtils::md5sum(const std::string& file, std::string* md5sum) {
     return Status::OK();
 }
 
-bool FileUtils::check_exist(Env* env, const std::string& path) {
-    return env->path_exists(path).ok();
+bool FileUtils::check_exist(FileSystem* fs, const std::string& path) {
+    return fs->path_exists(path).ok();
 }
 
 bool FileUtils::check_exist(const std::string& path) {
-    auto res = Env::CreateSharedFromString(path);
+    auto res = FileSystem::CreateSharedFromString(path);
     if (!res.ok()) return false;
     return check_exist(res.value().get(), path);
 }
 
 Status FileUtils::canonicalize(const std::string& path, std::string* real_path) {
-    return Env::Default()->canonicalize(path, real_path);
+    return FileSystem::Default()->canonicalize(path, real_path);
 }
 
 } // namespace starrocks

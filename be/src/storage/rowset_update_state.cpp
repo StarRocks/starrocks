@@ -377,7 +377,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     vector<std::pair<string, string>> rewrite_files;
     DeferOp clean_temp_files([&] {
         for (auto& e : rewrite_files) {
-            Env::Default()->delete_file(e.second);
+            FileSystem::Default()->delete_file(e.second);
         }
     });
     bool is_rewrite = config::rewrite_partial_segment;
@@ -409,7 +409,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     if (is_rewrite) {
         for (size_t i = 0; i < num_segments; i++) {
-            RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
         }
     }
     // clean this to prevent DeferOp clean files

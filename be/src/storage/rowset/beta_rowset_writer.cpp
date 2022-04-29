@@ -29,7 +29,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
@@ -101,14 +101,14 @@ Status BetaRowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_env, Env::CreateSharedFromString(_context.rowset_path_prefix));
-    _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
     return Status::OK();
 }
 
 StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
-        RETURN_IF_ERROR(_env->sync_dir(_context.rowset_path_prefix));
+        RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
@@ -177,7 +177,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(tmp_segment_file);
+                auto st = _fs->delete_file(tmp_segment_file);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
             }
             _tmp_segment_files.clear();
@@ -186,13 +186,13 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(path);
+                auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
             }
             for (auto i = 0; i < _segment_has_deletes.size(); ++i) {
                 if (!_segment_has_deletes[i]) {
                     auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-                    auto st = _env->delete_file(path);
+                    auto st = _fs->delete_file(path);
                     LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
                 }
             }
@@ -222,7 +222,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(path);
+                auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
@@ -436,7 +436,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     if (_num_segment == 1) {
         auto old_path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
         auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
-        auto st = _env->rename_file(old_path, new_path);
+        auto st = _fs->rename_file(old_path, new_path);
         RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
         return Status::OK();
     }
@@ -552,7 +552,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         // Even if an error is encountered, these files that have not been cleaned up
         // will be cleaned up by the GC background. So here we only print the error
         // message when we encounter an error.
-        auto st = _env->delete_file(tmp_segment_file);
+        auto st = _fs->delete_file(tmp_segment_file);
         RETURN_IF_ERROR_WITH_WARN(st, "Fail to delete segment temp file");
     }
     _tmp_segment_files.clear();
@@ -610,7 +610,7 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
             // Even if an error is encountered, these files that have not been cleaned up
             // will be cleaned up by the GC background. So here we only print the error
             // message when we encounter an error.
-            auto st = _env->delete_file(path);
+            auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak

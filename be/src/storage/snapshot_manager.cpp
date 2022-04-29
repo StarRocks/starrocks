@@ -25,7 +25,7 @@
 #include <map>
 #include <set>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
@@ -508,7 +508,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
     }
 
     std::unique_ptr<WritableFile> f;
-    ASSIGN_OR_RETURN(f, Env::Default()->new_writable_file(snapshot_dir + "/meta"));
+    ASSIGN_OR_RETURN(f, FileSystem::Default()->new_writable_file(snapshot_dir + "/meta"));
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(f.get()));
     RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
@@ -518,7 +518,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
 // See `SnapshotManager::make_snapshot_on_tablet_meta` for the file format.
 StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& filename) {
     SnapshotMeta snapshot_meta;
-    ASSIGN_OR_RETURN(auto file, Env::Default()->new_random_access_file(filename));
+    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_random_access_file(filename));
     RETURN_IF_ERROR(snapshot_meta.parse_from_file(file.get()));
     return std::move(snapshot_meta);
 }
@@ -534,12 +534,12 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
         for (int seg_id = 0; seg_id < rowset_meta_pb.num_segments(); seg_id++) {
             auto old_path = BetaRowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = BetaRowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
-            RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
+            RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = BetaRowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
             auto new_path = BetaRowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
-            RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
+            RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
     }

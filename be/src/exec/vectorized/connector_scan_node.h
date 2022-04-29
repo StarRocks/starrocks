@@ -7,8 +7,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "env/env.h"
 #include "exec/scan_node.h"
+#include "fs/fs.h"
 
 namespace starrocks::vectorized {
 

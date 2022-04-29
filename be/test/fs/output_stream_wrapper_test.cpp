@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/output_stream_wrapper.h"
+#include "fs/output_stream_wrapper.h"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@ protected:
         }
 
         std::filesystem::path file = path / "test.txt";
-        auto res = Env::Default()->new_writable_file(file.string());
+        auto res = FileSystem::Default()->new_writable_file(file.string());
         if (!res.ok()) {
             std::cerr << "Fail to create " << file << ": " << res.status() << std::endl;
             LOG(FATAL) << "Fail to create " << file << ": " << res.status();
@@ -57,7 +57,7 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     ASSERT_TRUE(stream.good());
     ASSERT_EQ(21, stream.size());
 
-    auto rf = *Env::Default()->new_random_access_file(_file->filename());
+    auto rf = *FileSystem::Default()->new_random_access_file(_file->filename());
     std::string buff(21, 0);
     Slice slice(buff);
 

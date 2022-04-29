@@ -29,7 +29,7 @@
 #include "column/hash_set.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"

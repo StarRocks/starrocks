@@ -26,7 +26,7 @@
 #include <roaring/roaring.hh>
 #include <utility>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"

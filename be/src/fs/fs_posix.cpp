@@ -20,7 +20,7 @@
 #include <memory>
 
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/gscoped_ptr.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
@@ -71,19 +71,19 @@ static Status do_sync(int fd, const string& filename) {
     return Status::OK();
 }
 
-static Status do_open(const string& filename, Env::OpenMode mode, int* fd) {
+static Status do_open(const string& filename, FileSystem::OpenMode mode, int* fd) {
     int flags = O_RDWR;
     switch (mode) {
-    case Env::CREATE_OR_OPEN_WITH_TRUNCATE:
+    case FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE:
         flags |= O_CREAT | O_TRUNC;
         break;
-    case Env::CREATE_OR_OPEN:
+    case FileSystem::CREATE_OR_OPEN:
         flags |= O_CREAT;
         break;
-    case Env::MUST_CREATE:
+    case FileSystem::MUST_CREATE:
         flags |= O_CREAT | O_EXCL;
         break;
-    case Env::MUST_EXIST:
+    case FileSystem::MUST_EXIST:
         break;
     default:
         return Status::NotSupported(strings::Substitute("Unknown create mode $0", mode));
@@ -403,9 +403,9 @@ private:
     bool _closed = false;
 };
 
-class PosixEnv : public Env {
+class PosixFileSystem : public FileSystem {
 public:
-    ~PosixEnv() override = default;
+    ~PosixFileSystem() override = default;
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
         int fd;
@@ -637,14 +637,14 @@ public:
     }
 };
 
-// Default Posix Env
-Env* Env::Default() {
-    static PosixEnv default_env;
-    return &default_env;
+// Default Posix FileSystem
+FileSystem* FileSystem::Default() {
+    static PosixFileSystem default_fs;
+    return &default_fs;
 }
 
-std::unique_ptr<Env> new_env_posix() {
-    return std::make_unique<PosixEnv>();
+std::unique_ptr<FileSystem> new_fs_posix() {
+    return std::make_unique<PosixFileSystem>();
 }
 
 } // end namespace starrocks

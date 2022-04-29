@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "column/datum_tuple.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"

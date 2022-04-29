@@ -38,7 +38,7 @@ struct SpaceInfo {
     int64_t available = 0;
 };
 
-class Env {
+class FileSystem {
 public:
     // Governs if/how the file is created.
     //
@@ -50,17 +50,17 @@ public:
     // MUST_EXIST                   | opens             | fails
     enum OpenMode { CREATE_OR_OPEN_WITH_TRUNCATE, CREATE_OR_OPEN, MUST_CREATE, MUST_EXIST };
 
-    Env() = default;
-    virtual ~Env() = default;
+    FileSystem() = default;
+    virtual ~FileSystem() = default;
 
-    static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
+    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri);
 
-    static StatusOr<std::shared_ptr<Env>> CreateSharedFromString(std::string_view uri);
+    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
     // Return a default environment suitable for the current operating
-    // system.  Sophisticated users may wish to provide their own Env
+    // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.
-    static Env* Default();
+    static FileSystem* Default();
 
     // Create a brand new sequentially-readable file with the specified name.
     //  If the file does not exist, returns a non-OK status.
@@ -183,7 +183,7 @@ public:
     virtual Status link_file(const std::string& /*old_path*/, const std::string& /*new_path*/) = 0;
 
     // Determines the information about the filesystem on which the pathname 'path' is located.
-    virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("Env::space()"); }
+    virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
 };
 
 struct RandomAccessFileOptions {
@@ -195,7 +195,7 @@ struct WritableFileOptions {
     // Call Sync() during Close().
     bool sync_on_close = false;
     // See OpenMode for details.
-    Env::OpenMode mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+    FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
 };
 
 // Creation-time options for RWFile
@@ -203,7 +203,7 @@ struct RandomRWFileOptions {
     // Call Sync() during Close().
     bool sync_on_close = false;
     // See OpenMode for details.
-    Env::OpenMode mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+    FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.

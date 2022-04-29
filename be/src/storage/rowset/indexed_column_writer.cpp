@@ -26,7 +26,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "storage/fs/block_manager.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/encoding_info.h"

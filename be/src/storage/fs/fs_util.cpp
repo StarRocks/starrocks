@@ -26,8 +26,8 @@
 namespace starrocks::fs::fs_util {
 
 StatusOr<std::shared_ptr<BlockManager>> block_manager(std::string_view uri) {
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(uri));
-    return std::make_shared<FileBlockManager>(std::move(env), fs::BlockManagerOptions());
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(uri));
+    return std::make_shared<FileBlockManager>(std::move(fs), fs::BlockManagerOptions());
 }
 
 } // namespace starrocks::fs::fs_util

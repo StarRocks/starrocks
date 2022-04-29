@@ -6,10 +6,9 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "env/env.h"
-#include "env/env_hdfs.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "fs/fs_hdfs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -84,8 +83,8 @@ struct HdfsScannerParams {
     // excluded from conjunct_ctxs.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
-    // The Env used to open the file to be scanned
-    Env* env = nullptr;
+    // The FileSystem used to open the file to be scanned
+    FileSystem* fs = nullptr;
     // The file to scan
     std::string path;
 

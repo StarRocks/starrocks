@@ -225,13 +225,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_ranges = {&scan_range};
-    scanner_params.env = _pool->add(env.release());
+    scanner_params.fs = _pool->add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;

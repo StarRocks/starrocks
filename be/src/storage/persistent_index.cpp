@@ -432,7 +432,7 @@ class ImmutableIndexWriter {
 public:
     ~ImmutableIndexWriter() {
         if (_wb) {
-            Env::Default()->delete_file(_idx_file_path_tmp);
+            FileSystem::Default()->delete_file(_idx_file_path_tmp);
         }
     }
 
@@ -441,7 +441,7 @@ public:
         _idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
         _idx_file_path_tmp = _idx_file_path + ".tmp";
         ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_idx_file_path_tmp));
-        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, Env::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
+        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
         return _block_mgr->create_block(wblock_opts, &_wb);
     }
 
@@ -497,7 +497,7 @@ public:
         RETURN_IF_ERROR(_wb->append(Slice(footer)));
         RETURN_IF_ERROR(_wb->finalize());
         RETURN_IF_ERROR(_wb->close());
-        RETURN_IF_ERROR(Env::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
+        RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
         _wb.reset();
         return Status::OK();
     }
@@ -1005,7 +1005,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
     std::string file_name = _get_l0_index_file_name(_path, version);
     fs::CreateBlockOptions wblock_opts({file_name});
-    wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+    wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
     RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
     return Status::OK();
 }
@@ -1093,7 +1093,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     // so we need to truncate file first
     RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
     fs::CreateBlockOptions wblock_opts({l0_index_file_name});
-    wblock_opts.mode = Env::MUST_EXIST;
+    wblock_opts.mode = FileSystem::MUST_EXIST;
     RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
 
     if (index_meta.has_l1_version()) {
@@ -1133,7 +1133,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     if (!_flushed) {
         std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
         fs::CreateBlockOptions wblock_opts({l0_index_file_path});
-        wblock_opts.mode = Env::MUST_EXIST;
+        wblock_opts.mode = FileSystem::MUST_EXIST;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
     }
 
@@ -1373,7 +1373,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         //ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(file_name));
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions wblock_opts({file_name});
-        wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+        wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
         DeferOp close_block([&wblock] {
             if (wblock) {
@@ -1401,7 +1401,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         std::string file_name = _get_l0_index_file_name(_path, _version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
-        Env::Default()->delete_file(file_name);
+        FileSystem::Default()->delete_file(file_name);
         size_t snapshot_size = _dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         if (!_dump(ar_out)) {
@@ -1459,11 +1459,11 @@ Status PersistentIndex::on_commited() {
 
         fs::CreateBlockOptions wblock_opts({index_file_path});
         // new index file should be created in commit() phase
-        wblock_opts.mode = Env::MUST_EXIST;
+        wblock_opts.mode = FileSystem::MUST_EXIST;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
         _index_block = std::move(wblock);
         VLOG(1) << "delete expired l0 index file: " << expired_l0_file_path;
-        Env::Default()->delete_file(expired_l0_file_path);
+        FileSystem::Default()->delete_file(expired_l0_file_path);
     }
 
     _dump_snapshot = false;
@@ -1665,7 +1665,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
-            Status st = Env::Default()->delete_file(path);
+            Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
                 return false;
@@ -1673,7 +1673,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         }
         return true;
     };
-    return Env::Default()->iterate_dir(_path, cb);
+    return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
 template <size_t KeySize>

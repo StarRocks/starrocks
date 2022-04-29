@@ -7,7 +7,7 @@
 #include <iostream>
 
 #include "column/datum_tuple.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"

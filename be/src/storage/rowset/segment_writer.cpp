@@ -27,7 +27,7 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "common/logging.h" // LOG
-#include "env/env.h"        // Env
+#include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
 #include "storage/fs/block_manager.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter

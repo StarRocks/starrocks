@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "common/status.h"
-#include "env/env_util.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"

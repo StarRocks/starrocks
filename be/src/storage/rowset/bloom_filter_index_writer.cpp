@@ -25,7 +25,7 @@
 #include <memory>
 #include <utility>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/fs/block_manager.h"
 #include "storage/olap_type_infra.h"
