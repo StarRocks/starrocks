@@ -330,7 +330,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
     }
 
-    // Handle show authors
+    // Handle show process list
     private void handleShowProcesslist() {
         ShowProcesslistStmt showStmt = (ShowProcesslistStmt) stmt;
         List<List<String>> rowSet = Lists.newArrayList();
