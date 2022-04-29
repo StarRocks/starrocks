@@ -1,16 +1,26 @@
 # CAST
 
-## description
+## 功能
 
-### Syntax
+将 input 转成指定的(type)的值, 如 `cast (input as BIGINT)` 将当前列 input 转换为 BIGINT 类型的值
+
+## 语法
 
 ```Haskell
-cast (input as type)
+cast(input as type)
 ```
 
-将  input转成指定的(type)的值,如`cast (input as BIGINT)`将当前列 input 转换为 BIGINT 类型的值
+## 参数说明
 
-## example
+`input`: 待转类型的参数
+
+`type`: 目标类型
+
+## 返回值说明
+
+返回值的数据类型为 `type`(目标类型)
+
+## 示例
 
 1. 转常量，或表中某列
 
@@ -31,9 +41,9 @@ cast (input as type)
         http://host:port/api/test/bigint/_stream_load
     ```
 
-    > 注：在导入中，由于原始类型均为String，将值为浮点的原始数据做 cast的时候数据会被转换成 NULL ，比如 12.0 。StarRocks 目前不会对原始数据做截断。
+    > 注：在导入中, 由于原始类型均为 String, 将值为浮点的原始数据做 cast 的时候数据会被转换成 NULL , 比如 12.0 StarRocks 目前不会对原始数据做截断
 
-    如果想强制将这种类型的原始数据 cast to int 的话。请看下面写法：
+    如果想强制将这种类型的原始数据 cast to int 的话, 请看下面写法:
 
     ```bash
     curl --location-trusted -u root: -T ~/user_data/bigint \

@@ -2,22 +2,23 @@
 
 ## 功能
 
-计算SHA-2系列哈希函数(SHA-224/SHA-256/SHA-384/SHA-512)
+计算 SHA-2 系列哈希函数(SHA-224/SHA-256/SHA-384/SHA-512)
 
 ## 语法
 
 ```Haskell
-VARCHAR sha2(VARCHAR expr, INT hash_length)
+sha2(expr, hash_length)
 ```
 
 ## 参数说明
 
-* epxr: 需要被计算的字符串
-* hash_length: 结果所需要的位长度，其值必须为224,256,381,512或者0(相当于256)
+`epxr`: 需要被计算的字符串, 支持的数据类型为 VARCHAR
+
+`hash_length`: 结果所需要的位长度, 其值必须为 224,256,384,512 或者 0(相当于 256), 支持的数据类型为 INT
 
 ## 返回值说明
 
-返回哈希函数的计算结果，如果两个参数任意一个为NULL, 结果返回NULL, 如果hash_length不在参数说明中的范围内，结果返回NULL
+返回哈希函数的计算结果(数据类型为 VARCHAR), 如果两个参数任意一个为 NULL, 结果返回 NULL, 如果 hash_length 不在参数说明中的范围内, 结果返回 NULL
 
 ## 示例
 

@@ -2,21 +2,21 @@
 
 ## 功能
 
-计算给定字符串的MD5 128-bit校验和
+计算给定字符串的 MD5 128-bit 校验和
 
 ## 语法
 
 ```Haskell
-VARCHAR md5(VARCHAR expr)
+md5(expr)
 ```
 
 ## 参数说明
 
-* expr: 需要被计算的字符串
+`expr`: 需要被计算的字符串, 支持的数据类型为 VARCHAR
 
 ## 返回值说明
 
-校验和以32个十六进制数字组成的字符串表示，如果expr为NULL，返回结果为NULL
+校验和以 32 个十六进制数字组成的字符串表示, 如果 expr 为 NULL, 返回结果为 NULL, 否则返回的数据类型为 VARCHAR
 
 ## 示例
 

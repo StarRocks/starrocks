@@ -1,14 +1,24 @@
 # murmur_hash3_32
 
-## description
+## 功能
 
-### Syntax
+返回输入字符串的 32 位 murmur3 hash 值
 
-`INT MURMUR_HASH3_32(VARCHAR input, ...)`
+## 语法
 
-返回输入字符串的32位murmur3 hash值
+```Haskell
+MURMUR_HASH3_32(input, ...)
+```
 
-## example
+## 参数说明
+
+`input`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 INT
+
+## 示例
 
 ```Plain Text
 MySQL > select murmur_hash3_32(null);
@@ -33,6 +43,6 @@ MySQL > select murmur_hash3_32("hello", "world");
 +-----------------------------------+
 ```
 
-## keyword
+## 关键词
 
-MURMUR_HASH3_32,HASH
+MURMUR_HASH3_32, HASH
