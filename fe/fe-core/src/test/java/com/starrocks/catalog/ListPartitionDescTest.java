@@ -84,7 +84,7 @@ public class ListPartitionDescTest {
         return supportedProperties;
     }
 
-    public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException {
+    public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", this.findSupportedProperties(null));
         listPartitionDesc.analyze(this.findColumnDefList(), null);
@@ -95,7 +95,7 @@ public class ListPartitionDescTest {
         return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
-    public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException {
+    public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", this.findSupportedProperties(null));
         listPartitionDesc.analyze(this.findColumnDefList(), null);

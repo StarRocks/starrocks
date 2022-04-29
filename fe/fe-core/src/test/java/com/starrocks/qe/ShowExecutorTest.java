@@ -317,7 +317,7 @@ public class ShowExecutorTest {
         String partitionKeyTitle = resultSet.getMetaData().getColumn(6).getName();
         Assert.assertEquals(partitionKeyTitle, "PartitionKey");
         String valuesTitle = resultSet.getMetaData().getColumn(7).getName();
-        Assert.assertEquals(valuesTitle, "Values");
+        Assert.assertEquals(valuesTitle, "List");
 
         String partitionKey1 = resultSet.getResultRows().get(0).get(6);
         Assert.assertEquals(partitionKey1, "dt, province");

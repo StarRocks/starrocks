@@ -37,6 +37,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -44,7 +45,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -88,7 +88,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 .add("State").add("PartitionKey");
 
         if (this.partitionType == PartitionType.LIST) {
-            builder.add("Values");
+            builder.add("List");
         } else {
             builder.add("Range");
         }
@@ -263,7 +263,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
                 // partition key , range or value
                 partitionInfo.add(joiner.join(this.findPartitionColNames(tblPartitionInfo)));
-                partitionInfo.add(this.findPartitionRangeOrValue(tblPartitionInfo, partitionId));
+                partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partitionId));
 
                 // distribution
                 DistributionInfo distributionInfo = partition.getDistributionInfo();
@@ -324,9 +324,9 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionColumns.stream().map(column -> column.getName()).collect(Collectors.toList());
     }
 
-    private String findPartitionRangeOrValue(PartitionInfo partitionInfo, long partitionId) {
+    private String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {
         if (this.partitionType == PartitionType.LIST) {
-            return ((ListPartitionInfo) partitionInfo).getValueFormat(partitionId);
+            return ((ListPartitionInfo) partitionInfo).getValuesFormat(partitionId);
         }
         if (this.partitionType == PartitionType.RANGE) {
             return ((RangePartitionInfo) partitionInfo).getRange(partitionId).toString();

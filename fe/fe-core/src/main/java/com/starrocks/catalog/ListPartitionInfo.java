@@ -3,6 +3,9 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -27,9 +30,11 @@ public class ListPartitionInfo extends PartitionInfo {
     //serialize values for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
     @SerializedName("idToMultiValues")
     private Map<Long, List<List<String>>> idToMultiValues;
+    private Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
     //serialize values for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
+    private Map<Long, List<LiteralExpr>> idToLiteralExprValues;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -38,13 +43,17 @@ public class ListPartitionInfo extends PartitionInfo {
         this.setIsMultiColumnPartition();
 
         this.idToValues = new HashMap<>();
+        this.idToLiteralExprValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
     }
 
     public ListPartitionInfo() {
         super();
         this.idToValues = new HashMap<>();
+        this.idToLiteralExprValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
     }
 
@@ -52,8 +61,34 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToValues.put(partitionId, values);
     }
 
+    public void setLiteralExprValues(long partitionId, List<String> values) throws AnalysisException {
+        List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
+        for (String value : values) {
+            //there only one partition column for single partition list
+            Type type = this.partitionColumns.get(0).getType();
+            LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+            partitionValues.add(partitionValue);
+        }
+        this.idToLiteralExprValues.put(partitionId, partitionValues);
+    }
+
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
         this.idToMultiValues.put(partitionId, multiValues);
+    }
+
+    public void setMultiLiteralExprValues(long partitionId, List<List<String>> multiValues) throws AnalysisException {
+        List<List<LiteralExpr>> multiPartitionValues = new ArrayList<>(multiValues.size());
+        for (List<String> values : multiValues) {
+            List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
+            for (int i = 0; i < values.size(); i++) {
+                String value = values.get(i);
+                Type type = this.partitionColumns.get(i).getType();
+                LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+                partitionValues.add(partitionValue);
+            }
+            multiPartitionValues.add(partitionValues);
+        }
+        this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
     }
 
     private void setIsMultiColumnPartition() {
@@ -102,6 +137,19 @@ public class ListPartitionInfo extends PartitionInfo {
         list.idToTabletType.forEach((k, v) -> partitionInfo.setTabletType(k, v));
         partitionInfo.setIsMultiColumnPartition();
         partitionInfo.type = list.getType();
+
+        try {
+            Map<Long, List<String>> idToValuesMap = partitionInfo.getIdToValues();
+            for (Map.Entry<Long, List<String>> entry : idToValuesMap.entrySet()) {
+                partitionInfo.setLiteralExprValues(entry.getKey(), entry.getValue());
+            }
+            Map<Long, List<List<String>>> idToMultiValuesMap = partitionInfo.getIdToMultiValues();
+            for (Map.Entry<Long, List<List<String>>> entry : idToMultiValuesMap.entrySet()) {
+                partitionInfo.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
+            }
+        } catch (AnalysisException e) {
+            throw new IOException(e);
+        }
         return partitionInfo;
     }
 
@@ -133,7 +181,7 @@ public class ListPartitionInfo extends PartitionInfo {
 
     private String singleListPartitionSql(OlapTable table, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
-        idToValues.forEach((partitionId, values) -> {
+        this.idToLiteralExprValues.forEach((partitionId, values) -> {
             Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
@@ -150,14 +198,14 @@ public class ListPartitionInfo extends PartitionInfo {
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
 
-    private String valuesToString(List<String> values) {
-        return "(" + values.stream().map(value -> "\'" + value + "\'")
+    private String valuesToString(List<LiteralExpr> values) {
+        return "(" + values.stream().map(value -> "\'" + value.getStringValue() + "\'")
                 .collect(Collectors.joining(", ")) + ")";
     }
 
     private String multiListPartitionSql(OlapTable table, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
-        idToMultiValues.forEach((partitionId, multiValues) -> {
+        this.idToMultiLiteralExprValues.forEach((partitionId, multiValues) -> {
             Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
@@ -177,9 +225,9 @@ public class ListPartitionInfo extends PartitionInfo {
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
 
-    private String multiValuesToString(List<List<String>> multiValues) {
+    private String multiValuesToString(List<List<LiteralExpr>> multiValues) {
         return multiValues.stream()
-                .map(values -> "(" + values.stream().map(value -> "\'" + value + "\'")
+                .map(values -> "(" + values.stream().map(value -> "\'" + value.getStringValue() + "\'")
                         .collect(Collectors.joining(", ")) + ")")
                 .collect(Collectors.joining(", "));
     }
@@ -189,12 +237,12 @@ public class ListPartitionInfo extends PartitionInfo {
         return this.partitionColumns;
     }
 
-    public String getValueFormat(long partitionId) {
-        if (!this.idToValues.isEmpty()) {
-            return this.valuesToString(this.idToValues.get(partitionId));
+    public String getValuesFormat(long partitionId) {
+        if (!this.idToLiteralExprValues.isEmpty()) {
+            return this.valuesToString(this.idToLiteralExprValues.get(partitionId));
         }
-        if (!this.idToMultiValues.isEmpty()) {
-            return this.multiValuesToString(this.idToMultiValues.get(partitionId));
+        if (!this.idToMultiLiteralExprValues.isEmpty()) {
+            return this.multiValuesToString(this.idToMultiLiteralExprValues.get(partitionId));
         }
         return "";
     }
