@@ -16,7 +16,7 @@ using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinProbeOperator final : public OperatorWithDependency {
 public:
     HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
-                          HashJoinerPtr join_prober, HashJoinerPtr join_builder);
+                          int32_t driver_sequence, HashJoinerPtr join_prober, HashJoinerPtr join_builder);
     ~HashJoinProbeOperator() override = default;
 
     Status prepare(RuntimeState* state) override;

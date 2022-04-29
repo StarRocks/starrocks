@@ -131,7 +131,6 @@ set(EXEC_FILES
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
-    pipeline/operator_with_dependency.cpp
     pipeline/limit_operator.cpp
     pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp
@@ -154,6 +153,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
     pipeline/exec_state_reporter.cpp
+    pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp

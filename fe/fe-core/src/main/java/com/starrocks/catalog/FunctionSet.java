@@ -131,6 +131,7 @@ public class FunctionSet {
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String DATE_TRUNC = "date_trunc";
+    public static final String DATE_FLOOR = "date_floor";
 
     // string functions
     public static final String SUBSTRING = "substring";
@@ -429,7 +430,7 @@ public class FunctionSet {
         addBuiltInFunction(fn);
     }
 
-    // Populate all the aggregate builtins in the catalog.
+    // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {
@@ -728,6 +729,9 @@ public class FunctionSet {
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
 
+	// Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATE, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
                 Type.INT, Type.ARRAY_BIGINT, false, false, false));
 

@@ -347,6 +347,8 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // short operation time, can set a short timeout
 CONF_Int32(tablet_writer_open_rpc_timeout_sec, "60");
+// make_snapshot rpc timeout
+CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
 // the timeout of a rpc to process one batch in tablet writer.
 // you may need to increase this timeout if using larger 'streaming_load_max_mb',
@@ -375,8 +377,7 @@ CONF_Int32(num_threads_per_disk, "0");
 // There is a trade off of latency and throughout, trying to keep disks busy but
 // not introduce seeks.  The literature seems to agree that with 8 MB reads, random
 // io and sequential io perform similarly.
-CONF_Int32(read_size, "8388608");    // 8 * 1024 * 1024, Read Size (in bytes)
-CONF_Int32(min_buffer_size, "1024"); // 1024, The minimum read buffer size (in bytes)
+CONF_Int32(read_size, "8388608"); // 8 * 1024 * 1024, Read Size (in bytes)
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
@@ -651,6 +652,9 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "8");
+// Used to reject coming fragment instances, when the number of running drivers
+// exceeds it*pipeline_exec_thread_pool_thread_num.
+CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");

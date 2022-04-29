@@ -32,10 +32,7 @@ public class RuntimeFilterDescription {
     private JoinNode.DistributionMode joinMode;
     private TUniqueId senderFragmentInstanceId;
 
-
-
     private Set<TUniqueId> broadcastGRFSenders;
-
 
     private List<TRuntimeFilterDestination> broadcastGRFDestinations;
     private int equalCount;

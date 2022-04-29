@@ -202,7 +202,7 @@ public class IcebergTableStatisticCalculator {
 
     private IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
                                                       List<Types.NestedField> columns) {
-        Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
+        Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable);
         if (!snapshot.isPresent()) {
             return null;
         }
@@ -221,7 +221,7 @@ public class IcebergTableStatisticCalculator {
                 .collect(toImmutableList());
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicates, true);
+                snapshot.get(), icebergPredicates);
 
         IcebergFileStats icebergFileStats = null;
         try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {

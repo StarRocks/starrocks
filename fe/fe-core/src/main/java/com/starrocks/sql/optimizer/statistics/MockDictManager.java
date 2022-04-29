@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 
 import java.util.Optional;
 
-
 public class MockDictManager implements IDictManager {
     private static final ImmutableMap<String, Integer> mockDict = ImmutableMap.of("mock", 1);
 
@@ -40,7 +39,12 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void forbidGlobalDict(long tableId) {
+    public void disableGlobalDict(long tableId) {
+    }
+
+    @Override
+    public void enableGlobalDict(long tableId) {
+
     }
 
     @Override

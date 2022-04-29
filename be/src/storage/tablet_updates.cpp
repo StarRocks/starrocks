@@ -1706,12 +1706,14 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t version;
+    bool has_pending = false;
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
         auto& last = _edit_version_infos.back();
         version = last->version.major();
         rowsets = last->rowsets;
+        has_pending = _pending_commits.size() > 0;
     }
     string err_rowsets;
     int64_t total_row = 0;
@@ -1734,6 +1736,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
                                  << " rowset=" << err_rowsets;
     }
     info->__set_version(version);
+    info->__set_version_miss(has_pending);
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);

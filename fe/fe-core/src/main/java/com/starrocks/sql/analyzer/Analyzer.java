@@ -4,6 +4,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
@@ -11,6 +14,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
@@ -26,6 +30,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.MetaUtils;
@@ -50,6 +55,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+            AlterTableStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
@@ -58,6 +69,12 @@ public class Analyzer {
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             analyzeAnalyzeStmt(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
+            AdminSetReplicaStatusStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -132,6 +149,24 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            GrantRevokeRoleAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
+            AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

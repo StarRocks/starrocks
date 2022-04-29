@@ -30,7 +30,7 @@ namespace pipeline {
 class SinkBuffer;
 class ExchangeSinkOperator final : public Operator {
 public:
-    ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                          const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
                          const int32_t num_shuffles, int32_t sender_id, PlanNodeId dest_node_id,

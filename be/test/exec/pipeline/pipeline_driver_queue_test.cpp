@@ -14,8 +14,8 @@ namespace starrocks::pipeline {
 
 class MockEmptyOperator final : public Operator {
 public:
-    MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id)
-            : Operator(factory, id, "mock_empty_operator", plan_node_id) {}
+    MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
+            : Operator(factory, id, "mock_empty_operator", plan_node_id, driver_sequence) {}
 
     ~MockEmptyOperator() override = default;
 
@@ -29,7 +29,7 @@ public:
 
 Operators _gen_operators() {
     Operators operators;
-    operators.emplace_back(std::make_shared<MockEmptyOperator>(nullptr, 1, 1));
+    operators.emplace_back(std::make_shared<MockEmptyOperator>(nullptr, 1, 1, 0));
     return operators;
 }
 

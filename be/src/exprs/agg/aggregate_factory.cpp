@@ -71,8 +71,9 @@ AggregateFunctionPtr AggregateFactory::MakeCountAggregateFunction() {
     return std::make_shared<CountAggregateFunction>();
 }
 
+template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
-    return std::make_shared<WindowFunnelAggregateFunction>();
+    return std::make_shared<WindowFunnelAggregateFunction<PT>>();
 }
 
 template <PrimitiveType PT>
@@ -346,8 +347,11 @@ public:
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
             } else if (name == "window_funnel") {
-                auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState>(windowfunnel);
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
+                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<arg_type>>(
+                            windowfunnel);
+                }
             }
         } else {
             if (name == "dict_merge") {
@@ -355,7 +359,9 @@ public:
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
             } else if (name == "window_funnel") {
-                return AggregateFactory::MakeWindowfunnelAggregateFunction();
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    return AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
+                }
             }
         }
 
@@ -908,7 +914,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     // This first type is the 4th type input of windowfunnel.
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
-    add_array_mapping<TYPE_ARRAY, TYPE_INT>("window_funnel");
+    add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
+    add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 }
 
 #undef ADD_ALL_TYPE

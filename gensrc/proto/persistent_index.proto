@@ -16,6 +16,7 @@ message IndexWalMetaPB {
 }
 
 message MutableIndexMetaPB {
+    uint32 format_version = 1;
     IndexSnapshotMetaPB snapshot = 2;
     repeated IndexWalMetaPB wals = 3;
 }
@@ -27,13 +28,14 @@ message ImmutableIndexShardMetaPB {
 }
 
 message ImmutableIndexMetaPB {
-    EditVersionPB version = 1;
-    uint64 size = 2;
-    repeated ImmutableIndexShardMetaPB shards = 3;
+    uint32 format_version = 1;
+    EditVersionPB version = 2;
+    uint64 size = 3;
+    repeated ImmutableIndexShardMetaPB shards = 4;
     // only support fixed length KVs currently
     // will add varlen KV in future
-    uint64 fixed_key_size = 4;
-    uint64 fixed_value_size = 5;
+    uint64 fixed_key_size = 5;
+    uint64 fixed_value_size = 6;
 }
 
 message PersistentIndexMetaPB {

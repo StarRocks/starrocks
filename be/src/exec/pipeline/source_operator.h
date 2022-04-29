@@ -14,8 +14,9 @@ using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
 
 class SourceOperator : public Operator {
 public:
-    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
-            : Operator(factory, id, name, plan_node_id) {}
+    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                   int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
     ~SourceOperator() override = default;
 
     bool need_input() const override { return false; }
@@ -36,7 +37,6 @@ public:
 
 protected:
     MorselQueue* _morsel_queue = nullptr;
-    ChunkSourcePtr _chunk_source;
 
     int64_t _last_scan_rows_num = 0;
 };

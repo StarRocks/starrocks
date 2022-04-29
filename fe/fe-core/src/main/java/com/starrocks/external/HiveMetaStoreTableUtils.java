@@ -4,7 +4,6 @@ package com.starrocks.external;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -13,6 +12,7 @@ import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,7 +27,7 @@ public class HiveMetaStoreTableUtils {
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableColumnStats")) {
-            Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
+            Map<String, HiveColumnStats> allColumnStats = GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getTableLevelColumnStats(hmsTable);
             Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
             for (String columnName : columnNames) {
@@ -52,13 +52,13 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
                                                               List<PartitionKey> partitionKeys) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
         }
     }
 
     public static HiveTableStats getTableStats(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableStats")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(hmsTable.getResourceName(),
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getTableStats(hmsTable.getResourceName(),
                     hmsTable.getDb(), hmsTable.getTable());
         }
     }
@@ -66,14 +66,14 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable,
                                                     List<PartitionKey> partitionKeys) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitions")) {
-            return Catalog.getCurrentCatalog().getHiveRepository()
+            return GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getPartitions(hmsTable, partitionKeys);
         }
     }
 
     public static Map<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionKeys")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getPartitionKeys(hmsTable);
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionKeys(hmsTable);
         }
     }
 

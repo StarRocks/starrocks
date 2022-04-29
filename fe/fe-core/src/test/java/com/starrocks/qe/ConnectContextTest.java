@@ -21,10 +21,11 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -43,7 +44,7 @@ public class ConnectContextTest {
     @Mocked
     private SocketChannel socketChannel;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private ConnectScheduler connectScheduler;
 
@@ -114,6 +115,9 @@ public class ConnectContextTest {
         ctx.setConnectionId(101);
         Assert.assertEquals(101, ctx.getConnectionId());
 
+        // set connect start time to now
+        ctx.resetConnectionStartTime();
+
         // command
         ctx.setCommand(MysqlCommand.COM_PING);
         Assert.assertEquals(MysqlCommand.COM_PING, ctx.getCommand());
@@ -122,16 +126,17 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(9, row.size());
+        Assert.assertEquals(10, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
         Assert.assertEquals("testCluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis-ctx.getStartTime()) / 1000), row.get(6));
-        Assert.assertEquals("", row.get(7));
+        Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(7));
         Assert.assertEquals("", row.get(8));
+        Assert.assertEquals("", row.get(9));
 
         // Start time
         ctx.setStartTime();
@@ -141,10 +146,10 @@ public class ConnectContextTest {
         ctx.setExecutionId(new TUniqueId(100, 200));
         Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
-        // Catalog
-        Assert.assertNull(ctx.getCatalog());
-        ctx.setCatalog(catalog);
-        Assert.assertNotNull(ctx.getCatalog());
+        // GlobalStateMgr
+        Assert.assertNull(ctx.getGlobalStateMgr());
+        ctx.setCatalog(globalStateMgr);
+        Assert.assertNotNull(ctx.getGlobalStateMgr());
 
         // clean up
         ctx.cleanup();

@@ -8,6 +8,8 @@
 
 #include <random>
 
+#include "exprs/vectorized/decimal_cast_expr_test_helper.h"
+
 namespace starrocks::vectorized {
 
 class DecimalBinaryFunctionTest : public ::testing::Test {};
@@ -194,10 +196,10 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 
             if constexpr (is_div_op<Op> || is_mod_op<Op>) {
                 if (rhs_datum != "0") {
-                    ASSERT_EQ(expect, actual);
+                    compare_decimal_string(expect, actual, result_scale);
                 }
             } else {
-                ASSERT_EQ(actual, expect);
+                compare_decimal_string(expect, actual, result_scale);
             }
         }
         return;
@@ -241,10 +243,10 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 
         if constexpr (is_div_op<Op> || is_mod_op<Op>) {
             if (rhs_datum != "0") {
-                ASSERT_EQ(expect, actual);
+                compare_decimal_string(expect, actual, result_scale);
             }
         } else {
-            ASSERT_EQ(expect, actual);
+            compare_decimal_string(expect, actual, result_scale);
         }
     }
 }
@@ -299,10 +301,10 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
 
         if constexpr (is_div_op<Op> || is_mod_op<Op>) {
             if (rhs_datum != "0") {
-                ASSERT_EQ(expect, actual);
+                compare_decimal_string(expect, actual, result_scale);
             }
         } else {
-            ASSERT_EQ(expect, actual);
+            compare_decimal_string(expect, actual, result_scale);
         }
     }
 }

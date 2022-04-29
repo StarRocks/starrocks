@@ -50,10 +50,22 @@ TEST(CompactionUtilsTest, test_get_segment_max_rows) {
     int64_t input_row_num = 10000;
     int64_t input_size = 100 * 10000;
     uint32_t segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, input_row_num, input_size);
-    ASSERT_EQ(10737407, segment_max_rows);
+    ASSERT_EQ(10737418, segment_max_rows);
 
     segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
-    ASSERT_EQ(1, segment_max_rows);
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    max_segment_file_size = -1;
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
+    ASSERT_EQ(2147483647, segment_max_rows);
+
+    max_segment_file_size = 1 << 63;
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
+    ASSERT_EQ(2147483647, segment_max_rows);
+
+    max_segment_file_size = 0;
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
+    ASSERT_EQ(2147483647, segment_max_rows);
 }
 
 TEST(CompactionUtilsTest, test_split_column_into_groups) {

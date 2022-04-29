@@ -24,22 +24,20 @@ package com.starrocks.alter;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
-import java.util.UUID;
 
 public class AlterJobV2Test {
     private static ConnectContext connectContext;
@@ -80,9 +78,9 @@ public class AlterJobV2Test {
         // 1. process a schema change job
         String alterStmtStr = "alter table test.schema_change_test add column k4 int default '1'";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
-        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
-        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         Assert.assertEquals(1, alterJobs.size());
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
@@ -108,9 +106,9 @@ public class AlterJobV2Test {
         // 1. process a rollup job
         String alterStmtStr = "alter table test.schema_change_test add rollup test_rollup(k1, k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
-        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
-        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getRollupHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
                 System.out.println(
@@ -135,9 +133,9 @@ public class AlterJobV2Test {
         // 1. process a modify table properties job(enable_persistent_index)
         String alterStmtStr = "alter table test.properties_change_test set ('enable_persistent_index' = 'true');";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
-        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
-        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         Assert.assertEquals(1, alterJobs.size());
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
@@ -160,10 +158,10 @@ public class AlterJobV2Test {
         // 4. process a modify table properties job(in_memory)
         String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr2, connectContext);
-        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
         // 4. check alter job
-        alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         Assert.assertEquals(1, alterJobs.size());
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/column.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/types.h"
 #include "util/runtime_profile.h"
 

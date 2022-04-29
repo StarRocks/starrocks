@@ -44,7 +44,6 @@ import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -84,6 +83,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -912,7 +912,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             bfColumns = PropertyAnalyzer
                     .analyzeBloomFilterColumns(propertyMap, indexSchemaMap.get(olapTable.getBaseIndexId()),
-                    olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
+                            olapTable.getKeysType() == KeysType.PRIMARY_KEYS);
             bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(propertyMap);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
@@ -974,8 +974,8 @@ public class SchemaChangeHandler extends AlterHandler {
         TStorageFormat storageFormat = PropertyAnalyzer.analyzeStorageFormat(propertyMap);
 
         // create job
-        Catalog catalog = Catalog.getCurrentCatalog();
-        long jobId = catalog.getNextId();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long jobId = globalStateMgr.getNextId();
         SchemaChangeJobV2 schemaChangeJob =
                 new SchemaChangeJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutSecond * 1000);
         schemaChangeJob.setBloomFilterInfo(hasBfChange, bfColumns, bfFpp);
@@ -1145,7 +1145,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 5. calc short key
-            short newShortKeyColumnCount = Catalog.calcShortKeyColumnCount(alterSchema,
+            short newShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
                     indexIdToProperties.get(alterIndexId));
             LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyColumnCount);
             indexIdToShortKeyColumnCount.put(alterIndexId, newShortKeyColumnCount);
@@ -1183,7 +1183,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             String newIndexName = SHADOW_NAME_PRFIX + olapTable.getIndexNameById(originIndexId);
             short newShortKeyColumnCount = indexIdToShortKeyColumnCount.get(originIndexId);
-            long shadowIndexId = catalog.getNextId();
+            long shadowIndexId = globalStateMgr.getNextId();
 
             // create SHADOW index for each partition
             List<Tablet> addedTablets = Lists.newArrayList();
@@ -1198,7 +1198,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partitionId);
                 for (Tablet originTablet : originIndex.getTablets()) {
                     long originTabletId = originTablet.getId();
-                    long shadowTabletId = catalog.getNextId();
+                    long shadowTabletId = globalStateMgr.getNextId();
 
                     LocalTablet shadowTablet = new LocalTablet(shadowTabletId);
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
@@ -1209,7 +1209,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                     int healthyReplicaNum = 0;
                     for (Replica originReplica : originReplicas) {
-                        long shadowReplicaId = catalog.getNextId();
+                        long shadowReplicaId = globalStateMgr.getNextId();
                         long backendId = originReplica.getBackendId();
 
                         if (originReplica.getState() == Replica.ReplicaState.CLONE
@@ -1243,7 +1243,7 @@ public class SchemaChangeHandler extends AlterHandler {
                          * if the quorum of replica number is not satisfied.
                          */
                         for (Tablet tablet : addedTablets) {
-                            Catalog.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
                         }
                         throw new DdlException(
                                 "tablet " + originTabletId + " has few healthy replica: " + healthyReplicaNum);
@@ -1263,7 +1263,7 @@ public class SchemaChangeHandler extends AlterHandler {
         addAlterJobV2(schemaChangeJob);
 
         // 3. write edit log
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(schemaChangeJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
         LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
     }
 
@@ -1364,7 +1364,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // handle cancelled schema change jobs
         for (AlterJob alterJob : cancelledJobs) {
-            Database db = Catalog.getCurrentCatalog().getDb(alterJob.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(alterJob.getDbId());
             if (db == null) {
                 cancelInternal(alterJob, null, null);
                 continue;
@@ -1388,7 +1388,7 @@ public class SchemaChangeHandler extends AlterHandler {
             ((SchemaChangeJob) alterJob).deleteAllTableHistorySchema();
             ((SchemaChangeJob) alterJob).finishJob();
             jobDone(alterJob);
-            Catalog.getCurrentCatalog().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
         }
     }
 
@@ -1412,7 +1412,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 continue;
             }
             if (ctx != null) {
-                if (!Catalog.getCurrentCatalog().getAuth()
+                if (!GlobalStateMgr.getCurrentState().getAuth()
                         .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
                     continue;
                 }
@@ -1488,10 +1488,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 // so just return after finished handling.
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
-                    Catalog.getCurrentCatalog().modifyTableColocate(db, olapTable, colocateGroup, false, null);
+                    GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
                     return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
-                    Catalog.getCurrentCatalog().convertDistributionType(db, olapTable);
+                    GlobalStateMgr.getCurrentState().convertDistributionType(db, olapTable);
                     return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                     /*
@@ -1512,14 +1512,14 @@ public class SchemaChangeHandler extends AlterHandler {
                                     "to see how to change a normal table to a dynamic partition table.");
                         }
                     }
-                    Catalog.getCurrentCatalog().modifyTableDynamicPartition(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
                     return;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
-                    Catalog.getCurrentCatalog().modifyTableDefaultReplicationNum(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().modifyTableDefaultReplicationNum(db, olapTable, properties);
                     return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                    Catalog.getCurrentCatalog().modifyTableReplicationNum(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
                     return;
                 }
             }
@@ -1621,7 +1621,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         db.writeLock();
         try {
-            Catalog.getCurrentCatalog().modifyTableMeta(db, olapTable, properties, metaType);
+            GlobalStateMgr.getCurrentState().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             db.writeUnlock();
         }
@@ -1758,7 +1758,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Preconditions.checkState(!Strings.isNullOrEmpty(dbName));
         Preconditions.checkState(!Strings.isNullOrEmpty(tableName));
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }

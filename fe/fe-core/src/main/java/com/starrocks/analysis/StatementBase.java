@@ -46,6 +46,7 @@ public abstract class StatementBase implements ParseNode {
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
         COST,
     }
+
     private ExplainLevel explainLevel;
 
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
@@ -78,7 +79,7 @@ public abstract class StatementBase implements ParseNode {
     /**
      * Analyzes the statement and throws an AnalysisException if analysis fails. A failure
      * could be due to a problem with the statement or because one or more tables/views
-     * were missing from the catalog.
+     * were missing from the globalStateMgr.
      * It is up to the analysis() implementation to ensure the maximum number of missing
      * tables/views get collected in the Analyzer before failing analyze().
      */

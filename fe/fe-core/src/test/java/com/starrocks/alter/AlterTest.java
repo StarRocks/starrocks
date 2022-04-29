@@ -23,11 +23,11 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -41,6 +41,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -49,10 +50,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class AlterTest {
 
@@ -137,7 +136,7 @@ public class AlterTest {
         String dropSQL = "drop table test_partition_exception";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
         try {
-            Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -155,13 +154,28 @@ public class AlterTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         try {
-            Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+            if (expectedException) {
+                Assert.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assert.fail();
+            }
+        }
+    }
+
+    private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -176,7 +190,7 @@ public class AlterTest {
     private static void alterTableWithExceptionMsg(String sql, String msg) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         try {
-            Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         } catch (Exception e) {
             Assert.assertEquals(msg, e.getMessage());
         }
@@ -184,7 +198,7 @@ public class AlterTest {
 
     @Test
     public void testConflictAlterOperations() throws Exception {
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
 
         String stmt =
@@ -291,12 +305,15 @@ public class AlterTest {
         // add partition when dynamic partition is disable
         stmt = "alter table test.tbl1 add partition p4 values less than('2020-04-10') ('replication_num' = '1')";
         alterTable(stmt, false);
+        //rename table
+        stmt = "alter table test.tbl1 rename newTableName";
+        alterTableWithNewParser(stmt, false);
     }
 
     // test batch update range partitions' properties
     @Test
     public void testBatchUpdatePartitionProperties() throws Exception {
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
         Partition p1 = tbl4.getPartition("p1");
         Partition p2 = tbl4.getPartition("p2");
@@ -371,7 +388,7 @@ public class AlterTest {
         alterTable(stmt, false);
         Thread.sleep(5000); // sleep to wait dynamic partition scheduler run
 
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable tbl = (OlapTable) db.getTable("tbl3");
         Assert.assertEquals(4, tbl.getPartitionNames().size());
         Assert.assertNull(tbl.getPartition("p1"));
@@ -379,9 +396,9 @@ public class AlterTest {
     }
     */
     private void waitSchemaChangeJobDone(boolean rollupJob, OlapTable tb) throws InterruptedException {
-        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         if (rollupJob) {
-            alterJobs = Catalog.getCurrentCatalog().getRollupHandler().getAlterJobsV2();
+            alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         }
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
@@ -527,7 +544,7 @@ public class AlterTest {
         createTable(stmt2);
         createTable(stmt3);
         createTable(stmt4);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         // name conflict
         String replaceStmt = "ALTER TABLE test.replace1 SWAP WITH r1";
@@ -578,16 +595,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-07\") EVERY (interval 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p20170103"));
@@ -598,9 +615,36 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
+
+    @Test
+    public void testAddBackend() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String addBackendSql = "ALTER SYSTEM ADD BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt addBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addBackendSql, ctx);
+
+        String dropBackendSql = "ALTER SYSTEM DROP BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt dropBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropBackendSql, ctx);
+
+        String addObserverSql = "ALTER SYSTEM ADD OBSERVER \"192.168.1.1:8080\"";
+        AlterSystemStmt addObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addObserverSql, ctx);
+
+        String dropObserverSql = "ALTER SYSTEM DROP OBSERVER \"192.168.1.1:8080\"";
+        AlterSystemStmt dropObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropObserverSql, ctx);
+
+        String addFollowerSql = "ALTER SYSTEM ADD FOLLOWER \"192.168.1.1:8080\"";
+        AlterSystemStmt addFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addFollowerSql, ctx);
+
+        String dropFollowerSql = "ALTER SYSTEM DROP FOLLOWER \"192.168.1.1:8080\"";
+        AlterSystemStmt dropFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropFollowerSql, ctx);
+
+
+    }
+
+
 
     @Test
     public void testCatalogAddPartitions5Day() throws Exception {
@@ -621,16 +665,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-15\") EVERY (interval 5 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p20170103"));
@@ -639,7 +683,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -662,14 +706,14 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition_exception ADD\n" +
                 "    PARTITIONS START (\"2014-01-01\") END (\"2014-01-04\") EVERY (interval 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exception", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exception", addPartitionClause);
     }
 
     @Test
@@ -691,16 +735,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-25\") END (\"2017-04-10\") EVERY (interval 1 week)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_week", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_week", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition_week");
 
         Assert.assertNotNull(table.getPartition("p2017_13"));
@@ -709,7 +753,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -731,16 +775,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2017-04-01\") EVERY (interval 1 month)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p201701"));
@@ -750,7 +794,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -772,16 +816,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2020-01-01\") EVERY (interval 1 YEAR)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p2017"));
@@ -791,7 +835,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -813,16 +857,16 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"1\") END (\"4\") EVERY (1)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -832,7 +876,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -856,21 +900,21 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 1 day);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
-            Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (DdlException ex) {
 
         }
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -879,7 +923,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
 
@@ -904,21 +948,21 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 0 day);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
-            Catalog.getCurrentCatalog().addPartitions(db, "test_partition_0day", addPartitionClause);
+            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_0day", addPartitionClause);
             Assert.fail();
         } catch (DdlException ex) {
 
         }
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition_0day");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -927,7 +971,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition_0day";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
 
@@ -951,21 +995,21 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "         START (\"2015-01-01\") END (\"2015-01-06\") EVERY (interval 1 day);";
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-            Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+            GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
             Assert.fail();
         } catch (AnalysisException ex) {
 
         }
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -974,7 +1018,7 @@ public class AlterTest {
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -997,29 +1041,29 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-02')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists", addPartitionClause2);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition_exists");
 
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test
@@ -1042,29 +1086,29 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists2", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists2", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists2", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists2", addPartitionClause2);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition_exists2");
 
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -1087,27 +1131,27 @@ public class AlterTest {
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists3", addPartitionClause);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists3", addPartitionClause);
 
         String alterSQL2 = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists3", addPartitionClause2);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists3", addPartitionClause2);
 
-        Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition_exists3");
 
         Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists3";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
 }

@@ -68,6 +68,7 @@ class HeartbeatFlags;
 namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
+class DriverLimiter;
 } // namespace pipeline
 
 // Execution environment for queries/plan fragments.
@@ -166,11 +167,13 @@ public:
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
+    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
 
-    Status _init_mem_tracker();
+    Status _init_storage_page_cache();
 
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
@@ -225,6 +228,8 @@ private:
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
+    pipeline::DriverLimiter* _driver_limiter;
+
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 

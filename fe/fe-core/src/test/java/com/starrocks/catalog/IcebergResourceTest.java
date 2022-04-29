@@ -12,6 +12,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -30,10 +31,10 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -58,10 +59,10 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testCustomStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

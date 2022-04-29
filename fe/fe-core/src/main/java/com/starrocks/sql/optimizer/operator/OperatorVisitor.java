@@ -59,7 +59,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 
-
 /**
  * OperatorVisitor is used to traverse Operator
  * R represents the return value of function visitXXX, C represents the global context

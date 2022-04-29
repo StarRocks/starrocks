@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.base;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 import java.util.List;
@@ -29,21 +28,12 @@ public class OutputInputProperty {
         return new OutputInputProperty(outputProperty, Lists.newArrayList(inputProperties));
     }
 
-    public static OutputInputProperty emptyOutputOf(PhysicalPropertySet... inputProperties) {
-        return new OutputInputProperty(PhysicalPropertySet.EMPTY, Lists.newArrayList(inputProperties));
-    }
-
     public PhysicalPropertySet getOutputProperty() {
         return outputProperty;
     }
 
     public List<PhysicalPropertySet> getInputProperties() {
         return inputProperties;
-    }
-
-    public PhysicalPropertySet getInputProperty(int i) {
-        Preconditions.checkState(i < inputProperties.size());
-        return inputProperties.get(i);
     }
 
     @Override

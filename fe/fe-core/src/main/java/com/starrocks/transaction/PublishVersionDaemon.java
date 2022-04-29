@@ -22,10 +22,10 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -56,7 +56,7 @@ public class PublishVersionDaemon extends MasterDaemon {
     }
 
     private void publishVersion() throws UserException {
-        GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         List<TransactionState> readyTransactionStates = globalTransactionMgr.getReadyToPublishTransactions();
         if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
             return;
@@ -67,7 +67,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         // should publish to two clusters.
         // attention here, we publish transaction state to all backends including dead backend, if not publish to dead backend
         // then transaction manager will treat it as success
-        List<Long> allBackends = Catalog.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
         if (allBackends.isEmpty()) {
             LOG.warn("some transaction state need to publish, but no backend exists");
             return;

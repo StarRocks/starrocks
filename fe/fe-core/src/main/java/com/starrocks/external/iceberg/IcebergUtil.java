@@ -38,7 +38,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding catalog implementation.
+     * Returns the corresponding globalStateMgr implementation.
      */
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
@@ -50,12 +50,12 @@ public class IcebergUtil {
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
                 throw new StarRocksIcebergException(
-                        "Unexpected catalog type: " + catalogType.toString());
+                        "Unexpected globalStateMgr type: " + catalogType.toString());
         }
     }
 
     /**
-     * Returns the corresponding hive catalog implementation.
+     * Returns the corresponding hive globalStateMgr implementation.
      */
     public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
             throws StarRocksIcebergException {
@@ -63,7 +63,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding custom catalog implementation.
+     * Returns the corresponding custom globalStateMgr implementation.
      */
     public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
             throws StarRocksIcebergException {
@@ -73,6 +73,7 @@ public class IcebergUtil {
 
     /**
      * Get hdfs file format in StarRocks use iceberg file format.
+     *
      * @param format
      * @return HdfsFileFormat
      */
@@ -91,19 +92,18 @@ public class IcebergUtil {
     /**
      * Get current snapshot of iceberg table, return null if snapshot do not exist.
      * Refresh table is needed.
+     *
      * @param table
      * @return Optional<Snapshot>
      */
-    public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
+    public static Optional<Snapshot> getCurrentTableSnapshot(Table table) {
         return Optional.ofNullable(table.currentSnapshot());
     }
 
     /**
      * Get table scan for given table and snapshot, filter with given iceberg predicates.
      * Refresh table if needed.
+     *
      * @param table
      * @param snapshot
      * @param icebergPredicates
@@ -112,12 +112,7 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates,
-                                         boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
-
+                                         List<Expression> icebergPredicates) {
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
         Expression filterExpressions = Expressions.alwaysTrue();
         if (!icebergPredicates.isEmpty()) {
@@ -127,7 +122,7 @@ public class IcebergUtil {
         return tableScan.filter(filterExpressions);
     }
 
-    private static void refreshTable(Table table) {
+    public static void refreshTable(Table table) {
         try {
             if (table instanceof BaseTable) {
                 BaseTable baseTable = (BaseTable) table;
@@ -138,7 +133,7 @@ public class IcebergUtil {
                     throw new NoSuchTableException("No such table: %s", table.name());
                 }
             } else {
-                // table loaded by Catalog should be a base table
+                // table loaded by GlobalStateMgr should be a base table
                 throw new StarRocksIcebergException(String.format("Invalid table type of %s, it should be a BaseTable!",
                         table.name()));
             }
@@ -152,7 +147,6 @@ public class IcebergUtil {
     }
 
     /**
-     *
      * @param partitionSpec
      * @return
      */

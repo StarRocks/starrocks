@@ -10,7 +10,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-
 public class CreateMVStmtTest {
 
     private static StarRocksAssert starRocksAssert;
@@ -51,7 +50,8 @@ public class CreateMVStmtTest {
                         "  `c_1_9` bigint(20) NOT NULL COMMENT \"\",\n" +
                         "  `c_1_10` varchar(31) NOT NULL COMMENT \"\",\n" +
                         "  `c_1_11` decimal128(22, 18) NULL COMMENT \"\",\n" +
-                        "  `c_1_12` boolean NULL COMMENT \"\"\n" +
+                        "  `c_1_12` boolean NULL COMMENT \"\",\n" +
+                        "  `c_1_13` json NULL COMMENT \"\"\n" +
                         ") ENGINE=OLAP \n" +
                         "DUPLICATE KEY(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`)\n" +
                         "COMMENT \"OLAP\"\n" +
@@ -74,7 +74,8 @@ public class CreateMVStmtTest {
         try {
             UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
         } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("The materialized view currently does not support * in select statement"));
+            Assert.assertTrue(
+                    ex.getMessage().contains("The materialized view currently does not support * in select statement"));
         }
     }
 
@@ -94,5 +95,20 @@ public class CreateMVStmtTest {
         }
     }
 
+    @Test
+    public void testCreateMVWithJSON() {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "CREATE MATERIALIZED VIEW v0 AS " +
+                "SELECT t1.c_1_1, t1.c_1_2, t1.c_1_13 " +
+                "FROM t1";
+        try {
+            CreateMaterializedViewStmt stmt = (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+            boolean jsonKey = stmt.getMVColumnItemList().stream().anyMatch(col -> col.isKey() && col.getType().isJsonType());
+            Assert.assertFalse(jsonKey);
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
+        }
+    }
 }
+
 

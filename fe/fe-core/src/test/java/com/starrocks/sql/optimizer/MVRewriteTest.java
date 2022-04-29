@@ -123,7 +123,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
-        query = "select * from ( select *,'v1' as vid from " + EMPS_TABLE_NAME + ") T"  + " where vid='v1'";
+        query = "select * from ( select *,'v1' as vid from " + EMPS_TABLE_NAME + ") T" + " where vid='v1'";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
     }
 

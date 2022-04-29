@@ -2,6 +2,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -11,6 +14,7 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -18,16 +22,20 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropIndexClause;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -42,6 +50,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -51,8 +60,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -77,6 +88,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
@@ -89,7 +108,15 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -141,6 +168,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -163,6 +194,33 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowTableStatusStmt(ShowTableStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    // ----------------- Alter Clause ---------------
+
+    public R visitCreateIndexClause(CreateIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDropIndexClause(DropIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitBackendClause(BackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+
+    public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
     }
 
     // ----------------- Relation ---------------

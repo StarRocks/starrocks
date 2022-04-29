@@ -33,7 +33,7 @@ public class DeleteAnalyzer {
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
             try {
-                deleteStatement.analyze(new Analyzer(session.getCatalog(), session));
+                deleteStatement.analyze(new Analyzer(session.getGlobalStateMgr(), session));
             } catch (Exception e) {
                 LOG.warn("Analyze DeleteStmt using old analyzer failed", e);
                 throw new SemanticException("Analyze DeleteStmt using old analyzer failed: " + e.getMessage());

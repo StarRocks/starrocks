@@ -24,7 +24,6 @@ package com.starrocks.clone;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -42,6 +41,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -223,7 +223,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.indexId = idxId;
         this.tabletId = tabletId;
         this.createTime = createTime;
-        this.infoService = Catalog.getCurrentSystemInfo();
+        this.infoService = GlobalStateMgr.getCurrentSystemInfo();
         this.state = State.PENDING;
     }
 
@@ -645,7 +645,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             AgentTaskQueue.removeTask(cloneTask.getBackendId(), TTaskType.CLONE, cloneTask.getSignature());
 
             // clear all CLONE replicas
-            Database db = Catalog.getCurrentCatalog().getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
             if (db != null) {
                 db.writeLock();
                 try {
@@ -747,7 +747,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 || tabletStatus == TabletStatus.REPLICA_RELOCATING || tabletStatus == TabletStatus.COLOCATE_MISMATCH
                 || (type == Type.BALANCE && !cloneTask.isLocal())) {
             Replica cloneReplica = new Replica(
-                    Catalog.getCurrentCatalog().getNextId(), destBackendId,
+                    GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
                     -1 /* version */, schemaHash,
                     -1 /* data size */, -1 /* row count */,
                     ReplicaState.CLONE,
@@ -800,7 +800,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         Preconditions.checkState(state == State.RUNNING, state);
         Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
         setLastVisitedTime(System.currentTimeMillis());
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         // check if clone task success
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
@@ -826,24 +826,24 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         // 1. check the tablet status first
-        Database db = catalog.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
         db.writeLock();
         try {
-            OlapTable olapTable = (OlapTable) catalog.getTableIncludeRecycleBin(db, tblId);
+            OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
 
-            Partition partition = catalog.getPartitionIncludeRecycleBin(olapTable, partitionId);
+            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
             }
 
             short replicationNum =
-                    catalog.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
+                    globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
             if (replicationNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }
@@ -965,11 +965,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);
-            Catalog.getCurrentCatalog().getEditLog().logAddReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
             // so we keep it state unchanged, and log update replica
-            Catalog.getCurrentCatalog().getEditLog().logUpdateReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
         }
     }
 

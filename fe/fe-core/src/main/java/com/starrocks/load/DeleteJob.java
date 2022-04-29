@@ -23,13 +23,13 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PushTask;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionState;
@@ -88,7 +88,7 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }
@@ -162,20 +162,20 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
             return;
         }
         executeFinish();
-        Catalog.getCurrentCatalog().getEditLog().logFinishMultiDelete(deleteInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
             throws UserException {
         // just to clean the callback
-        Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
     }
 
     public void executeFinish() {
         setState(DeleteState.FINISHED);
-        Catalog.getCurrentCatalog().getDeleteHandler().recordFinishedJob(this);
-        Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        GlobalStateMgr.getCurrentState().getDeleteHandler().recordFinishedJob(this);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
     }
 
     public long getTransactionId() {

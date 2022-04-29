@@ -29,7 +29,9 @@ using DriverDependencies = std::vector<DriverDependencyPtr>;
 
 class OperatorWithDependency : public Operator {
 public:
-    OperatorWithDependency(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id);
+    OperatorWithDependency(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                           int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
     ~OperatorWithDependency() = default;
     // return true if the corresponding right operator is full materialized, otherwise return false.
     virtual bool is_ready() const = 0;
@@ -37,7 +39,9 @@ public:
 
 class OperatorWithDependencyFactory : public OperatorFactory {
 public:
-    OperatorWithDependencyFactory(int32_t id, const std::string& name, int32_t plan_node_id);
+    OperatorWithDependencyFactory(int32_t id, const std::string& name, int32_t plan_node_id)
+            : OperatorFactory(id, name, plan_node_id) {}
+
     ~OperatorWithDependencyFactory() = default;
 };
 

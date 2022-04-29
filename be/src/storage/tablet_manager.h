@@ -130,8 +130,6 @@ public:
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
 
-    void get_partition_related_tablets(int64_t partition_id, std::set<TabletInfo>* tablet_infos);
-
     void do_tablet_meta_checkpoint(DataDir* data_dir);
 
     void register_clone_tablet(int64_t tablet_id);

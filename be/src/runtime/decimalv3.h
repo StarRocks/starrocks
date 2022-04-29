@@ -171,19 +171,21 @@ public:
                 high_scale = mid_scale;
             }
         }
-        // case 1: low_scale = 0, fraction part is zero, no fraction part to output;
-        // case 2: low_scale = scale, no zeros between decimal point and first non-zero dec-digit
+        // case 1: low_scale = scale, no zeros between decimal point and first non-zero dec-digit
         //         of fraction part.
-        // case 3: low_scale < scale, (scale-low_scale) zeros are interpolated into str_decimal.
-        if (low_scale != 0) {
+        // case 2: low_scale < scale, (scale-low_scale) zeros are interpolated into str_decimal.
+        if (scale) {
             str_decimal[len++] = '.';
             const size_t zeros_interpolated = scale - low_scale;
             for (size_t i = 0; i < zeros_interpolated; ++i) {
                 str_decimal[len++] = '0';
             }
-            end = fmt::format_to(str_decimal + len, "{}", frac_part);
-            len = end - str_decimal;
+            if (frac_part) {
+                end = fmt::format_to(str_decimal + len, "{}", frac_part);
+                len = end - str_decimal;
+            }
         }
+
         s.resize(len);
         return s;
     }

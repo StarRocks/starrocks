@@ -26,6 +26,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
@@ -189,6 +190,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(max_thread_num);
 
+    _driver_limiter = new pipeline::DriverLimiter(max_thread_num * config::pipeline_max_num_drivers_per_exec_thread);
+
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
                             .set_min_threads(0)
@@ -225,7 +228,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _broker_mgr->init();
     _small_file_mgr->init();
-    _init_mem_tracker();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
@@ -305,18 +307,11 @@ Status ExecEnv::init_mem_tracker() {
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    _init_storage_page_cache();
     return Status::OK();
 }
 
-Status ExecEnv::_init_mem_tracker() {
-    // Initialize global memory limit.
-    std::stringstream ss;
-
-    if (!BitUtil::IsPowerOf2(config::min_buffer_size)) {
-        ss << "--min_buffer_size must be a power-of-two: " << config::min_buffer_size;
-        return Status::InternalError(ss.str());
-    }
-
+Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
@@ -389,6 +384,10 @@ void ExecEnv::_destroy() {
     if (_wg_driver_executor) {
         delete _wg_driver_executor;
         _wg_driver_executor = nullptr;
+    }
+    if (_driver_limiter) {
+        delete _driver_limiter;
+        _driver_limiter = nullptr;
     }
     if (_fragment_mgr) {
         delete _fragment_mgr;

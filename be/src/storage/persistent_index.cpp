@@ -485,6 +485,7 @@ public:
         _meta.set_size(_total);
         _meta.set_fixed_key_size(_fixed_key_size);
         _meta.set_fixed_value_size(_fixed_value_size);
+        _meta.set_format_version(PERSISTENT_INDEX_VERSION_1);
         std::string footer;
         if (!_meta.SerializeToString(&footer)) {
             return Status::InternalError("ImmutableIndexMetaPB::SerializeToString failed");
@@ -1391,6 +1392,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(0);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
@@ -1417,10 +1419,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(snapshot_size);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         _offset += snapshot_size;
         _page_size = 0;
     } else {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         IndexWalMetaPB* wal_pb = l0_meta->add_wals();
         _version.to_pb(wal_pb->mutable_version());
 

@@ -15,11 +15,11 @@ namespace pipeline {
 
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
-    CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           const std::vector<ExprContext*>& conjunct_ctxs,
                           const vectorized::Buffer<SlotDescriptor*>& col_types, const size_t& probe_column_count,
                           const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id),
+            : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id, driver_sequence),
               _col_types(col_types),
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
@@ -165,8 +165,9 @@ public:
     ~CrossJoinLeftOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, _conjunct_ctxs, _col_types,
-                                                       _probe_column_count, _build_column_count, _cross_join_context);
+        return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs,
+                                                       _col_types, _probe_column_count, _build_column_count,
+                                                       _cross_join_context);
     }
 
     Status prepare(RuntimeState* state) override;

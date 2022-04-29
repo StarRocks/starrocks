@@ -22,11 +22,11 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 
@@ -85,7 +85,7 @@ public class BrokerLoadErrorHub extends LoadErrorHub {
         }
 
         public TBrokerErrorHubInfo toThrift() {
-            FsBroker fsBroker = Catalog.getCurrentCatalog().getBrokerMgr().getAnyBroker(brokerName);
+            FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getAnyBroker(brokerName);
             if (fsBroker == null) {
                 return null;
             }

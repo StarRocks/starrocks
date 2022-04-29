@@ -24,14 +24,15 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -73,6 +74,9 @@ public class ConnectContext {
 
     // id for this connection
     protected int connectionId;
+    // Time when the connection is make
+    protected long connectionStartTime;
+
     // mysql net
     protected MysqlChannel mysqlChannel;
     // state
@@ -114,9 +118,9 @@ public class ConnectContext {
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
-    // Catalog: put catalog here is convenient for unit test,
-    // because catalog is singleton, hard to mock
-    protected Catalog catalog;
+    // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
+    // because globalStateMgr is singleton, hard to mock
+    protected GlobalStateMgr globalStateMgr;
     protected boolean isSend;
 
     protected AuditEventBuilder auditEventBuilder = new AuditEventBuilder();
@@ -236,12 +240,12 @@ public class ConnectContext {
         return new TResourceInfo(qualifiedUser, sessionVariable.getResourceGroup());
     }
 
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
+    public void setCatalog(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
-    public Catalog getCatalog() {
-        return catalog;
+    public GlobalStateMgr getGlobalStateMgr() {
+        return globalStateMgr;
     }
 
     public String getQualifiedUser() {
@@ -327,6 +331,14 @@ public class ConnectContext {
 
     public void setConnectionId(int connectionId) {
         this.connectionId = connectionId;
+    }
+
+    public void resetConnectionStartTime() {
+        this.connectionStartTime = System.currentTimeMillis();
+    }
+
+    public long getConnectionStartTime() {
+        return connectionStartTime;
     }
 
     public MysqlChannel getMysqlChannel() {
@@ -538,6 +550,8 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
+            // connection start Time
+            row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State

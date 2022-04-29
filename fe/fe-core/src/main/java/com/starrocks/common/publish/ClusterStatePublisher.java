@@ -21,9 +21,9 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
@@ -57,7 +57,7 @@ public class ClusterStatePublisher {
     // Fuck singleton.
     public static ClusterStatePublisher getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new ClusterStatePublisher(Catalog.getCurrentSystemInfo());
+            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentSystemInfo());
         }
         return INSTANCE;
     }

@@ -2,6 +2,9 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -9,12 +12,14 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -29,9 +34,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -157,8 +164,11 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewParser(StatementBase statement) {
-        return statement instanceof AlterViewStmt
+        return AlterTableStmt.isSupportNewPlanner(statement)
+                || AlterSystemStmt.isSupportNewPlanner(statement)
+                || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -166,12 +176,16 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
-        return statement instanceof AlterViewStmt
+        return AlterTableStmt.isSupportNewPlanner(statement)
+                || AlterSystemStmt.isSupportNewPlanner(statement)
+                || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
@@ -179,12 +193,16 @@ public class StatementPlanner {
                 || statement instanceof DmlStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RevokeRoleStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
+                || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof DropMaterializedViewStmt;
     }
 }

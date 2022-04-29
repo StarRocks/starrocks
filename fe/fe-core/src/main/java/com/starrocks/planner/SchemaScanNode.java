@@ -57,13 +57,21 @@ public class SchemaScanNode extends ScanNode {
     private String frontendIP;
     private int frontendPort;
 
-    public void setSchemaDb(String schemaDb) { this.schemaDb = schemaDb; }
+    public void setSchemaDb(String schemaDb) {
+        this.schemaDb = schemaDb;
+    }
 
-    public void setSchemaTable(String schemaTable) { this.schemaTable = schemaTable; }
+    public void setSchemaTable(String schemaTable) {
+        this.schemaTable = schemaTable;
+    }
 
-    public String getSchemaDb() { return schemaDb; }
+    public String getSchemaDb() {
+        return schemaDb;
+    }
 
-    public String getSchemaTable() { return schemaTable; }
+    public String getSchemaTable() {
+        return schemaTable;
+    }
 
     public void setUser(String user) {
         this.user = user;

@@ -3,7 +3,9 @@
 #include "formats/parquet/column_reader.h"
 
 #include "column/array_column.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class RandomAccessFile;

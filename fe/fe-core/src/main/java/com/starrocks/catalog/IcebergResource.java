@@ -80,7 +80,7 @@ public class IcebergResource extends Resource {
                 }
                 break;
             default:
-                throw new DdlException("Unexpected catalog type: " + catalogType);
+                throw new DdlException("Unexpected globalStateMgr type: " + catalogType);
         }
     }
 
@@ -95,7 +95,7 @@ public class IcebergResource extends Resource {
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, catalogImpl));
                 break;
             default:
-                LOG.warn("Unexpected catalog type: " + catalogType);
+                LOG.warn("Unexpected globalStateMgr type: " + catalogType);
                 break;
         }
     }

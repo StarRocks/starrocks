@@ -26,7 +26,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -41,6 +40,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -174,7 +174,7 @@ public class ExportStmt extends StatementBase {
         }
 
         // check auth
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                 tblName.getDb(), tblName.getTbl(),
                 PrivPredicate.SELECT)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "EXPORT",
@@ -208,8 +208,8 @@ public class ExportStmt extends StatementBase {
         checkProperties(properties);
     }
 
-    private void checkTable(Catalog catalog) throws AnalysisException {
-        Database db = catalog.getDb(tblName.getDb());
+    private void checkTable(GlobalStateMgr globalStateMgr) throws AnalysisException {
+        Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             throw new AnalysisException("Db does not exist. name: " + tblName.getDb());
         }

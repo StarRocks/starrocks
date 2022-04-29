@@ -16,6 +16,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -101,6 +102,10 @@ public class IcebergTable extends Table {
         this.tableLocation = location;
     }
 
+    public void refreshTable() {
+        IcebergUtil.refreshTable(this.getIcebergTable());
+    }
+
     // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
@@ -138,7 +143,7 @@ public class IcebergTable extends Table {
         }
 
         copiedProps.remove(ICEBERG_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource == null) {
             throw new DdlException("iceberg resource [" + resourceName + "] not exists");
         }
@@ -160,7 +165,8 @@ public class IcebergTable extends Table {
                 for (String key : copiedProps.keySet()) {
                     icebergProperties.put(key, copiedProps.remove(key));
                 }
-                icebergCatalog = IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
+                icebergCatalog =
+                        IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
                 break;
             default:
                 throw new DdlException("unsupported catalog type " + type.name());

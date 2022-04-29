@@ -2,9 +2,17 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddFollowerClause;
+import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -20,6 +28,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -28,6 +37,11 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropFollowerClause;
+import com.starrocks.analysis.DropIndexClause;
+import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -38,6 +52,7 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.InsertTarget;
@@ -63,6 +78,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -71,6 +87,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
@@ -90,6 +107,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -99,12 +117,14 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -138,22 +158,57 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-    // -------------------------------- Statement ------------------------------
-
+    // ------------------------------------------- Table Statement -----------------------------------------------------
     @Override
-    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowDbStmt(stringLiteral.getValue());
-        } else if (context.expression() != null) {
-            return new ShowDbStmt(null, (Expr) visit(context.expression()));
-        } else {
-            return new ShowDbStmt(null, null);
+    public ParseNode visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
         }
+
+        CreateTableStmt createTableStmt = new CreateTableStmt(
+                context.IF() != null,
+                false,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                null,
+                "olap",
+                null,
+                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                properties,
+                null,
+                context.comment() == null ? null :
+                        ((StringLiteral) visit(context.comment().string())).getStringValue());
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        return new CreateTableAsSelectStmt(
+                createTableStmt,
+                columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
+                (QueryStatement) visit(context.queryStatement()));
     }
 
     @Override
-    public ParseNode visitShowTables(StarRocksParser.ShowTablesContext context) {
+    public ParseNode visitAlterTableStatement(StarRocksParser.AlterTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
+        return new AlterTableStmt(targetTableName, alterClauses);
+    }
+
+    @Override
+    public ParseNode visitDropTableStatement(StarRocksParser.DropTableStatementContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        boolean force = context.FORCE() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, force);
+    }
+
+    @Override
+    public ParseNode visitShowTableStatement(StarRocksParser.ShowTableStatementContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
         if (context.qualifiedName() != null) {
@@ -171,71 +226,194 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
-        Map<String, String> configs = new HashMap<>();
-        Property property = (Property) visitProperty(context.property());
-        String configKey = property.getKey();
-        String configValue = property.getValue();
-        configs.put(configKey, configValue);
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
-    }
+    public ParseNode visitCreateIndexStatement(StarRocksParser.CreateIndexStatementContext context) {
+        String indexName = ((Identifier) visit(context.identifier())).getValue();
+        List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
 
-    @Override
-    public ParseNode visitDropTable(StarRocksParser.DropTableContext context) {
-        boolean ifExists = context.IF() != null && context.EXISTS() != null;
-        boolean force = context.FORCE() != null;
+        IndexDef indexDef = new IndexDef(indexName,
+                columnList.stream().map(Identifier::getValue).collect(toList()),
+                IndexDef.IndexType.BITMAP,
+                comment);
+
+        CreateIndexClause createIndexClause = new CreateIndexClause(null, indexDef, false);
+
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        return new DropTableStmt(ifExists, targetTableName, force);
+        return new AlterTableStmt(targetTableName, Lists.newArrayList(createIndexClause));
     }
 
     @Override
-    public ParseNode visitDropView(StarRocksParser.DropViewContext context) {
+    public ParseNode visitDropIndexStatement(StarRocksParser.DropIndexStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        DropIndexClause dropIndexClause = new DropIndexClause(identifier.getValue(), null, false);
+
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new AlterTableStmt(targetTableName, Lists.newArrayList(dropIndexClause));
+    }
+
+    // ------------------------------------------- View Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateViewStatement(StarRocksParser.CreateViewStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+
+        List<ColWithComment> colWithComments = null;
+        if (context.columnNameWithComment().size() > 0) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+        return new CreateViewStmt(
+                context.IF() != null,
+                targetTableName,
+                colWithComments,
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
+                (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitAlterViewStatement(StarRocksParser.AlterViewStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+
+        List<ColWithComment> colWithComments = null;
+        if (context.columnNameWithComment().size() > 0) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
+        return new AlterViewStmt(targetTableName, colWithComments, (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitDropViewStatement(StarRocksParser.DropViewStatementContext context) {
         boolean ifExists = context.IF() != null && context.EXISTS() != null;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new DropTableStmt(ifExists, targetTableName, true, false);
     }
 
+    // ------------------------------------------- Materialized View Statement -----------------------------------------
+
     @Override
-    public ParseNode visitUse(StarRocksParser.UseContext context) {
+    public ParseNode visitShowMaterializedViewStatement(StarRocksParser.ShowMaterializedViewStatementContext context) {
+        String database = null;
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
+        }
+        return new ShowMaterializedViewStmt(database);
+    }
+
+    @Override
+    public ParseNode visitDropMaterializedViewStatement(StarRocksParser.DropMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new DropMaterializedViewStmt(context.IF() != null, mvName);
+    }
+
+    // ------------------------------------------- Cluster Mangement Statement -----------------------------------------
+
+    @Override
+    public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
+        return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
+    }
+
+    // ------------------------------------------- Alter Clause --------------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateIndexClause(StarRocksParser.CreateIndexClauseContext context) {
+        String indexName = ((Identifier) visit(context.identifier())).getValue();
+        List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
+
+        IndexDef indexDef = new IndexDef(indexName,
+                columnList.stream().map(Identifier::getValue).collect(toList()),
+                IndexDef.IndexType.BITMAP,
+                comment);
+
+        return new CreateIndexClause(null, indexDef, true);
+    }
+
+    @Override
+    public ParseNode visitDropIndexClause(StarRocksParser.DropIndexClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new UseStmt(identifier.getValue());
+        return new DropIndexClause(identifier.getValue(), null, true);
     }
 
     @Override
-    public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
-        QueryRelation queryRelation = (QueryRelation) visit(context.query());
-        QueryStatement queryStatement = new QueryStatement(queryRelation);
-        if (context.outfile() != null) {
-            queryStatement.setOutFileClause((OutFileClause) visit(context.outfile()));
-        }
-        return queryStatement;
-    }
-
-    private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context) {
-        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
-        if (context.LOGICAL() != null) {
-            explainLevel = StatementBase.ExplainLevel.LOGICAL;
-        } else if (context.VERBOSE() != null) {
-            explainLevel = StatementBase.ExplainLevel.VERBOSE;
-        } else if (context.COSTS() != null) {
-            explainLevel = StatementBase.ExplainLevel.COST;
-        }
-        return explainLevel;
+    public ParseNode visitTableRenameClause(StarRocksParser.TableRenameClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new TableRenameClause(identifier.getValue());
     }
 
     @Override
-    public ParseNode visitExplain(StarRocksParser.ExplainContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        if (context.explainDesc() != null) {
-            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+    public ParseNode visitAdminSetReplicaStatus(StarRocksParser.AdminSetReplicaStatusContext context) {
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
         }
-        return queryStatement;
+        return new AdminSetReplicaStatusStmt(properties);
+    }
+
+
+
+    @Override
+    public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        if (context.TO() != null) {
+            Identifier identifier = (Identifier) visit(context.identifier());
+            return new AddBackendClause(clusters, identifier.getValue());
+        }
+        if (context.FREE() != null) {
+            return new AddBackendClause(clusters, true);
+        }
+        return new AddBackendClause(clusters, false);
     }
 
     @Override
-    public ParseNode visitInsert(StarRocksParser.InsertContext context) {
+    public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new DropBackendClause(clusters, context.FORCE() != null);
+    }
+
+    @Override
+    public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null) {
+            return new AddFollowerClause(cluster);
+        } else if (context.OBSERVER() != null) {
+            return new AddObserverClause(cluster);
+        } else {
+            Preconditions.checkState(false, "frontend clause error.");
+            return null;
+        }
+    }
+
+    @Override
+    public ParseNode visitDropFrontendClause(StarRocksParser.DropFrontendClauseContext context) {
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.FOLLOWER() != null) {
+            return new DropFollowerClause(cluster);
+        } else if (context.OBSERVER() != null) {
+            return new DropObserverClause(cluster);
+        } else {
+            Preconditions.checkState(false, "frontend clause error.");
+            return null;
+        }
+    }
+
+    // ------------------------------------------- DML Statement -------------------------------------------------------
+    @Override
+    public ParseNode visitInsertStatement(StarRocksParser.InsertStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
@@ -282,56 +460,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitExpressionOrDefault(StarRocksParser.ExpressionOrDefaultContext context) {
-        if (context.DEFAULT() != null) {
-            return new DefaultValueExpr();
-        } else {
-            return visit(context.expression());
-        }
-    }
-
-    @Override
-    public ParseNode visitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext context) {
-        ArrayList<Expr> row = Lists.newArrayList();
-        for (int i = 0; i < context.expressionOrDefault().size(); ++i) {
-            row.add((Expr) visit(context.expressionOrDefault(i)));
-        }
-        return new ValueList(row);
-    }
-
-    @Override
-    public ParseNode visitCreateTableAsSelect(StarRocksParser.CreateTableAsSelectContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
-        CreateTableStmt createTableStmt = new CreateTableStmt(
-                context.IF() != null,
-                false,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                null,
-                "olap",
-                null,
-                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
-                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
-                properties,
-                null,
-                context.comment() == null ? null :
-                        ((StringLiteral) visit(context.comment().string())).getStringValue());
-
-        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-        return new CreateTableAsSelectStmt(
-                createTableStmt,
-                columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
-                (QueryStatement) visit(context.queryStatement()));
-    }
-
-    @Override
-    public ParseNode visitUpdate(StarRocksParser.UpdateContext context) {
+    public ParseNode visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
@@ -344,14 +473,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAssignment(StarRocksParser.AssignmentContext context) {
-        String column = ((Identifier) visit(context.identifier())).getValue();
-        Expr expr = (Expr) visit(context.expressionOrDefault());
-        return new ColumnAssignment(column, expr);
-    }
-
-    @Override
-    public ParseNode visitDelete(StarRocksParser.DeleteContext context) {
+    public ParseNode visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
@@ -366,154 +488,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ret;
     }
 
-    @Override
-    public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-        List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
-        return new RangePartitionDesc(
-                identifierList.stream().map(Identifier::getValue).collect(toList()),
-                partitionDesc);
-    }
+    // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitSingleRangePartition(StarRocksParser.SingleRangePartitionContext context) {
-        PartitionKeyDesc partitionKeyDesc = (PartitionKeyDesc) visit(context.partitionKeyDesc());
-        return new SingleRangePartitionDesc(false, ((Identifier) visit(context.identifier())).getValue(),
-                partitionKeyDesc, null);
-    }
-
-    @Override
-    public ParseNode visitMultiRangePartition(StarRocksParser.MultiRangePartitionContext context) {
-        if (context.interval() != null) {
-            IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
-
-            return new MultiRangePartitionDesc(
-                    ((StringLiteral) visit(context.string(0))).getStringValue(),
-                    ((StringLiteral) visit(context.string(1))).getStringValue(),
-                    Long.parseLong(intervalLiteral.getValue().toString()),
-                    intervalLiteral.getUnitIdentifier().getDescription());
-        } else {
-            return new MultiRangePartitionDesc(
-                    ((StringLiteral) visit(context.string(0))).getStringValue(),
-                    ((StringLiteral) visit(context.string(1))).getStringValue(),
-                    Long.parseLong(context.INTEGER_VALUE().getText()));
-        }
-    }
-
-    @Override
-    public ParseNode visitPartitionKeyDesc(StarRocksParser.PartitionKeyDescContext context) {
-        PartitionKeyDesc partitionKeyDesc;
-        if (context.LESS() != null) {
-            List<PartitionValue> partitionValueList =
-                    visit(context.partitionValueList().get(0).partitionValue(), PartitionValue.class);
-            partitionKeyDesc = new PartitionKeyDesc(partitionValueList);
-        } else {
-            List<PartitionValue> lowerPartitionValueList =
-                    visit(context.partitionValueList().get(0).partitionValue(), PartitionValue.class);
-            List<PartitionValue> upperPartitionValueList =
-                    visit(context.partitionValueList().get(1).partitionValue(), PartitionValue.class);
-            partitionKeyDesc = new PartitionKeyDesc(lowerPartitionValueList, upperPartitionValueList);
-        }
-        return partitionKeyDesc;
-    }
-
-    @Override
-    public ParseNode visitPartitionValue(StarRocksParser.PartitionValueContext context) {
-        if (context.MAXVALUE() != null) {
-            return PartitionValue.MAX_VALUE;
-        } else {
-            return new PartitionValue(((StringLiteral) visit(context.string())).getStringValue());
-        }
-    }
-
-    @Override
-    public ParseNode visitDistributionDesc(StarRocksParser.DistributionDescContext context) {
-        //default buckets number
-        int buckets = 10;
-
-        if (context.INTEGER_VALUE() != null) {
-            buckets = Integer.parseInt(context.INTEGER_VALUE().getText());
-        }
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-
-        return new HashDistributionDesc(buckets, identifierList.stream().map(Identifier::getValue).collect(toList()));
-    }
-
-    @Override
-    public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
-        return new Property(
-                ((StringLiteral) visit(context.key)).getStringValue(),
-                ((StringLiteral) visit(context.value)).getStringValue());
-    }
-
-    @Override
-    public ParseNode visitOutfile(StarRocksParser.OutfileContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
+    public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        QueryStatement queryStatement = new QueryStatement(queryRelation);
+        if (context.outfile() != null) {
+            queryStatement.setOutFileClause((OutFileClause) visit(context.outfile()));
         }
 
-        String format = null;
-        if (context.fileFormat() != null) {
-            if (context.fileFormat().identifier() != null) {
-                format = ((Identifier) visit(context.fileFormat().identifier())).getValue();
-            } else if (context.fileFormat().string() != null) {
-                format = ((StringLiteral) visit(context.fileFormat().string())).getStringValue();
-            }
+        if (context.explainDesc() != null) {
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
 
-        return new OutFileClause(
-                ((StringLiteral) visit(context.file)).getStringValue(),
-                format,
-                properties);
+        return queryStatement;
     }
 
     @Override
-    public ParseNode visitCreateView(StarRocksParser.CreateViewContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-
-        List<ColWithComment> colWithComments = null;
-        if (context.columnNameWithComment().size() > 0) {
-            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
-        }
-        return new CreateViewStmt(
-                context.IF() != null,
-                targetTableName,
-                colWithComments,
-                context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
-                (QueryStatement) visit(context.queryStatement()));
-    }
-
-    @Override
-    public ParseNode visitAlterView(StarRocksParser.AlterViewContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-
-        List<ColWithComment> colWithComments = null;
-        if (context.columnNameWithComment().size() > 0) {
-            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
-        }
-
-        return new AlterViewStmt(targetTableName, colWithComments, (QueryStatement) visit(context.queryStatement()));
-    }
-
-    @Override
-    public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
-        String comment = null;
-        if (context.comment() != null) {
-            comment = ((StringLiteral) visit(context.comment())).getStringValue();
-        }
-
-        return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment);
-    }
-
-    // ------------------------------------------- Query Relation -------------------------------------------
-    @Override
-    public ParseNode visitQuery(StarRocksParser.QueryContext context) {
+    public ParseNode visitQueryBody(StarRocksParser.QueryBodyContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
 
         List<CTERelation> withQuery = new ArrayList<>();
@@ -537,7 +530,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnNames = columns.stream().map(Identifier::getValue).collect(toList());
         }
 
-        QueryRelation queryRelation = (QueryRelation) visit(context.query());
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
                 ((Identifier) visit(context.name)).getValue(),
@@ -833,8 +826,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new LimitElement(offset, limit);
     }
 
-    // ------------------------------------------- Relation -------------------------------------------
-
     @Override
     public ParseNode visitParenthesizedRelation(StarRocksParser.ParenthesizedRelationContext context) {
         return visit(context.relation());
@@ -968,11 +959,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 identifierList.stream().map(Identifier::getValue).collect(toList()));
     }
 
-    // ------------------------------------------- SubQuery ------------------------------------------
-
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.query())));
+        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.queryBody())));
     }
 
     @Override
@@ -995,14 +984,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitInSubquery(StarRocksParser.InSubqueryContext context) {
         boolean isNotIn = context.NOT() != null;
-        QueryRelation query = (QueryRelation) visit(context.query());
+        QueryRelation query = (QueryRelation) visit(context.queryBody());
 
         return new InPredicate((Expr) visit(context.value), new Subquery(new QueryStatement(query)), isNotIn);
     }
 
     @Override
     public ParseNode visitExists(StarRocksParser.ExistsContext context) {
-        QueryRelation query = (QueryRelation) visit(context.query());
+        QueryRelation query = (QueryRelation) visit(context.queryBody());
         return new ExistsPredicate(new Subquery(new QueryStatement(query)), false);
     }
 
@@ -1010,11 +999,73 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitScalarSubquery(StarRocksParser.ScalarSubqueryContext context) {
         BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
-        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.query())));
+        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
     }
 
-    // ------------------------------------------- Logical Expression -------------------------------------------
+    // ------------------------------------------- Other Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowDbStmt(stringLiteral.getValue());
+        } else if (context.expression() != null) {
+            return new ShowDbStmt(null, (Expr) visit(context.expression()));
+        } else {
+            return new ShowDbStmt(null, null);
+        }
+    }
+
+    @Override
+    public ParseNode visitUse(StarRocksParser.UseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new UseStmt(identifier.getValue());
+    }
+
+    @Override
+    public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
+        Map<String, String> configs = new HashMap<>();
+        Property property = (Property) visitProperty(context.property());
+        String configKey = property.getKey();
+        String configValue = property.getValue();
+        configs.put(configKey, configValue);
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
+    public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    @Override
+    public ParseNode visitRevokeRole(StarRocksParser.RevokeRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    // ------------------------------------------- Expression ----------------------------------------------------------
+
+    @Override
+    public ParseNode visitExpressionOrDefault(StarRocksParser.ExpressionOrDefaultContext context) {
+        if (context.DEFAULT() != null) {
+            return new DefaultValueExpr();
+        } else {
+            return visit(context.expression());
+        }
+    }
+
+    @Override
+    public ParseNode visitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext context) {
+        ArrayList<Expr> row = Lists.newArrayList();
+        for (int i = 0; i < context.expressionOrDefault().size(); ++i) {
+            row.add((Expr) visit(context.expressionOrDefault(i)));
+        }
+        return new ValueList(row);
+    }
 
     @Override
     public ParseNode visitLogicalNot(StarRocksParser.LogicalNotContext context) {
@@ -1043,8 +1094,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         throw new IllegalArgumentException("Unsupported operator: " + token.getText());
     }
-
-    // ------------------------------------------- Predicate Expression -------------------------------------------
 
     @Override
     public ParseNode visitPredicate(StarRocksParser.PredicateContext context) {
@@ -1154,8 +1203,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CaseWhenClause((Expr) visit(context.condition), (Expr) visit(context.result));
     }
 
-    // ------------------------------------------- Value Expression -------------------------------------------
-
     @Override
     public ParseNode visitArithmeticUnary(StarRocksParser.ArithmeticUnaryContext context) {
         Expr child = (Expr) visit(context.primaryExpression());
@@ -1234,7 +1281,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB", "DATE_FLOOR");
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
@@ -1380,6 +1427,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
+        } else if (context.QUARTER() != null) {
+            return new FunctionCallExpr("quarter", visit(context.expression(), Expr.class));
         } else if (context.REGEXP() != null) {
             return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
@@ -1413,8 +1462,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr right = (Expr) visit(context.right);
         return new FunctionCallExpr("concat", new FunctionParams(Lists.newArrayList(left, right)));
     }
-
-    // ------------------------------------------- Literal -------------------------------------------
 
     @Override
     public ParseNode visitNullLiteral(StarRocksParser.NullLiteralContext context) {
@@ -1608,8 +1655,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
-    // ------------------------------------------- Primary Expression -------------------------------------------
-
     @Override
     public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
         if (context.identifier() != null) {
@@ -1674,6 +1719,180 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText());
+    }
+
+    // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+    private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context) {
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
+        if (context.LOGICAL() != null) {
+            explainLevel = StatementBase.ExplainLevel.LOGICAL;
+        } else if (context.VERBOSE() != null) {
+            explainLevel = StatementBase.ExplainLevel.VERBOSE;
+        } else if (context.COSTS() != null) {
+            explainLevel = StatementBase.ExplainLevel.COST;
+        }
+        return explainLevel;
+    }
+
+    @Override
+    public ParseNode visitAssignment(StarRocksParser.AssignmentContext context) {
+        String column = ((Identifier) visit(context.identifier())).getValue();
+        Expr expr = (Expr) visit(context.expressionOrDefault());
+        return new ColumnAssignment(column, expr);
+    }
+
+    @Override
+    public ParseNode visitPartitionDesc(StarRocksParser.PartitionDescContext context) {
+        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
+        return new RangePartitionDesc(
+                identifierList.stream().map(Identifier::getValue).collect(toList()),
+                partitionDesc);
+    }
+
+    @Override
+    public ParseNode visitSingleRangePartition(StarRocksParser.SingleRangePartitionContext context) {
+        PartitionKeyDesc partitionKeyDesc = (PartitionKeyDesc) visit(context.partitionKeyDesc());
+        return new SingleRangePartitionDesc(false, ((Identifier) visit(context.identifier())).getValue(),
+                partitionKeyDesc, null);
+    }
+
+    @Override
+    public ParseNode visitMultiRangePartition(StarRocksParser.MultiRangePartitionContext context) {
+        if (context.interval() != null) {
+            IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+            Expr expr = intervalLiteral.getValue();
+            long intervalVal;
+            if (expr instanceof IntLiteral) {
+                intervalVal = ((IntLiteral) expr).getLongValue();
+            } else {
+                throw new IllegalArgumentException("Unsupported interval expr: " + expr);
+            }
+            return new MultiRangePartitionDesc(
+                    ((StringLiteral) visit(context.string(0))).getStringValue(),
+                    ((StringLiteral) visit(context.string(1))).getStringValue(),
+                    intervalVal,
+                    intervalLiteral.getUnitIdentifier().getDescription());
+        } else {
+            return new MultiRangePartitionDesc(
+                    ((StringLiteral) visit(context.string(0))).getStringValue(),
+                    ((StringLiteral) visit(context.string(1))).getStringValue(),
+                    Long.parseLong(context.INTEGER_VALUE().getText()));
+        }
+    }
+
+    @Override
+    public ParseNode visitPartitionKeyDesc(StarRocksParser.PartitionKeyDescContext context) {
+        PartitionKeyDesc partitionKeyDesc;
+        if (context.LESS() != null) {
+            List<PartitionValue> partitionValueList =
+                    visit(context.partitionValueList().get(0).partitionValue(), PartitionValue.class);
+            partitionKeyDesc = new PartitionKeyDesc(partitionValueList);
+        } else {
+            List<PartitionValue> lowerPartitionValueList =
+                    visit(context.partitionValueList().get(0).partitionValue(), PartitionValue.class);
+            List<PartitionValue> upperPartitionValueList =
+                    visit(context.partitionValueList().get(1).partitionValue(), PartitionValue.class);
+            partitionKeyDesc = new PartitionKeyDesc(lowerPartitionValueList, upperPartitionValueList);
+        }
+        return partitionKeyDesc;
+    }
+
+    @Override
+    public ParseNode visitPartitionValue(StarRocksParser.PartitionValueContext context) {
+        if (context.MAXVALUE() != null) {
+            return PartitionValue.MAX_VALUE;
+        } else {
+            return new PartitionValue(((StringLiteral) visit(context.string())).getStringValue());
+        }
+    }
+
+    @Override
+    public ParseNode visitDistributionDesc(StarRocksParser.DistributionDescContext context) {
+        //default buckets number
+        int buckets = 10;
+
+        if (context.INTEGER_VALUE() != null) {
+            buckets = Integer.parseInt(context.INTEGER_VALUE().getText());
+        }
+        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+
+        return new HashDistributionDesc(buckets, identifierList.stream().map(Identifier::getValue).collect(toList()));
+    }
+
+    @Override
+    public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
+        return new Property(
+                ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.value)).getStringValue());
+    }
+
+    @Override
+    public ParseNode visitOutfile(StarRocksParser.OutfileContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        String format = null;
+        if (context.fileFormat() != null) {
+            if (context.fileFormat().identifier() != null) {
+                format = ((Identifier) visit(context.fileFormat().identifier())).getValue();
+            } else if (context.fileFormat().string() != null) {
+                format = ((StringLiteral) visit(context.fileFormat().string())).getStringValue();
+            }
+        }
+
+        return new OutFileClause(
+                ((StringLiteral) visit(context.file)).getStringValue(),
+                format,
+                properties);
+    }
+
+
+    @Override
+    public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
+
+        return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment);
+    }
+
+    @Override
+    public ParseNode visitIdentifierOrString(StarRocksParser.IdentifierOrStringContext context) {
+        String s = null;
+        if (context.identifier() != null) {
+            s = ((Identifier) visit(context.identifier())).getValue();
+        } else if (context.string() != null) {
+            s = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        return new Identifier(s);
+    }
+
+    @Override
+    public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), true);
+    }
+
+    @Override
+    public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), false);
+    }
+
+    @Override
+    public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString());
+        return new UserIdentifier(user.getValue(), "%", false);
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

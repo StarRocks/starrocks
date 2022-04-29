@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -47,6 +46,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+// TODO: refactor these test case with SQL style
 public class CreateMaterializedViewStmtTest {
 
     @Mocked
@@ -813,18 +813,28 @@ public class CreateMaterializedViewStmtTest {
                 result = columnName3;
                 slotRef4.getColumnName();
                 result = columnName4;
+
                 slotRef1.getType().getIndexSize();
                 result = 34;
+                slotRef1.getType().canBeMVKey();
+                result = true;
                 slotRef1.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+
                 slotRef2.getType().getIndexSize();
                 result = 1;
+                slotRef2.getType().canBeMVKey();
+                result = true;
                 slotRef2.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+
                 slotRef3.getType().getIndexSize();
                 result = 1;
+                slotRef3.getType().canBeMVKey();
+                result = true;
                 slotRef3.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+
                 slotRef4.getType().getIndexSize();
                 result = 4;
                 selectStmt.getAggInfo(); // return null, so that the mv can be a duplicate mv
@@ -921,14 +931,18 @@ public class CreateMaterializedViewStmtTest {
                 result = 1;
                 slotRef1.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+                slotRef1.getType().canBeMVKey();
+                result = true;
                 slotRef2.getType().getIndexSize();
                 result = 2;
                 slotRef2.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+                slotRef2.getType().canBeMVKey();
+                result = true;
                 slotRef3.getType().getIndexSize();
                 result = 3;
-                slotRef3.getType().isFloatingPointType();
-                result = true;
+                slotRef3.getType().canBeMVKey();
+                result = false;
                 selectStmt.getAggInfo(); // return null, so that the mv can be a duplicate mv
                 result = null;
             }
@@ -1023,14 +1037,20 @@ public class CreateMaterializedViewStmtTest {
                 result = 1;
                 slotRef1.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+                slotRef1.getType().canBeMVKey();
+                result = true;
                 slotRef2.getType().getIndexSize();
                 result = 2;
                 slotRef2.getType().getPrimitiveType();
                 result = PrimitiveType.INT;
+                slotRef2.getType().canBeMVKey();
+                result = true;
                 slotRef3.getType().getIndexSize();
                 result = 3;
                 slotRef3.getType().getPrimitiveType();
                 result = PrimitiveType.VARCHAR;
+                slotRef3.getType().canBeMVKey();
+                result = true;
                 selectStmt.getAggInfo(); // return null, so that the mv can be a duplicate mv
                 result = null;
             }
@@ -1100,7 +1120,7 @@ public class CreateMaterializedViewStmtTest {
                 selectStmt.analyze(analyzer);
                 slotRef1.getColumnName();
                 result = columnName1;
-                slotRef1.getType().isFloatingPointType();
+                slotRef1.getType().canBeMVKey();
                 result = true;
                 selectStmt.getAggInfo(); // return null, so that the mv can be a duplicate mv
                 result = null;
@@ -1153,6 +1173,8 @@ public class CreateMaterializedViewStmtTest {
                 result = columnName1;
                 slotRef1.getType().getPrimitiveType();
                 result = PrimitiveType.VARCHAR;
+                slotRef1.getType().canBeMVKey();
+                result = true;
             }
         };
 
@@ -1223,8 +1245,12 @@ public class CreateMaterializedViewStmtTest {
                 selectStmt.analyze(analyzer);
                 slotRef1.getColumnName();
                 result = columnName1;
+                slotRef1.getType().canBeMVKey();
+                result = true;
                 slotRef2.getColumnName();
                 result = columnName2;
+                slotRef2.getType().canBeMVKey();
+                result = true;
                 slotDescriptor.getColumn();
                 result = column1;
                 column1.getType();

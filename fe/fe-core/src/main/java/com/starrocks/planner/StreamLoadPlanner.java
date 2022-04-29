@@ -29,19 +29,20 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.StreamLoadTask;
@@ -87,7 +88,7 @@ public class StreamLoadPlanner {
     }
 
     private void resetAnalyzer() {
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), null);
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
         // TODO(cmy): currently we do not support UDF in stream load command.
         // Because there is no way to check the privilege of accessing UDF..
         analyzer.setUDFAllowed(false);
@@ -131,9 +132,10 @@ public class StreamLoadPlanner {
                 throw new DdlException("Column is not SUM AggreateType. column:" + col.getName());
             }
 
-            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                    col.getName())) {
-                Optional<ColumnDict>  dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+            if (col.getType().isVarchar() && Config.enable_dict_optimize_stream_load &&
+                    IDictManager.getInstance().hasGlobalDict(destTable.getId(),
+                            col.getName())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 if (dict != null && dict.isPresent()) {
                     globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
                 }
