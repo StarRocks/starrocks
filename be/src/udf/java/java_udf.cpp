@@ -544,7 +544,6 @@ StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::stri
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     auto res = env->NewGlobalRef(method_object);
-    LOG(WARNING) << "delete" << method_object;
     env->DeleteLocalRef(method_object);
     return res;
 }
