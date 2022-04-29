@@ -101,7 +101,6 @@ public class MysqlProto {
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(qualifiedUser, remoteIp,
                 scramble, randomString, currentUserIdentity)) {
-            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, qualifiedUser, usePasswd);
             return false;
         }
         context.setAuthDataSalt(randomString);

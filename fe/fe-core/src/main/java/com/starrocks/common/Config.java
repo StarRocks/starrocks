@@ -1425,4 +1425,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_password_reuse = true;
+
+    /**
+     * Max attemps to login if failed. -1 means unlimited.
+     */
+    @ConfField(mutable = true)
+    public static int max_failed_login_attempts = 3;
+
+    /**
+     * How long in seconds to lock the account after too many consecutive login attempts provide an incorrect password.
+     */
+    @ConfField(mutable = true)
+    public static int password_lock_interval_seconds = 600;
 }
