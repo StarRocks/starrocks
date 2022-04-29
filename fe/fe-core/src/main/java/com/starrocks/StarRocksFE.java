@@ -283,9 +283,7 @@ public class StarRocksFE {
             try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
                 FileLock lock = file.getChannel().tryLock();
                 if (lock == null) {
-                    LOG.warn("get pid file lock failed, retried: {}", i);
-                    Thread.sleep(10000L);
-                    continue;
+                    throw new Exception("get pid file lock failed, lock is null");
                 }
 
                 pid.deleteOnExit();
@@ -300,6 +298,7 @@ public class StarRocksFE {
                     LOG.warn("get pid file lock failed, retried: {}", i, t);
                     Thread.sleep(10000L);
                 } catch (InterruptedException ie) {
+                    LOG.warn("thread sleep interrupted", ie);
                 }
             }
         }
@@ -307,4 +306,3 @@ public class StarRocksFE {
         return false;
     }
 }
-
