@@ -13,11 +13,8 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class AlterUserStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(AlterUserStmt.class);
 
     private UserIdentity userIdent;
     private String password;
@@ -70,6 +67,9 @@ public class AlterUserStmt extends DdlStmt {
         // convert password to hashed password
         if (!Strings.isNullOrEmpty(password)) {
             if (isPasswordPlain) {
+                // plain password should check for validation & reuse
+                Auth.validatePassword(password);
+                GlobalStateMgr.getCurrentState().getAuth().checkPasswordReuse(userIdent, password);
                 // convert plain password to scramble
                 scramblePassword = MysqlPassword.makeScrambledPassword(password);
             } else {
