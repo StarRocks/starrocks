@@ -169,11 +169,11 @@ jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, 
 
 void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) {
     if (auto e = env->ExceptionOccurred()) {
+        LOCAL_REF_GUARD(e);
         std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);
         LOG(WARNING) << "Exception: " << msg;
         ctx->set_error(msg.c_str());
         env->ExceptionClear();
-        env->DeleteLocalRef(e);
     }
 }
 
@@ -181,7 +181,6 @@ void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) 
     if (auto e = _env->ExceptionOccurred()) {                 \
         LOCAL_REF_GUARD(e);                                   \
         _env->ExceptionClear();                               \
-        _env->DeleteLocalRef(e);                              \
         LOG(WARNING) << "Exception happend when call " #name; \
         return "";                                            \
     }
@@ -192,9 +191,9 @@ std::string JVMFunctionHelper::array_to_string(jobject object) {
             _env->GetStaticMethodID(_jarrays_class, "toString", "([Ljava/lang/Object;)Ljava/lang/String;");
     DCHECK(arrayToStringMethod != nullptr);
     jobject jstr = _env->CallStaticObjectMethod(_jarrays_class, arrayToStringMethod, object);
+    LOCAL_REF_GUARD(jstr);
     CHECK_FUNCTION_EXCEPTION(_env, "array_to_string")
     value = to_cxx_string((jstring)jstr);
-    _env->DeleteLocalRef(jstr);
     return value;
 }
 
@@ -202,9 +201,9 @@ std::string JVMFunctionHelper::to_string(jobject obj) {
     std::string value;
     auto method = getToStringMethod(_object_class);
     auto res = _env->CallObjectMethod(obj, method);
+    LOCAL_REF_GUARD(res);
     CHECK_FUNCTION_EXCEPTION(_env, "to_string")
     value = to_cxx_string((jstring)res);
-    _env->DeleteLocalRef(res);
     return value;
 }
 
@@ -227,9 +226,9 @@ std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
     jmethodID getStackTrace = _env->GetMethodID(_throwable_class, "getStackTrace", "()[Ljava/lang/StackTraceElement;");
     CHECK(getStackTrace != nullptr) << "Not Found JNI method getStackTrace";
     jobject stack_traces = _env->CallObjectMethod((jobject)throwable, getStackTrace);
+    LOCAL_REF_GUARD(stack_traces);
     CHECK_FUNCTION_EXCEPTION(_env, "dump_string")
     ss << array_to_string(stack_traces);
-    _env->DeleteLocalRef(stack_traces);
     return ss.str();
 }
 
@@ -255,6 +254,7 @@ jobject JVMFunctionHelper::create_array(int sz) {
 
 jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz) {
     jobjectArray input_arr = _env->NewObjectArray(sz, _direct_buffer_class, nullptr);
+    LOCAL_REF_GUARD(input_arr);
     for (int i = 0; i < sz; ++i) {
         _env->SetObjectArrayElement(input_arr, i, buffs[i].handle());
     }
@@ -264,7 +264,6 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
         LOG(WARNING) << "fail to create array " << this->dumpExceptionString(_env->ExceptionOccurred());
         _env->ExceptionClear();
     }
-    _env->DeleteLocalRef(input_arr);
     return res;
 }
 
@@ -276,24 +275,24 @@ jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
 void JVMFunctionHelper::batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state,
                                             jobject* input, int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
+    LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_single, udaf, update, state, input_arr);
     check_call_exception(_env, ctx);
-    _env->DeleteLocalRef(input_arr);
 }
 
 void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
+    LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, input_arr);
     check_call_exception(_env, ctx);
-    _env->DeleteLocalRef(input_arr);
 }
 
 jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols,
                                       int rows) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
+    LOCAL_REF_GUARD(input_arr);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, udf, evaluate, rows, input_arr);
     check_call_exception(_env, ctx);
-    _env->DeleteLocalRef(input_arr);
     return res;
 }
 
@@ -328,9 +327,9 @@ DEFINE_NEW_BOX(double, double, Double, Double);
 // TODO:
 jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     auto bytesArr = _env->NewByteArray(size);
+    LOCAL_REF_GUARD(bytesArr);
     _env->SetByteArrayRegion(bytesArr, 0, size, reinterpret_cast<const jbyte*>(data));
     jobject nstr = _env->NewObject(_string_class, _string_construct_with_bytes, bytesArr, _utf8_charsets);
-    _env->DeleteLocalRef(bytesArr);
     return nstr;
 }
 
@@ -370,8 +369,8 @@ DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     auto lref = env->NewDirectByteBuffer(ptr, capacity);
+    LOCAL_REF_GUARD(lref);
     _handle = env->NewGlobalRef(lref);
-    env->DeleteLocalRef(lref);
     _capacity = capacity;
     _data = ptr;
 }
@@ -556,9 +555,9 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
     LOCAL_REF_GUARD(result_sign);
 
     if (jthrowable thr = env->ExceptionOccurred(); thr != nullptr) {
+        LOCAL_REF_GUARD(thr);
         std::string err = helper.dumpExceptionString(thr);
         env->ExceptionClear();
-        env->DeleteLocalRef(thr);
         return Status::InternalError(fmt::format("could't found method {} err:{}", method, err));
     }
     if (result_sign == nullptr) {
