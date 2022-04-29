@@ -38,7 +38,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding globalStateMgr implementation.
+     * Returns the corresponding catalog implementation.
      */
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
@@ -50,12 +50,12 @@ public class IcebergUtil {
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
                 throw new StarRocksIcebergException(
-                        "Unexpected globalStateMgr type: " + catalogType.toString());
+                        "Unexpected catalog type: " + catalogType.toString());
         }
     }
 
     /**
-     * Returns the corresponding hive globalStateMgr implementation.
+     * Returns the corresponding hive catalog implementation.
      */
     public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
             throws StarRocksIcebergException {
@@ -63,7 +63,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding custom globalStateMgr implementation.
+     * Returns the corresponding custom catalog implementation.
      */
     public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
             throws StarRocksIcebergException {
@@ -107,7 +107,6 @@ public class IcebergUtil {
      * @param table
      * @param snapshot
      * @param icebergPredicates
-     * @param refresh
      * @return
      */
     public static TableScan getTableScan(Table table,
