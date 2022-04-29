@@ -97,6 +97,7 @@ public class ConnectScheduler {
         }
 
         context.setConnectionId(nextConnectionId.getAndAdd(1));
+        context.resetConnectionStartTime();
         // no necessary for nio.
         if (context instanceof NConnectContext) {
             return true;

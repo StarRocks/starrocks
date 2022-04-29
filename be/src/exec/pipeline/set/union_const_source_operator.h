@@ -22,10 +22,10 @@ namespace starrocks::pipeline {
 // UnionConstSourceOperator is for the Const kind of sub-node.
 class UnionConstSourceOperator final : public SourceOperator {
 public:
-    UnionConstSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    UnionConstSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              const std::vector<SlotDescriptor*>& dst_slots,
                              const std::vector<ExprContext*>* const const_expr_lists, const size_t rows_total)
-            : SourceOperator(factory, id, "union_const_source", plan_node_id),
+            : SourceOperator(factory, id, "union_const_source", plan_node_id, driver_sequence),
               _dst_slots(dst_slots),
               _const_expr_lists(DCHECK_NOTNULL(const_expr_lists)),
               _rows_total(rows_total) {}
@@ -63,7 +63,7 @@ public:
         DCHECK(rows_total > rows_offset);
         size_t rows_count = std::min(num_rows_per_driver, rows_total - rows_offset);
 
-        return std::make_shared<UnionConstSourceOperator>(this, _id, _plan_node_id, _dst_slots,
+        return std::make_shared<UnionConstSourceOperator>(this, _id, _plan_node_id, driver_sequence, _dst_slots,
                                                           _const_expr_lists.data() + rows_offset, rows_count);
     }
 

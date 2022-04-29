@@ -51,10 +51,6 @@ Status JsonScanner::open() {
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
-    if (range.__isset.jsonpaths && range.__isset.json_root) {
-        return Status::InvalidArgument("json path and json root cannot be both set");
-    }
-
     if (range.__isset.jsonpaths) {
         RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
     }
@@ -724,7 +720,7 @@ Status JsonReader::_read_and_parse_json() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << data[i] << "]";
-            return Status::EndOfFile("illegal json started with " + data[i]);
+            return Status::DataQualityError(fmt::format("illegal json started with {}", data[i]));
         }
     }
 

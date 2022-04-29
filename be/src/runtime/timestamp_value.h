@@ -41,6 +41,8 @@ const int TIME_MAX_HOUR = 838;
 
 class TimestampValue {
 public:
+    using type = Timestamp;
+
     inline static TimestampValue create(int year, int month, int day, int hour, int minute, int second);
 
     inline Timestamp timestamp() const { return _timestamp; }

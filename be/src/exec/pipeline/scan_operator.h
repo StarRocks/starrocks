@@ -14,7 +14,7 @@ namespace pipeline {
 
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ScanOperator() override = default;
 

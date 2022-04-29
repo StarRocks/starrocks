@@ -29,7 +29,8 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id);
+    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+             int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -152,6 +153,7 @@ protected:
     const std::string _name;
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
+    const int32_t _driver_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.

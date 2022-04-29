@@ -265,6 +265,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
@@ -6332,25 +6333,31 @@ public class GlobalStateMgr {
         Map<String, String> property = new HashMap<>();
         Database db = getDb(dbName);
         if (db == null) {
-            throw new DdlException("the DB " + dbName + "isn't  exist");
+            throw new DdlException("the DB " + dbName + " is not exist");
         }
-
-        Table table = db.getTable(tableName);
-        if (table == null) {
-            throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
-        }
-
-        if (table instanceof OlapTable) {
-            OlapTable olapTable = (OlapTable) table;
-            olapTable.setHasForbitGlobalDict(isForbit);
-            if (isForbit) {
-                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
-            } else {
-                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
             }
-            ModifyTablePropertyOperationLog info =
-                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-            editLog.logSetHasForbitGlobalDict(info);
+
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                olapTable.setHasForbitGlobalDict(isForbit);
+                if (isForbit) {
+                    property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+                    IDictManager.getInstance().disableGlobalDict(olapTable.getId());
+                } else {
+                    property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+                    IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                }
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+                editLog.logSetHasForbitGlobalDict(info);
+            }
+        } finally {
+            db.readUnlock();
         }
     }
 
@@ -6389,8 +6396,10 @@ public class GlobalStateMgr {
                 if (olapTable != null) {
                     if (enAble.equals(PropertyAnalyzer.DISABLE_LOW_CARD_DICT)) {
                         olapTable.setHasForbitGlobalDict(true);
+                        IDictManager.getInstance().disableGlobalDict(olapTable.getId());
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
+                        IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
             } else {

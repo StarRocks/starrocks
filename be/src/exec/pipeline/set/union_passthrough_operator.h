@@ -30,9 +30,10 @@ public:
 
     using SlotMap = std::unordered_map<SlotId, SlotItem>;
 
-    UnionPassthroughOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, SlotMap* dst2src_slot_map,
-                             const std::vector<SlotDescriptor*>& slots, const std::vector<SlotDescriptor*>& src_slots)
-            : Operator(factory, id, "union_passthrough", plan_node_id),
+    UnionPassthroughOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                             SlotMap* dst2src_slot_map, const std::vector<SlotDescriptor*>& slots,
+                             const std::vector<SlotDescriptor*>& src_slots)
+            : Operator(factory, id, "union_passthrough", plan_node_id, driver_sequence),
               _dst2src_slot_map(dst2src_slot_map),
               _dst_slots(slots),
               _src_slots(src_slots) {}
@@ -77,8 +78,8 @@ public:
               _src_slots(src_slots) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<UnionPassthroughOperator>(this, _id, _plan_node_id, _dst2src_slot_map, _dst_slots,
-                                                          _src_slots);
+        return std::make_shared<UnionPassthroughOperator>(this, _id, _plan_node_id, driver_sequence, _dst2src_slot_map,
+                                                          _dst_slots, _src_slots);
     }
 
 private:

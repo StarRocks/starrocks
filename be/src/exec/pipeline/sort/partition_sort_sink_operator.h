@@ -28,12 +28,12 @@ using namespace vectorized;
  */
 class PartitionSortSinkOperator final : public Operator {
 public:
-    PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
                               const RowDescriptor& parent_node_row_desc,
                               const RowDescriptor& parent_node_child_row_desc, SortContext* sort_context)
-            : Operator(factory, id, "partition_sort_sink", plan_node_id),
+            : Operator(factory, id, "partition_sort_sink", plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(std::move(sort_exec_exprs)),
               _order_by_types(order_by_types),

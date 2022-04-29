@@ -363,4 +363,11 @@ int SchemaDescriptor::get_column_index(const std::string& column) const {
     return -1;
 }
 
+void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names) const {
+    names->clear();
+    for (const ParquetField& f : _fields) {
+        names->emplace(f.name);
+    }
+}
+
 } // namespace starrocks::parquet

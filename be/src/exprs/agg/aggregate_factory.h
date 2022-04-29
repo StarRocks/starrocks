@@ -26,6 +26,7 @@ public:
 
     static AggregateFunctionPtr MakeBitmapUnionCountAggregateFunction();
 
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeWindowfunnelAggregateFunction();
 
     template <PrimitiveType PT>

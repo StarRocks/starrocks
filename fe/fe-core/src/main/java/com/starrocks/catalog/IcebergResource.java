@@ -23,7 +23,7 @@ import java.util.Map;
  * PROPERTIES
  * (
  * "type" = "iceberg",
- * "starrocks.globalStateMgr-type"="hive"
+ * "starrocks.catalog-type"="hive"
  * );
  * <p>
  * DROP RESOURCE "iceberg0";
@@ -31,9 +31,9 @@ import java.util.Map;
 public class IcebergResource extends Resource {
     private static final Logger LOG = LogManager.getLogger(IcebergResource.class);
 
-    private static final String ICEBERG_CATALOG = "starrocks.globalStateMgr-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.globalStateMgr.hive.metastore.uris";
-    private static final String ICEBERG_IMPL = "iceberg.globalStateMgr-impl";
+    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     @SerializedName(value = "catalogType")
     private String catalogType;

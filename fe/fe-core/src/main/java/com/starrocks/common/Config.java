@@ -803,7 +803,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
@@ -1405,4 +1405,24 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
+  
+    @ConfField
+    public static boolean enable_dict_optimize_routine_load = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_dict_optimize_stream_load = true;
+
+    /**
+     * If set to true, the following rules will apply to see if the password is secure upon the creation of a user.
+     * 1. The length of the password should be no less than 8.
+     * 2. The password should contain at least one digit, one lowercase letter, one uppercase letter
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_validate_password = false;
+
+    /**
+     * If set to false, changing the password to the previous one is not allowed.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_password_reuse = true;
 }

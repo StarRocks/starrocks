@@ -28,11 +28,6 @@ protected:
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
-struct SlotDesc {
-    string name;
-    TypeDescriptor type;
-};
-
 void OrcChunkReaderTest::_create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
@@ -43,27 +38,42 @@ void OrcChunkReaderTest::_create_runtime_state() {
     _runtime_state = runtime_state;
 }
 
-void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs) {
-    TDescriptorTableBuilder builder;
-    TTupleDescriptorBuilder b3;
-    DescriptorTbl* tbl;
-    size_t size = 0;
+struct SlotDesc {
+    string name;
+    TypeDescriptor type;
+};
+
+void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
+    TDescriptorTableBuilder table_desc_builder;
+
+    TTupleDescriptorBuilder tuple_desc_builder;
+    int size = 0;
     for (int i = 0;; i++) {
         if (slot_descs[i].name == "") {
             break;
         }
         TSlotDescriptorBuilder b2;
         b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
-        b3.add_slot(b2.build());
+        tuple_desc_builder.add_slot(b2.build());
         size += 1;
     }
-    b3.build(&builder);
+    tuple_desc_builder.build(&table_desc_builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    DCHECK(status.ok()) << status.get_error_msg();
-    for (int i = 0; i < size; i++) {
-        res->push_back(tbl->get_slot_descriptor(i));
-    }
+    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+    std::vector<bool> nullable_tuples = std::vector<bool>{true};
+    DescriptorTbl* tbl = nullptr;
+    DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    *tuple_desc = row_desc->tuple_descriptors()[0];
+    return;
+}
+
+void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs) {
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(pool, slot_descs, &tuple_desc);
+    *res = tuple_desc->slots();
+    return;
 }
 
 /**

@@ -60,12 +60,6 @@ public class AnalyzeAlterTableStatementTest {
         String sql = "CREATE INDEX index1 ON `db`.`table` (`col1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
-        sql = "CREATE INDEX index1 ON t0 (`v1`) USING BITMAP where v2 = 2 COMMENT 'balabala'";
-        analyzeSuccess(sql);
-
-        sql = "create fulltext index in_1 on t0(v1)";
-        analyzeSuccess(sql);
-
         sql = "alter table t0 add index index1 (v2)";
         analyzeSuccess(sql);
     }
@@ -73,9 +67,6 @@ public class AnalyzeAlterTableStatementTest {
     @Test
     public void testDropIndex() {
         String sql = "DROP INDEX index1 ON db.t0";
-        analyzeSuccess(sql);
-
-        sql = "alter table t0 drop primary key";
         analyzeSuccess(sql);
 
         sql = "alter table t0 drop index index1";

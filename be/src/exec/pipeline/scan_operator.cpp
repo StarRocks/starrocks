@@ -15,8 +15,8 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),

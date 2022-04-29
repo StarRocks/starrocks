@@ -21,7 +21,7 @@ import java.util.Map;
 public interface CatalogLoader {
 
     /**
-     * Create a new globalStateMgr with the provided properties.
+     * Create a new catalog with the provided properties.
      *
      * @return a newly created {@link Catalog}
      */

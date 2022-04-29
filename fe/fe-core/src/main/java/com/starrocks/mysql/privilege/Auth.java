@@ -1034,6 +1034,57 @@ public class Auth implements Writable {
         }
     }
 
+    /**
+     * check password complexity if `enable_validate_password` is set
+     * only check for plain text
+     *
+     * TODO The rules is hard-coded for temporary
+     *      We will refactor the whole user privilege framework later to ultimately fix this.
+     *
+     **/
+    public static void validatePassword(String password) throws DdlException {
+        if (!Config.enable_validate_password) {
+            return;
+        }
+
+        //  1. The length of the password should be no less than 8.
+        if (password.length() < 8) {
+            throw new DdlException("password is too short!");
+        }
+
+        // 2. The password should contain at least one digit, one lowercase letter, one uppercase letter
+        boolean hasDigit = false;
+        boolean hasUpper = false;
+        boolean hasLower = false;
+        for (int i = 0; i != password.length(); ++ i) {
+            char c = password.charAt(i);
+            if (c >= '0' && c <= '9') {
+                hasDigit = true;
+            } else if (c >= 'A' && c <= 'Z') {
+                hasUpper = true;
+            } else if (c >= 'a' && c <= 'z') {
+                hasLower = true;
+            }
+        }
+        if (!hasDigit || !hasLower || !hasUpper) {
+            throw new DdlException("password should contains at least one digit, one lowercase letter and one uppercase letter!");
+        }
+    }
+
+    /**
+     * prevent password reuse if `enable_password_reuse` is set;
+     * only check for plain text
+     */
+    public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
+        if (Config.enable_password_reuse) {
+            return;
+        }
+        List<UserIdentity> userList = Lists.newArrayList();
+        if (checkPlainPassword(user.getQualifiedUser(), user.getHost(), plainPassword, userList)) {
+            throw new DdlException("password should not be the same as the previous one!");
+        }
+    }
+
     // set password
     public void setPassword(SetPassVar stmt) throws DdlException {
         Password passwordToSet = new Password(stmt.getPassword());

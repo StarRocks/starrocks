@@ -78,9 +78,9 @@ private:
 class MultiCastLocalExchangeSourceOperator final : public SourceOperator {
 public:
     MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                         int32_t mcast_consumer_index,
+                                         int32_t driver_sequence, int32_t mcast_consumer_index,
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id),
+            : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id, driver_sequence),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(exchanger) {}
 
@@ -109,8 +109,8 @@ public:
               _exchanger(exchanger) {}
     ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _plan_node_id, _mcast_consumer_index,
-                                                                      _exchanger);
+        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                                      _mcast_consumer_index, _exchanger);
     }
 
 private:
@@ -125,8 +125,7 @@ public:
     MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                        const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id),
-              _driver_sequence(driver_sequence),
+            : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id, driver_sequence),
               _exchanger(exchanger) {}
 
     ~MultiCastLocalExchangeSinkOperator() override = default;
@@ -149,7 +148,6 @@ public:
 
 private:
     bool _is_finished = false;
-    const int32_t _driver_sequence;
     const std::shared_ptr<MultiCastLocalExchanger> _exchanger;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
