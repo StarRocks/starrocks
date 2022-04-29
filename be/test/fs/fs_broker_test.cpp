@@ -121,8 +121,8 @@ public:
 
     void openWriter(TBrokerOpenWriterResponse& response, const TBrokerOpenWriterRequest& request) {
         std::string path = url_path(request.path);
-        RandomRWFileOptions opts{.mode = FileSystem::MUST_CREATE};
-        auto res = _fs->new_random_rw_file(opts, path);
+        WritableFileOptions opts{.mode = FileSystem::MUST_CREATE};
+        auto res = _fs->new_writable_file(opts, path);
         if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_FILE_PATH);
         } else {
@@ -143,12 +143,11 @@ public:
             return;
         }
         auto& f = iter->second;
-        ASSIGN_OR_ABORT(const uint64_t size, f->get_size());
-        if (size != request.offset) {
+        if (f->size() != request.offset) {
             response.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_OFFSET);
             return;
         }
-        Status st = f->write_at(request.offset, request.data);
+        Status st = f->append(request.data);
         if (st.ok()) {
             response.__set_statusCode(TBrokerOperationStatusCode::OK);
         } else {
@@ -182,7 +181,7 @@ private:
     MemoryFileSystem* _fs;
     int64_t _next_fd = 0;
     std::map<int64_t, std::unique_ptr<RandomAccessFile>> _readers;
-    std::map<int64_t, std::unique_ptr<RandomRWFile>> _writers;
+    std::map<int64_t, std::unique_ptr<WritableFile>> _writers;
 };
 
 class MockBrokerServiceClient : public TFileBrokerServiceClient {

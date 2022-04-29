@@ -32,11 +32,6 @@ public:
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override;
 
-    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override;
-
-    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
-                                                               const std::string& path) override;
-
     Status path_exists(const std::string& path) override;
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override;
