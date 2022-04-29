@@ -1,18 +1,24 @@
 # bitmap_intersect
 
-## description
+## 功能
 
-聚合函数，用于计算分组后的 bitmap 交集。常见使用场景如：计算用户留存率。
+输入一组 bitmap 值, 求这一组 bitmap 值的交集, 并返回
 
-### Syntax
+## 语法
 
 ```Haskell
-BITMAP BITMAP_INTERSECT(BITMAP value)
+BITMAP_INTERSECT(value)
 ```
 
-输入一组 bitmap 值，求这一组 bitmap 值的交集，并返回。
+## 参数说明
 
-## example
+`value`: 支持的数据类型为 BITMAP
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 表结构
 

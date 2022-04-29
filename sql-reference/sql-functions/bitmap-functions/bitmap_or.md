@@ -1,16 +1,26 @@
 # bitmap_or
 
-## description
+## 功能
 
-### Syntax
+计算两个输入 bitmap 的并集，返回新的 bitmap
+
+## 语法
 
 ```Haskell
-BITMAP BITMAP_OR(BITMAP lhs, BITMAP rhs)
+BITMAP_OR(lhs, rhs)
 ```
 
-计算两个输入bitmap的并集，返回新的bitmap.
+## 参数说明
 
-## example
+`lhs`: 支持的数据类型为 BITMAP
+
+`rhs`: 支持的数据类型为 BITMAP
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(2))) cnt;
@@ -28,6 +38,6 @@ MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(1))) cnt;
 +------+
 ```
 
-## keyword
+## 关键词
 
-BITMAP_OR,BITMAP
+BITMAP_OR, BITMAP

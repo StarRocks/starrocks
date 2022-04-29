@@ -1,16 +1,24 @@
 # bitmap_to_array
 
-## description
+## 功能
 
-### Syntax
+将一个 BIMTAP 中的所有值组合成一个 bigint 数组
+
+## 语法
 
 ```Haskell
- `ARRAY<BIGINT>` BITMAP_TO_ARRAY (BITMAP)
+ `ARRAY<BIGINT>` BITMAP_TO_ARRAY (bitmap)
 ```
 
-将一个BIMTAP中的所有值组合成一个bigint数组
+## 参数说明
 
-## example
+`bitmap`: 支持的数据类型为 BITMAP
+
+## 返回值说明
+
+返回值的数据类型为 ARRAY
+
+## 示例
 
 ```Plain text
 mysql> select bitmap_to_array(bitmap_from_string("1, 7"));
@@ -28,6 +36,6 @@ mysql> select bitmap_to_array(NULL);
 +-----------------------+
 ```
 
-## keyword
+## 关键词
 
-BITMAP_TO_ARRAY,BITMAP
+BITMAP_TO_ARRAY, BITMAP

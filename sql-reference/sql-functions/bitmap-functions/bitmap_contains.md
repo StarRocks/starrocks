@@ -1,14 +1,26 @@
 # bitmap_contains
 
-## description
+## 功能
 
-### Syntax
+计算输入值是否在 Bitmap 列中
 
-`B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)`
+## 语法
 
-计算输入值是否在Bitmap列中，返回值是Boolean值。
+```Haskell
+BITMAP_CONTAINS(bitmap, input)
+```
 
-## example
+## 参数说明
+
+`bitmap`: 支持的数据类型为 BITMAP
+
+`input`: 输入值, 支持的数据类型为 BIGINT
+
+## 返回值说明
+
+返回值的数据类型为 BOOLEAN
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_contains(to_bitmap(1),2) cnt;
@@ -26,6 +38,6 @@ MySQL > select bitmap_contains(to_bitmap(1),1) cnt;
 +------+
 ```
 
-## keyword
+## 关键词
 
-BITMAP_CONTAINS,BITMAP
+BITMAP_CONTAINS, BITMAP

@@ -1,15 +1,9 @@
 # to_bitmap
 
-## description
+## 功能
 
-### Syntax
-
-```Haskell
-BITMAP TO_BITMAP(expr)
-```
-
-输入为取值在 0 ~ 18446744073709551615 区间的 unsigned bigint ，输出为包含该元素的bitmap。
-该函数主要用于stream load任务将整型字段导入StarRocks表的bitmap字段。例如
+输入为取值在 0 ~ 18446744073709551615 区间的 unsigned bigint , 输出为包含该元素的 bitmap
+该函数主要用于 stream load 任务将整型字段导入 StarRocks 表的 bitmap 字段, 如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -17,7 +11,21 @@ cat data | curl --location-trusted -u user:passwd -T - \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
-## example
+## 语法
+
+```Haskell
+TO_BITMAP(expr)
+```
+
+## 参数说明
+
+`expr`: 支持的数据类型为 unsigned BIGINT
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_count(to_bitmap(10));
@@ -28,6 +36,6 @@ MySQL > select bitmap_count(to_bitmap(10));
 +-----------------------------+
 ```
 
-## keyword
+## 关键词
 
-TO_BITMAP,BITMAP
+TO_BITMAP, BITMAP

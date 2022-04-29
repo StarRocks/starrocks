@@ -1,14 +1,9 @@
 # bitmap_hash
 
-## description
+## 功能
 
-### Syntax
-
-```Haskell
-BITMAP BITMAP_HASH(expr)
-```
-
-对任意类型的输入计算32位的哈希值，返回包含该哈希值的bitmap。主要用于stream load任务将非整型字段导入StarRocks表的bitmap字段。例如
+对任意类型的输入计算 32 位的哈希值, 返回包含该哈希值的 bitmap
+主要用于 stream load 任务将非整型字段导入 StarRocks 表的 bitmap 字段, 如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -16,7 +11,21 @@ cat data | curl --location-trusted -u user:passwd -T - \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
-## example
+## 语法
+
+```Haskell
+BITMAP_HASH(expr)
+```
+
+## 参数说明
+
+`expr`: 支持任意数据类型
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_count(bitmap_hash('hello'));
@@ -27,6 +36,6 @@ MySQL > select bitmap_count(bitmap_hash('hello'));
 +------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-BITMAP_HASH,BITMAP
+BITMAP_HASH, BITMAP

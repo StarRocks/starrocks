@@ -1,16 +1,26 @@
 # bitmap_andnot
 
-## description
+## 功能
 
-### Syntax
+计算两个输入 bitmap 的差集
+
+## 语法
 
 ```Haskell
-bitmap_andnot(BITMAP lhs, BITMAP rhs)
+bitmap_andnot(lhs, rhs)
 ```
 
-计算得到在 **lhs** 中，但是不在 **rhs** 中的集合(差集).
+## 参数说明
 
-## example
+`lhs`: 支持的数据类型为 BITMAP
+
+`rhs`: 支持的数据类型为 BITMAP
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 ```plain text
 mysql> select bitmap_to_string(bitmap_andnot(bitmap_from_string('1, 3'), bitmap_from_string('2'))) cnt;
@@ -28,6 +38,6 @@ mysql> select bitmap_to_string(bitmap_andnot(bitmap_from_string('1,3,5'), bitmap
 +------+
 ```
 
-## keyword
+## 关键词
 
 BITMAP_ANDNOT, BITMAP

@@ -1,16 +1,24 @@
 # bitmap_to_string
 
-## description
+## 功能
 
-### Syntax
+将一个 bitmap 转化成一个逗号分隔的字符串, 字符串中包含所有设置的 BIT 位, 输入是 null 的话会返回 null
+
+## 语法
 
 ```Haskell
-VARCHAR BITMAP_TO_STRING(BITMAP input)
+BITMAP_TO_STRING(input)
 ```
 
-将一个bitmap转化成一个逗号分隔的字符串，字符串中包含所有设置的BIT位。输入是null的话会返回null。
+## 参数说明
 
-## example
+`input`: 支持的数据类型为 BITMAP
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL > select bitmap_to_string(null);
@@ -43,6 +51,6 @@ MySQL > select bitmap_to_string(bitmap_or(to_bitmap(1), to_bitmap(2)));
 
 ```
 
-## keyword
+## 关键词
 
-BITMAP_TO_STRING,BITMAP
+BITMAP_TO_STRING, BITMAP

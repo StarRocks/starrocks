@@ -1,26 +1,36 @@
 # bitmap_remove
 
-## description
+## 功能
 
-### Syntax
+从 **lhs** 中删除 **input** 作为结果集合返回
+
+## 语法
 
 ```Haskell
-bitmap_remove(BITMAP lhs, BIGINT input)
+bitmap_remove(lhs, input)
 ```
 
-从 lhs 中删除 **input** 作为结果集合返回
+## 参数说明
 
-## example
+`lhs`: 支持的数据类型为 BITMAP
+
+`input`: 支持的数据类型为 BIGINT
+
+## 返回值说明
+
+返回值的数据类型为 BITMAP
+
+## 示例
 
 ```plain text
-mysql> select bitmap_to_string(**bitmap_remove**(bitmap_from_string('1, 3'), 3)) cnt;
+mysql> select bitmap_to_string(bitmap_remove(bitmap_from_string('1, 3'), 3)) cnt;
 +------+
 |cnt   |
 +------+
 |1     |
 +------+
 
-mysql> select bitmap_to_string(**bitmap_remove**(bitmap_from_string('1,3,5'), 6)) cnt;
+mysql> select bitmap_to_string(bitmap_remove(bitmap_from_string('1,3,5'), 6)) cnt;
 +------+
 |cnt   |
 +------+
@@ -28,6 +38,6 @@ mysql> select bitmap_to_string(**bitmap_remove**(bitmap_from_string('1,3,5'), 6)
 +------+
 ```
 
-## keyword
+## 关键词
 
 BITMAP_REMOVE, BITMAP
