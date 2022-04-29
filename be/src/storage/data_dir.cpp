@@ -34,6 +34,7 @@
 
 #include "common/version.h"
 #include "env/env.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -394,17 +395,17 @@ Status DataDir::load() {
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
                                                                     std::string_view value) -> bool {
-        Status st =
-                _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
-        if (!st.ok() && !st.is_not_found()) {
+        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false,
+                                                         false, true);
+        if (!st.ok() && !st.status().is_not_found()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
             // but it has not been cleared from rocksdb. At this time, restarting the BE
             // will read the tablet in the DELETE state from rocksdb. These tablets have been
             // added to the garbage collection queue and will be automatically deleted afterwards.
             // Therefore, we believe that this situation is not a failure.
-            LOG(WARNING) << "load tablet from header failed. status:" << st.to_string() << ", tablet=" << tablet_id
-                         << "." << schema_hash;
+            LOG(WARNING) << "load tablet from header failed. status:" << to_status(st).to_string()
+                         << ", tablet=" << tablet_id << "." << schema_hash;
             failed_tablet_ids.insert(tablet_id);
         } else {
             tablet_ids.insert(tablet_id);
@@ -435,14 +436,17 @@ Status DataDir::load() {
     // 2. add visible rowset to tablet
     // ignore any errors when load tablet or rowset, because fe will repair them after report
     for (const auto& rowset_meta : dir_rowset_metas) {
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
+        auto res = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
-        if (tablet == nullptr) {
+        if (res.status().is_not_found()) {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
             //              << ", schema hash: " << rowset_meta->tablet_schema_hash()
             //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
             continue;
+        } else if (!res.ok()) {
+            return res.status();
         }
+        TabletSharedPtr tablet = res.value();
         RowsetSharedPtr rowset;
         Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
                                                             rowset_meta, &rowset);
@@ -511,8 +515,8 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, true);
-        if (tablet != nullptr) {
+        auto res = _tablet_manager->get_tablet(tablet_id, true);
+        if (!res.status().is_not_found()) {
             // could find the tablet, then skip check it
             continue;
         }
@@ -560,8 +564,9 @@ void DataDir::perform_path_gc_by_rowsetid() {
             RowsetId rowset_id;
             bool is_rowset_file = TabletManager::get_rowset_id_from_path(path, &rowset_id);
             if (is_rowset_file) {
-                TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
-                if (tablet != nullptr) {
+                auto res = _tablet_manager->get_tablet(tablet_id, false);
+                if (res.ok()) {
+                    TabletSharedPtr tablet = res.value();
                     if (!tablet->check_rowset_id(rowset_id) &&
                         !StorageEngine::instance()->check_rowset_id_in_unused_rowsets(rowset_id)) {
                         _process_garbage_path(path);

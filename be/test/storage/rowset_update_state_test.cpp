@@ -105,7 +105,9 @@ public:
         request.tablet_schema.columns.push_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
-        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        CHECK(res.ok());
+        return res.value();
     }
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,

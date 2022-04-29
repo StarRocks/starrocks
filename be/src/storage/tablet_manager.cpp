@@ -62,24 +62,32 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size)
+TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size, StorageEngine* storage_engine)
         : _mem_tracker(mem_tracker),
-          _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
           _last_update_stat_ms(0),
-          _cur_shard(0) {
+          _cur_shard(0),
+          _storage_engine(storage_engine) {
+    for (int i = 0; i < tablet_map_lock_shard_size; ++i) {
+        _tablets_shards.push_back(std::make_shared<TabletsShard>());
+    }
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
 
-Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bool update_meta, bool force) {
-    TabletSharedPtr old_tablet = _get_tablet_unlocked(new_tablet->tablet_id());
-    if (old_tablet == nullptr) {
+Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bool update_meta, bool force,
+                                           bool need_load) {
+    auto res = _get_tablet_unlocked(new_tablet->tablet_id(), need_load);
+    if (res.status().is_not_found()) {
         RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
+    } else if (!res.ok()) {
+        return res.status();
     } else if (force) {
+        auto old_tablet = res.value();
         RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kKeepMetaAndFiles));
         RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
     } else {
+        TabletSharedPtr old_tablet = res.value();
         if (old_tablet->schema_hash_path() == new_tablet->schema_hash_path()) {
             LOG(WARNING) << "add the same tablet twice! tablet_id=" << new_tablet->tablet_id()
                          << " schema_hash_path=" << new_tablet->schema_hash_path();
@@ -119,9 +127,11 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
     // the perspective of root path.
     // Example: unregister all tables when a bad disk found.
     tablet->register_tablet_into_dir();
-    TabletMap& tablet_map = _get_tablet_map(tablet->tablet_id());
-    auto [it, inserted] = tablet_map.emplace(tablet->tablet_id(), tablet);
-    if (!inserted) {
+
+    auto tablet_shard = _get_tablets_shard(tablet->tablet_id());
+    tablet_shard->id_set.insert(tablet->tablet_id());
+    auto res = tablet_shard->tablet_cache->put(tablet);
+    if (!res) {
         return Status::InternalError(fmt::format("tablet {} already exist in map", tablet->tablet_id()));
     }
     _add_tablet_to_partition(*tablet);
@@ -136,7 +146,13 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     LOG(INFO) << "Creating tablet " << tablet_id;
 
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-    TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, true, nullptr);
+    auto res = _get_tablet_unlocked(tablet_id, true);
+    TabletSharedPtr tablet = nullptr;
+    if (res.ok()) {
+        tablet = res.value();
+    } else if (!res.status().is_not_found()) {
+        return res.status();
+    }
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
     } else if (tablet != nullptr) {
@@ -150,8 +166,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     // If the CreateTabletReq has base_tablet_id then it is a alter-tablet request
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
         is_schema_change = true;
-        base_tablet = _get_tablet_unlocked(request.base_tablet_id);
-        if (base_tablet == nullptr) {
+        auto res = _get_tablet_unlocked(request.base_tablet_id, true);
+        if (!res.ok()) {
             LOG(WARNING) << "Fail to create tablet(change schema), base tablet does not exist. "
                          << "new_tablet_id=" << tablet_id << " new_schema_hash=" << schema_hash
                          << " base_tablet_id=" << request.base_tablet_id
@@ -159,6 +175,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
             StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("base tablet not exist");
         }
+        base_tablet = res.value();
         // If we are doing schema-change, we should use the same data dir
         // TODO(lingbin): A litter trick here, the directory should be determined before
         // entering this method
@@ -262,7 +279,7 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
             }
         }
         // Add tablet to StorageEngine will make it visiable to user
-        status = _add_tablet_unlocked(tablet, true, false);
+        status = _add_tablet_unlocked(tablet, true, false, true);
         if (!status.ok()) {
             LOG(WARNING) << "Fail to add tablet to StorageEngine: " << status.to_string();
             break;
@@ -323,11 +340,12 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     // Fetch tablet which need to be dropped
-    TabletSharedPtr tablet_to_drop = _get_tablet_unlocked(tablet_id);
-    if (tablet_to_drop == nullptr) {
+    auto result = _get_tablet_unlocked(tablet_id, true);
+    if (!result.ok()) {
         LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": not exist";
-        return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
+        return result.status();
     }
+    TabletSharedPtr tablet_to_drop = result.value();
     LOG(INFO) << "Dropping tablet " << tablet_id;
 
     // Try to get schema change info, we can drop tablet directly if it is not
@@ -340,13 +358,16 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     AlterTabletState alter_state = alter_task->alter_state();
     TTabletId related_tablet_id = alter_task->related_tablet_id();
 
-    TabletSharedPtr related_tablet = _get_tablet_unlocked(related_tablet_id);
-    if (related_tablet == nullptr) {
+    result = _get_tablet_unlocked(related_tablet_id, true);
+    if (result.status().is_not_found()) {
         // TODO(lingbin): in what case, can this happen?
         LOG(WARNING) << "Dropping tablet directly when related tablet not found. "
                      << " tablet_id=" << related_tablet_id;
         return _drop_tablet_directly_unlocked(tablet_id, flag);
+    } else if (!result.ok()) {
+        return result.status();
     }
+    TabletSharedPtr related_tablet = result.value();
 
     // Check whether the tablet we want to delete is in schema-change state
     bool is_schema_change_finished = alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED;
@@ -400,45 +421,44 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
     auto num_shards = _tablets_shards.size();
     for (int i = 0; i < num_shards; i++) {
-        std::unique_lock wlock(_tablets_shards[i].lock);
+        std::unique_lock wlock(_tablets_shards[i]->lock);
         for (const TabletInfo& tablet_info : tablet_info_vec) {
             TTabletId tablet_id = tablet_info.tablet_id;
             if ((tablet_id & _tablets_shards_mask) != i) {
                 continue;
             }
-            TabletSharedPtr dropped_tablet = _get_tablet_unlocked(tablet_id);
-            if (dropped_tablet == nullptr) {
+            auto st = _get_tablet_unlocked(tablet_id, true);
+            if (!st.ok()) {
                 LOG(WARNING) << "dropping tablet not exist. tablet_id=" << tablet_id;
                 continue;
             } else {
-                TabletMap& tablet_map = _get_tablet_map(tablet_id);
+                TabletSharedPtr dropped_tablet = st.value();
+                auto tablet_shard = _get_tablets_shard(tablet_id);
                 _remove_tablet_from_partition(*dropped_tablet);
-                tablet_map.erase(tablet_id);
+                tablet_shard->id_set.erase(tablet_id);
+                tablet_shard->tablet_cache->remove(tablet_id);
+                LOG(WARNING) << "dropping tablet. tablet_id=" << tablet_id;
             }
         }
     }
     return Status::OK();
 }
 
-TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
-    std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
-    return _get_tablet_unlocked(tablet_id, include_deleted, err);
-}
-
-TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
-    TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id);
+StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
+    auto shard = _get_tablets_shard(tablet_id);
+    TabletSharedPtr tablet = nullptr;
+    {
+        std::shared_lock rlock(shard->lock);
+        tablet = shard->tablet_cache->get(tablet_id);
+    }
     if (tablet == nullptr && include_deleted) {
         std::shared_lock rlock(_shutdown_tablets_lock);
         if (auto it = _shutdown_tablets.find(tablet_id); it != _shutdown_tablets.end()) {
             tablet = it->second.tablet;
         }
     }
-
     if (tablet == nullptr) {
-        if (err != nullptr) {
-            *err = "tablet does not exist";
-        }
-        return nullptr;
+        return Status::NotFound(fmt::format("tablet: {} not found", tablet_id));
     }
 
     if (!tablet->is_used()) {
@@ -446,20 +466,51 @@ TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool in
         if (err != nullptr) {
             *err = "tablet cannot be used";
         }
-        return nullptr;
+        return Status::InternalError("tablet cannot be used");
+    }
+    return tablet;
+}
+
+StatusOr<TabletSharedPtr> TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted,
+                                                              std::string* err) {
+    TabletSharedPtr tablet;
+    auto st = _get_tablet_unlocked(tablet_id, true);
+    if (!st.ok() && include_deleted) {
+        std::shared_lock rlock(_shutdown_tablets_lock);
+        if (auto it = _shutdown_tablets.find(tablet_id); it != _shutdown_tablets.end()) {
+            tablet = it->second.tablet;
+        }
+    }
+
+    if (!tablet) {
+        if (err != nullptr) {
+            *err = "tablet does not exist";
+        }
+        return Status::NotFound("tablet not found");
+    }
+
+    if (!tablet->is_used()) {
+        LOG(WARNING) << "tablet_id=" << tablet_id << " cannot be used";
+        if (err != nullptr) {
+            *err = "tablet cannot be used";
+        }
+        return Status::InternalError("tablet cannot be used");
     }
 
     return tablet;
 }
 
-TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted,
-                                          std::string* err) {
-    std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
-    TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, include_deleted, err);
-    if (tablet != nullptr && tablet->tablet_uid() == tablet_uid) {
-        return tablet;
+StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid,
+                                                    bool include_deleted, std::string* err) {
+    auto st = get_tablet(tablet_id, include_deleted, err);
+    if (st.ok() && st.value()->tablet_uid() == tablet_uid) {
+        return st.value();
+    } else if (st.ok()) {
+        return Status::InternalError("mismatch uid " + st.value()->tablet_uid().to_string() + " " +
+                                     tablet_uid.to_string());
+    } else {
+        return st;
     }
-    return nullptr;
 }
 
 bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& path, TTabletId* tablet_id,
@@ -517,8 +568,16 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
     size_t size = 0;
     const auto& tablets_shard = _tablets_shards[_cur_shard];
-    std::shared_lock rlock(tablets_shard.lock);
-    for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    std::shared_lock rlock(tablets_shard->lock);
+    for (auto tablet_id : tablets_shard->id_set) {
+        TabletSharedPtr tablet_ptr = nullptr;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            tablet_ptr = tablets_shard->tablet_cache->get(tablet_id);
+            if (!tablet_ptr) {
+                continue;
+            }
+        }
         if (_shard_visited_tablet_ids.find(tablet_id) == _shard_visited_tablet_ids.end()) {
             tablets->push_back(tablet_ptr);
             _shard_visited_tablet_ids.insert(tablet_id);
@@ -548,17 +607,33 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     // only do compaction if compaction #rowset > 1
     uint32_t highest_score = 1;
     TabletSharedPtr best_tablet;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> id_shard_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                id_shard_set.insert(tabletid);
+            }
+        }
+
+        for (auto tabletid : id_shard_set) {
+            TabletSharedPtr tablet_ptr = nullptr;
+            {
+                std::shared_lock rlock(tablets_shard->lock);
+                tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
+                if (!tablet_ptr) {
+                    continue;
+                }
+            }
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
             AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
             if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
                 cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
+                auto st = _get_tablet_unlocked(cur_alter_task->related_tablet_id(), true);
+                TabletSharedPtr related_tablet = st.value();
+                if (st.ok() && tablet_ptr->creation_time() > related_tablet->creation_time()) {
                     // Current tablet is newly created during schema-change or rollup, skip it
                     continue;
                 }
@@ -630,17 +705,33 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> id_shard_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                id_shard_set.insert(tabletid);
+            }
+        }
+
+        for (auto tabletid : id_shard_set) {
+            TabletSharedPtr tablet_ptr = nullptr;
+            {
+                std::shared_lock rlock(tablets_shard->lock);
+                tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
+                if (!tablet_ptr) {
+                    continue;
+                }
+            }
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
             }
             AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
             if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
                 cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
+                auto st = _get_tablet_unlocked(cur_alter_task->related_tablet_id(), true);
+                TabletSharedPtr related_tablet = st.value();
+                if (st.ok() && tablet_ptr->creation_time() > related_tablet->creation_time()) {
                     // Current tablet is newly created during schema-change or rollup, skip it
                     continue;
                 }
@@ -677,10 +768,14 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     return best_tablet;
 }
 
-Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
-                                            std::string_view meta_binary, bool update_meta, bool force, bool restore,
-                                            bool check_path) {
-    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+StatusOr<TabletSharedPtr> TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id,
+                                                               TSchemaHash schema_hash, std::string_view meta_binary,
+                                                               bool update_meta, bool force, bool restore,
+                                                               bool check_path, bool add) {
+    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
+    if (add) {
+        wlock.lock();
+    }
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet because can not parse meta_binary string. "
@@ -751,14 +846,20 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         // tablet state is invalid, drop tablet
         return Status::InternalError("tablet in running state but without delta");
     }
-    auto st = _add_tablet_unlocked(tablet, update_meta, force);
-    LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
+
+    if (add) {
+        auto st = _add_tablet_unlocked(tablet, update_meta, force, false);
+        LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
+    }
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
     }
 
-    return st;
+    if (add) {
+        wlock.unlock();
+    }
+    return tablet;
 }
 
 Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
@@ -795,18 +896,19 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     tablet_meta->serialize(&meta_binary);
     auto st = load_tablet_from_meta(store, tablet_id, schema_hash, meta_binary, true, force, restore, true);
     LOG_IF(WARNING, !st.ok()) << "fail to load tablet. meta_path=" << meta_path;
-    return st;
+    return st.status();
 }
 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
     StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
 
-    TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, false);
-    if (tablet == nullptr) {
+    auto res = get_tablet(tablet_info->tablet_id, false);
+    if (!res.ok()) {
         LOG(WARNING) << "Fail to report tablet info: can't find tablet."
                      << " tablet=" << tablet_info->tablet_id;
-        return Status::NotFound("tablet not found");
+        return res.status();
     }
+    auto tablet = res.value();
     LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
 
     tablet->build_tablet_report_info(tablet_info);
@@ -825,9 +927,23 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 
     StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> id_shard_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                id_shard_set.insert(tabletid);
+            }
+        }
+        for (auto tablet_id : id_shard_set) {
+            TabletSharedPtr tablet_ptr = nullptr;
+            {
+                std::shared_lock rlock(tablets_shard->lock);
+                tablet_ptr = tablets_shard->tablet_cache->get(tablet_id);
+                if (!tablet_ptr) {
+                    continue;
+                }
+            }
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
@@ -855,12 +971,23 @@ Status TabletManager::start_trash_sweep() {
         // we use this vector to save all tablet ptr for saving lock time.
         std::vector<TabletSharedPtr> all_tablets;
         for (auto& tablets_shard : _tablets_shards) {
-            TabletMap& tablet_map = tablets_shard.tablet_map;
+            std::unordered_set<int64_t> id_shard_set;
             {
-                std::shared_lock rlock(tablets_shard.lock);
-                for (auto& [tablet_id, tablet] : tablet_map) {
-                    all_tablets.push_back(tablet);
+                std::shared_lock rlock(tablets_shard->lock);
+                for (auto tabletid : tablets_shard->id_set) {
+                    id_shard_set.insert(tabletid);
                 }
+            }
+            for (auto tabletid : id_shard_set) {
+                TabletSharedPtr tablet_ptr = nullptr;
+                {
+                    std::shared_lock rlock(tablets_shard->lock);
+                    tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
+                    if (!tablet_ptr) {
+                        continue;
+                    }
+                }
+                all_tablets.push_back(tablet_ptr);
             }
 
             for (const auto& tablet : all_tablets) {
@@ -987,23 +1114,23 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
 }
 
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
-    TabletsShard& shard = _get_tablets_shard(tablet_id);
-    std::unique_lock wlock(shard.lock);
-    shard.tablets_under_clone.insert(tablet_id);
+    auto shard = _get_tablets_shard(tablet_id);
+    std::unique_lock wlock(shard->lock);
+    shard->tablets_under_clone.insert(tablet_id);
 }
 
 void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
-    TabletsShard& shard = _get_tablets_shard(tablet_id);
-    std::unique_lock wlock(shard.lock);
-    shard.tablets_under_clone.erase(tablet_id);
+    auto shard = _get_tablets_shard(tablet_id);
+    std::unique_lock wlock(shard->lock);
+    shard->tablets_under_clone.erase(tablet_id);
 }
 
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const std::string& tablet_id_path) {
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
-    TabletsShard& shard = _get_tablets_shard(tablet_id);
-    std::shared_lock rlock(shard.lock);
+    auto shard = _get_tablets_shard(tablet_id);
+    std::shared_lock rlock(shard->lock);
 
     // check if meta already exists
     TabletMeta tablet_meta;
@@ -1011,7 +1138,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
     if (st.ok()) {
         LOG(INFO) << "Cannot remove schema_hash_path=" << tablet_id_path << ", tablet meta exist in meta store";
     } else if (st.is_not_found()) {
-        if (shard.tablets_under_clone.count(tablet_id) > 0) {
+        if (shard->tablets_under_clone.count(tablet_id) > 0) {
             LOG(INFO) << "Cannot move schema_hash_path=" << tablet_id_path << " to trash, tablet is under clone";
             return;
         }
@@ -1027,14 +1154,14 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
 }
 
 bool TabletManager::try_schema_change_lock(TTabletId tablet_id) {
-    std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
-    TabletMap& tablet_map = _get_tablet_map(tablet_id);
-    auto it = tablet_map.find(tablet_id);
-    if (it == tablet_map.end()) {
+    auto shard = _get_tablets_shard(tablet_id);
+    std::shared_lock rlock(shard->lock);
+    auto it = shard->id_set.find(tablet_id);
+    if (it == shard->id_set.end()) {
         LOG(WARNING) << "Fail to lock nonexistent tablet_id=" << tablet_id;
         return false;
     } else {
-        return _schema_change_lock_tbl.try_lock(it->first);
+        return _schema_change_lock_tbl.try_lock(tablet_id);
     }
 }
 
@@ -1045,9 +1172,23 @@ void TabletManager::release_schema_change_lock(TTabletId tablet_id) {
 void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_count) {
     DCHECK(tablet_count != nullptr);
     *tablet_count = 0;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> id_shard_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                id_shard_set.insert(tabletid);
+            }
+        }
+        for (auto tabletid : id_shard_set) {
+            TabletSharedPtr tablet = nullptr;
+            {
+                std::shared_lock rlock(tablets_shard->lock);
+                tablet = tablets_shard->tablet_cache->get(tabletid);
+                if (!tablet) {
+                    continue;
+                }
+            }
             ++(*tablet_count);
             int64_t data_size = tablet->tablet_footprint();
             auto iter = path_map->find(tablet->data_dir()->path());
@@ -1063,9 +1204,22 @@ void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* pa
 
 void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
     std::vector<TabletSharedPtr> related_tablets;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> shard_id_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                shard_id_set.insert(tabletid);
+            }
+        }
+        for (auto tabletid : shard_id_set) {
+            TabletSharedPtr tablet_ptr = nullptr;
+            {
+                tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
+                if (!tablet_ptr) {
+                    continue;
+                }
+            }
             if (tablet_ptr->tablet_state() != TABLET_RUNNING) {
                 continue;
             }
@@ -1084,11 +1238,26 @@ void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
 
 void TabletManager::_build_tablet_stat() {
     _tablet_stat_cache.clear();
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet] : tablets_shard.tablet_map) {
+    for (auto& tablets_shard : _tablets_shards) {
+        std::unordered_set<int64_t> shard_id_set;
+        {
+            std::shared_lock rlock(tablets_shard->lock);
+            for (auto tabletid : tablets_shard->id_set) {
+                shard_id_set.insert(tabletid);
+            }
+        }
+        for (auto tablet_id : shard_id_set) {
+            TabletSharedPtr tablet = nullptr;
+            {
+                std::shared_lock rlock(tablets_shard->lock);
+                tablet = tablets_shard->tablet_cache->get(tablet_id);
+                if (!tablet) {
+                    continue;
+                }
+            }
+
             TTabletStat stat;
-            stat.tablet_id = tablet_id;
+            stat.tablet_id = tablet->tablet_id();
             // TODO(cbl): get row num and data size together is faster
             stat.__set_data_size(tablet->tablet_footprint());
             stat.__set_row_num(tablet->num_rows());
@@ -1214,14 +1383,15 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
     if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
     }
-    TabletMap& tablet_map = _get_tablet_map(tablet_id);
-    auto it = tablet_map.find(tablet_id);
-    if (it == tablet_map.end()) {
+    auto tablet_shard = _get_tablets_shard(tablet_id);
+    auto tablet = tablet_shard->tablet_cache->get(tablet_id);
+    if (!tablet) {
         LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
         return Status::NotFound("");
     }
-    TabletSharedPtr dropped_tablet = it->second;
-    tablet_map.erase(it);
+    TabletSharedPtr dropped_tablet = tablet;
+    tablet_shard->id_set.erase(tablet_id);
+    tablet_shard->tablet_cache->remove(tablet_id);
     _remove_tablet_from_partition(*dropped_tablet);
     LOG(INFO) << "drop tablet:" << dropped_tablet->tablet_id() << ", stop compaction task";
     dropped_tablet->stop_compaction();
@@ -1266,10 +1436,13 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
     return Status::OK();
 }
 
-TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id) {
-    TabletMap& tablet_map = _get_tablet_map(tablet_id);
-    auto it = tablet_map.find(tablet_id);
-    return it != tablet_map.end() ? it->second : nullptr;
+StatusOr<TabletSharedPtr> TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool need_load) {
+    auto shard = _get_tablets_shard(tablet_id);
+    auto tablet = shard->tablet_cache->get(tablet_id);
+    if (tablet) {
+        return tablet;
+    }
+    return Status::NotFound("tablet not found");
 }
 
 void TabletManager::_add_tablet_to_partition(const Tablet& tablet) {
@@ -1286,14 +1459,10 @@ void TabletManager::_remove_tablet_from_partition(const Tablet& tablet) {
 }
 
 std::shared_mutex& TabletManager::_get_tablets_shard_lock(TTabletId tabletId) {
-    return _get_tablets_shard(tabletId).lock;
+    return _get_tablets_shard(tabletId)->lock;
 }
 
-TabletManager::TabletMap& TabletManager::_get_tablet_map(TTabletId tabletId) {
-    return _get_tablets_shard(tabletId).tablet_map;
-}
-
-TabletManager::TabletsShard& TabletManager::_get_tablets_shard(TTabletId tabletId) {
+std::shared_ptr<TabletManager::TabletsShard> TabletManager::_get_tablets_shard(TTabletId tabletId) {
     return _tablets_shards[tabletId & _tablets_shards_mask];
 }
 
@@ -1380,8 +1549,9 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
 
     std::unique_lock l(_get_tablets_shard_lock(tablet_id));
     // TODO: if old tablet exists, should do an atomic "replace_or_add" approach instead
-    auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
-    if (old_tablet_ptr != nullptr) {
+    auto result = _get_tablet_unlocked(tablet_id, true, nullptr);
+    if (result.ok()) {
+        auto old_tablet_ptr = result.value();
         if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
             Status st = delete_shutdown_tablet(tablet_id);
             if (st.ok() || st.is_not_found()) {
@@ -1394,6 +1564,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         } else {
             return Status::InternalError("tablet already exist");
         }
+    } else if (!result.status().is_not_found()) {
+        return result.status();
     }
 
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
@@ -1409,9 +1581,9 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
         return Status::InternalError("tablet init failed");
     }
-    auto st = _add_tablet_unlocked(tablet, true, false);
-    LOG_IF(WARNING, !st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << st;
-    return st;
+    auto res = _add_tablet_unlocked(tablet, true, false, false);
+    LOG_IF(WARNING, !res.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << res;
+    return res;
 }
 
 Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
@@ -1440,5 +1612,4 @@ Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& t
     // move tablet directories to ${storage_root_path}/trash
     return move_to_trash(tablet->tablet_id_path());
 }
-
 } // end namespace starrocks
