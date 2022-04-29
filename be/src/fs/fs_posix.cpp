@@ -97,66 +97,6 @@ static Status do_open(const string& filename, FileSystem::OpenMode mode, int* fd
     return Status::OK();
 }
 
-static Status do_readv_at(int fd, const std::string& filename, uint64_t offset, const Slice* res, size_t res_cnt,
-                          uint64_t* read_bytes) {
-    // Convert the results into the iovec vector to request
-    // and calculate the total bytes requested
-    size_t bytes_req = 0;
-    struct iovec iov[res_cnt];
-    for (size_t i = 0; i < res_cnt; i++) {
-        const Slice& result = res[i];
-        bytes_req += result.size;
-        iov[i] = {result.data, result.size};
-    }
-
-    uint64_t cur_offset = offset;
-    size_t completed_iov = 0;
-    size_t rem = bytes_req;
-    while (rem > 0) {
-        // Never request more than IOV_MAX in one request
-        size_t iov_count = std::min(res_cnt - completed_iov, static_cast<size_t>(IOV_MAX));
-        ssize_t r;
-        RETRY_ON_EINTR(r, preadv(fd, iov + completed_iov, iov_count, cur_offset));
-        if (PREDICT_FALSE(r < 0)) {
-            // An error: return a non-ok status.
-            return io_error(filename, errno);
-        }
-
-        if (PREDICT_FALSE(r == 0)) {
-            if (read_bytes != nullptr) {
-                *read_bytes = cur_offset - offset;
-            }
-            return Status::EndOfFile(
-                    strings::Substitute("EOF trying to read $0 bytes at offset $1", bytes_req, offset));
-        }
-
-        if (PREDICT_TRUE(r == rem)) {
-            // All requested bytes were read. This is almost always the case.
-            return Status::OK();
-        }
-        DCHECK_LE(r, rem);
-        // Adjust iovec vector based on bytes read for the next request
-        ssize_t bytes_rem = r;
-        for (size_t i = completed_iov; i < res_cnt; i++) {
-            if (bytes_rem >= iov[i].iov_len) {
-                // The full length of this iovec was read
-                completed_iov++;
-                bytes_rem -= iov[i].iov_len;
-            } else {
-                // Partially read this result.
-                // Adjust the iov_len and iov_base to request only the missing data.
-                iov[i].iov_base = static_cast<uint8_t*>(iov[i].iov_base) + bytes_rem;
-                iov[i].iov_len -= bytes_rem;
-                break; // Don't need to adjust remaining iovec's
-            }
-        }
-        cur_offset += r;
-        rem -= r;
-    }
-    DCHECK_EQ(0, rem);
-    return Status::OK();
-}
-
 static Status do_writev_at(int fd, const string& filename, uint64_t offset, const Slice* data, size_t data_cnt,
                            size_t* bytes_written) {
     // Convert the results into the iovec vector to request
@@ -321,88 +261,6 @@ private:
     uint64_t _pre_allocated_size = 0;
 };
 
-class PosixRandomRWFile : public RandomRWFile {
-public:
-    PosixRandomRWFile(string fname, int fd, bool sync_on_close)
-            : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close) {}
-
-    ~PosixRandomRWFile() override { WARN_IF_ERROR(close(), "Failed to close " + _filename); }
-
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        return do_readv_at(_fd, _filename, offset, &result, 1, nullptr);
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
-    }
-
-    Status write_at(uint64_t offset, const Slice& data) override { return writev_at(offset, &data, 1); }
-
-    Status writev_at(uint64_t offset, const Slice* data, size_t data_cnt) override {
-        size_t bytes_written = 0;
-        return do_writev_at(_fd, _filename, offset, data, data_cnt, &bytes_written);
-    }
-
-    Status flush(FlushMode mode, uint64_t offset, size_t length) override {
-#if defined(__linux__)
-        int flags = SYNC_FILE_RANGE_WRITE;
-        if (mode == FLUSH_SYNC) {
-            flags |= SYNC_FILE_RANGE_WAIT_AFTER;
-        }
-        if (sync_file_range(_fd, offset, length, flags) < 0) {
-            return io_error(_filename, errno);
-        }
-#else
-        if (mode == FLUSH_SYNC && fsync(_fd) < 0) {
-            return io_error(_filename, errno);
-        }
-#endif
-        return Status::OK();
-    }
-
-    Status sync() override { return do_sync(_fd, _filename); }
-
-    Status close() override {
-        if (_closed) {
-            return Status::OK();
-        }
-        Status s;
-        if (_sync_on_close) {
-            s = sync();
-            if (!s.ok()) {
-                LOG(ERROR) << "Unable to Sync " << _filename << ": " << s.to_string();
-            }
-        }
-
-        int ret;
-        RETRY_ON_EINTR(ret, ::close(_fd));
-        if (ret < 0) {
-            if (s.ok()) {
-                s = io_error(_filename, errno);
-            }
-        }
-
-        _closed = true;
-        return s;
-    }
-
-    StatusOr<uint64_t> get_size() const override {
-        struct stat st;
-        if (fstat(_fd, &st) == -1) {
-            return io_error(_filename, errno);
-        }
-        return st.st_size;
-    }
-
-    const string& filename() const override { return _filename; }
-
-private:
-    const std::string _filename;
-    const int _fd;
-    const bool _sync_on_close = false;
-    bool _closed = false;
-};
-
 class PosixFileSystem : public FileSystem {
 public:
     ~PosixFileSystem() override = default;
@@ -449,17 +307,6 @@ public:
             ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
         return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
-    }
-
-    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const string& fname) override {
-        return new_random_rw_file(RandomRWFileOptions(), fname);
-    }
-
-    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
-                                                               const string& fname) override {
-        int fd;
-        RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
-        return std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
     }
 
     Status path_exists(const std::string& fname) override {

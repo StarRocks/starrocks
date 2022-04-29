@@ -26,9 +26,9 @@ using InodePtr = std::shared_ptr<Inode>;
 
 class MemoryFileInputStream : public io::SeekableInputStreamWrapper {
 public:
-    MemoryFileInputStream(InodePtr inode)
+    explicit MemoryFileInputStream(InodePtr inode)
             : io::SeekableInputStreamWrapper(&_stream, kDontTakeOwnership), _inode(std::move(inode)) {
-        _stream.reset(_inode->data.data(), _inode->data.size());
+        _stream.reset(_inode->data.data(), static_cast<int64_t>(_inode->data.size()));
     }
 
 private:
@@ -67,62 +67,6 @@ public:
     Status sync() override { return Status::OK(); }
 
     uint64_t size() const override { return _inode->data.size(); }
-
-    const std::string& filename() const override { return _path; }
-
-private:
-    std::string _path;
-    InodePtr _inode;
-};
-
-class MemoryRandomRWFile final : public RandomRWFile {
-public:
-    MemoryRandomRWFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
-
-    Status read_at(uint64_t offset, const Slice& result) const override {
-        const std::string& data = _inode->data;
-        if (offset + result.size > data.size()) {
-            return Status::IOError("invalid offset or buffer size");
-        }
-        memcpy(result.data, &data[offset], result.size);
-        return Status::OK();
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        for (size_t i = 0; i < res_cnt; i++) {
-            RETURN_IF_ERROR(read_at(offset, res[i]));
-            offset += res[i].size;
-        }
-        return Status::OK();
-    }
-
-    Status write_at(uint64_t offset, const Slice& data) override {
-        std::string& content = _inode->data;
-        if (offset + data.size > content.size()) {
-            content.resize(offset + data.size);
-        }
-        memcpy(&content[offset], data.data, data.size);
-        return Status::OK();
-    }
-
-    Status writev_at(uint64_t offset, const Slice* data, size_t data_cnt) override {
-        for (size_t i = 0; i < data_cnt; i++) {
-            (void)write_at(offset, data[i]);
-            offset += data[i].size;
-        }
-        return Status::OK();
-    }
-
-    Status flush(FlushMode mode, uint64_t offset, size_t length) override { return Status::OK(); }
-
-    Status sync() override { return Status::OK(); }
-
-    Status close() override {
-        _inode = nullptr;
-        return Status::OK();
-    }
-
-    StatusOr<uint64_t> get_size() const override { return _inode->data.size(); }
 
     const std::string& filename() const override { return _path; }
 
@@ -448,17 +392,6 @@ StatusOr<std::unique_ptr<WritableFile>> MemoryFileSystem::new_writable_file(cons
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_writable_file<MemoryWritableFile, WritableFile>(opts.mode, butil::FilePath(new_path));
-}
-
-StatusOr<std::unique_ptr<RandomRWFile>> MemoryFileSystem::new_random_rw_file(const std::string& path) {
-    return new_random_rw_file(RandomRWFileOptions(), path);
-}
-
-StatusOr<std::unique_ptr<RandomRWFile>> MemoryFileSystem::new_random_rw_file(const RandomRWFileOptions& opts,
-                                                                             const std::string& path) {
-    std::string new_path;
-    RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_writable_file<MemoryRandomRWFile, RandomRWFile>(opts.mode, butil::FilePath(new_path));
 }
 
 Status MemoryFileSystem::path_exists(const std::string& path) {
