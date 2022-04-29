@@ -21,18 +21,25 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
+import com.starrocks.utframe.UtFrameUtils;
+
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
 public class EditLogTest {
     private String meta = "editLogTestDir/";
@@ -128,5 +135,21 @@ public class EditLogTest {
 
         EditLog editLog = new EditLog("node1");
         editLog.logTimestamp(new Timestamp());
+    }
+
+    @Test
+    public void testOpUpdateFrontend() {
+        UtFrameUtils.createMinStarRocksCluster();
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        fe.updateHostAndEditLogPort("testHost", 1000);
+        JournalEntity journal = new JournalEntity();
+        journal.setData(fe);
+        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
+        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journal);
+        List<Frontend> updatedFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend updatedfFe = updatedFrontends.get(0);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 }

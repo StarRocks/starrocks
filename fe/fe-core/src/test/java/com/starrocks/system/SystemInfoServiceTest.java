@@ -2,7 +2,7 @@
 
 package com.starrocks.system;
 
-import com.starrocks.analysis.UpdateBackendAddressClause;
+import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -26,7 +26,7 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(100, "originalHost", 1000);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
 
-        UpdateBackendAddressClause clause = new UpdateBackendAddressClause(
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
             new Pair<String, Integer>("originalHost", 1000), 
             new Pair<String, Integer>("newHost", 1000)
         );
@@ -40,7 +40,7 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(100, "originalHost", 1000);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
 
-        UpdateBackendAddressClause clause = new UpdateBackendAddressClause(
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
             new Pair<String, Integer>("originalHost-test", 1000), 
             new Pair<String, Integer>("newHost", 1000)
         );

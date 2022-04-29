@@ -111,7 +111,7 @@ public class Frontend implements Writable {
         return feVersion;
     }
 
-    public void updateHostAndPort(String host, int editLogPort) {
+    public void updateHostAndEditLogPort(String host, int editLogPort) {
         this.host = host;
         this.editLogPort = editLogPort;
     }

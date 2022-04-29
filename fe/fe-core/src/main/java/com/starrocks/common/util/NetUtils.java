@@ -29,7 +29,6 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.regex.Pattern;
 
 public class NetUtils {
 
@@ -63,8 +62,23 @@ public class NetUtils {
     }
 
     public static boolean validIPAddress(String hostname) {
-        String chunkIPv4 = "([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])";
-        Pattern pattenIPv4 = Pattern.compile("^(" + chunkIPv4 + "\\.){3}" + chunkIPv4 + "$");
-        return pattenIPv4.matcher(hostname).matches();
+        String[] nums = hostname.split("\\.", -1);
+        for (String x : nums) {
+            if (x.length() == 0 || x.length() > 3) { 
+                return false; 
+            }
+            if (x.charAt(0) == '0' && x.length() != 1) { 
+                return false; 
+            }
+            for (char ch : x.toCharArray()) {
+                if (!Character.isDigit(ch)) { 
+                    return false;
+                }
+            }
+            if (Integer.parseInt(x) > 255) { 
+                return false; 
+            }
+        }
+        return true;
     }
 }
