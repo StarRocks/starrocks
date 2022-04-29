@@ -38,7 +38,6 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;

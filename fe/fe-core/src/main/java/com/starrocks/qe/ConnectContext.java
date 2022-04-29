@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -72,6 +73,9 @@ public class ConnectContext {
 
     // id for this connection
     protected int connectionId;
+    // Time when the connection is make
+    protected long connectionStartTime;
+
     // mysql net
     protected MysqlChannel mysqlChannel;
     // state
@@ -322,6 +326,14 @@ public class ConnectContext {
         this.connectionId = connectionId;
     }
 
+    public void resetConnectionStartTime() {
+        this.connectionStartTime = System.currentTimeMillis();
+    }
+
+    public long getConnectionStartTime() {
+        return connectionStartTime;
+    }
+
     public MysqlChannel getMysqlChannel() {
         return mysqlChannel;
     }
@@ -515,6 +527,8 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
+            // connection start Time
+            row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State
