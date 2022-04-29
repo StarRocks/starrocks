@@ -22,12 +22,6 @@ OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node
         : ScanOperatorFactory(id, scan_node), _ctx(std::move(ctx)) {}
 
 Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    const auto& tolap_scan_node = olap_scan_node->thrift_olap_scan_node();
-    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(tolap_scan_node.tuple_id);
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
-                                                       &(tuple_desc->decoded_slots()));
     return Status::OK();
 }
 
