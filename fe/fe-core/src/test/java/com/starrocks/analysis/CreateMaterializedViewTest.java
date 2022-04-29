@@ -24,8 +24,8 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.utframe.StarRocksAssert;
@@ -33,8 +33,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -174,36 +172,40 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testRefreshNoEvery(){
-        String sql = "create materialized view mv1 " +
+    public void testExists(){
+        String sql = "create materialized view tbl1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
-                "refresh async START('2122-12-31') " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Refresh every must be specified");
+            assertEquals(e.getMessage(), "Table 'tbl1' already exists");
         }
     }
 
     @Test
-    public void testRefreshStartBeforeCurr(){
-        String sql = "create materialized view mv1 " +
+    public void testIfNotExists(){
+        String sql = "create materialized view if not exists tbl1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
-                "refresh async START('2016-12-31') " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Refresh start must be after current time");
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -579,6 +581,40 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(), "Unsupported refresh type: manual");
+        }
+    }
+
+    @Test
+    public void testRefreshNoEvery(){
+        String sql = "create materialized view mv1 " +
+                "partition by (ss) " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Refresh every must be specified");
+        }
+    }
+
+    @Test
+    public void testRefreshStartBeforeCurr(){
+        String sql = "create materialized view mv1 " +
+                "partition by (ss) " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Refresh start must be after current time");
         }
     }
 

@@ -5902,6 +5902,7 @@ public class GlobalStateMgr {
                     LOG.info("create materialized view [{}] which already exists", mvName);
                     return;
                 } else {
+                    // todo create mv error code and use it.
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
                 }
             }

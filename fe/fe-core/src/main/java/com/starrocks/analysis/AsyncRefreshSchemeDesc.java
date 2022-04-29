@@ -29,15 +29,5 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
     public IntervalLiteral getIntervalLiteral() {
         return intervalLiteral;
     }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return super.accept(visitor, context);
-    }
 }
 

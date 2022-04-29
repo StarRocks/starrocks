@@ -113,7 +113,7 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
             globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
-            globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+            globalStateMgr.createMaterializedView((CreateMaterializedViewStatement) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
             globalStateMgr.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterTableStmt) {

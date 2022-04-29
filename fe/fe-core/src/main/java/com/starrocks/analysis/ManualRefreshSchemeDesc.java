@@ -13,14 +13,5 @@ public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
         this.type = RefreshType.MANUAL;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return super.accept(visitor, context);
-    }
 }
 
