@@ -108,7 +108,7 @@ public:
 
 extern const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
                                                        PrimitiveType return_type, bool is_null,
-                                                       int agg_func_set_version);
+                                                       int agg_func_set_version = 2);
 
 } // namespace vectorized
 } // namespace starrocks
