@@ -152,8 +152,8 @@ public:
     static constexpr const char* JNI_CLASS_NAME = "java/nio/ByteBuffer";
 
     DirectByteBuffer(void* data, int capacity);
-    DirectByteBuffer(jobject&& handle, void* data, int capacity)
-            : _handle(std::move(handle)), _data(data), _capacity(capacity) {}
+    // DirectByteBuffer(jobject&& handle, void* data, int capacity)
+    //         : _handle(std::move(handle)), _data(data), _capacity(capacity) {}
     ~DirectByteBuffer();
 
     DirectByteBuffer(const DirectByteBuffer&) = delete;
@@ -267,11 +267,10 @@ struct MethodTypeDescriptor {
 };
 
 struct JavaMethodDescriptor {
-    ~JavaMethodDescriptor();
     std::string signature; // function signature
     std::string name;      // function name
     std::vector<MethodTypeDescriptor> method_desc;
-    jobject method = nullptr;
+    JavaGlobalRef method = nullptr;
     // thread safe
     jmethodID get_method_id() const;
 };
@@ -313,7 +312,7 @@ public:
     // create a new state for UDAF
     JavaGlobalRef create();
     // destroy state
-    void destroy(JavaGlobalRef state);
+    void destroy(JavaGlobalRef& state);
     // UDAF Update Function
     void update(jvalue* val);
     // UDAF merge

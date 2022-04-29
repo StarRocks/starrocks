@@ -79,7 +79,7 @@ struct UDFFunctionCallHelper {
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
                                                       &input_col_objs);
         // call UDF method
-        jobject res = helper.batch_call(ctx, fn_desc->udf_handle.handle(), fn_desc->evaluate->method,
+        jobject res = helper.batch_call(ctx, fn_desc->udf_handle.handle(), fn_desc->evaluate->method.handle(),
                                         input_col_objs.data(), input_col_objs.size(), size);
 
         env->PushLocalFrame(size * (num_cols + 1));

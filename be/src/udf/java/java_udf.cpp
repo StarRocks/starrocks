@@ -344,7 +344,9 @@ void JVMFunctionHelper::clear(DirectByteBuffer* buffer) {
 DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
-    _handle = env->NewDirectByteBuffer(ptr, capacity);
+    auto lref = env->NewDirectByteBuffer(ptr, capacity);
+    _handle = env->NewGlobalRef(lref);
+    env->DeleteLocalRef(lref);
     _capacity = capacity;
     _data = ptr;
 }
@@ -353,7 +355,8 @@ DirectByteBuffer::~DirectByteBuffer() {
     if (_handle != nullptr) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
-        env->DeleteLocalRef(_handle);
+        env->DeleteGlobalRef(_handle);
+        _handle = nullptr;
     }
 }
 
@@ -453,17 +456,14 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     }
     // no exception happened, class exists
     DCHECK(loaded_clazz != nullptr);
-    return loaded_clazz;
-}
 
-JavaMethodDescriptor::~JavaMethodDescriptor() {
-    if (method) {
-        JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(method);
-    }
+    auto res = env->NewGlobalRef(loaded_clazz);
+    env->DeleteLocalRef(loaded_clazz);
+    return res;
 }
 
 jmethodID JavaMethodDescriptor::get_method_id() const {
-    return JVMFunctionHelper::getInstance().getEnv()->FromReflectedMethod(method);
+    return JVMFunctionHelper::getInstance().getEnv()->FromReflectedMethod(method.handle());
 }
 
 Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* has) {
@@ -544,6 +544,7 @@ StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::stri
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     auto res = env->NewGlobalRef(method_object);
+    LOG(WARNING) << "delete" << method_object;
     env->DeleteLocalRef(method_object);
     return res;
 }
@@ -635,10 +636,12 @@ JavaGlobalRef UDAFFunction::create() {
     jmethodID create = _ctx->create->get_method_id();
     auto obj = env->CallObjectMethod(_udaf_handle, create);
     JVMFunctionHelper::check_call_exception(env, _function_context);
-    return JavaGlobalRef(std::move(obj));
+    auto res = env->NewGlobalRef(obj);
+    env->DeleteLocalRef(obj);
+    return JavaGlobalRef(std::move(res));
 }
 
-void UDAFFunction::destroy(JavaGlobalRef state) {
+void UDAFFunction::destroy(JavaGlobalRef& state) {
     JNIEnv* env = getJNIEnv();
     jmethodID destory = _ctx->destory->get_method_id();
     env->CallVoidMethod(_udaf_handle, destory, state.handle());
