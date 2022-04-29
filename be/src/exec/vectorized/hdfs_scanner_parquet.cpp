@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 
-#include "exec/vectorized/hdfs_scan_node.h"
 #include "formats/parquet/file_reader.h"
 #include "util/runtime_profile.h"
 
