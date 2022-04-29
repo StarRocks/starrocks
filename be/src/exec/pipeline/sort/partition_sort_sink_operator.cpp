@@ -44,7 +44,7 @@ Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     // skip sorting if cancelled
     if (state->is_cancelled()) {
         _is_finished = true;
-        return Status::OK();
+        return Status::Cancelled("runtime state is cancelled");
     }
     RETURN_IF_ERROR(_chunks_sorter->finish(state));
 

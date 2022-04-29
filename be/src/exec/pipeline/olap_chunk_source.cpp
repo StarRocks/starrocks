@@ -36,12 +36,6 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
     _scan_range = scan_morsel->get_olap_scan_range();
 }
 
-OlapChunkSource::~OlapChunkSource() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
-}
-
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -472,15 +466,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 }
 
 void OlapChunkSource::close(RuntimeState* state) {
-    if (_closed) {
-        return;
-    }
     _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
-    _closed = true;
 }
 
 int64_t OlapChunkSource::last_spent_cpu_time_ns() {

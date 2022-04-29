@@ -33,7 +33,7 @@ public:
     OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
                     vectorized::OlapScanNode* scan_node);
 
-    ~OlapChunkSource() override;
+    ~OlapChunkSource() override = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -87,7 +87,6 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    bool _closed = false;
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
