@@ -969,7 +969,9 @@ public class StmtExecutor {
                 QueryDetail.QueryMemState.RUNNING,
                 context.getDatabase(),
                 sql,
-                context.getQualifiedUser());
+                context.getQualifiedUser(),
+                context.getWorkGroup() != null ?
+                    context.getWorkGroup().getName() : "");
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
