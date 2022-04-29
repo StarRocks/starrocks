@@ -253,18 +253,17 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     wg->increment_real_runtime_ns(runtime_ns);
 
     // for big query check cpu
+    auto* query_ctx = driver->query_ctx();
+    auto* source_operator = driver->source_operator();
     if (wg->big_query_cpu_core_second_limit()) {
         wg->incr_total_cpu_cost(runtime_ns);
-        auto* query_ctx = driver->query_ctx();
         query_ctx->incr_cpu_cost(runtime_ns);
 
         // Increase the overhead of the source operator alone
-        auto* source_operator = driver->source_operator();
         int64_t source_operator_last_cpu_time_ns = source_operator->get_last_growth_cpu_time_ns();
 
         wg->incr_total_cpu_cost(source_operator_last_cpu_time_ns);
         query_ctx->incr_cpu_cost(source_operator_last_cpu_time_ns);
-        query_ctx->incr_cur_scan_rows_num(source_operator->get_last_scan_rows_num());
 
         // Increase the overhead of the sink operator alone
         auto* sink_operator = driver->sink_operator();
@@ -273,6 +272,9 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
         wg->incr_total_cpu_cost(sink_operator_last_cpu_time_ns);
         query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
     }
+
+    // Update scan rows
+    query_ctx->incr_cur_scan_rows_num(source_operator->get_last_scan_rows_num());
 
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
