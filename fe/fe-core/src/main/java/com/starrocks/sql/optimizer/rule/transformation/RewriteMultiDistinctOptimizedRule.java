@@ -37,12 +37,15 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        // check cte is disable or hasNoGroup false
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        boolean hasNoGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
+        if (!context.getSessionVariable().isCboCteReuse() || !hasNoGroup) {
+            return false;
+        }
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                         .filter(CallOperator::isDistinct).collect(Collectors.toList());
-
-        boolean hasNoGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
 
         boolean hasMultiColumns = false;
         for (CallOperator callOperator : distinctAggOperatorList) {
@@ -52,15 +55,11 @@ public class RewriteMultiDistinctOptimizedRule extends TransformationRule {
             }
         }
 
-        boolean isCheck = hasNoGroup && (distinctAggOperatorList.size() > 1
+        boolean isCheck = (distinctAggOperatorList.size() > 1
                 && !hasMultiColumns) || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
         if (isCheck) {
-            context.getSessionVariable().setCboCteReuse(true);
-            context.getCteContext().setEnableCTE(true);
-            // add forced identifier
             context.getCteContext().setForcedCTE(true);
-            context.getSessionVariable().setEnablePipelineEngine(true);
         }
         return isCheck;
     }
