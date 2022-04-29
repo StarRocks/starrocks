@@ -3,9 +3,9 @@
 package com.starrocks.catalog;
 
 public class InternalCatalog extends Catalog {
-    private static final String INTERNAL_CATALOG_NAME = "default";
+    private static final String DEFAULT_INTERNAL_CATALOG_NAME = "default";
 
     public InternalCatalog() {
-        super(INTERNAL_CATALOG_NAME);
+        super(DEFAULT_INTERNAL_CATALOG_NAME);
     }
 }
