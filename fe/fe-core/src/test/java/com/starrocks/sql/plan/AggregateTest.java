@@ -678,7 +678,7 @@ public class AggregateTest extends PlanTestBase {
         sql = " SELECT c2, count(*) FROM (SELECT t1.c2 as c2 FROM db1.tbl3 as t1 INNER JOIN [shuffle] db1.tbl4 " +
                 "as t2 ON t1.c2=t2.c2 WHERE t1.c1<10) as t3 GROUP BY c2;";
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "AGGREGATE (merge finalize)"));
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "AGGREGATE (update finalize)"));
 
         sql = "SELECT c2, count(*) FROM db1.tbl5 GROUP BY c2;";
         plan = getFragmentPlan(sql);
