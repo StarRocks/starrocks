@@ -6,21 +6,17 @@
 
 ## 语法
 
-`reverse(param)`
+```Haskell
+reverse(param)
+```
 
 ## 参数说明
 
-`param`：需要反转的字符串/数组。支持的数据类型为 VARCHAR、CHAR、ARRAY。
+`param`：需要反转的字符串/数组，目前只支持一维数组且数组元素的数据类型不允许为 `DECIMAL`。支持的数据类型为 VARCHAR、CHAR、ARRAY。
 
 ## 返回值说明
 
 返回的数据类型与 `param` 一致。
-
-## 注意事项
-
-* 如果 `param` 是数组类型，返回数组中的元素类型和 `param` 中的元素类型一致。
-* 如果 `param` 是数组类型，只支持一维数组。
-* 如果 `param` 是数组类型，数组中元素类型不允许为 `DECIMAL`。
 
 ## 示例
 

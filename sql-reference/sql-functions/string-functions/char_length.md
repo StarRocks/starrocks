@@ -1,16 +1,26 @@
 # char_length
 
-## description
+## 功能
 
-### Syntax
+返回字符串的长度
+</br>
+对于多字节字符, 返回 **字符** 数, 目前仅支持 utf8 编码, 该函数还有一个别名 `character_length`
+
+## 语法
 
 ```Haskell
-INT char_length(VARCHAR str)
+char_length(str)
 ```
 
-返回字符串的长度，对于多字节字符，返回**字符**数, 目前仅支持utf8 编码。这个函数还有一个别名 `character_length`。
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 INT
+
+## 示例
 
 ```Plain Text
 MySQL > select char_length("abc");
@@ -28,6 +38,6 @@ MySQL > select char_length("中国");
 +----------------------+
 ```
 
-## keyword
+## 关键词
 
 CHAR_LENGTH, CHARACTER_LENGTH

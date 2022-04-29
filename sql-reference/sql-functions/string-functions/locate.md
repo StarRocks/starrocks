@@ -1,14 +1,28 @@
 # locate
 
-## description
+## 功能
 
-### Syntax
+返回 `substr` 在 `str` 中出现的位置(从 1 开始计数, 按「字符」计算), 如果指定第 3 个参数 `pos`, 则从 `str` 以 `pos` 下标开始的字符串处开始查找 `substr` 第一次出现的位置, 如果没有找到就返回 0
 
-`INT locate(VARCHAR substr, VARCHAR str[, INT pos])`
+## 语法
 
-返回 substr 在 str 中出现的位置（从1开始计数，按「字符」计算）。如果指定第3个参数 pos，则从 str 以 pos 下标开始的字符串处开始查找 substr 出现的位置。如果没有找到，返回0
+```Haskell
+locate(substr, str, pos)
+```
 
-## example
+## 参数说明
+
+`substr`: 支持的数据类型为 VARCHAR
+
+`str`: 支持的数据类型为 VARCHAR
+
+`pos`: 可选参数, 支持的数据类型为 INT
+
+## 返回值说明
+
+返回值的数据类型为 INT
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT LOCATE('bar', 'foobarbar');
@@ -33,6 +47,6 @@ MySQL > SELECT LOCATE('bar', 'foobarbar', 5);
 +-------------------------------+
 ```
 
-## keyword
+## 关键词
 
 LOCATE

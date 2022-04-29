@@ -1,16 +1,28 @@
 # regexp_extract
 
-## description
+## 功能
 
-### Syntax
+对字符串 str 进行正则匹配, 抽取符合 pattern 的第 pos 个匹配部分, 需要 pattern 完全匹配 str 中的某部分, 才能返回 pattern 部分中需匹配部分, 如果没有匹配就返回空字符串
+
+## 语法
 
 ```Haskell
-VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
+regexp_extract(str, pattern, pos)
 ```
 
-对字符串 str 进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分。需要 pattern 完全匹配 str 中的某部分，这样才能返回 pattern 部分中需匹配部分。如果没有匹配，返回空字符串。
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+`pattern`: 支持的数据类型为 VARCHAR
+
+`pos`: 支持的数据类型为 INT
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
@@ -28,6 +40,6 @@ MySQL > SELECT regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 2);
 +-------------------------------------------------------------+
 ```
 
-## keyword
+## 关键词
 
-REGEXP_EXTRACT,REGEXP,EXTRACT
+REGEXP_EXTRACT, REGEXP, EXTRACT

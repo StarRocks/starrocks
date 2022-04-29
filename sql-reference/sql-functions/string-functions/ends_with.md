@@ -1,16 +1,26 @@
 # ends_with
 
-## description
+## 功能
 
-### Syntax
+如果字符串以指定后缀结尾, 返回 true, 否则返回 false, 任意参数为 NULL 就返回 NULL
+
+## 语法
 
 ```Haskell
-BOOLEAN ENDS_WITH (VARCHAR str, VARCHAR suffix)
+ENDS_WITH(str, suffix)
 ```
 
-如果字符串以指定后缀结尾，返回true。否则，返回false。任意参数为NULL，返回NULL。
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+`suffix`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 BOOLEAN
+
+## 示例
 
 ```Plain Text
 MySQL > select ends_with("Hello starrocks", "starrocks");
@@ -28,6 +38,6 @@ MySQL > select ends_with("Hello starrocks", "Hello");
 +-----------------------------------+
 ```
 
-## keyword
+## 关键词
 
 ENDS_WITH

@@ -1,20 +1,26 @@
 # get_json_double
 
-## description
+## 功能
 
-### Syntax
+解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对, 或者无法找到匹配项, 则返回 NULL。
+
+## 语法
 
 ```Haskell
-DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
+get_json_double(json_str, json_path)
 ```
 
-解析并获取 json 字符串内指定路径的浮点型内容。
-其中 json_path 必须以 $ 符号作为开头，使用 . 作为路径分割符。如果路径中包含 . ，则可以使用双引号包围。
-使用 [ ] 表示数组下标，从 0 开始。
-path 的内容不能包含 ", [ 和 ]。
-如果 json_string 格式不对，或 json_path 格式不对，或无法找到匹配项，则返回 NULL。
+## 参数说明
 
-## example
+`json_str`: json 字符串，支持的数据类型为 VARCHAR。
+
+`json_path`: 指定的路径，支持的数据类型为 VARCHAR，其中 json_path 必须以 $ 符号作为开头, 使用 . 作为路径分割符, 如果路径中包含 `.`, 则可以使用双引号包围。使用 [ ] 表示数组下标, 从 0 开始, path 的内容不能包含 ", [ 和 ]。
+
+## 返回值说明
+
+返回值的数据类型为 DOUBLE。
+
+## 示例
 
 1. 获取 key 为 "k1" 的 value
 
@@ -49,6 +55,6 @@ path 的内容不能包含 ", [ 和 ]。
     +---------------------------------------------------------------------+
     ```
 
-## keyword
+## 关键词
 
-GET_JSON_DOUBLE,GET,JSON,DOUBLE
+GET_JSON_DOUBLE, GET, JSON, DOUBLE

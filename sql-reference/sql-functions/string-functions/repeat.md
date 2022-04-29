@@ -1,16 +1,26 @@
 # repeat
 
-## description
+## 功能
 
-### Syntax
+将字符串 str 重复 count 次输出, count 小于 1 时返回空串, str 或 count 为 NULL 时, 返回 NULL
+
+## 语法
 
 ```Haskell
-VARCHAR repeat(VARCHAR str, INT count)
+repeat(str, count)
 ```
 
-将字符串 str 重复 count 次输出，count 小于1时返回空串，str，count 任一为NULL时，返回 NULL
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+`count`: 支持的数据类型为 INT
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL > SELECT repeat("a", 3);
@@ -28,6 +38,6 @@ MySQL > SELECT repeat("a", -1);
 +-----------------+
 ```
 
-## keyword
+## 关键词
 
-REPEAT,
+REPEAT

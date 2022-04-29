@@ -1,16 +1,24 @@
 # null_or_empty
 
-## description
+## 功能
 
-### Syntax
+如果字符串为空字符串或者 NULL 则返回 true, 否则返回 false
+
+## 语法
 
 ```Haskell
-BOOLEAN NULL_OR_EMPTY (VARCHAR str)
+NULL_OR_EMPTY(str)
 ```
 
-如果字符串为空字符串或者NULL，返回true。否则，返回false。
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 BOOLEAN
+
+## 示例
 
 ```Plain Text
 MySQL > select null_or_empty(null);
@@ -35,6 +43,6 @@ MySQL > select null_or_empty("a");
 +--------------------+
 ```
 
-## keyword
+## 关键词
 
 NULL_OR_EMPTY

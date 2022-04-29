@@ -1,16 +1,28 @@
 # split_part
 
-## description
+## 功能
 
-### Syntax
+根据分割符拆分字符串, 返回指定的分割部分(从 1 开始计数)
+
+## 语法
 
 ```Haskell
-VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
+split_part(content, delimiter, field)
 ```
 
-根据分割符拆分字符串, 返回指定的分割部分(从一开始计数)。
+## 参数说明
 
-## example
+`content`: 支持的数据类型为 VARCHAR
+
+`delimiter`: 支持的数据类型为 VARCHAR
+
+`field`: 支持的数据类型为 INT
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL > select split_part("hello world", " ", 1);
@@ -42,6 +54,6 @@ MySQL > select split_part("abca", "a", 1);
 +----------------------------+
 ```
 
-## keyword
+## 关键词
 
-SPLIT_PART,SPLIT,PART
+SPLIT_PART, SPLIT, PART

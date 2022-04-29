@@ -1,16 +1,26 @@
 # append_trailing_char_if_absent
 
-## description
+## 功能
 
-### Syntax
+如果 str 字符串非空并且末尾不包含 trailing_char 字符, 则将 trailing_char 字符附加到末尾
+
+## 语法
 
 ```Haskell
-VARCHAR append_trailing_char_if_absent(VARCHAR str, VARCHAR trailing_char)
+append_trailing_char_if_absent(str, trailing_char)
 ```
 
-如果str字符串非空并且末尾不包含trailing_char字符，则将trailing_char字符附加到末尾。 trailing_char只能包含一个字符，如果包含多个字符，将返回NULL
+## 参数说明
 
-## example
+`str`: 给定字符串, 支持的数据类型为 VARCHAR
+
+`trailing_char`: 给定字符, 支持的数据类型为 VARCHAR, trailing_char 只能包含一个字符, 若包含多个字符, 将返回 NULL
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL [test]> select append_trailing_char_if_absent('a','c');
@@ -30,6 +40,6 @@ MySQL [test]> select append_trailing_char_if_absent('ac','c');
 1 row in set (0.00 sec)
 ```
 
-## keyword
+## 关键词
 
 APPEND_TRAILING_CHAR_IF_ABSENT

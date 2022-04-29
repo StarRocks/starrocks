@@ -1,16 +1,26 @@
 # split
 
-## description
+## 功能
 
-### Syntax
+根据分隔符拆分字符串, 将拆分后的所有字符串以 ARRAY 的格式返回
+
+## 语法
 
 ```Haskell
-`ARRAY<VARCHAR>` split(VARCHAR content, VARCHAR delimiter)
+split(content, delimiter)
 ```
 
-根据分隔符拆分字符串，将拆分后的所有字符串以ARRAY的格式返回
+## 参数说明
 
-## example
+`content`: 支持的数据类型为 VARCHAR
+
+`delimiter`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 ARRAY
+
+## 示例
 
 ```Plain Text
 mysql> select split("a,b,c",",");
@@ -33,6 +43,6 @@ mysql> select split("abc","");
 +------------------+
 ```
 
-## keyword
+## 关键词
 
-SPLIT,PART
+SPLIT, PART

@@ -1,14 +1,24 @@
 # concat
 
-## description
+## 功能
 
-### Syntax
+将多个字符串连接起来, 如果参数中任意一个值是 NULL, 那么返回的结果就是 NULL
 
-`VARCHAR concat(VARCHAR,...)`
+## 语法
 
-将多个字符串连接起来, 如果参数中任意一个值是 NULL，那么返回的结果就是 NULL
+```Haskell
+concat(str,...)
+```
 
-## example
+## 参数说明
+
+`str`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 VARCHAR
+
+## 示例
 
 ```Plain Text
 MySQL > select concat("a", "b");
@@ -33,6 +43,6 @@ MySQL > select concat("a", null, "c");
 +------------------------+
 ```
 
-## keyword
+## 关键词
 
 CONCAT

@@ -1,16 +1,26 @@
 # starts_with
 
-## description
+## 功能
 
-### Syntax
+如果字符串以指定前缀开头返回 1, 否则返回 0, 任意参数为 NULL 则返回 NULL
+
+## 语法
 
 ```Haskell
-BOOLEAN starts_with(VARCHAR str, VARCHAR prefix)
+starts_with(str, prefix)
 ```
 
-如果字符串以指定前缀开头，返回 1; 否则返回 0. 任意参数为NULL，返回NULL
+## 参数说明
 
-## example
+`str`: 支持的数据类型为 VARCHAR
+
+`perfix`: 支持的数据类型为 VARCHAR
+
+## 返回值说明
+
+返回值的数据类型为 BOOLEAN
+
+## 示例
 
 ```Plain Text
 mysql> select starts_with("hello world","hello");
@@ -28,6 +38,6 @@ mysql> select starts_with("hello world","world");
 +-------------------------------------+
 ```
 
-## keyword
+## 关键词
 
 START_WITH
