@@ -157,7 +157,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
             driver->set_driver_state(DriverState::INPUT_EMPTY);
             this->_blocked_driver_poller->add_blocked_driver(driver);
         } else {
-            this->_driver_queue->put(driver);
+            this->_driver_queue->put_back(driver);
         }
     }
 }

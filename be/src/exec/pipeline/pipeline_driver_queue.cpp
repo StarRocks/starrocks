@@ -13,7 +13,7 @@ void QuerySharedDriverQueue::close() {
     _cv.notify_all();
 }
 
-void QuerySharedDriverQueue::put(const DriverRawPtr driver) {
+void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     {
@@ -24,7 +24,7 @@ void QuerySharedDriverQueue::put(const DriverRawPtr driver) {
     }
 }
 
-void QuerySharedDriverQueue::put(const std::vector<DriverRawPtr>& drivers) {
+void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
     std::vector<int> levels(drivers.size());
     for (int i = 0; i < drivers.size(); i++) {
         levels[i] = _compute_driver_level(drivers[i]);
@@ -40,12 +40,12 @@ void QuerySharedDriverQueue::put(const std::vector<DriverRawPtr>& drivers) {
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
-    put(driver);
+    put_back(driver);
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
-    put(drivers);
+    put_back(drivers);
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
@@ -120,24 +120,24 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
     return QUEUE_SIZE - 1;
 }
 
-void QuerySharedDriverQueueWithoutLock::put(const DriverRawPtr driver) {
-    _put(driver);
+void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
+    _put_back(driver);
 }
 
-void QuerySharedDriverQueueWithoutLock::put(const std::vector<DriverRawPtr>& drivers) {
+void QuerySharedDriverQueueWithoutLock::put_back(const std::vector<DriverRawPtr>& drivers) {
     for (auto driver : drivers) {
-        _put(driver);
+        _put_back(driver);
     }
 }
 
 void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const DriverRawPtr driver) {
     // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put(driver);
+    put_back(driver);
 }
 
 void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put(drivers);
+    put_back(drivers);
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
@@ -177,7 +177,7 @@ void QuerySharedDriverQueueWithoutLock::update_statistics(const DriverRawPtr dri
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
 }
 
-void QuerySharedDriverQueueWithoutLock::_put(const DriverRawPtr driver) {
+void QuerySharedDriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     _queues[level].put(driver);
@@ -201,26 +201,26 @@ void DriverQueueWithWorkGroup::close() {
     _cv.notify_all();
 }
 
-void DriverQueueWithWorkGroup::put(const DriverRawPtr driver) {
-    _put<false>(driver);
+void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
+    _put_back<false>(driver);
 }
 
-void DriverQueueWithWorkGroup::put(const std::vector<DriverRawPtr>& drivers) {
+void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
     for (const auto driver : drivers) {
-        _put<false>(driver);
+        _put_back<false>(driver);
     }
 }
 
 void DriverQueueWithWorkGroup::put_back_from_executor(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
-    _put<true>(driver);
+    _put_back<true>(driver);
 }
 
 void DriverQueueWithWorkGroup::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     for (const auto driver : drivers) {
-        _put<true>(driver);
+        _put_back<true>(driver);
     }
 }
 
@@ -310,7 +310,7 @@ size_t DriverQueueWithWorkGroup::size() {
 }
 
 template <bool from_executor>
-void DriverQueueWithWorkGroup::_put(const DriverRawPtr driver) {
+void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _sum_cpu_limit += wg->cpu_limit();
@@ -337,7 +337,7 @@ void DriverQueueWithWorkGroup::_put(const DriverRawPtr driver) {
         }
         _ready_wgs.emplace(wg);
     }
-    wg->driver_queue()->put(driver);
+    wg->driver_queue()->put_back(driver);
     _cv.notify_one();
 }
 

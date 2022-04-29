@@ -19,8 +19,8 @@ public:
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
 
-    virtual void put(const DriverRawPtr driver) = 0;
-    virtual void put(const std::vector<DriverRawPtr>& drivers) = 0;
+    virtual void put_back(const DriverRawPtr driver) = 0;
+    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
     // *from_executor* means that the executor thread puts the driver back to the queue.
     virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
     virtual void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) = 0;
@@ -143,8 +143,8 @@ public:
     }
     ~QuerySharedDriverQueue() override = default;
     void close() override;
-    void put(const DriverRawPtr driver) override;
-    void put(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
     void put_back_from_executor(const DriverRawPtr driver) override;
     void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
@@ -199,8 +199,8 @@ public:
     ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
 
-    void put(const DriverRawPtr driver) override;
-    void put(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
     void put_back_from_executor(const DriverRawPtr driver) override;
     void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
@@ -214,7 +214,7 @@ public:
     size_t size() override { return _size; }
 
 private:
-    void _put(const DriverRawPtr driver);
+    void _put_back(const DriverRawPtr driver);
     // When the driver at the i-th level costs _level_time_slices[i],
     // it will move to (i+1)-th level.
     int _compute_driver_level(const DriverRawPtr driver) const;
@@ -239,8 +239,8 @@ public:
     ~DriverQueueWithWorkGroup() override = default;
     void close() override;
 
-    void put(const DriverRawPtr driver) override;
-    void put(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
     // When the driver's workgroup is not in the workgroup queue
     // and the driver isn't from a executor thread (that is, from the poller or new driver),
     // the workgroup's vruntime is adjusted to workgroup_queue.min_vruntime-ideal_runtime/2,
@@ -265,7 +265,7 @@ private:
 
     // This method should be guarded by the outside _global_mutex.
     template <bool from_executor>
-    void _put(const DriverRawPtr driver);
+    void _put_back(const DriverRawPtr driver);
     // This method should be guarded by the outside _global_mutex.
     workgroup::WorkGroup* _find_min_owner_wg(int worker_id);
     workgroup::WorkGroup* _find_min_wg();

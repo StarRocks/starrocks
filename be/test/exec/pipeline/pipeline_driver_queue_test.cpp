@@ -64,7 +64,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
     // Put back drivers to queue.
     for (auto* in_driver : in_drivers) {
         queue.update_statistics(in_driver);
-        queue.put(in_driver);
+        queue.put_back(in_driver);
     }
 
     // Take drivers from queue.
@@ -108,7 +108,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
     std::vector<DriverRawPtr> out_drivers = {driver1.get(), driver4.get(), driver3.get(), driver2.get()};
 
     for (auto* in_driver : in_drivers) {
-        queue.put(in_driver);
+        queue.put_back(in_driver);
     }
 
     for (size_t i = 0;i < out_drivers.size();i ++) {
@@ -136,7 +136,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
 
     sleep(1);
     queue.update_statistics(driver1.get());
-    queue.put(driver1.get());
+    queue.put_back(driver1.get());
 
     consumer_thread->join();
 }
@@ -241,7 +241,7 @@ TEST_F(DriverQueueWithWorkGroupTest, test_basic) {
     // Put back drivers to queue.
     for (auto* in_driver : in_drivers) {
         queue.update_statistics(in_driver);
-        queue.put(in_driver);
+        queue.put_back(in_driver);
     }
 
     // Take drivers from queue.
@@ -268,7 +268,7 @@ TEST_F(DriverQueueWithWorkGroupTest, test_take_block) {
 
     sleep(1);
     queue.update_statistics(driver1.get());
-    queue.put(driver1.get());
+    queue.put_back(driver1.get());
 
     consumer_thread->join();
 }
