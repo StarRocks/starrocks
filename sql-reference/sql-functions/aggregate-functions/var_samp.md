@@ -1,17 +1,25 @@
 
-# VAR_SAMP,VARIANCE_SAMP
+# VAR_SAMP, VARIANCE_SAMP
 
-## description
+## 功能
 
-### Syntax
+返回 expr 表达式的样本方差
+
+## 语法
 
 ```Haskell
 VAR_SAMP(expr)
 ```
 
-返回expr表达式的样本方差
+## 参数说明
 
-## example
+`epxr`: 被选取的表达式
+
+## 返回值说明
+
+返回值为数值类型
+
+## 示例
 
 ```plain text
 MySQL > select var_samp(scan_rows)
@@ -24,6 +32,6 @@ group by datetime;
 +-----------------------+
 ```
 
-## keyword
+## 关键词
 
-VAR_SAMP,VARIANCE_SAMP,VAR,SAMP,VARIANCE
+VAR_SAMP, VARIANCE_SAMP, VAR, SAMP, VARIANCE

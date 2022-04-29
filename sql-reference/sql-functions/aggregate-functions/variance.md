@@ -1,17 +1,25 @@
 
-# VARIANCE,VAR_POP,VARIANCE_POP
+# VARIANCE, VAR_POP, VARIANCE_POP
 
-## description
+## 功能
 
-### Syntax
+返回 expr 表达式的方差
+
+## 语法
 
 ```Haskell
 VARIANCE(expr)
 ```
 
-返回expr表达式的方差
+## 参数说明
 
-## example
+`epxr`: 被选取的表达式
+
+## 返回值说明
+
+返回值为数值类型
+
+## 示例
 
 ```plain text
 MySQL > select variance(scan_rows)
@@ -33,6 +41,6 @@ group by datetime;
 +----------------------+
 ```
 
-## keyword
+## 关键词
 
-VARIANCE,VAR_POP,VARIANCE_POP,VAR,POP
+VARIANCE, VAR_POP, VARIANCE_POP, VAR, POP

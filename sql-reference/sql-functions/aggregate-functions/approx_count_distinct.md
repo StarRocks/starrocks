@@ -1,18 +1,25 @@
 # APPROX_COUNT_DISTINCT
 
-## description
+## 功能
 
-### Syntax
+返回类似于 `COUNT(DISTINCT col)` 结果的近似值聚合函数
+> 它比 COUNT 和 DISTINCT 组合的速度更快, 并使用固定大小的内存, 因此对于高基数的列可以使用更少的内存
+
+## 语法
 
 ```Haskell
 APPROX_COUNT_DISTINCT(expr)
 ```
 
-返回类似于 `COUNT(DISTINCT col)` 结果的近似值聚合函数。
+## 参数说明
 
-它比 COUNT 和 DISTINCT 组合的速度更快，并使用固定大小的内存，因此对于高基数的列可以使用更少的内存。
+`epxr`: 被选取的表达式
 
-## example
+## 返回值说明
+
+返回值为数值类型
+
+## 示例
 
 ```plain text
 MySQL > select approx_count_distinct(query_id) from log_statis group by datetime;
@@ -23,6 +30,6 @@ MySQL > select approx_count_distinct(query_id) from log_statis group by datetime
 +-----------------------------------+
 ```
 
-## keyword
+## 关键词
 
 APPROX_COUNT_DISTINCT

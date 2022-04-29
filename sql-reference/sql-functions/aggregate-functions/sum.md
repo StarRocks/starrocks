@@ -1,17 +1,25 @@
 
 # SUM
 
-## description
+## 功能
 
-### Syntax
+用于返回选中字段所有值的和
+
+## 语法
 
 ```Haskell
 SUM(expr)
 ```
 
-用于返回选中字段所有值的和
+## 参数说明
 
-## example
+`epxr`: 被选取的表达式
+
+## 返回值说明
+
+返回值的数据类型为 INT
+
+## 示例
 
 ```plain text
 MySQL > select sum(scan_rows)
@@ -24,6 +32,6 @@ group by datetime;
 +------------------+
 ```
 
-## keyword
+## 关键词
 
 SUM

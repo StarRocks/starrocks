@@ -1,16 +1,24 @@
 # AVG
 
-## description
-
-### Syntax
-
-`AVG([DISTINCT] expr)`
+## 功能
 
 用于返回选中字段的平均值
 
-可选字段DISTINCT参数可以用来返回去重平均值
+## 语法
 
-## example
+```Haskell
+AVG([DISTINCT] expr)
+```
+
+## 参数说明
+
+`epxr`: 被选取的表达式, 可选字段 DISTINCT 参数
+
+## 返回值说明
+
+返回值为数值类型
+
+## 示例
 
 ```plain text
 MySQL > SELECT datetime, AVG(cost_time)
@@ -33,6 +41,6 @@ group by datetime;
 
 ```
 
-## keyword
+## 关键词
 
 AVG
