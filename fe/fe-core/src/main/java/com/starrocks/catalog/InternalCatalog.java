@@ -3,7 +3,7 @@
 package com.starrocks.catalog;
 
 public class InternalCatalog extends Catalog {
-    private static final String DEFAULT_INTERNAL_CATALOG_NAME = "default";
+    public static final String DEFAULT_INTERNAL_CATALOG_NAME = "default";
 
     public InternalCatalog() {
         super(DEFAULT_INTERNAL_CATALOG_NAME);
