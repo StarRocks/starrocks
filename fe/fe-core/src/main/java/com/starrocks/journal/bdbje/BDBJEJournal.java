@@ -26,6 +26,9 @@ import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.rep.InsufficientLogException;
+import com.sleepycat.je.rep.NetworkRestore;
+import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
@@ -275,28 +278,41 @@ public class BDBJEJournal implements Journal {
         }
 
         // Open a new journal database or get last existing one as current journal database
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null) {
-            LOG.error("fail to get dbNames while open bdbje journal. will exit");
-            System.exit(-1);
-        }
-        if (dbNames.size() == 0) {
-            /*
-             *  This is the very first time to open. Usually, we will open a new database named "1".
-             *  But when we start cluster with an image file copied from other cluster,
-             *  here we should open database with name image max journal id + 1.
-             *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
-             */
-            String dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
-            LOG.info("the very first time to open bdb, dbname is {}", dbName);
-            currentJournalDB = bdbEnvironment.openDatabase(dbName);
-        } else {
-            // get last database as current journal database
-            currentJournalDB = bdbEnvironment.openDatabase(dbNames.get(dbNames.size() - 1).toString());
-        }
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
+        List<Long> dbNames = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                dbNames = bdbEnvironment.getDatabaseNames();
 
-        // set next journal id
-        nextJournalId.set(getMaxJournalId() + 1);
+                if (dbNames == null) {
+                    LOG.error("fail to get dbNames while open bdbje journal. will exit");
+                    System.exit(-1);
+                }
+                if (dbNames.size() == 0) {
+                    /*
+                     *  This is the very first time to open. Usually, we will open a new database named "1".
+                     *  But when we start cluster with an image file copied from other cluster,
+                     *  here we should open database with name image max journal id + 1.
+                     *  (default Catalog.getCurrentCatalog().getReplayedJournalId() is 0)
+                     */
+                    String dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    LOG.info("the very first time to open bdb, dbname is {}", dbName);
+                    currentJournalDB = bdbEnvironment.openDatabase(dbName);
+                } else {
+                    // get last database as current journal database
+                    currentJournalDB = bdbEnvironment.openDatabase(dbNames.get(dbNames.size() - 1).toString());
+                }
+
+                // set next journal id
+                nextJournalId.set(getMaxJournalId() + 1);
+
+                break;
+            } catch (InsufficientLogException insufficientLogEx) {
+                // Copy the missing log files from a member of the replication group who owns the files
+                LOG.warn("catch insufficient log exception. will recover and try again.", insufficientLogEx);
+                bdbEnvironment.refreshAndSetup(insufficientLogEx);
+            }
+        }
     }
 
     @Override
