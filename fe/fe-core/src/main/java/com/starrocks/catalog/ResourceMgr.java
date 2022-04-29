@@ -130,7 +130,7 @@ public class ResourceMgr implements Writable {
     }
 
     private void onDropResource(Resource resource) {
-        if (resource instanceof HiveResource) {
+        if (resource instanceof HiveResource || resource instanceof HudiResource) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
     }
@@ -169,16 +169,18 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Resource(" + name + ") does not exist");
             }
 
+            // 1. alter the resource properties
+            // 2. clear the cache
+            // 3. update the edit log
             if (resource instanceof HiveResource) {
-                // 1. alter the resource properties
-                // 2. clear the cache
-                // 3. update the edit log
                 ((HiveResource) resource).alterProperties(stmt.getProperties());
-                GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
+            } else if (resource instanceof HudiResource) {
+                ((HudiResource) resource).alterProperties(stmt.getProperties());
             } else {
-                throw new DdlException("Alter resource statement only support external hive now");
+                throw new DdlException("Alter resource statement only support external hive/hudi now");
             }
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
         } finally {
             this.writeUnLock();
         }
