@@ -37,6 +37,10 @@ public:
     int64_t mem_usage() const override;
 
 private:
+    // Three stages of sorting procedure:
+    // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
+    // 2. Sort the accumulated big chunk partially
+    // 3. Merge all big-chunks into global sorted
     Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
