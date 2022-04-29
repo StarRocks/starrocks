@@ -488,7 +488,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     // init _schema
     if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        // we use shared schema to save mem usage, but the premise is that we need to ensure that no 
+        // we use shared schema to save mem usage, but the premise is that we need to ensure that no
         // two different TabletSchemaPBs have the same id
         // But we can't guarantee it after schema change so far, so we should check the consistent of
         // tablet schema
