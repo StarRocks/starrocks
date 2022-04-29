@@ -6,8 +6,8 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"

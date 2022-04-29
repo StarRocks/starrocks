@@ -135,15 +135,17 @@ set(EXEC_FILES
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/limit_operator.cpp
-    pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
-    pipeline/scan_operator.cpp
-    pipeline/olap_scan_operator.cpp
-    pipeline/connector_scan_operator.cpp
-    pipeline/jdbc_scan_operator.cpp
+    pipeline/scan/scan_operator.cpp
+    pipeline/scan/olap_chunk_source.cpp
+    pipeline/scan/olap_scan_operator.cpp
+    pipeline/scan/olap_scan_prepare_operator.cpp
+    pipeline/scan/olap_scan_context.cpp
+    pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

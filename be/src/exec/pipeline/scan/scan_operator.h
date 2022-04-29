@@ -36,6 +36,8 @@ public:
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
     // interface for different scan node
+    virtual bool maybe_has_output() const { return true; }
+    virtual bool must_be_finished() const { return false; }
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;

@@ -215,15 +215,15 @@ public:
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
-                             std::vector<SlotId>&& filter_null_value_columns,
-                             std::vector<TupleSlotMapping>&& tuple_slot_mappings) {
+                             const std::vector<SlotId>& filter_null_value_columns,
+                             const std::vector<TupleSlotMapping>& tuple_slot_mappings) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
         _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
-        _filter_null_value_columns = std::move(filter_null_value_columns);
-        _tuple_slot_mappings = std::move(tuple_slot_mappings);
+        _filter_null_value_columns = filter_null_value_columns;
+        _tuple_slot_mappings = tuple_slot_mappings;
     }
     // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
     // to bound its runtime in-filters.

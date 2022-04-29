@@ -180,7 +180,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
                                                 const RcRfProbeCollectorPtr& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), this->get_tuple_ids(),
                             this->local_rf_waiting_set(), this->row_desc(), rc_rf_probe_collector,
-                            std::move(_filter_null_value_columns), std::move(_tuple_slot_mappings));
+                            _filter_null_value_columns, _tuple_slot_mappings);
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {

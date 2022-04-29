@@ -6,7 +6,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_common.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
