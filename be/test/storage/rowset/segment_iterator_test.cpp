@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 #include "common/object_pool.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -27,9 +27,9 @@ namespace starrocks {
 class SegmentIteratorTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
+        ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
@@ -52,7 +52,7 @@ public:
     }
 
     const std::string kSegmentDir = "/segment_test";
-    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;

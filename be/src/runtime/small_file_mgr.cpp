@@ -29,7 +29,7 @@
 #include <utility>
 
 #include "common/status.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -69,7 +69,7 @@ Status SmallFileMgr::_load_local_files() {
         return true;
     };
 
-    RETURN_IF_ERROR(Env::Default()->iterate_dir(_local_path, scan_cb));
+    RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(_local_path, scan_cb));
     return Status::OK();
 }
 

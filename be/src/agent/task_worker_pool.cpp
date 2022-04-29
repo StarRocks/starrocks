@@ -33,8 +33,8 @@
 #include <string>
 
 #include "common/status.h"
-#include "env/env.h"
 #include "exec/workgroup/work_group.h"
+#include "fs/fs.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -1641,7 +1641,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
                 // we need to add subdir: tablet_id/schema_hash/
                 std::stringstream ss;
                 ss << snapshot_path << "/" << snapshot_request.tablet_id << "/" << snapshot_request.schema_hash << "/";
-                st = FileUtils::list_files(Env::Default(), ss.str(), &snapshot_files);
+                st = FileUtils::list_files(FileSystem::Default(), ss.str(), &snapshot_files);
                 if (!st.ok()) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "Fail to make snapshot tablet_id" << snapshot_request.tablet_id

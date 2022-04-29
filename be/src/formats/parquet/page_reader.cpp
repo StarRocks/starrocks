@@ -3,7 +3,7 @@
 #include "formats/parquet/page_reader.h"
 
 #include "common/config.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 

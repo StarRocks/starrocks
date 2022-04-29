@@ -28,7 +28,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "env/env.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
@@ -173,7 +173,7 @@ struct CreateBlockOptions {
     // const std::string tablet_id;
     const std::string path;
     // create mode
-    Env::OpenMode mode = Env::MUST_CREATE;
+    FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };
 
 // Block manager creation options.

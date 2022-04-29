@@ -6,7 +6,7 @@
 
 #include <filesystem>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -92,12 +92,12 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(SnapshotMetaTest, test_serialize_and_parse) {
-    auto wf = *Env::Default()->new_writable_file("test_serialize_and_parse.meta");
+    auto wf = *FileSystem::Default()->new_writable_file("test_serialize_and_parse.meta");
     ASSERT_TRUE(_snapshot_meta.serialize_to_file(wf.get()).ok());
     wf->close();
     DeferOp defer([&]() { std::filesystem::remove("test_serialize_and_parse.meta"); });
 
-    auto rf = *Env::Default()->new_random_access_file("test_serialize_and_parse.meta");
+    auto rf = *FileSystem::Default()->new_random_access_file("test_serialize_and_parse.meta");
     SnapshotMeta meta;
     auto st = meta.parse_from_file(rf.get());
     ASSERT_TRUE(st.ok()) << st;

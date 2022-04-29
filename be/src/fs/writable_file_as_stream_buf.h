@@ -4,7 +4,7 @@
 
 #include <ostream>
 
-#include "env/env.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 

@@ -9,7 +9,7 @@
 
 #include "column/datum_tuple.h"
 #include "common/logging.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
@@ -38,10 +38,10 @@ using std::vector;
 class SegmentRewriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _env = Env::CreateSharedFromString("posix://").value();
+        _fs = FileSystem::CreateSharedFromString("posix://").value();
         ASSIGN_OR_ABORT(_block_mgr, fs::fs_util::block_manager("posix://"));
         bool created;
-        ASSERT_OK(_env->create_dir_if_missing(kSegmentDir, &created));
+        ASSERT_OK(_fs->create_dir_if_missing(kSegmentDir, &created));
 
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
@@ -69,7 +69,7 @@ protected:
 
     const std::string kSegmentDir = "./ut_dir/segment_rewriter_test";
 
-    std::shared_ptr<Env> _env;
+    std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<fs::BlockManager> _block_mgr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
@@ -175,7 +175,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     // add useless string to partial segment
     std::unique_ptr<fs::WritableBlock> wblock_tmp;
     fs::CreateBlockOptions wblock_opts_tmp({file_name});
-    wblock_opts_tmp.mode = Env::MUST_EXIST;
+    wblock_opts_tmp.mode = FileSystem::MUST_EXIST;
     ASSERT_OK(_block_mgr->create_block(wblock_opts_tmp, &wblock_tmp));
     for (int i = 0; i < 10; i++) {
         wblock_tmp->append("test");

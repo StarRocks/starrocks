@@ -3,7 +3,7 @@
 #include "util/buffered_stream.h"
 
 #include "common/config.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "util/bit_util.h"
 
 namespace starrocks {

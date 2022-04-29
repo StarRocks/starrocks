@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_hdfs.h"
+#include "fs/fs_hdfs.h"
 
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
@@ -87,15 +87,15 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
     return std::move(statistics);
 }
 
-class EnvHdfs : public Env {
+class HdfsFileSystem : public FileSystem {
 public:
-    EnvHdfs() {}
-    ~EnvHdfs() override = default;
+    HdfsFileSystem() {}
+    ~HdfsFileSystem() override = default;
 
-    EnvHdfs(const EnvHdfs&) = delete;
-    void operator=(const EnvHdfs&) = delete;
-    EnvHdfs(EnvHdfs&&) = delete;
-    void operator=(EnvHdfs&&) = delete;
+    HdfsFileSystem(const HdfsFileSystem&) = delete;
+    void operator=(const HdfsFileSystem&) = delete;
+    HdfsFileSystem(HdfsFileSystem&&) = delete;
+    void operator=(HdfsFileSystem&&) = delete;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
@@ -103,88 +103,92 @@ public:
                                                                        const std::string& path) override;
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::new_sequential_file");
+        return Status::NotSupported("HdfsFileSystem::new_sequential_file");
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::new_writable_file");
+        return Status::NotSupported("HdfsFileSystem::new_writable_file");
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::new_writable_file");
+        return Status::NotSupported("HdfsFileSystem::new_writable_file");
     }
 
     StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::new_random_rw_file");
+        return Status::NotSupported("HdfsFileSystem::new_random_rw_file");
     }
 
     StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
                                                                const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::new_random_rw_file");
+        return Status::NotSupported("HdfsFileSystem::new_random_rw_file");
     }
 
-    Status path_exists(const std::string& path) override { return Status::NotSupported("EnvHdfs::path_exists"); }
+    Status path_exists(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::path_exists"); }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
-        return Status::NotSupported("EnvHdfs::get_children");
+        return Status::NotSupported("HdfsFileSystem::get_children");
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        return Status::NotSupported("EnvHdfs::iterate_dir");
+        return Status::NotSupported("HdfsFileSystem::iterate_dir");
     }
 
-    Status delete_file(const std::string& path) override { return Status::NotSupported("EnvHdfs::delete_file"); }
+    Status delete_file(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::delete_file"); }
 
-    Status create_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::create_dir"); }
+    Status create_dir(const std::string& dirname) override {
+        return Status::NotSupported("HdfsFileSystem::create_dir");
+    }
 
     Status create_dir_if_missing(const std::string& dirname, bool* created) override {
-        return Status::NotSupported("EnvHdfs::create_dir_if_missing");
+        return Status::NotSupported("HdfsFileSystem::create_dir_if_missing");
     }
 
     Status create_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("EnvHdfs::create_dir_recursive");
+        return Status::NotSupported("HdfsFileSystem::create_dir_recursive");
     }
 
-    Status delete_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::delete_dir"); }
+    Status delete_dir(const std::string& dirname) override {
+        return Status::NotSupported("HdfsFileSystem::delete_dir");
+    }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("EnvHdfs::delete_dir_recursive");
+        return Status::NotSupported("HdfsFileSystem::delete_dir_recursive");
     }
 
-    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::sync_dir"); }
+    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("HdfsFileSystem::sync_dir"); }
 
     StatusOr<bool> is_directory(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::is_directory");
+        return Status::NotSupported("HdfsFileSystem::is_directory");
     }
 
     Status canonicalize(const std::string& path, std::string* file) override {
-        return Status::NotSupported("EnvHdfs::canonicalize");
+        return Status::NotSupported("HdfsFileSystem::canonicalize");
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::get_file_size");
+        return Status::NotSupported("HdfsFileSystem::get_file_size");
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
-        return Status::NotSupported("EnvHdfs::get_file_modified_time");
+        return Status::NotSupported("HdfsFileSystem::get_file_modified_time");
     }
 
     Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("EnvHdfs::rename_file");
+        return Status::NotSupported("HdfsFileSystem::rename_file");
     }
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
-        return Status::NotSupported("EnvHdfs::link_file");
+        return Status::NotSupported("HdfsFileSystem::link_file");
     }
 };
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(const std::string& path) {
-    return EnvHdfs::new_random_access_file(RandomAccessFileOptions(), path);
+StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const std::string& path) {
+    return HdfsFileSystem::new_random_access_file(RandomAccessFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                            const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                   const std::string& path) {
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
@@ -200,8 +204,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(cons
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
-std::unique_ptr<Env> new_env_hdfs() {
-    return std::make_unique<EnvHdfs>();
+std::unique_ptr<FileSystem> new_fs_hdfs() {
+    return std::make_unique<HdfsFileSystem>();
 }
 
 } // namespace starrocks

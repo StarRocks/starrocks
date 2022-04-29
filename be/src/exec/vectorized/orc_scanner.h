@@ -4,9 +4,9 @@
 
 #include <orc/OrcFile.hh>
 
-#include "env/env.h"
 #include "exec/vectorized/file_scanner.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "fs/fs.h"
 
 namespace starrocks::vectorized {
 

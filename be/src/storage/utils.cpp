@@ -48,7 +48,7 @@ DIAGNOSTIC_POP
 
 #include "common/logging.h"
 #include "common/status.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_define.h"
 #include "util/errno.h"
@@ -104,13 +104,13 @@ Status move_to_trash(const std::filesystem::path& file_path) {
                                            delete_counter.fetch_add(1, std::memory_order_relaxed));
     std::string new_file_path = fmt::format("{}/{}", new_file_dir, old_file_name);
     // 2. create target dir, or the rename() function will fail.
-    if (auto st = Env::Default()->create_dir(new_file_dir); !st.ok()) {
+    if (auto st = FileSystem::Default()->create_dir(new_file_dir); !st.ok()) {
         // May be because the parent directory does not exist, try create directories recursively.
         RETURN_IF_ERROR(FileUtils::create_dir(new_file_dir));
     }
 
     // 3. remove file to trash
-    auto st = Env::Default()->rename_file(old_file_path, new_file_path);
+    auto st = FileSystem::Default()->rename_file(old_file_path, new_file_path);
     auto t1 = std::chrono::steady_clock::now();
     g_move_trash << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
     return st;
@@ -128,7 +128,7 @@ Status read_write_test_file(const string& test_file_path) {
                     fmt::format("Error to access file: {}, error:{} ", test_file_path, std::strerror(Errno::no())));
         }
     }
-    ASSIGN_OR_RETURN(auto file, Env::Default()->new_random_rw_file(test_file_path));
+    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_random_rw_file(test_file_path));
     const size_t TEST_FILE_BUF_SIZE = 4096;
     const size_t DIRECT_IO_ALIGNMENT = 512;
     char* write_test_buff = nullptr;

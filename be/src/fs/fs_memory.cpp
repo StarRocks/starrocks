@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 
 #include <butil/files/file_path.h>
 #include <fmt/format.h>
@@ -164,22 +164,22 @@ public:
     }
 
     template <typename DerivedType, typename BaseType>
-    StatusOr<std::unique_ptr<BaseType>> new_writable_file(Env::OpenMode mode, const butil::FilePath& path) {
+    StatusOr<std::unique_ptr<BaseType>> new_writable_file(FileSystem::OpenMode mode, const butil::FilePath& path) {
         InodePtr inode = get_inode(path);
-        if (mode == Env::MUST_EXIST && inode == nullptr) {
+        if (mode == FileSystem::MUST_EXIST && inode == nullptr) {
             return Status::NotFound(path.value());
         }
-        if (mode == Env::MUST_CREATE && inode != nullptr) {
+        if (mode == FileSystem::MUST_CREATE && inode != nullptr) {
             return Status::AlreadyExist(path.value());
         }
-        if (mode == Env::CREATE_OR_OPEN_WITH_TRUNCATE && inode != nullptr) {
+        if (mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE && inode != nullptr) {
             inode->data.clear();
         }
         if (inode == nullptr && !path_exists(path.DirName()).ok()) {
             return Status::NotFound("parent directory not exist");
         }
         if (inode == nullptr) {
-            assert(mode != Env::MUST_EXIST);
+            assert(mode != FileSystem::MUST_EXIST);
             inode = std::make_shared<Inode>(kNormal, "");
             _namespace[path.value()] = inode;
         } else if (inode->type != kNormal) {
@@ -414,119 +414,119 @@ private:
     OrderedMap<std::string, InodePtr> _namespace;
 };
 
-EnvMemory::EnvMemory() : _impl(new EnvMemoryImpl()) {}
+MemoryFileSystem::MemoryFileSystem() : _impl(new EnvMemoryImpl()) {}
 
-EnvMemory::~EnvMemory() {
+MemoryFileSystem::~MemoryFileSystem() {
     delete _impl;
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> EnvMemory::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_sequential_file(butil::FilePath(new_path));
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvMemory::new_random_access_file(const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_random_access_file(butil::FilePath(new_path));
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvMemory::new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                              const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(
+        const RandomAccessFileOptions& opts, const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_random_access_file(opts, butil::FilePath(new_path));
 }
 
-StatusOr<std::unique_ptr<WritableFile>> EnvMemory::new_writable_file(const std::string& path) {
+StatusOr<std::unique_ptr<WritableFile>> MemoryFileSystem::new_writable_file(const std::string& path) {
     return new_writable_file(WritableFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<WritableFile>> EnvMemory::new_writable_file(const WritableFileOptions& opts,
-                                                                     const std::string& path) {
+StatusOr<std::unique_ptr<WritableFile>> MemoryFileSystem::new_writable_file(const WritableFileOptions& opts,
+                                                                            const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_writable_file<MemoryWritableFile, WritableFile>(opts.mode, butil::FilePath(new_path));
 }
 
-StatusOr<std::unique_ptr<RandomRWFile>> EnvMemory::new_random_rw_file(const std::string& path) {
+StatusOr<std::unique_ptr<RandomRWFile>> MemoryFileSystem::new_random_rw_file(const std::string& path) {
     return new_random_rw_file(RandomRWFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<RandomRWFile>> EnvMemory::new_random_rw_file(const RandomRWFileOptions& opts,
-                                                                      const std::string& path) {
+StatusOr<std::unique_ptr<RandomRWFile>> MemoryFileSystem::new_random_rw_file(const RandomRWFileOptions& opts,
+                                                                             const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_writable_file<MemoryRandomRWFile, RandomRWFile>(opts.mode, butil::FilePath(new_path));
 }
 
-Status EnvMemory::path_exists(const std::string& path) {
+Status MemoryFileSystem::path_exists(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->path_exists(butil::FilePath(new_path));
 }
 
-Status EnvMemory::get_children(const std::string& dir, std::vector<std::string>* file) {
+Status MemoryFileSystem::get_children(const std::string& dir, std::vector<std::string>* file) {
     std::string new_path;
     file->clear();
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->get_children(butil::FilePath(new_path), file);
 }
 
-Status EnvMemory::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+Status MemoryFileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->iterate_dir(butil::FilePath(new_path), cb);
 }
 
-Status EnvMemory::delete_file(const std::string& path) {
+Status MemoryFileSystem::delete_file(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->delete_file(butil::FilePath(new_path));
 }
 
-Status EnvMemory::create_dir(const std::string& dirname) {
+Status MemoryFileSystem::create_dir(const std::string& dirname) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->create_dir(butil::FilePath(new_path));
 }
 
-Status EnvMemory::create_dir_if_missing(const std::string& dirname, bool* created) {
+Status MemoryFileSystem::create_dir_if_missing(const std::string& dirname, bool* created) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->create_dir_if_missing(butil::FilePath(new_path), created);
 }
 
-Status EnvMemory::create_dir_recursive(const std::string& dirname) {
+Status MemoryFileSystem::create_dir_recursive(const std::string& dirname) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->create_dir_recursive(butil::FilePath(new_path));
 }
 
-Status EnvMemory::delete_dir(const std::string& dirname) {
+Status MemoryFileSystem::delete_dir(const std::string& dirname) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->delete_dir(butil::FilePath(new_path));
 }
 
-Status EnvMemory::delete_dir_recursive(const std::string& dirname) {
+Status MemoryFileSystem::delete_dir_recursive(const std::string& dirname) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->delete_dir_recursive(butil::FilePath(new_path));
 }
 
-Status EnvMemory::sync_dir(const std::string& dirname) {
+Status MemoryFileSystem::sync_dir(const std::string& dirname) {
     return Status::OK();
 }
 
-StatusOr<bool> EnvMemory::is_directory(const std::string& path) {
+StatusOr<bool> MemoryFileSystem::is_directory(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->is_directory(butil::FilePath(new_path));
 }
 
-Status EnvMemory::canonicalize(const std::string& path, std::string* file) {
+Status MemoryFileSystem::canonicalize(const std::string& path, std::string* file) {
     if (path.empty() || path[0] != '/') {
         return Status::InvalidArgument("Invalid path");
     }
@@ -563,17 +563,17 @@ Status EnvMemory::canonicalize(const std::string& path, std::string* file) {
     return Status::OK();
 }
 
-StatusOr<uint64_t> EnvMemory::get_file_size(const std::string& path) {
+StatusOr<uint64_t> MemoryFileSystem::get_file_size(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->get_file_size(butil::FilePath(new_path));
 }
 
-StatusOr<uint64_t> EnvMemory::get_file_modified_time(const std::string& path) {
+StatusOr<uint64_t> MemoryFileSystem::get_file_modified_time(const std::string& path) {
     return Status::NotSupported("get_file_modified_time");
 }
 
-Status EnvMemory::rename_file(const std::string& src, const std::string& target) {
+Status MemoryFileSystem::rename_file(const std::string& src, const std::string& target) {
     std::string new_src_path;
     std::string new_dst_path;
     RETURN_IF_ERROR(canonicalize(src, &new_src_path));
@@ -581,7 +581,7 @@ Status EnvMemory::rename_file(const std::string& src, const std::string& target)
     return _impl->rename_file(butil::FilePath(new_src_path), butil::FilePath(new_dst_path));
 }
 
-Status EnvMemory::link_file(const std::string& old_path, const std::string& new_path) {
+Status MemoryFileSystem::link_file(const std::string& old_path, const std::string& new_path) {
     std::string new_src_path;
     std::string new_dst_path;
     RETURN_IF_ERROR(canonicalize(old_path, &new_src_path));
@@ -589,18 +589,18 @@ Status EnvMemory::link_file(const std::string& old_path, const std::string& new_
     return _impl->link_file(butil::FilePath(new_src_path), butil::FilePath(new_dst_path));
 }
 
-Status EnvMemory::create_file(const std::string& path) {
+Status MemoryFileSystem::create_file(const std::string& path) {
     WritableFileOptions opts{.mode = CREATE_OR_OPEN};
     return new_writable_file(opts, path).status();
 }
 
-Status EnvMemory::append_file(const std::string& path, const Slice& content) {
+Status MemoryFileSystem::append_file(const std::string& path, const Slice& content) {
     WritableFileOptions opts{.mode = CREATE_OR_OPEN};
     ASSIGN_OR_RETURN(auto f, new_writable_file(opts, path));
     return f->append(content);
 }
 
-Status EnvMemory::read_file(const std::string& path, std::string* content) {
+Status MemoryFileSystem::read_file(const std::string& path, std::string* content) {
     ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(path));
     ASSIGN_OR_RETURN(const uint64_t size, random_access_file->get_size());
     raw::make_room(content, size);

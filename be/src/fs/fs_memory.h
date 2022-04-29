@@ -4,20 +4,20 @@
 
 #include <algorithm>
 
-#include "env/env.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
 class EnvMemoryImpl;
 
-class EnvMemory : public Env {
+class MemoryFileSystem : public FileSystem {
 public:
-    EnvMemory();
+    MemoryFileSystem();
 
-    ~EnvMemory() override;
+    ~MemoryFileSystem() override;
 
-    EnvMemory(const EnvMemory&) = delete;
-    void operator=(const EnvMemory&) = delete;
+    MemoryFileSystem(const MemoryFileSystem&) = delete;
+    void operator=(const MemoryFileSystem&) = delete;
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& url) override;
 

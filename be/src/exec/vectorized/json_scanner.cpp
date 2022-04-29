@@ -10,12 +10,12 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "env/env.h"
 #include "exec/vectorized/json_parser.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/json_functions.h"
 #include "formats/json/nullable_column.h"
+#include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

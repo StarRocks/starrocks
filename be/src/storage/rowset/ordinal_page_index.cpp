@@ -22,7 +22,7 @@
 #include "storage/rowset/ordinal_page_index.h"
 
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "storage/fs/fs_util.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"

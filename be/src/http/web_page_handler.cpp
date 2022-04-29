@@ -24,7 +24,7 @@
 #include <functional>
 
 #include "common/config.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
 #include "http/ev_http_server.h"
@@ -172,7 +172,7 @@ std::string WebPageHandler::mustache_partial_tag(const std::string& path) const 
 }
 
 bool WebPageHandler::static_pages_available() const {
-    const StatusOr<bool> status_or = Env::Default()->is_directory(_www_path);
+    const StatusOr<bool> status_or = FileSystem::Default()->is_directory(_www_path);
     return status_or.ok() && status_or.value();
 }
 
@@ -180,7 +180,7 @@ bool WebPageHandler::mustache_template_available(const std::string& path) const 
     if (!static_pages_available()) {
         return false;
     }
-    return Env::Default()->path_exists(strings::Substitute("$0/$1.mustache", _www_path, path)).ok();
+    return FileSystem::Default()->path_exists(strings::Substitute("$0/$1.mustache", _www_path, path)).ok();
 }
 
 void WebPageHandler::render_main_template(const std::string& content, std::stringstream* output) {

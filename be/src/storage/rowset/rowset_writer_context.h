@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/global_dicts.h"
 #include "storage/fs/fs_util.h"

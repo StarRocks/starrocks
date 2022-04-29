@@ -109,7 +109,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_file, _scanner_params.env->new_random_access_file(_scanner_params.path));
+    ASSIGN_OR_RETURN(_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {

@@ -4,8 +4,8 @@
 
 #include <memory>
 
-#include "env/env.h"
 #include "formats/csv/output_stream.h"
+#include "fs/fs.h"
 
 namespace starrocks::vectorized::csv {
 

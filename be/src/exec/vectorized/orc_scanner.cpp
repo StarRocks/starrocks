@@ -7,9 +7,9 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "env/env.h"
 #include "exprs/expr.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"

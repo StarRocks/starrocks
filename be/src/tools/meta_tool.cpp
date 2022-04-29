@@ -26,7 +26,7 @@
 #include <string>
 
 #include "common/status.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
@@ -410,7 +410,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
 }
 
 void show_segment_footer(const std::string& file_name) {
-    auto res = starrocks::Env::Default()->new_random_access_file(file_name);
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
     if (!res.ok()) {
         std::cout << "open file failed: " << res.status() << std::endl;
         return;

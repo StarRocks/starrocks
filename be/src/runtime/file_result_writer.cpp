@@ -23,12 +23,12 @@
 
 #include <memory>
 
-#include "env/env_broker.h"
 #include "exec/local_file_writer.h"
 #include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
+#include "fs/fs_broker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
@@ -40,12 +40,12 @@ FileResultWriter::FileResultWriter(const ResultFileOptions* file_opts,
                                    const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile)
         : _file_opts(file_opts), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {
     if (_file_opts->is_local_file) {
-        _env = Env::Default();
+        _fs = FileSystem::Default();
     } else {
         // TODO(@c1oudman) Do you only need first element of broker addresses?
-        _env = new EnvBroker(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
-                             config::broker_write_timeout_seconds * 1000);
-        _owned_env.reset(_env);
+        _fs = new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
+                                   config::broker_write_timeout_seconds * 1000);
+        _owned_fs.reset(_fs);
     }
 }
 
@@ -74,7 +74,7 @@ void FileResultWriter::_init_profile() {
 Status FileResultWriter::_create_file_writer() {
     std::string file_name = _get_next_file_name();
     std::unique_ptr<WritableFile> writable_file;
-    ASSIGN_OR_RETURN(writable_file, _env->new_writable_file(file_name));
+    ASSIGN_OR_RETURN(writable_file, _fs->new_writable_file(file_name));
 
     switch (_file_opts->file_format) {
     case TFileFormatType::FORMAT_CSV_PLAIN:

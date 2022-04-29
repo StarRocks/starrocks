@@ -25,10 +25,10 @@
 #include <sstream>
 
 #include "column/column.h"
-#include "env/env_broker.h"
 #include "exec/broker_writer.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
+#include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -103,18 +103,18 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     std::string file_name;
     RETURN_IF_ERROR(gen_file_name(&file_name));
     std::string file_path = _t_export_sink.export_path + "/" + file_name;
-    WritableFileOptions options{.sync_on_close = false, .mode = Env::MUST_CREATE};
+    WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::MUST_CREATE};
 
     const auto& file_type = _t_export_sink.file_type;
     switch (file_type) {
     case TFileType::FILE_LOCAL: {
-        ASSIGN_OR_RETURN(output_file, Env::Default()->new_writable_file(options, file_path));
+        ASSIGN_OR_RETURN(output_file, FileSystem::Default()->new_writable_file(options, file_path));
         break;
     }
     case TFileType::FILE_BROKER: {
         const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
-        EnvBroker env_broker(broker_addr, _t_export_sink.properties, timeout_ms);
-        ASSIGN_OR_RETURN(output_file, env_broker.new_writable_file(options, file_path));
+        BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
+        ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));
         break;
     }
     case TFileType::FILE_STREAM:

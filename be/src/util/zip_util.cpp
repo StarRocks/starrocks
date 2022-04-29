@@ -23,7 +23,7 @@
 
 #include <memory>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "util/file_utils.h"
@@ -84,7 +84,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
     }
 
     // 3.move to target directory
-    RETURN_IF_ERROR(Env::Default()->rename_file(temp, target));
+    RETURN_IF_ERROR(FileSystem::Default()->rename_file(temp, target));
     _clean_paths.clear();
 
     return Status::OK();
@@ -120,7 +120,7 @@ Status ZipFile::extract_file(const std::string& target_path) {
     ZPOS64_T file_size = std::min(file_info_inzip.uncompressed_size, DEFAULT_UNZIP_BUFFER);
     std::unique_ptr<char[]> file_data(new char[file_size]);
 
-    ASSIGN_OR_RETURN(auto wfile, Env::Default()->new_writable_file(path));
+    ASSIGN_OR_RETURN(auto wfile, FileSystem::Default()->new_writable_file(path));
 
     int size;
     do {

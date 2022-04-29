@@ -27,7 +27,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/utils.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
@@ -157,7 +157,7 @@ void do_file_response(const std::string& file_path, HttpRequest* req) {
 
 void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     std::vector<std::string> files;
-    Status status = FileUtils::list_files(Env::Default(), dir_path, &files);
+    Status status = FileUtils::list_files(FileSystem::Default(), dir_path, &files);
     if (!status.ok()) {
         LOG(WARNING) << "Failed to scan dir. dir=" << dir_path;
         HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);

@@ -9,9 +9,9 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "env/env.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
+#include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/block_compression.h"
 
