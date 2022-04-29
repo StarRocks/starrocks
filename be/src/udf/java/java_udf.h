@@ -91,7 +91,7 @@ public:
     static std::string to_jni_class_name(const std::string& name);
 
     // reset Buffer set read/write position to zero
-    void clear(DirectByteBuffer* buffer);
+    void clear(DirectByteBuffer* buffer, FunctionContext* ctx);
 
     jclass object_class() { return _object_class; }
 
@@ -152,8 +152,6 @@ public:
     static constexpr const char* JNI_CLASS_NAME = "java/nio/ByteBuffer";
 
     DirectByteBuffer(void* data, int capacity);
-    // DirectByteBuffer(jobject&& handle, void* data, int capacity)
-    //         : _handle(std::move(handle)), _data(data), _capacity(capacity) {}
     ~DirectByteBuffer();
 
     DirectByteBuffer(const DirectByteBuffer&) = delete;
@@ -257,7 +255,8 @@ public:
 private:
     std::string _path;
     jmethodID _get_class = nullptr;
-    jobject _handle = nullptr;
+    JavaGlobalRef _handle = nullptr;
+    JavaGlobalRef _clazz = nullptr;
 };
 
 struct MethodTypeDescriptor {

@@ -62,7 +62,7 @@ public:
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
-        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
         memcpy(udaf_ctx->buffer_data.data(), slice.get_data(), slice.get_size());
         udaf_ctx->_func->merge(this->data(state).handle(), udaf_ctx->buffer->handle());
     }
@@ -88,7 +88,7 @@ public:
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
-        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
 
         udaf_ctx->_func->serialize(this->data(state).handle(), udaf_ctx->buffer->handle());
         size_t new_size = old_size + serialize_size;

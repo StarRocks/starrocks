@@ -17,6 +17,7 @@
 #include "fmt/core.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+#include "udf/udf.h"
 #include "util/defer_op.h"
 
 #define ADD_NUMBERIC_CLASS(prim_clazz, clazz, sign)                                                           \
@@ -42,6 +43,26 @@
 namespace starrocks::vectorized {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
+
+class JavaLocalRefGuard {
+public:
+    JavaLocalRefGuard(jobject handle) : _handle(handle), _env(nullptr) {}
+    JavaLocalRefGuard(jobject handle, JNIEnv* env) : _handle(handle), _env(env) {}
+    JavaLocalRefGuard(const JavaLocalRefGuard& other) = delete;
+    ~JavaLocalRefGuard() {
+        if (_env == nullptr) {
+            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(_handle);
+        } else {
+            _env->DeleteLocalRef(_handle);
+        }
+    }
+
+private:
+    jobject _handle;
+    JNIEnv* _env;
+};
+
+#define LOCAL_REF_GUARD(lref) auto VARNAME_LINENUM(guard) = JavaLocalRefGuard(lref);
 
 JVMFunctionHelper& JVMFunctionHelper::getInstance() {
     static thread_local std::unique_ptr<JVMFunctionHelper> helper;
@@ -122,16 +143,26 @@ void JVMFunctionHelper::_add_class_path(const std::string& path) {
     const std::string urlPath = "file://" + path;
     LOG(INFO) << "add class path:" << urlPath;
     jclass classLoaderCls = _env->FindClass("java/lang/ClassLoader");
+    LOCAL_REF_GUARD(classLoaderCls);
     jmethodID getSystemClassLoaderMethod =
             _env->GetStaticMethodID(classLoaderCls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
     jobject classLoaderInstance = _env->CallStaticObjectMethod(classLoaderCls, getSystemClassLoaderMethod);
+    LOCAL_REF_GUARD(classLoaderInstance);
+
     jclass urlClassLoaderCls = _env->FindClass("java/net/URLClassLoader");
+    LOCAL_REF_GUARD(urlClassLoaderCls);
+
     jmethodID addUrlMethod = _env->GetMethodID(urlClassLoaderCls, "addURL", "(Ljava/net/URL;)V");
     jclass urlCls = _env->FindClass("java/net/URL");
+    LOCAL_REF_GUARD(urlCls);
+
     jmethodID urlConstructor = _env->GetMethodID(urlCls, "<init>", "(Ljava/lang/String;)V");
     jobject urlInstance = _env->NewObject(urlCls, urlConstructor, _env->NewStringUTF(urlPath.c_str()));
+    LOCAL_REF_GUARD(urlInstance);
+
     _env->CallVoidMethod(classLoaderInstance, addUrlMethod, urlInstance);
     if (auto e = _env->ExceptionOccurred()) {
+        LOCAL_REF_GUARD(e);
         std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);
         LOG(WARNING) << "Exception: " << msg;
         _env->ExceptionClear();
@@ -152,12 +183,15 @@ void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) 
         LOG(WARNING) << "Exception: " << msg;
         ctx->set_error(msg.c_str());
         env->ExceptionClear();
+        env->DeleteLocalRef(e);
     }
 }
 
 #define CHECK_FUNCTION_EXCEPTION(_env, name)                  \
-    if (_env->ExceptionOccurred()) {                          \
+    if (auto e = _env->ExceptionOccurred()) {                 \
+        LOCAL_REF_GUARD(e);                                   \
         _env->ExceptionClear();                               \
+        _env->DeleteLocalRef(e);                              \
         LOG(WARNING) << "Exception happend when call " #name; \
         return "";                                            \
     }
@@ -337,8 +371,9 @@ std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
     return jni_class_name;
 }
 
-void JVMFunctionHelper::clear(DirectByteBuffer* buffer) {
+void JVMFunctionHelper::clear(DirectByteBuffer* buffer, FunctionContext* ctx) {
     _env->CallNonvirtualVoidMethod(buffer->handle(), _direct_buffer_class, _direct_buffer_clear);
+    check_call_exception(_env, ctx);
 }
 
 DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
@@ -383,8 +418,8 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
 }
 
 ClassLoader::~ClassLoader() {
-    JNIEnv* env = getJNIEnv();
-    env->DeleteLocalRef(_handle);
+    _handle.clear();
+    _clazz.clear();
 }
 
 constexpr const char* CLASS_LOADER_NAME = "com.starrocks.udf.UDFClassLoader";
@@ -397,6 +432,9 @@ Status ClassLoader::init() {
     }
     std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_LOADER_NAME);
     jclass clazz = env->FindClass(name.c_str());
+    LOCAL_REF_GUARD(clazz);
+    _clazz = env->NewGlobalRef(clazz);
+
     if (clazz == nullptr) {
         return Status::InternalError(fmt::format("ClassLoader Not Found: {}", CLASS_LOADER_NAME));
     }
@@ -408,22 +446,22 @@ Status ClassLoader::init() {
 
     // create class loader instance
     jstring jstr = env->NewStringUTF(_path.c_str());
-    _handle = env->NewObject(clazz, udf_loader_contructor, jstr);
-    env->DeleteLocalRef(jstr);
+    LOCAL_REF_GUARD(jstr);
 
-    if (_handle == nullptr) {
-        jthrowable throwable = env->ExceptionOccurred();
-        std::string err_msg = fmt::format("Error: couldn't create class loader {} ", CLASS_LOADER_NAME);
-        if (throwable) {
-            err_msg = JVMFunctionHelper::getInstance().dumpExceptionString(throwable);
-            env->DeleteLocalRef(throwable);
-        }
+    auto handle = env->NewObject(clazz, udf_loader_contructor, jstr);
+    LOCAL_REF_GUARD(handle);
+    _handle = env->NewGlobalRef(handle);
+
+    if (jthrowable jthr = env->ExceptionOccurred()) {
+        LOCAL_REF_GUARD(jthr);
+        std::string err_msg = fmt::format("Error: couldn't create class loader {},{} ", CLASS_LOADER_NAME,
+                                          JVMFunctionHelper::getInstance().dumpExceptionString(jthr));
         LOG(WARNING) << err_msg;
         return Status::InternalError(err_msg);
     }
 
     // init method id
-    _get_class = env->GetMethodID(clazz, "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    _get_class = env->GetMethodID((jclass)_clazz.handle(), "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
 
     // init method
     if (_get_class == nullptr) {
@@ -442,13 +480,14 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     std::string jni_class_name = JVMFunctionHelper::to_jni_class_name(className);
     // invoke class loader
     jstring jstr_name = helper.to_jstring(jni_class_name);
+    LOCAL_REF_GUARD(jstr_name);
 
-    auto loaded_clazz = env->CallObjectMethod(_handle, _get_class, jstr_name);
+    auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_class, jstr_name);
+    LOCAL_REF_GUARD(loaded_clazz);
 
-    env->DeleteLocalRef(jstr_name);
     // check exception
-    jthrowable jthr = env->ExceptionOccurred();
-    if (jthr) {
+    if (jthrowable jthr = env->ExceptionOccurred()) {
+        LOCAL_REF_GUARD(jthr);
         std::string msg = fmt::format("exception happened when get class: {}", helper.dumpExceptionString(jthr));
         LOG(WARNING) << msg;
         env->ExceptionClear();
@@ -458,7 +497,6 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     DCHECK(loaded_clazz != nullptr);
 
     auto res = env->NewGlobalRef(loaded_clazz);
-    env->DeleteLocalRef(loaded_clazz);
     return res;
 }
 
@@ -475,6 +513,8 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
 
     std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
+    LOCAL_REF_GUARD(class_analyzer);
+
     if (class_analyzer == nullptr) {
         return Status::InternalError(fmt::format("ClassAnalyzer Not Found: {}", CLASS_ANALYZER_NAME));
     }
@@ -486,12 +526,15 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
     }
 
     jstring method_name = helper.to_jstring(method.c_str());
+    LOCAL_REF_GUARD(method_name);
+
     *has = env->CallStaticBooleanMethod(class_analyzer, hasMethod, method_name, (jobject)clazz);
 
     if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
+        LOCAL_REF_GUARD(jthr);
+
         std::string err = helper.dumpExceptionString(jthr);
         env->ExceptionClear();
-        env->DeleteLocalRef(jthr);
         return Status::InternalError(fmt::format("call hasMemberMethod failed: {} err:{}", method, err));
     }
 
@@ -505,6 +548,8 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
     JNIEnv* env = helper.getEnv();
     std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
+    LOCAL_REF_GUARD(class_analyzer);
+
     if (class_analyzer == nullptr) {
         return Status::InternalError(fmt::format("ClassAnalyzer Not Found: {}", CLASS_ANALYZER_NAME));
     }
@@ -515,7 +560,11 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
     }
 
     jstring method_name = helper.to_jstring(method.c_str());
+    LOCAL_REF_GUARD(method_name);
+
     jobject result_sign = env->CallStaticObjectMethod(class_analyzer, getSign, method_name, (jobject)clazz);
+    LOCAL_REF_GUARD(result_sign);
+
     if (jthrowable thr = env->ExceptionOccurred(); thr != nullptr) {
         std::string err = helper.dumpExceptionString(thr);
         env->ExceptionClear();
@@ -532,19 +581,25 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
 StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::string& method) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
+
     std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
+    LOCAL_REF_GUARD(class_analyzer);
     DCHECK(class_analyzer);
+
     jmethodID getMethodObject = env->GetStaticMethodID(
             class_analyzer, "getMethodObject", "(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/reflect/Method;");
     DCHECK(getMethodObject);
     jstring method_name = helper.to_jstring(method.c_str());
+    LOCAL_REF_GUARD(method_name);
+
     jobject method_object = env->CallStaticObjectMethod(class_analyzer, getMethodObject, method_name, (jobject)clazz);
+    LOCAL_REF_GUARD(method_object);
+    env->ExceptionClear();
     if (method_object == nullptr) {
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     auto res = env->NewGlobalRef(method_object);
-    env->DeleteLocalRef(method_object);
     return res;
 }
 
@@ -634,9 +689,10 @@ JavaGlobalRef UDAFFunction::create() {
     JNIEnv* env = getJNIEnv();
     jmethodID create = _ctx->create->get_method_id();
     auto obj = env->CallObjectMethod(_udaf_handle, create);
+    LOCAL_REF_GUARD(obj);
+
     JVMFunctionHelper::check_call_exception(env, _function_context);
     auto res = env->NewGlobalRef(obj);
-    env->DeleteLocalRef(obj);
     return JavaGlobalRef(std::move(res));
 }
 
