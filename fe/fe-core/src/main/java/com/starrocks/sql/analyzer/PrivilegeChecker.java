@@ -9,6 +9,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -17,6 +18,7 @@ import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -187,6 +189,28 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
                     ConnectContext.get(), PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
+                    tableName.getTbl(), PrivPredicate.UPDATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "UPDATE",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
+                    tableName.getTbl(), PrivPredicate.DELETE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DELETE",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }
