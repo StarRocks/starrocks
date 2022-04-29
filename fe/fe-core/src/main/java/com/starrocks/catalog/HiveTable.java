@@ -166,12 +166,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties;
     }
 
-    public HiveMetaStoreTableInfo initHmsTableInfo() {
+    public void initHmsTableInfo() {
         if (hmsTableInfo == null) {
             hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
                     partColumnNames, dataColumnNames, nameToColumn, type);
         }
-        return hmsTableInfo;
     }
 
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
