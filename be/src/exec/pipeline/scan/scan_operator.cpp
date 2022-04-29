@@ -66,10 +66,6 @@ void ScanOperator::close(RuntimeState* state) {
 }
 
 bool ScanOperator::has_output() const {
-    if (!maybe_has_output()) {
-        return false;
-    }
-
     if (_is_finished) {
         return false;
     }
@@ -103,15 +99,11 @@ bool ScanOperator::has_output() const {
 }
 
 bool ScanOperator::pending_finish() const {
-    DCHECK(_is_finished || must_be_finished());
+    DCHECK(is_finished());
     return false;
 }
 
 bool ScanOperator::is_finished() const {
-    if (must_be_finished()) {
-        return true;
-    }
-
     if (_is_finished) {
         return true;
     }

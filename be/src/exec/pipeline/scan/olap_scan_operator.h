@@ -37,8 +37,8 @@ public:
 
     ~OlapScanOperator() override = default;
 
-    bool maybe_has_output() const override;
-    bool must_be_finished() const override;
+    bool has_output() const override;
+    bool is_finished() const override;
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;

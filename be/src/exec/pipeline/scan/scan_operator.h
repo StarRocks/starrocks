@@ -35,9 +35,7 @@ public:
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    // interface for different scan node
-    virtual bool maybe_has_output() const { return true; }
-    virtual bool must_be_finished() const { return false; }
+    /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;

@@ -39,11 +39,20 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
     _ctx->ref();
 }
 
-bool OlapScanOperator::maybe_has_output() const {
-    return _ctx->is_prepare_finished() && !_ctx->is_finished();
+bool OlapScanOperator::has_output() const {
+    if (!_ctx->is_prepare_finished() || _ctx->is_finished()) {
+        return false;
+    }
+
+    return ScanOperator::has_output();
 }
-bool OlapScanOperator::must_be_finished() const {
-    return _ctx->is_finished();
+
+bool OlapScanOperator::is_finished() const {
+    if (_ctx->is_finished()) {
+        return true;
+    }
+
+    return ScanOperator::is_finished();
 }
 
 Status OlapScanOperator::do_prepare(RuntimeState*) {
