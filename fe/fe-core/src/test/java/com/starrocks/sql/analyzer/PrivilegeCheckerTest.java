@@ -264,4 +264,55 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
     }
+
+    @Test
+    public void testUpdateTable() throws Exception {
+
+        String createPrimaryTblStmtStr = "CREATE TABLE db2.tbl2 (k1 int, k2 int, k3 varchar(32)) PRIMARY KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 8 properties('replication_num' = '1');";
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("db2");
+        starRocksAssert.withTable(createPrimaryTblStmtStr);
+
+        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db2TablePattern = new TablePattern("db2", "*");
+        db2TablePattern.analyze("default_cluster");
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db2TablePattern, PrivBitSet.of(Privilege.UPDATE_PRIV), true);
+        String sql = "update db2.tbl2 set k3 = 20 where k1 = 1";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+            auth.revokePrivs(testUser, db2TablePattern, PrivBitSet.of(Privilege.UPDATE_PRIV), true);
+            Assert.assertThrows(SemanticException.class,
+                    () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testDeleteTable() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DELETE_PRIV), true);
+        String sql = "delete from db1.tbl1 where k4 = 1";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DELETE_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
 }

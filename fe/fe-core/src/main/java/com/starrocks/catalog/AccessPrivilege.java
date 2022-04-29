@@ -39,7 +39,9 @@ public enum AccessPrivilege {
     CREATE_PRIV(9, "Privilege for createing database or table"),
     DROP_PRIV(10, "Privilege for dropping database or table"),
     ADMIN_PRIV(11, "All privileges except NODE_PRIV"),
-    USAGE_PRIV(12, "Privileage for use resource");
+    USAGE_PRIV(12, "Privileage for use resource"),
+    UPDATE_PRIV(13, "Privilege for update data in tables"),
+    DELETE_PRIV(14, "Privilege for delete data in tables");
 
     private int flag;
     private String desc;
@@ -50,7 +52,7 @@ public enum AccessPrivilege {
     }
 
     public PrivBitSet toPrivilege() {
-        Preconditions.checkState(flag > 0 && flag < 13);
+        Preconditions.checkState(flag > 0 && flag < 15);
         switch (flag) {
             case 1:
                 return PrivBitSet.of(Privilege.SELECT_PRIV);
@@ -77,6 +79,10 @@ public enum AccessPrivilege {
                 return PrivBitSet.of(Privilege.ADMIN_PRIV);
             case 12:
                 return PrivBitSet.of(Privilege.USAGE_PRIV);
+            case 13:
+                return PrivBitSet.of(Privilege.UPDATE_PRIV);
+            case 14:
+                return PrivBitSet.of(Privilege.DELETE_PRIV);
             default:
                 return null;
         }

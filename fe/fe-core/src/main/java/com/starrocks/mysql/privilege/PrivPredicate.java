@@ -32,7 +32,9 @@ public class PrivPredicate {
                     Privilege.ALTER_PRIV,
                     Privilege.CREATE_PRIV,
                     Privilege.DROP_PRIV,
-                    Privilege.USAGE_PRIV),
+                    Privilege.USAGE_PRIV,
+                    Privilege.UPDATE_PRIV,
+                    Privilege.DELETE_PRIV),
             Operator.OR);
     // create/drop/alter/show user
     public static final PrivPredicate GRANT = PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
@@ -76,6 +78,18 @@ public class PrivPredicate {
                     Privilege.USAGE_PRIV),
             Operator.OR);
 
+    // update
+    public static final PrivPredicate UPDATE = PrivPredicate.of(
+            // add LOAD PRIV for compatibility
+            PrivBitSet.of(Privilege.ADMIN_PRIV, Privilege.UPDATE_PRIV, Privilege.LOAD_PRIV),
+            Operator.OR);
+
+    // delete
+    public static final PrivPredicate DELETE = PrivPredicate.of(
+            // add LOAD PRIV for compatibility
+            PrivBitSet.of(Privilege.ADMIN_PRIV, Privilege.DELETE_PRIV, Privilege.LOAD_PRIV),
+            Operator.OR);
+
     // all
     public static final PrivPredicate ALL = PrivPredicate.of(PrivBitSet.of(Privilege.NODE_PRIV,
                     Privilege.ADMIN_PRIV,
@@ -84,7 +98,9 @@ public class PrivPredicate {
                     Privilege.ALTER_PRIV,
                     Privilege.CREATE_PRIV,
                     Privilege.DROP_PRIV,
-                    Privilege.USAGE_PRIV),
+                    Privilege.USAGE_PRIV,
+                    Privilege.UPDATE_PRIV,
+                    Privilege.DELETE_PRIV),
             Operator.OR);
 
     private PrivBitSet privs;
