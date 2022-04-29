@@ -144,7 +144,7 @@ public class IcebergScanNode extends ScanNode {
 
     public void getScanRangeLocations() throws UserException {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(
-                srIcebergTable.getIcebergTable(), true);
+                srIcebergTable.getIcebergTable());
         if (!snapshot.isPresent()) {
             LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
             return;
@@ -152,7 +152,7 @@ public class IcebergScanNode extends ScanNode {
         preProcessConjuncts();
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
                 srIcebergTable.getIcebergTable(), snapshot.get(),
-                icebergPredicates, true).planTasks()) {
+                icebergPredicates).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
