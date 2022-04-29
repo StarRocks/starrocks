@@ -56,4 +56,30 @@ public class HudiResource extends Resource {
     public String getHiveMetastoreURIs() {
         return metastoreURIs;
     }
+
+    /**
+     * <p>alter the resource properties.</p>
+     * <p>the user can not alter the property that the system does not support.
+     * currently , hudi resource only support 'hive.metastore.uris' property to alter. </p>
+     *
+     * @param properties the properties that user uses to alter
+     * @throws DdlException
+     */
+    public void alterProperties(Map<String, String> properties) throws DdlException {
+        Preconditions.checkState(properties != null, "properties can not be null");
+
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (HIVE_METASTORE_URIS.equals(key)) {
+                if (StringUtils.isBlank(value)) {
+                    throw new DdlException(HIVE_METASTORE_URIS + " can not be null");
+                }
+                validateMetastoreUris(value);
+                this.metastoreURIs = value;
+            } else {
+                throw new DdlException(String.format("property %s has not support yet", key));
+            }
+        }
+    }
 }
