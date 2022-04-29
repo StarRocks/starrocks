@@ -10,6 +10,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
 
 public class ListPartitionInfo extends PartitionInfo {
+
+    private static final Logger LOG = LogManager.getLogger(ListPartitionInfo.class);
 
     @SerializedName("partitionColumns")
     private List<Column> partitionColumns;
@@ -148,7 +152,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 partitionInfo.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
             }
         } catch (AnalysisException e) {
-            throw new IOException(e);
+            LOG.error("deserialize PartitionInfo error", e);
         }
         return partitionInfo;
     }

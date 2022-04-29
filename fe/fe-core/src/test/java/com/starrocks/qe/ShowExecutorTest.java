@@ -277,7 +277,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
-        // Prepare Test
+        // Prepare to Test
         ListPartitionInfoTest listPartitionInfoTest = new ListPartitionInfoTest();
         listPartitionInfoTest.setUp();
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();

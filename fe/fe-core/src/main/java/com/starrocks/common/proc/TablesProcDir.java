@@ -157,9 +157,9 @@ public class TablesProcDir implements ProcDirInterface {
     private int findPartitionNum(TableType tableType, Table table) {
         if (tableType == TableType.OLAP) {
             OlapTable olapTable = (OlapTable) table;
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE
-                    || partitionInfo.getType() == PartitionType.LIST) {
+            PartitionType partitionType = olapTable.getPartitionInfo().getType();
+            if (partitionType == PartitionType.RANGE
+                    || partitionType == PartitionType.LIST) {
                 return olapTable.getPartitions().size();
             }
         }
