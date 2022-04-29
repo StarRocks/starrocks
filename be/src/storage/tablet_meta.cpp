@@ -423,23 +423,6 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-bool TabletMeta::_check_schema_unique_id(const TabletSchemaPB& schema_pb,
-                                         const std::shared_ptr<const TabletSchema>& schema_ptr) {
-    if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
-        schema_pb.column_size() != schema_ptr->num_columns()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < schema_ptr->num_columns(); ++i) {
-        int32_t pb_unique_id = schema_pb.column(i).unique_id();
-        int32_t unique_id = schema_ptr->column(i).unique_id();
-        if (pb_unique_id != unique_id) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
@@ -488,16 +471,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     // init _schema
     if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        // we use shared schema to save mem usage, but the premise is that we need to ensure that no
-        // two different TabletSchemaPBs have the same id
-        // But we can't guarantee it after schema change so far, so we should check the consistent of
-        // tablet schema
-        auto [_schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema());
-        if (!inserted) {
-            if (UNLIKELY(!_check_schema_unique_id(tablet_meta_pb.schema(), _schema))) {
-                _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
-            }
-        }
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {
         _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
