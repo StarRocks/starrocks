@@ -689,7 +689,7 @@ distributionDesc
 
 refreshSchemeDesc
     : REFRESH (SYNC
-    | ASYNC (START '(' string ')')? (EVERY '(' interval ')')?
+    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;
 

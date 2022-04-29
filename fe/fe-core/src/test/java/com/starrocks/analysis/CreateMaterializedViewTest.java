@@ -585,28 +585,11 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testRefreshNoEvery(){
-        String sql = "create materialized view mv1 " +
-                "partition by (ss) " +
-                "distributed by hash(k2) " +
-                "refresh async START('2122-12-31') " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            assertEquals(e.getMessage(), "Refresh every must be specified");
-        }
-    }
-
-    @Test
     public void testRefreshStartBeforeCurr(){
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
-                "refresh async START('2016-12-31') " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR)" +
                 "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
