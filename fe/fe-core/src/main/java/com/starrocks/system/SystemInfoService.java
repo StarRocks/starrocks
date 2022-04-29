@@ -30,7 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.UpdateBackendAddressClause;
+import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -171,9 +171,9 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public void updateBackendAddress(UpdateBackendAddressClause updateBackendAddressClause) throws DdlException {
-        Pair<String, Integer> discardedHostAndPort = updateBackendAddressClause.getDiscardedHostPort();
-        Pair<String, Integer> newlyEffectiveHostAndPort = updateBackendAddressClause.getNewlyEffectiveHostPort();
+    public void updateBackendAddress(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+        Pair<String, Integer> discardedHostAndPort = modifyBackendAddressClause.getDiscardedHostPort();
+        Pair<String, Integer> newlyEffectiveHostAndPort = modifyBackendAddressClause.getNewlyEffectiveHostPort();
         if (getBackendWithHeartbeatPort(discardedHostAndPort.first, discardedHostAndPort.second) == null) {
             throw new DdlException("backend does not exists[" + 
                 discardedHostAndPort.first + ":" + 

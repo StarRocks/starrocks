@@ -23,17 +23,28 @@ package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
+import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -54,6 +65,8 @@ import java.util.Random;
 
 public class GlobalStateMgrTest {
 
+    private static Analyzer analyzer;
+
     @Before
     public void setUp() {
         MetaContext metaContext = new MetaContext();
@@ -64,6 +77,8 @@ public class GlobalStateMgrTest {
                 result = metaContext;
             }
         };
+        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        UtFrameUtils.createMinStarRocksCluster();
     }
 
     public void mkdir(String dirString) {
@@ -209,8 +224,50 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testGetFeByHost() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost("127.0.0.1");
-        Assert.assertNotNull(fe);
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        Frontend testFe = GlobalStateMgr.getCurrentState().getFeByHost(fe.getHost());
+        Assert.assertNotNull(testFe);
+    }
+
+    @Test
+    public void testReplayUpdateFrontend() throws Exception {
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        fe.updateHostAndEditLogPort("testHost", 1000);
+        GlobalStateMgr.getCurrentState().replayUpdateFrontend(fe);
+        List<Frontend> updatedFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend updatedfFe = updatedFrontends.get(0);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+    }
+
+    @Test(expected = ClassCastException.class)
+    public void testUpdateFrontend() throws Exception {
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+                return new Pair<String, Integer>(fe.getHost(), fe.getEditLogPort());
+            }
+        };
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(
+            fe.getHost()+":"+fe.getEditLogPort(), "sandbox:1000");
+        clause.analyze(analyzer);
+        GlobalStateMgr.getCurrentState().updateFrontendHost(clause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testUpdateFrontendDDLException() throws Exception {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+                return new Pair<String, Integer>("test", 1000);
+            }
+        };
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", "sandbox:1000");
+        clause.analyze(analyzer);
+        GlobalStateMgr.getCurrentState().updateFrontendHost(clause);
     }
 }

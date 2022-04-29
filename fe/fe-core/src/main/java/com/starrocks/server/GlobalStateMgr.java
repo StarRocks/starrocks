@@ -77,7 +77,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.analysis.UpdateFrontendAddressClause;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
@@ -1749,9 +1748,9 @@ public class GlobalStateMgr {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
 
-    public void updateFrontendHost(UpdateFrontendAddressClause updateFrontendAddressClause) throws DdlException {
-        Pair<String, Integer> dPair = updateFrontendAddressClause.getDiscardedHostPort();
-        Pair<String, Integer> nPair = updateFrontendAddressClause.getNewlyEffectiveHostPort();
+    public void updateFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
+        Pair<String, Integer> dPair = modifyFrontendAddressClause.getDiscardedHostPort();
+        Pair<String, Integer> nPair = modifyFrontendAddressClause.getNewlyEffectiveHostPort();
         if (dPair.first.equals(selfNode.first) && dPair.second == selfNode.second && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not modify current master node.");
         }
@@ -1763,11 +1762,10 @@ public class GlobalStateMgr {
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + dPair.first + ":" + dPair.second + "]");
             }
-
-            // step 1
+            // step 1 update the fe information stored in bdb
             ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(fe.getNodeName(), nPair.first, nPair.second);
-            // step 2
-            fe.updateHostAndPort(nPair.first, nPair.second);
+            // step 2 update the fe information stored in memory
+            fe.updateHostAndEditLogPort(nPair.first, nPair.second);
             frontends.put(fe.getNodeName(), fe);
             
             // editLog
@@ -2317,10 +2315,9 @@ public class GlobalStateMgr {
             Frontend fe = frontends.get(frontend.getNodeName());
             if (fe == null) {
                 LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
-                System.exit(-1);
                 return;
             }
-            fe.updateHostAndPort(frontend.getHost(), frontend.getEditLogPort());
+            fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
             frontends.put(fe.getNodeName(), fe);
             LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
         } finally {

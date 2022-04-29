@@ -1,13 +1,17 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.SystemInfoService;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 
-public class UpdateFrontendAddressClause extends FrontendClause {
+public class ModifyBackendAddressClause extends BackendClause {
 
     protected String discardedHostPort;
     protected String newlyEffectiveHostPort;
@@ -15,12 +19,19 @@ public class UpdateFrontendAddressClause extends FrontendClause {
     protected Pair<String, Integer> discardedHostPortPair;
     protected Pair<String, Integer> newlyEffectivePortPair;
     
-    protected UpdateFrontendAddressClause(String hostPort, FrontendNodeType role) {
-        super(hostPort, role);
+    
+    public ModifyBackendAddressClause(Pair<String, Integer> dPair, Pair<String, Integer> nPair) {
+        super(new ArrayList<String>());
+        discardedHostPortPair = dPair;
+        newlyEffectivePortPair = nPair;
     }
 
-    protected UpdateFrontendAddressClause(String discardedHostPort, String newlyEffectiveHostPort) {
-        super(discardedHostPort, FrontendNodeType.UNKNOWN);
+    protected ModifyBackendAddressClause(List<String> hostPorts) {
+        super(new ArrayList<String>());
+    }
+
+    public ModifyBackendAddressClause(String discardedHostPort, String newlyEffectiveHostPort) {
+        super(new ArrayList<String>());
         this.discardedHostPort = discardedHostPort;
         this.newlyEffectiveHostPort = newlyEffectiveHostPort;
     }

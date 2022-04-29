@@ -1043,7 +1043,7 @@ alter_system_clause ::=
     :}
     | KW_MODIFY KW_BACKEND_HOST STRING_LITERAL:discardedHostPort KW_TO STRING_LITERAL:newlyEffectiveHostPort
     {:
-        RESULT = new UpdateBackendAddressClause(discardedHostPort, newlyEffectiveHostPort);
+        RESULT = new ModifyBackendAddressClause(discardedHostPort, newlyEffectiveHostPort);
     :}
     | KW_ADD KW_FREE KW_BACKEND string_list:hostPorts
     {:
@@ -1083,7 +1083,7 @@ alter_system_clause ::=
     :}
     | KW_MODIFY KW_FRONTEND_HOST STRING_LITERAL:discardedHostPort KW_TO STRING_LITERAL:newlyEffectiveHostPort
     {:
-        RESULT = new UpdateFrontendAddressClause(discardedHostPort, newlyEffectiveHostPort);
+        RESULT = new ModifyFrontendAddressClause(discardedHostPort, newlyEffectiveHostPort);
     :}
     /* Broker manipulation */
     | KW_ADD KW_BROKER ident_or_text:brokerName string_list:hostPorts
