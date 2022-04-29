@@ -23,7 +23,7 @@
 
 #include <gtest/gtest.h>
 
-#include "env/env.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
@@ -34,14 +34,14 @@ public:
     void SetUp() override {
         _file_cache.reset(new FileCache<RandomAccessFile>("test cache", 10000));
         _file_exist = "file_exist";
-        auto file = *Env::Default()->new_writable_file(_file_exist);
+        auto file = *FileSystem::Default()->new_writable_file(_file_exist);
         auto st = file->close();
         ASSERT_TRUE(st.ok());
     }
 
     void TearDown() override {
         _file_cache.reset(nullptr);
-        auto st = Env::Default()->delete_file(_file_exist);
+        auto st = FileSystem::Default()->delete_file(_file_exist);
         ASSERT_TRUE(st.ok());
     }
 
@@ -54,7 +54,7 @@ TEST_F(FileCacheTest, normal) {
     OpenedFileHandle<RandomAccessFile> file_handle;
     auto found = _file_cache->lookup(_file_exist, &file_handle);
     ASSERT_FALSE(found);
-    auto file = *Env::Default()->new_random_access_file(_file_exist);
+    auto file = *FileSystem::Default()->new_random_access_file(_file_exist);
     RandomAccessFile* tmp_file = file.release();
     _file_cache->insert(_file_exist, tmp_file, &file_handle);
     ASSERT_EQ(tmp_file, file_handle.file());

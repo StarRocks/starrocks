@@ -23,7 +23,7 @@
 
 #include <utility>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

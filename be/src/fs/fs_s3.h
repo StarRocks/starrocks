@@ -2,12 +2,10 @@
 
 #pragma once
 
-#include <memory>
-
-#include "env.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
-std::unique_ptr<Env> new_env_posix();
+std::unique_ptr<FileSystem> new_fs_s3();
 
-}
+} // namespace starrocks

@@ -12,11 +12,11 @@ class Message;
 
 namespace starrocks {
 
-class Env;
+class FileSystem;
 
 class ProtobufFile {
 public:
-    ProtobufFile(std::string path, Env* env = nullptr);
+    ProtobufFile(std::string path, FileSystem* fs = nullptr);
     ~ProtobufFile() = default;
 
     Status save(const ::google::protobuf::Message& message, bool sync);
@@ -25,7 +25,7 @@ public:
 
 private:
     std::string _path;
-    Env* _env;
+    FileSystem* _fs;
 };
 
 } // namespace starrocks

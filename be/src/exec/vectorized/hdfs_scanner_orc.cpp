@@ -4,8 +4,8 @@
 
 #include <utility>
 
-#include "env/env.h"
 #include "exec/exec_node.h"
+#include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"

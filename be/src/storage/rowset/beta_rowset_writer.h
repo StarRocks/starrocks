@@ -57,7 +57,7 @@ protected:
     Status flush_src_rssids(uint32_t segment_id);
 
     RowsetWriterContext _context;
-    std::shared_ptr<Env> _env;
+    std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<fs::BlockManager> _block_mgr;
     std::shared_ptr<RowsetMeta> _rowset_meta;
     std::unique_ptr<TabletSchema> _rowset_schema;

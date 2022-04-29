@@ -7,13 +7,13 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "env/env.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
+#include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
 namespace starrocks::parquet {
@@ -261,7 +261,7 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
 }
 
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
-    return *Env::Default()->new_random_access_file(file_path);
+    return *FileSystem::Default()->new_random_access_file(file_path);
 }
 
 HdfsFileReaderParam* FileReaderTest::_create_param() {

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "common/ownership.h"
-#include "env/writable_file_wrapper.h"
+#include "fs/writable_file_wrapper.h"
 
 namespace starrocks {
 

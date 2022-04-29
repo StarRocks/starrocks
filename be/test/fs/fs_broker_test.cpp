@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_broker.h"
+#include "fs/fs_broker.h"
 
 #include <brpc/uri.h>
 #include <gtest/gtest.h>
@@ -8,7 +8,7 @@
 #include <map>
 #include <memory>
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
@@ -19,7 +19,7 @@ namespace starrocks {
 
 class MockBrokerServer {
 public:
-    explicit MockBrokerServer(EnvMemory* env) : _env(env) {}
+    explicit MockBrokerServer(MemoryFileSystem* fs) : _fs(fs) {}
 
     std::string url_path(const std::string& url) {
         brpc::URI uri;
@@ -30,7 +30,7 @@ public:
     void listPath(TBrokerListResponse& response, const TBrokerListPathRequest& request) {
         std::string path = url_path(request.path);
         TBrokerFileStatus status;
-        StatusOr<bool> status_or = _env->is_directory(path);
+        StatusOr<bool> status_or = _fs->is_directory(path);
         if (status_or.status().is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
             return;
@@ -39,7 +39,7 @@ public:
             return;
         }
         bool is_dir = status_or.value();
-        uint64_t size = is_dir ? 0 : _env->get_file_size(path).value();
+        uint64_t size = is_dir ? 0 : _fs->get_file_size(path).value();
         status.__set_isSplitable(false);
         if (request.__isset.fileNameOnly && request.fileNameOnly) {
             status.__set_path(path.substr(path.rfind('/') + 1));
@@ -72,7 +72,7 @@ public:
 
     void openReader(TBrokerOpenReaderResponse& response, const TBrokerOpenReaderRequest& request) {
         std::string path = url_path(request.path);
-        auto res = _env->new_random_access_file(path);
+        auto res = _fs->new_random_access_file(path);
         if (res.ok()) {
             TBrokerFD fd;
             fd.__set_high(0);
@@ -121,8 +121,8 @@ public:
 
     void openWriter(TBrokerOpenWriterResponse& response, const TBrokerOpenWriterRequest& request) {
         std::string path = url_path(request.path);
-        RandomRWFileOptions opts{.mode = Env::MUST_CREATE};
-        auto res = _env->new_random_rw_file(opts, path);
+        RandomRWFileOptions opts{.mode = FileSystem::MUST_CREATE};
+        auto res = _fs->new_random_rw_file(opts, path);
         if (!res.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_FILE_PATH);
         } else {
@@ -168,18 +168,18 @@ public:
 
 private:
     bool _is_dir(const std::string& path) {
-        const auto status_or = _env->is_directory(path);
+        const auto status_or = _fs->is_directory(path);
         return status_or.ok() && status_or.value();
     }
     bool _is_file(const std::string& path) {
-        const auto status_or = _env->is_directory(path);
+        const auto status_or = _fs->is_directory(path);
         return status_or.ok() && !status_or.value();
     }
     bool _exists(const std::string& path) { return _is_dir(path) || _is_file(path); }
-    bool _rm_file(const std::string& path) { return _env->delete_file(path).ok(); }
-    bool _rm_dir(const std::string& path) { return _env->delete_dir(path).ok(); }
+    bool _rm_file(const std::string& path) { return _fs->delete_file(path).ok(); }
+    bool _rm_dir(const std::string& path) { return _fs->delete_dir(path).ok(); }
 
-    EnvMemory* _env;
+    MemoryFileSystem* _fs;
     int64_t _next_fd = 0;
     std::map<int64_t, std::unique_ptr<RandomAccessFile>> _readers;
     std::map<int64_t, std::unique_ptr<RandomRWFile>> _writers;
@@ -258,27 +258,27 @@ protected:
         TNetworkAddress addr;
         addr.__set_hostname("127.0.0.1");
         addr.__set_port(456);
-        EnvBroker env(addr, {});
-        _env = env;
+        BrokerFileSystem fs(addr, {});
+        _fs = fs;
 
         _buff.resize(4096);
-        _env_mem = new EnvMemory();
-        CHECK_OK(_env_mem->create_dir("/tmp"));
-        _server = new MockBrokerServer(_env_mem);
+        _fs_mem = new MemoryFileSystem();
+        CHECK_OK(_fs_mem->create_dir("/tmp"));
+        _server = new MockBrokerServer(_fs_mem);
         _client = new MockBrokerServiceClient();
         _client->connect_to_broker(_server);
-        EnvBroker::TEST_set_broker_client(_client);
+        BrokerFileSystem::TEST_set_broker_client(_client);
     }
 
     void TearDown() override {
-        EnvBroker::TEST_set_broker_client(nullptr);
+        BrokerFileSystem::TEST_set_broker_client(nullptr);
         delete _client;
         delete _server;
-        delete _env_mem;
+        delete _fs_mem;
     }
 
-    EnvMemory* _env_mem = nullptr;
-    EnvBroker _env{TNetworkAddress(), {}};
+    MemoryFileSystem* _fs_mem = nullptr;
+    BrokerFileSystem _fs{TNetworkAddress(), {}};
     MockBrokerServiceClient* _client = nullptr;
     MockBrokerServer* _server = nullptr;
     std::vector<char> _buff;
@@ -315,20 +315,20 @@ TEST_F(EnvBrokerTest, test_open_non_exist_file) {
 
     // Check the specific (mocked) error code is meaningless, because
     // I don't know what it is.
-    ASSERT_FALSE(_env.new_sequential_file(url).ok());
-    ASSERT_FALSE(_env.new_random_access_file(url).ok());
+    ASSERT_FALSE(_fs.new_sequential_file(url).ok());
+    ASSERT_FALSE(_fs.new_random_access_file(url).ok());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_write_file) {
     const std::string path = "/tmp/1.txt";
 
-    auto f = *_env.new_writable_file(path);
+    auto f = *_fs.new_writable_file(path);
     ASSERT_OK(f->append("first line\n"));
     ASSERT_OK(f->append("second line\n"));
     f->close();
     std::string content;
-    ASSERT_OK(_env_mem->read_file(path, &content));
+    ASSERT_OK(_fs_mem->read_file(path, &content));
     ASSERT_EQ("first line\nsecond line\n", content);
 }
 
@@ -336,10 +336,10 @@ TEST_F(EnvBrokerTest, test_write_file) {
 TEST_F(EnvBrokerTest, test_sequential_read) {
     const std::string path = "/tmp/1.txt";
     const std::string content = "abcdefghijklmnopqrstuvwxyz0123456789";
-    ASSERT_OK(_env_mem->create_file(path));
-    ASSERT_OK(_env_mem->append_file(path, content));
+    ASSERT_OK(_fs_mem->create_file(path));
+    ASSERT_OK(_fs_mem->append_file(path, content));
 
-    auto f = *_env.new_sequential_file(path);
+    auto f = *_fs.new_sequential_file(path);
     ASSERT_EQ("", read(f, 0));
     ASSERT_EQ("a", read(f, 1));
     ASSERT_EQ("bcdefghij", read(f, 9));
@@ -351,10 +351,10 @@ TEST_F(EnvBrokerTest, test_sequential_read) {
 TEST_F(EnvBrokerTest, test_random_read) {
     const std::string path = "/tmp/1.txt";
     const std::string content = "abcdefghijklmnopqrstuvwxyz0123456789";
-    ASSERT_OK(_env_mem->create_file(path));
-    ASSERT_OK(_env_mem->append_file(path, content));
+    ASSERT_OK(_fs_mem->create_file(path));
+    ASSERT_OK(_fs_mem->append_file(path, content));
 
-    auto f = *_env.new_random_access_file(path);
+    auto f = *_fs.new_random_access_file(path);
     ASSERT_EQ(content.size(), filesize(f));
     ASSERT_EQ("", read(f, 0, 0));
     ASSERT_EQ("", read(f, 10, 0));
@@ -371,27 +371,27 @@ TEST_F(EnvBrokerTest, test_random_read) {
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_write_exist_file) {
     const std::string path = "/tmp/1.txt";
-    ASSERT_OK(_env_mem->create_file(path));
-    ASSERT_OK(_env_mem->append_file(path, "old content"));
+    ASSERT_OK(_fs_mem->create_file(path));
+    ASSERT_OK(_fs_mem->append_file(path, "old content"));
 
     std::unique_ptr<WritableFile> f;
-    ASSERT_TRUE(_env.new_writable_file(path).status().is_not_supported());
+    ASSERT_TRUE(_fs.new_writable_file(path).status().is_not_supported());
 
-    auto opts = WritableFileOptions{.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
+    auto opts = WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSERT_TRUE(_fs.new_writable_file(opts, path).status().is_not_supported());
 
-    opts = WritableFileOptions{.mode = Env::MUST_CREATE};
-    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_already_exist());
+    opts = WritableFileOptions{.mode = FileSystem::MUST_CREATE};
+    ASSERT_TRUE(_fs.new_writable_file(opts, path).status().is_already_exist());
 
-    opts = WritableFileOptions{.mode = Env::MUST_EXIST};
-    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
+    opts = WritableFileOptions{.mode = FileSystem::MUST_EXIST};
+    ASSERT_TRUE(_fs.new_writable_file(opts, path).status().is_not_supported());
 
-    opts = WritableFileOptions{.mode = Env::CREATE_OR_OPEN};
-    ASSERT_TRUE(_env.new_writable_file(opts, path).status().is_not_supported());
+    opts = WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN};
+    ASSERT_TRUE(_fs.new_writable_file(opts, path).status().is_not_supported());
 
     // Assume the file still exists.
     std::string content;
-    ASSERT_OK(_env_mem->read_file(path, &content));
+    ASSERT_OK(_fs_mem->read_file(path, &content));
     ASSERT_EQ("old content", content);
 }
 
@@ -399,36 +399,36 @@ TEST_F(EnvBrokerTest, test_write_exist_file) {
 TEST_F(EnvBrokerTest, test_delete_file) {
     const std::string path = "/tmp/1.txt";
 
-    ASSERT_FALSE(_env.delete_file(path).ok());
+    ASSERT_FALSE(_fs.delete_file(path).ok());
 
-    ASSERT_OK(_env_mem->create_file(path));
-    ASSERT_OK(_env_mem->append_file(path, "file content"));
-    ASSERT_OK(_env.delete_file(path));
+    ASSERT_OK(_fs_mem->create_file(path));
+    ASSERT_OK(_fs_mem->append_file(path, "file content"));
+    ASSERT_OK(_fs.delete_file(path));
     std::string content;
-    EXPECT_TRUE(_env_mem->read_file(path, &content).is_not_found());
+    EXPECT_TRUE(_fs_mem->read_file(path, &content).is_not_found());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_check_path_exist) {
     const std::string path = "/tmp/1.txt";
 
-    ASSERT_TRUE(_env.path_exists(path).is_not_found());
+    ASSERT_TRUE(_fs.path_exists(path).is_not_found());
 
-    ASSERT_OK(_env_mem->create_file(path));
-    ASSERT_OK(_env_mem->append_file(path, "file content"));
-    ASSERT_OK(_env.path_exists(path));
+    ASSERT_OK(_fs_mem->create_file(path));
+    ASSERT_OK(_fs_mem->append_file(path, "file content"));
+    ASSERT_OK(_fs.path_exists(path));
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_is_directory) {
-    ASSERT_OK(_env_mem->create_file("/tmp/1.txt"));
-    ASSERT_TRUE(_env.is_directory("/xy").status().is_not_found());
+    ASSERT_OK(_fs_mem->create_file("/tmp/1.txt"));
+    ASSERT_TRUE(_fs.is_directory("/xy").status().is_not_found());
 
-    auto status_or = _env.is_directory("/tmp");
+    auto status_or = _fs.is_directory("/tmp");
     ASSERT_OK(status_or.status());
     ASSERT_TRUE(status_or.value());
 
-    status_or = _env.is_directory("/tmp/1.txt");
+    status_or = _fs.is_directory("/tmp/1.txt");
     ASSERT_OK(status_or.status());
     ASSERT_FALSE(status_or.value());
 }
@@ -437,53 +437,53 @@ TEST_F(EnvBrokerTest, test_is_directory) {
 TEST_F(EnvBrokerTest, test_link_file) {
     const std::string old_path = "/tmp";
     const std::string new_path = "/ttt";
-    ASSERT_TRUE(_env.link_file(old_path, new_path).is_not_supported());
+    ASSERT_TRUE(_fs.link_file(old_path, new_path).is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_rename) {
     const std::string old_path = "/tmp";
     const std::string new_path = "/ttt";
-    ASSERT_TRUE(_env.rename_file(old_path, new_path).is_not_supported());
+    ASSERT_TRUE(_fs.rename_file(old_path, new_path).is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_get_modified_time) {
     const std::string path = "/tmp";
-    ASSERT_TRUE(_env.get_file_modified_time(path).status().is_not_supported());
+    ASSERT_TRUE(_fs.get_file_modified_time(path).status().is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_canonicalize) {
     std::string s;
-    ASSERT_TRUE(_env.canonicalize("//a//b/", &s).is_not_supported());
+    ASSERT_TRUE(_fs.canonicalize("//a//b/", &s).is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_create_dir) {
-    ASSERT_TRUE(_env.create_dir("//a//b/").is_not_supported());
+    ASSERT_TRUE(_fs.create_dir("//a//b/").is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_create_dir_if_missing) {
     bool created;
-    ASSERT_TRUE(_env.create_dir_if_missing("//a//b/", &created).is_not_supported());
+    ASSERT_TRUE(_fs.create_dir_if_missing("//a//b/", &created).is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_delete_dir) {
-    ASSERT_TRUE(_env.delete_dir("//a//b/").is_not_supported());
+    ASSERT_TRUE(_fs.delete_dir("//a//b/").is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_sync_dir) {
-    ASSERT_TRUE(_env.sync_dir("//a//b/").is_not_supported());
+    ASSERT_TRUE(_fs.sync_dir("//a//b/").is_not_supported());
 }
 
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_get_children) {
     std::vector<std::string> children;
-    ASSERT_TRUE(_env.get_children("//a//b/", &children).is_not_supported());
+    ASSERT_TRUE(_fs.get_children("//a//b/", &children).is_not_supported());
 }
 
 } // namespace starrocks

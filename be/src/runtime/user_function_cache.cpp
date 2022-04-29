@@ -30,8 +30,8 @@
 #include <vector>
 
 #include "common/status.h"
-#include "env/env.h"
 #include "fmt/compile.h"
+#include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "util/download_util.h"
 #include "util/dynamic_util.h"
@@ -179,7 +179,7 @@ Status UserFunctionCache::_load_cached_lib() {
             }
             return true;
         };
-        RETURN_IF_ERROR(Env::Default()->iterate_dir(sub_dir, scan_cb));
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(sub_dir, scan_cb));
     }
     return Status::OK();
 }

@@ -453,9 +453,9 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
-    Env
     Exec
     Exprs
+    FileSystem
     Formats
     Gutil
     IO
@@ -618,7 +618,7 @@ add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/env)
+add_subdirectory(${SRC_DIR}/fs)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)

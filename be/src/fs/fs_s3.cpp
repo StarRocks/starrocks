@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_s3.h"
+#include "fs/fs_s3.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
@@ -181,15 +181,15 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     return S3ClientFactory::instance().new_client(config);
 }
 
-class EnvS3 : public Env {
+class S3FileSystem : public FileSystem {
 public:
-    EnvS3() {}
-    ~EnvS3() override = default;
+    S3FileSystem() {}
+    ~S3FileSystem() override = default;
 
-    EnvS3(const EnvS3&) = delete;
-    void operator=(const EnvS3&) = delete;
-    EnvS3(EnvS3&&) = delete;
-    void operator=(EnvS3&&) = delete;
+    S3FileSystem(const S3FileSystem&) = delete;
+    void operator=(const S3FileSystem&) = delete;
+    S3FileSystem(S3FileSystem&&) = delete;
+    void operator=(S3FileSystem&&) = delete;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
@@ -206,18 +206,18 @@ public:
                                                               const std::string& path) override;
 
     StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override {
-        return Status::NotSupported("EnvS3::new_random_rw_file");
+        return Status::NotSupported("S3FileSystem::new_random_rw_file");
     }
 
     StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
                                                                const std::string& path) override {
-        return Status::NotSupported("EnvS3::new_random_rw_file");
+        return Status::NotSupported("S3FileSystem::new_random_rw_file");
     }
 
-    Status path_exists(const std::string& path) override { return Status::NotSupported("EnvS3::path_exists"); }
+    Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
-        return Status::NotSupported("EnvS3::get_children");
+        return Status::NotSupported("S3FileSystem::get_children");
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
@@ -239,34 +239,34 @@ public:
     StatusOr<bool> is_directory(const std::string& path) override;
 
     Status canonicalize(const std::string& path, std::string* file) override {
-        return Status::NotSupported("EnvS3::canonicalize");
+        return Status::NotSupported("S3FileSystem::canonicalize");
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("EnvS3::get_file_size");
+        return Status::NotSupported("S3FileSystem::get_file_size");
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
-        return Status::NotSupported("EnvS3::get_file_modified_time");
+        return Status::NotSupported("S3FileSystem::get_file_modified_time");
     }
 
     Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("EnvS3::rename_file");
+        return Status::NotSupported("S3FileSystem::rename_file");
     }
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
-        return Status::NotSupported("EnvS3::link_file");
+        return Status::NotSupported("S3FileSystem::link_file");
     }
 
     StatusOr<SpaceInfo> space(const std::string& path) override;
 };
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const std::string& path) {
-    return EnvS3::new_random_access_file(RandomAccessFileOptions(), path);
+StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const std::string& path) {
+    return S3FileSystem::new_random_access_file(RandomAccessFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                          const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                 const std::string& path) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
@@ -276,7 +276,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> EnvS3::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const std::string& path) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
@@ -286,13 +286,13 @@ StatusOr<std::unique_ptr<SequentialFile>> EnvS3::new_sequential_file(const std::
     return std::make_unique<SequentialFile>(std::move(input_stream), path);
 }
 
-StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const std::string& fname) {
+StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const std::string& fname) {
     return new_writable_file(WritableFileOptions(), fname);
 }
 
-// NOTE: Unlike the posix env, we can create files under a non-exist directory.
-StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableFileOptions& opts,
-                                                                 const std::string& fname) {
+// NOTE: Unlike the posix fs, we can create files under a non-exist directory.
+StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const WritableFileOptions& opts,
+                                                                        const std::string& fname) {
     if (!fname.empty() && fname.back() == '/') {
         return Status::NotSupported(fmt::format("S3: cannot create file with name ended with '/': {}", fname));
     }
@@ -303,8 +303,8 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
     // NOTE: if the open mode is MUST_CREATE, technology we should send a head object request first
     // before creating the S3OutputStream, but since this API only used in test environment now,
     // here we assume that the caller can ensure that the file does not exist by themself.
-    if (opts.mode != Env::CREATE_OR_OPEN_WITH_TRUNCATE && opts.mode != Env::MUST_CREATE) {
-        return Status::NotSupported(fmt::format("EnvS3 does not support open mode {}", opts.mode));
+    if (opts.mode != FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE && opts.mode != FileSystem::MUST_CREATE) {
+        return Status::NotSupported(fmt::format("S3FileSystem does not support open mode {}", opts.mode));
     }
     auto client = new_s3client(uri);
     auto ostream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
@@ -313,9 +313,9 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
     return std::make_unique<OutputStreamAdapter>(std::move(ostream), fname);
 }
 
-StatusOr<SpaceInfo> EnvS3::space(const std::string& path) {
+StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
     // call `is_directory()` to check if 'path' is an valid path
-    const Status status = EnvS3::is_directory(path).status();
+    const Status status = S3FileSystem::is_directory(path).status();
     if (!status.ok()) {
         return status;
     }
@@ -324,7 +324,7 @@ StatusOr<SpaceInfo> EnvS3::space(const std::string& path) {
                      .available = std::numeric_limits<int64_t>::max()};
 }
 
-Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -379,8 +379,8 @@ Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::
 }
 
 // Creating directory is actually creating an object of key "dirname/"
-Status EnvS3::create_dir(const std::string& dirname) {
-    auto st = EnvS3::is_directory(dirname).status();
+Status S3FileSystem::create_dir(const std::string& dirname) {
+    auto st = S3FileSystem::is_directory(dirname).status();
     if (st.ok()) {
         return Status::AlreadyExist(dirname);
     }
@@ -408,7 +408,7 @@ Status EnvS3::create_dir(const std::string& dirname) {
     }
 }
 
-Status EnvS3::create_dir_if_missing(const std::string& dirname, bool* created) {
+Status S3FileSystem::create_dir_if_missing(const std::string& dirname, bool* created) {
     auto st = create_dir(dirname);
     if (created != nullptr) {
         *created = st.ok();
@@ -419,11 +419,11 @@ Status EnvS3::create_dir_if_missing(const std::string& dirname, bool* created) {
     return st;
 }
 
-Status EnvS3::create_dir_recursive(const std::string& dirname) {
+Status S3FileSystem::create_dir_recursive(const std::string& dirname) {
     return create_dir_if_missing(dirname, nullptr);
 }
 
-StatusOr<bool> EnvS3::is_directory(const std::string& path) {
+StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
@@ -453,7 +453,7 @@ StatusOr<bool> EnvS3::is_directory(const std::string& path) {
     return Status::NotFound(path);
 }
 
-Status EnvS3::delete_file(const std::string& path) {
+Status S3FileSystem::delete_file(const std::string& path) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
@@ -466,7 +466,7 @@ Status EnvS3::delete_file(const std::string& path) {
     auto client = new_s3client(uri);
     auto outcome = client->DeleteObject(request);
     // NOTE: If the object does not exist, outcome.IsSuccess() is true and OK is returned, which
-    // is different from the behavior of posix env.
+    // is different from the behavior of posix fs.
     if (outcome.IsSuccess()) {
         return Status::OK();
     } else {
@@ -474,7 +474,7 @@ Status EnvS3::delete_file(const std::string& path) {
     }
 }
 
-Status EnvS3::delete_dir(const std::string& dirname) {
+Status S3FileSystem::delete_dir(const std::string& dirname) {
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
@@ -518,14 +518,14 @@ Status EnvS3::delete_dir(const std::string& dirname) {
     }
 }
 
-Status EnvS3::sync_dir(const std::string& dirname) {
+Status S3FileSystem::sync_dir(const std::string& dirname) {
     // The only thing we need to do is check whether the directory exist or not.
     ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
     if (is_dir) return Status::OK();
     return Status::NotFound(fmt::format("{} not directory", dirname));
 }
 
-Status EnvS3::delete_dir_recursive(const std::string& dirname) {
+Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     S3URI uri;
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
@@ -577,8 +577,8 @@ Status EnvS3::delete_dir_recursive(const std::string& dirname) {
     return directory_exist ? Status::OK() : Status::NotFound(dirname);
 }
 
-std::unique_ptr<Env> new_env_s3() {
-    return std::make_unique<EnvS3>();
+std::unique_ptr<FileSystem> new_fs_s3() {
+    return std::make_unique<S3FileSystem>();
 }
 
 } // namespace starrocks

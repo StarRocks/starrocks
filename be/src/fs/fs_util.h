@@ -27,22 +27,22 @@
 
 namespace starrocks {
 
-class Env;
+class FileSystem;
 class SequentialFile;
 class RandomAccessFile;
 class WritableFile;
 struct WritableFileOptions;
 
-namespace env_util {
+namespace fs_util {
 
-Status open_file_for_write(Env* env, const std::string& path, std::shared_ptr<WritableFile>* file);
+Status open_file_for_write(FileSystem* fs, const std::string& path, std::shared_ptr<WritableFile>* file);
 
-Status open_file_for_write(const WritableFileOptions& opts, Env* env, const std::string& path,
+Status open_file_for_write(const WritableFileOptions& opts, FileSystem* fs, const std::string& path,
                            std::shared_ptr<WritableFile>* file);
 
-Status open_file_for_sequential(Env* env, const std::string& path, std::shared_ptr<SequentialFile>* file);
+Status open_file_for_sequential(FileSystem* fs, const std::string& path, std::shared_ptr<SequentialFile>* file);
 
-Status open_file_for_random(Env* env, const std::string& path, std::shared_ptr<RandomAccessFile>* file);
+Status open_file_for_random(FileSystem* fs, const std::string& path, std::shared_ptr<RandomAccessFile>* file);
 
-} // namespace env_util
+} // namespace fs_util
 } // namespace starrocks

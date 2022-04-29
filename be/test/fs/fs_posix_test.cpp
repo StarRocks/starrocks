@@ -24,26 +24,26 @@
 #include <algorithm>
 
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
 
-class EnvPosixTest : public testing::Test {
+class PosixFileSystemTest : public testing::Test {
 public:
-    EnvPosixTest() {}
-    virtual ~EnvPosixTest() {}
-    void SetUp() override { ASSERT_TRUE(FileUtils::create_dir("./ut_dir/env_posix").ok()); }
+    PosixFileSystemTest() {}
+    virtual ~PosixFileSystemTest() {}
+    void SetUp() override { ASSERT_TRUE(FileUtils::create_dir("./ut_dir/fs_posix").ok()); }
     void TearDown() override { ASSERT_TRUE(FileUtils::remove_all("./ut_dir").ok()); }
 };
 
-TEST_F(EnvPosixTest, random_access) {
-    std::string fname = "./ut_dir/env_posix/random_access";
+TEST_F(PosixFileSystemTest, random_access) {
+    std::string fname = "./ut_dir/fs_posix/random_access";
     WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
-    auto env = Env::Default();
-    wfile = *env->new_writable_file(fname);
+    auto fs = FileSystem::Default();
+    wfile = *fs->new_writable_file(fname);
     auto st = wfile->pre_allocate(1024);
     ASSERT_TRUE(st.ok());
     // wirte data
@@ -70,13 +70,13 @@ TEST_F(EnvPosixTest, random_access) {
 
     ASSERT_EQ(115, wfile->size());
 
-    const auto status_or = env->get_file_size(fname);
+    const auto status_or = fs->get_file_size(fname);
     ASSERT_TRUE(status_or.ok());
     const uint64_t size = status_or.value();
     ASSERT_EQ(115, size);
     {
         char mem[1024];
-        auto rfile = *env->new_random_access_file(fname);
+        auto rfile = *fs->new_random_access_file(fname);
 
         Slice slice1(mem, 9);
         Slice slice2(mem + 9, 100);
@@ -97,7 +97,7 @@ TEST_F(EnvPosixTest, random_access) {
     // test try read
     {
         char mem[1024];
-        auto rfile = *env->new_random_access_file(fname);
+        auto rfile = *fs->new_random_access_file(fname);
 
         // normal read
         {
@@ -119,18 +119,18 @@ TEST_F(EnvPosixTest, random_access) {
     }
 }
 
-TEST_F(EnvPosixTest, iterate_dir) {
-    const std::string dir_path = "./ut_dir/env_posix/iterate_dir";
+TEST_F(PosixFileSystemTest, iterate_dir) {
+    const std::string dir_path = "./ut_dir/fs_posix/iterate_dir";
     FileUtils::remove_all(dir_path);
-    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path));
+    ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path));
 
-    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path + "/abc"));
+    ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path + "/abc"));
 
-    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path + "/123"));
+    ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path + "/123"));
 
     {
         std::vector<std::string> children;
-        ASSERT_OK(Env::Default()->get_children(dir_path, &children));
+        ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
         ASSERT_EQ(4, children.size());
         std::sort(children.begin(), children.end());
 
@@ -141,7 +141,7 @@ TEST_F(EnvPosixTest, iterate_dir) {
     }
     {
         std::vector<std::string> children;
-        ASSERT_OK(FileUtils::list_files(Env::Default(), dir_path, &children));
+        ASSERT_OK(FileUtils::list_files(FileSystem::Default(), dir_path, &children));
         ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
@@ -150,10 +150,10 @@ TEST_F(EnvPosixTest, iterate_dir) {
     }
 
     // Delete non-empty directory, should fail.
-    ASSERT_ERROR(Env::Default()->delete_dir(dir_path));
+    ASSERT_ERROR(FileSystem::Default()->delete_dir(dir_path));
     {
         std::vector<std::string> children;
-        ASSERT_OK(Env::Default()->get_children(dir_path, &children));
+        ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
         ASSERT_EQ(4, children.size());
         std::sort(children.begin(), children.end());
 
@@ -164,29 +164,29 @@ TEST_F(EnvPosixTest, iterate_dir) {
     }
 
     // Delete directory recursively, should success.
-    ASSERT_OK(Env::Default()->delete_dir_recursive(dir_path));
-    ASSERT_TRUE(Env::Default()->path_exists(dir_path).is_not_found());
+    ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
+    ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
 }
 
-TEST_F(EnvPosixTest, create_dir_recursive) {
-    const std::string dir_path = "./ut_dir/env_posix/a/b/c/d";
+TEST_F(PosixFileSystemTest, create_dir_recursive) {
+    const std::string dir_path = "./ut_dir/fs_posix/a/b/c/d";
 
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a").status().is_not_found());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b").status().is_not_found());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c").status().is_not_found());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c/d").status().is_not_found());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a").status().is_not_found());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b").status().is_not_found());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c").status().is_not_found());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c/d").status().is_not_found());
 
-    ASSERT_OK(Env::Default()->create_dir_recursive(dir_path));
-    ASSERT_OK(Env::Default()->create_dir_recursive(dir_path));
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
 
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir").value());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a").value());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b").value());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c").value());
-    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c/d").value());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir").value());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a").value());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b").value());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c").value());
+    ASSERT_TRUE(FileSystem::Default()->is_directory("./ut_dir/fs_posix/a/b/c/d").value());
 
-    ASSERT_OK(Env::Default()->delete_dir_recursive(dir_path));
-    ASSERT_TRUE(Env::Default()->path_exists(dir_path).is_not_found());
+    ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
+    ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
 }
 
 } // namespace starrocks

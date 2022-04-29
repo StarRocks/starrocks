@@ -2343,7 +2343,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
-            auto st = Env::Default()->path_exists(path);
+            auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("segment file does not exist: " + st.to_string());
             }
@@ -2352,7 +2352,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
-            auto st = Env::Default()->path_exists(path);
+            auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("delete file does not exist: " + st.to_string());
             }

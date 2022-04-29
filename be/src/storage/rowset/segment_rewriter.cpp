@@ -2,7 +2,7 @@
 
 #include "segment_rewriter.h"
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/fs/block_manager.h"
@@ -25,7 +25,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(dest_path));
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({dest_path});
-    wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+    wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
 
     std::unique_ptr<fs::ReadableBlock> rblock;
@@ -87,7 +87,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
 
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({src_path});
-    wblock_opts.mode = Env::MUST_EXIST;
+    wblock_opts.mode = FileSystem::MUST_EXIST;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
     // set bytes_appended to src file size to ensure the correctness of new_segment_footer
     wblock->set_bytes_appended(trunc_len);

@@ -23,7 +23,7 @@
 
 #include <string>
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
@@ -44,7 +44,7 @@ public:
 protected:
     void SetUp() override {
         StoragePageCache::create_global_cache(&_tracker, 1000000000);
-        _env = std::make_shared<EnvMemory>();
+        _env = std::make_shared<MemoryFileSystem>();
         _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kTestDir).ok());
     }
@@ -79,7 +79,7 @@ protected:
         }
     }
 
-    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<MemoryFileSystem> _env = nullptr;
     std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     MemTracker _tracker;
     MemPool _pool;

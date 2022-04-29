@@ -19,33 +19,33 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "env/env_util.h"
+#include "fs/fs_util.h"
 
-#include "env/env.h"
+#include "fs/fs.h"
 
-namespace starrocks::env_util {
+namespace starrocks::fs_util {
 
-Status open_file_for_write(Env* env, const std::string& path, std::shared_ptr<WritableFile>* file) {
-    return open_file_for_write(WritableFileOptions(), env, path, file);
+Status open_file_for_write(FileSystem* fs, const std::string& path, std::shared_ptr<WritableFile>* file) {
+    return open_file_for_write(WritableFileOptions(), fs, path, file);
 }
 
-Status open_file_for_write(const WritableFileOptions& opts, Env* env, const std::string& path,
+Status open_file_for_write(const WritableFileOptions& opts, FileSystem* fs, const std::string& path,
                            std::shared_ptr<WritableFile>* file) {
-    ASSIGN_OR_RETURN(auto w, env->new_writable_file(opts, path));
+    ASSIGN_OR_RETURN(auto w, fs->new_writable_file(opts, path));
     file->reset(w.release());
     return Status::OK();
 }
 
-Status open_file_for_sequential(Env* env, const std::string& path, std::shared_ptr<SequentialFile>* file) {
-    ASSIGN_OR_RETURN(auto r, env->new_sequential_file(path));
+Status open_file_for_sequential(FileSystem* fs, const std::string& path, std::shared_ptr<SequentialFile>* file) {
+    ASSIGN_OR_RETURN(auto r, fs->new_sequential_file(path));
     file->reset(r.release());
     return Status::OK();
 }
 
-Status open_file_for_random(Env* env, const std::string& path, std::shared_ptr<RandomAccessFile>* file) {
-    ASSIGN_OR_RETURN(auto r, env->new_random_access_file(path));
+Status open_file_for_random(FileSystem* fs, const std::string& path, std::shared_ptr<RandomAccessFile>* file) {
+    ASSIGN_OR_RETURN(auto r, fs->new_random_access_file(path));
     file->reset(r.release());
     return Status::OK();
 }
 
-} // namespace starrocks::env_util
+} // namespace starrocks::fs_util

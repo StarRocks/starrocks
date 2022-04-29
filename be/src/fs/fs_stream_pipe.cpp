@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_stream_pipe.h"
+#include "fs/fs_stream_pipe.h"
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 

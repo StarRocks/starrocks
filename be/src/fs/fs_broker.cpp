@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/env_broker.h"
+#include "fs/fs_broker.h"
 
 #include <fmt/format.h>
 
@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
@@ -25,7 +25,7 @@ using BrokerServiceClient = TFileBrokerServiceClient;
 namespace {
 TFileBrokerServiceClient* g_broker_client = nullptr;
 }
-void EnvBroker::TEST_set_broker_client(TFileBrokerServiceClient* client) {
+void BrokerFileSystem::TEST_set_broker_client(TFileBrokerServiceClient* client) {
     g_broker_client = client;
 }
 const std::string& get_client_id(const TNetworkAddress& /*broker_addr*/) {
@@ -259,7 +259,7 @@ private:
     int _timeout_ms = DEFAULT_TIMEOUT_MS;
 };
 
-StatusOr<std::unique_ptr<SequentialFile>> EnvBroker::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const std::string& path) {
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -284,12 +284,12 @@ StatusOr<std::unique_ptr<SequentialFile>> EnvBroker::new_sequential_file(const s
     return std::make_unique<SequentialFile>(std::move(stream), path);
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(const std::string& path) {
     return new_random_access_file(RandomAccessFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                              const std::string& path) {
+StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(
+        const RandomAccessFileOptions& opts, const std::string& path) {
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -314,12 +314,12 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(co
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
-StatusOr<std::unique_ptr<WritableFile>> EnvBroker::new_writable_file(const std::string& path) {
+StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const std::string& path) {
     return new_writable_file(WritableFileOptions(), path);
 }
 
-StatusOr<std::unique_ptr<WritableFile>> EnvBroker::new_writable_file(const WritableFileOptions& opts,
-                                                                     const std::string& path) {
+StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const WritableFileOptions& opts,
+                                                                            const std::string& path) {
     if (opts.mode == CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
             return Status::NotSupported("Cannot truncate a file by broker");
@@ -362,20 +362,20 @@ StatusOr<std::unique_ptr<WritableFile>> EnvBroker::new_writable_file(const Writa
     return std::make_unique<BrokerWritableFile>(_broker_addr, path, response.fd, 0, _timeout_ms);
 }
 
-StatusOr<std::unique_ptr<RandomRWFile>> EnvBroker::new_random_rw_file(const std::string& path) {
-    return Status::NotSupported("EnvBroker::new_random_rw_file");
+StatusOr<std::unique_ptr<RandomRWFile>> BrokerFileSystem::new_random_rw_file(const std::string& path) {
+    return Status::NotSupported("BrokerFileSystem::new_random_rw_file");
 }
 
-StatusOr<std::unique_ptr<RandomRWFile>> EnvBroker::new_random_rw_file(const RandomRWFileOptions& opts,
-                                                                      const std::string& path) {
-    return Status::NotSupported("EnvBroker::new_random_rw_file");
+StatusOr<std::unique_ptr<RandomRWFile>> BrokerFileSystem::new_random_rw_file(const RandomRWFileOptions& opts,
+                                                                             const std::string& path) {
+    return Status::NotSupported("BrokerFileSystem::new_random_rw_file");
 }
 
-Status EnvBroker::path_exists(const std::string& path) {
+Status BrokerFileSystem::path_exists(const std::string& path) {
     return _path_exists(path);
 }
 
-Status EnvBroker::_path_exists(const std::string& path) {
+Status BrokerFileSystem::_path_exists(const std::string& path) {
     TBrokerCheckPathExistRequest request;
     TBrokerCheckPathExistResponse response;
     request.__set_properties(_properties);
@@ -388,11 +388,11 @@ Status EnvBroker::_path_exists(const std::string& path) {
     return response.isPathExist ? Status::OK() : Status::NotFound(path);
 }
 
-Status EnvBroker::get_children(const std::string& dir, std::vector<std::string>* file) {
-    return Status::NotSupported("EnvBroker::get_children");
+Status BrokerFileSystem::get_children(const std::string& dir, std::vector<std::string>* file) {
+    return Status::NotSupported("BrokerFileSystem::get_children");
 }
 
-Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+Status BrokerFileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::vector<std::string> files;
     RETURN_IF_ERROR(get_children(dir, &files));
     for (const auto& f : files) {
@@ -403,11 +403,11 @@ Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(s
     return Status::OK();
 }
 
-Status EnvBroker::delete_file(const std::string& path) {
+Status BrokerFileSystem::delete_file(const std::string& path) {
     return _delete_file(path);
 }
 
-Status EnvBroker::_delete_file(const std::string& path) {
+Status BrokerFileSystem::_delete_file(const std::string& path) {
     TBrokerDeletePathRequest request;
     TBrokerOperationStatus response;
     request.__set_version(TBrokerVersion::VERSION_ONE);
@@ -428,59 +428,59 @@ Status EnvBroker::_delete_file(const std::string& path) {
     return st;
 }
 
-Status EnvBroker::create_dir(const std::string& dirname) {
-    return Status::NotSupported("EnvBroker::create_dir");
+Status BrokerFileSystem::create_dir(const std::string& dirname) {
+    return Status::NotSupported("BrokerFileSystem::create_dir");
 }
 
-Status EnvBroker::create_dir_if_missing(const std::string& dirname, bool* created) {
-    return Status::NotSupported("EnvBroker::create_dir_if_missing");
+Status BrokerFileSystem::create_dir_if_missing(const std::string& dirname, bool* created) {
+    return Status::NotSupported("BrokerFileSystem::create_dir_if_missing");
 }
 
-Status EnvBroker::create_dir_recursive(const std::string& dirname) {
-    return Status::NotSupported("EnvBroker::create_dir_recursive");
+Status BrokerFileSystem::create_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("BrokerFileSystem::create_dir_recursive");
 }
 
-Status EnvBroker::delete_dir(const std::string& dirname) {
-    return Status::NotSupported("EnvBroker::delete_dir");
+Status BrokerFileSystem::delete_dir(const std::string& dirname) {
+    return Status::NotSupported("BrokerFileSystem::delete_dir");
 }
 
-Status EnvBroker::delete_dir_recursive(const std::string& dirname) {
-    return Status::NotSupported("EnvBroker::delete_dir_recursive");
+Status BrokerFileSystem::delete_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("BrokerFileSystem::delete_dir_recursive");
 }
 
-Status EnvBroker::sync_dir(const std::string& dirname) {
-    return Status::NotSupported("EnvBroker::sync_dir");
+Status BrokerFileSystem::sync_dir(const std::string& dirname) {
+    return Status::NotSupported("BrokerFileSystem::sync_dir");
 }
 
-StatusOr<bool> EnvBroker::is_directory(const std::string& path) {
+StatusOr<bool> BrokerFileSystem::is_directory(const std::string& path) {
     TBrokerFileStatus stat;
     RETURN_IF_ERROR(_list_file(path, &stat));
     return stat.isDir;
 }
 
-Status EnvBroker::canonicalize(const std::string& path, std::string* file) {
-    return Status::NotSupported("EnvBroker::canonicalize");
+Status BrokerFileSystem::canonicalize(const std::string& path, std::string* file) {
+    return Status::NotSupported("BrokerFileSystem::canonicalize");
 }
 
-StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
+StatusOr<uint64_t> BrokerFileSystem::get_file_size(const std::string& path) {
     TBrokerFileStatus stat;
     RETURN_IF_ERROR(_list_file(path, &stat));
     return stat.size;
 }
 
-StatusOr<uint64_t> EnvBroker::get_file_modified_time(const std::string& path) {
-    return Status::NotSupported("EnvBroker::get_file_modified_time");
+StatusOr<uint64_t> BrokerFileSystem::get_file_modified_time(const std::string& path) {
+    return Status::NotSupported("BrokerFileSystem::get_file_modified_time");
 }
 
-Status EnvBroker::rename_file(const std::string& src, const std::string& target) {
-    return Status::NotSupported("EnvBroker::rename_file");
+Status BrokerFileSystem::rename_file(const std::string& src, const std::string& target) {
+    return Status::NotSupported("BrokerFileSystem::rename_file");
 }
 
-Status EnvBroker::link_file(const std::string& old_path, const std::string& new_path) {
-    return Status::NotSupported("EnvBroker::link_file");
+Status BrokerFileSystem::link_file(const std::string& old_path, const std::string& new_path) {
+    return Status::NotSupported("BrokerFileSystem::link_file");
 }
 
-Status EnvBroker::_list_file(const std::string& path, TBrokerFileStatus* stat) {
+Status BrokerFileSystem::_list_file(const std::string& path, TBrokerFileStatus* stat) {
     TBrokerListPathRequest request;
     TBrokerListResponse response;
     request.__set_version(TBrokerVersion::VERSION_ONE);

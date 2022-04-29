@@ -92,7 +92,7 @@ Status BetaRowset::remove() {
     VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     auto merge_status = [&](const Status& st) {
         if (result.ok() && !st.ok() && !st.is_not_found()) result = st;
     };
@@ -100,20 +100,20 @@ Status BetaRowset::remove() {
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_srcrssid_file_path(_rowset_path, rowset_id(), i);
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }

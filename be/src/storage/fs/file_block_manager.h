@@ -34,7 +34,7 @@
 namespace starrocks {
 
 class BlockId;
-class Env;
+class FileSystem;
 class MemTracker;
 class RandomAccessFile;
 
@@ -65,7 +65,7 @@ struct BlockManagerMetrics;
 // The file-backed block manager.
 class FileBlockManager : public BlockManager {
 public:
-    explicit FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts);
+    explicit FileBlockManager(std::shared_ptr<FileSystem> fs, BlockManagerOptions opts);
     ~FileBlockManager() override;
 
     Status open() override;
@@ -96,10 +96,10 @@ private:
     // Synchronizes the metadata for a block with the given location.
     Status _sync_metadata(const std::string& path);
 
-    Env* env() const { return _env.get(); }
+    FileSystem* fs() const { return _fs.get(); }
 
     // For manipulating files.
-    std::shared_ptr<Env> _env;
+    std::shared_ptr<FileSystem> _fs;
 
     // The options that the FileBlockManager was created with.
     const BlockManagerOptions _opts;

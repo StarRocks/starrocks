@@ -21,11 +21,11 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/s3_uri_test.cpp
-        ./env/env_broker_test.cpp
-        ./env/env_posix_test.cpp
-        ./env/env_memory_test.cpp
-        ./env/env_s3_test.cpp
-        ./env/output_stream_wrapper_test.cpp
+        ./fs/fs_broker_test.cpp
+        ./fs/fs_posix_test.cpp
+        ./fs/fs_memory_test.cpp
+        ./fs/fs_s3_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp

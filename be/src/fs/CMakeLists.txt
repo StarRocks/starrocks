@@ -20,22 +20,22 @@
 # under the License.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/env")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/env")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 set(EXEC_FILES
-    env.cpp
-    env_posix.cpp
-    env_util.cpp
-    env_stream_pipe.cpp
-    env_broker.cpp
-    env_memory.cpp
-    env_s3.cpp
-    env_hdfs.cpp
+    fs.cpp
+    fs_posix.cpp
+    fs_util.cpp
+    fs_stream_pipe.cpp
+    fs_broker.cpp
+    fs_memory.cpp
+    fs_s3.cpp
+    fs_hdfs.cpp
     )
 
-add_library(Env STATIC
+add_library(FileSystem STATIC
     ${EXEC_FILES}
 )

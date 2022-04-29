@@ -28,7 +28,7 @@
 
 #include "column/datum_tuple.h"
 #include "common/logging.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -64,9 +64,9 @@ static vectorized::Datum DefaultIntGenerator(size_t rid, int cid, int block_id) 
 class SegmentReaderWriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
+        ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
@@ -120,7 +120,7 @@ protected:
 
     const std::string kSegmentDir = "/segment_test";
 
-    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
@@ -140,7 +140,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 
     // segment write
     std::string dname = "/segment_write_size";
-    ASSERT_OK(_env->create_dir(dname));
+    ASSERT_OK(_fs->create_dir(dname));
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = num_rows_per_block;
@@ -174,7 +174,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    file_size = _env->get_file_size(fname).value();
+    file_size = _fs->get_file_size(fname).value();
     LOG(INFO) << "segment file size=" << file_size;
 
     ASSERT_NE(segment_size, 0);

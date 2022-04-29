@@ -21,14 +21,14 @@
 
 #pragma once
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
-class Env;
+class FileSystem;
 class ExprContext;
 class FileBuilder;
 class RuntimeProfile;
@@ -90,8 +90,8 @@ private:
     const ResultFileOptions* _file_opts;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
-    Env* _env;
-    std::unique_ptr<Env> _owned_env;
+    FileSystem* _fs;
+    std::unique_ptr<FileSystem> _owned_fs;
     std::unique_ptr<FileBuilder> _file_builder;
 
     // the suffix idx of export file name, start at 0

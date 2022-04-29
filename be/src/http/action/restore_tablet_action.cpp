@@ -28,7 +28,7 @@
 #include <string>
 
 #include "boost/lexical_cast.hpp"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
@@ -191,7 +191,7 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
 
 Status RestoreTabletAction::_create_hard_link_recursive(const std::string& src, const std::string& dst) {
     std::vector<std::string> files;
-    RETURN_IF_ERROR(FileUtils::list_files(Env::Default(), src, &files));
+    RETURN_IF_ERROR(FileUtils::list_files(FileSystem::Default(), src, &files));
     for (auto& file : files) {
         std::string from = src + "/" + file;
         std::string to = dst + "/" + file;

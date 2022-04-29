@@ -30,7 +30,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
@@ -103,9 +103,9 @@ protected:
         int num_rows = src.size();
         ColumnMetaPB meta;
 
-        auto env = std::make_shared<EnvMemory>();
-        auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
-        ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
+        auto fs = std::make_shared<MemoryFileSystem>();
+        auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
+        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
                                                       version, adaptive, null_encoding, null_ratio);
@@ -337,9 +337,9 @@ protected:
     template <uint32_t version>
     void test_int_array(std::string null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
-        auto env = std::make_shared<EnvMemory>();
-        auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
-        ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
+        auto fs = std::make_shared<MemoryFileSystem>();
+        auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
+        ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         TabletColumn array_column = create_array(0, true, sizeof(Collection));
         TabletColumn int_column = create_int_value(0, OLAP_FIELD_AGGREGATION_NONE, true);
@@ -690,9 +690,9 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     }
 
     ColumnMetaPB meta;
-    auto env = std::make_shared<EnvMemory>();
-    auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
-    ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
+    auto fs = std::make_shared<MemoryFileSystem>();
+    auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
     auto segment = create_dummy_segment(block_mgr, fname);
 

@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/string_input_stream.h"
 #include "util/thrift_util.h"

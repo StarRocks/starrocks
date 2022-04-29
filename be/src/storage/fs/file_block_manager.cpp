@@ -30,8 +30,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "env/env.h"
-#include "env/env_util.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_id.h"
 #include "storage/storage_engine.h"
@@ -320,8 +319,8 @@ Status FileReadableBlock::read(uint64_t offset, Slice result) {
 // FileBlockManager
 ////////////////////////////////////////////////////////////
 
-FileBlockManager::FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts)
-        : _env(std::move(env)), _opts(std::move(opts)) {
+FileBlockManager::FileBlockManager(std::shared_ptr<FileSystem> fs, BlockManagerOptions opts)
+        : _fs(std::move(fs)), _opts(std::move(opts)) {
 #ifdef BE_TEST
     _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
                                                                 config::file_descriptor_cache_capacity);
@@ -344,8 +343,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     shared_ptr<WritableFile> writer;
     WritableFileOptions wr_opts;
     wr_opts.mode = opts.mode;
-    RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env.get(), opts.path, &writer));
-
+    ASSIGN_OR_RETURN(writer, _fs->new_writable_file(wr_opts, opts.path));
     VLOG(1) << "Creating new block at " << opts.path;
     *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
     return Status::OK();
@@ -356,7 +354,7 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
     std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle(new OpenedFileHandle<RandomAccessFile>());
     bool found = _file_cache->lookup(path, file_handle.get());
     if (!found) {
-        ASSIGN_OR_RETURN(auto file, _env->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
         _file_cache->insert(path, file.release(), file_handle.get());
     }
 
@@ -374,7 +372,7 @@ void FileBlockManager::erase_block_cache(const std::string& path) {
 Status FileBlockManager::_delete_block(const string& path) {
     CHECK(!_opts.read_only);
 
-    RETURN_IF_ERROR(_env->delete_file(path));
+    RETURN_IF_ERROR(_fs->delete_file(path));
 
     // We don't bother fsyncing the parent directory as there's nothing to be
     // gained by ensuring that the deletion is made durable. Even if we did
@@ -391,7 +389,7 @@ Status FileBlockManager::_delete_block(const string& path) {
 // TODO(lingbin): only one level is enough?
 Status FileBlockManager::_sync_metadata(const string& path) {
     string dir = path_util::dir_name(path);
-    RETURN_IF_ERROR(_env->sync_dir(dir));
+    RETURN_IF_ERROR(_fs->sync_dir(dir));
     return Status::OK();
 }
 
