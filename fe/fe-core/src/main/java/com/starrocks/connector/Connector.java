@@ -5,6 +5,7 @@ package com.starrocks.connector;
 public interface Connector {
     /**
      * Get the connector meta of connector
+     *
      * @return a ConnectorMetadata instance of connector
      */
     ConnectorMetadata getMetadata();
