@@ -20,8 +20,6 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
-#include "util/starrocks_metrics.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 namespace pipeline {
