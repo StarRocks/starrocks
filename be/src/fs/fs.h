@@ -20,14 +20,11 @@
 
 namespace starrocks {
 
-class NumericStatistics;
 class RandomAccessFile;
-class RandomRWFile;
 class WritableFile;
 class SequentialFile;
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
-struct RandomRWFileOptions;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -88,19 +85,6 @@ public:
     // specified.
     virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                                       const std::string& fname) = 0;
-
-    // TODO: remove this API.
-    // Creates a new readable and writable file. If a file with the same name
-    // already exists on disk, it is deleted.
-    //
-    // Some of the methods of the new file may be accessed concurrently,
-    // while others are only safe for access by one thread at a time.
-    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& fname) = 0;
-
-    // TODO: remove this API.
-    // Like the previous new_random_rw_file, but allows options to be specified.
-    virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
-                                                                       const std::string& fname) = 0;
 
     // Returns OK if the path exists.
     //         NotFound if the named file does not exist,
@@ -198,14 +182,6 @@ struct WritableFileOptions {
     FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
 };
 
-// Creation-time options for RWFile
-struct RandomRWFileOptions {
-    // Call Sync() during Close().
-    bool sync_on_close = false;
-    // See OpenMode for details.
-    FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-};
-
 // A `SequentialFile` is an `io::InputStream` with a name.
 class SequentialFile final : public io::InputStreamWrapper {
 public:
@@ -293,32 +269,6 @@ private:
     // No copying allowed
     WritableFile(const WritableFile&) = delete;
     void operator=(const WritableFile&) = delete;
-};
-
-// A file abstraction for random reading and writing.
-// TODO: remove this class
-class RandomRWFile {
-public:
-    enum FlushMode { FLUSH_SYNC, FLUSH_ASYNC };
-    RandomRWFile() = default;
-    virtual ~RandomRWFile() = default;
-
-    virtual Status read_at(uint64_t offset, const Slice& result) const = 0;
-
-    virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
-
-    virtual Status write_at(uint64_t offset, const Slice& data) = 0;
-
-    virtual Status writev_at(uint64_t offset, const Slice* data, size_t data_cnt) = 0;
-
-    virtual Status flush(FlushMode mode, uint64_t offset, size_t length) = 0;
-
-    virtual Status sync() = 0;
-
-    virtual Status close() = 0;
-
-    virtual StatusOr<uint64_t> get_size() const = 0;
-    virtual const std::string& filename() const = 0;
 };
 
 } // namespace starrocks

@@ -362,15 +362,6 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
     return std::make_unique<BrokerWritableFile>(_broker_addr, path, response.fd, 0, _timeout_ms);
 }
 
-StatusOr<std::unique_ptr<RandomRWFile>> BrokerFileSystem::new_random_rw_file(const std::string& path) {
-    return Status::NotSupported("BrokerFileSystem::new_random_rw_file");
-}
-
-StatusOr<std::unique_ptr<RandomRWFile>> BrokerFileSystem::new_random_rw_file(const RandomRWFileOptions& opts,
-                                                                             const std::string& path) {
-    return Status::NotSupported("BrokerFileSystem::new_random_rw_file");
-}
-
 Status BrokerFileSystem::path_exists(const std::string& path) {
     return _path_exists(path);
 }
