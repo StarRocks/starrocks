@@ -407,8 +407,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
+
     @Override
-    public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
+    public ParseNode visitCreateMaterializedViewStatement(StarRocksParser.CreateMaterializedViewStatementContext context) {
         if (!Config.enable_experimental_mv) {
             throw new ParsingException("The experimental mv is disabled");
         }
