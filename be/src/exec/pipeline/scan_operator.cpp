@@ -47,8 +47,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    DCHECK(_num_running_io_tasks == 0);
-
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
