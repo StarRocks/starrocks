@@ -133,6 +133,7 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./storage/decimal12_test.cpp
+        ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
