@@ -570,9 +570,9 @@ TEST_F(DecimalV2ValueTest, float_to_decimal) {
 TEST_F(DecimalV2ValueTest, parse_high_scale_decimal_string) {
     std::vector<std::tuple<std::string, std::string>> test_cases = {
             {"0.0000000000000000000000000", "0"},
-            {"1455434.99999999999999999999", "1455434.999999999"},
+            {"1455434.99999999999999999999", "1455435"},
             //{"1000.11233454589877", "1000.112334545"},
-            {"1000.11233454589877", "1000.112334545"},
+            {"1000.11233454589877", "1000.112334546"},
     };
     for (auto& tc : test_cases) {
         DecimalV2Value value;
