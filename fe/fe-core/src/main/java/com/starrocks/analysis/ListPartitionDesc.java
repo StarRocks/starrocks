@@ -172,10 +172,10 @@ public class ListPartitionDesc extends PartitionDesc {
 
     @Override
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) throws DdlException {
-        try{
+        try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
-            for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs){
+            for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
                 listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
                 listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
@@ -184,7 +184,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
             }
-            for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs){
+            for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
                 listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
                 listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
@@ -194,10 +194,9 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
             }
             return listPartitionInfo;
-        }catch (AnalysisException e){
+        } catch (AnalysisException e) {
             throw new DdlException(e.getMessage(), e);
         }
-
     }
 
     private List<Column> findPartitionColumns(List<Column> columns) {

@@ -261,7 +261,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 partitionInfo.add(0);
                 partitionInfo.add(partition.getState());
 
-                // partition key , range or value
+                // partition key , range or list value
                 partitionInfo.add(joiner.join(this.findPartitionColNames(tblPartitionInfo)));
                 partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partitionId));
 

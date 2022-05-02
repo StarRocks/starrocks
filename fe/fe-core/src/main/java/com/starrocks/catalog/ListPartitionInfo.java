@@ -189,8 +189,10 @@ public class ListPartitionInfo extends PartitionInfo {
             Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
-                sb.append("  PARTITION ").append(partitionName).append(" VALUES IN ");
-                sb.append(this.valuesToString(values));
+                sb.append("  PARTITION ")
+                        .append(partitionName)
+                        .append(" VALUES IN ")
+                        .append(this.valuesToString(values));
 
                 if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
                     sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
@@ -213,10 +215,10 @@ public class ListPartitionInfo extends PartitionInfo {
             Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
             Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
                 String partitionName = partition.getName();
-                sb.append("  PARTITION ").append(partitionName).append(" VALUES IN (");
-                String items = this.multiValuesToString(multiValues);
-                sb.append(items);
-                sb.append(")");
+                sb.append("  PARTITION ")
+                        .append(partitionName)
+                        .append(" VALUES IN ")
+                        .append(this.multiValuesToString(multiValues));
 
                 if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
                     sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
@@ -230,10 +232,10 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     private String multiValuesToString(List<List<LiteralExpr>> multiValues) {
-        return multiValues.stream()
+        return "(" + multiValues.stream()
                 .map(values -> "(" + values.stream().map(value -> "\'" + value.getStringValue() + "\'")
                         .collect(Collectors.joining(", ")) + ")")
-                .collect(Collectors.joining(", "));
+                .collect(Collectors.joining(", ")) + ")";
     }
 
     @Override

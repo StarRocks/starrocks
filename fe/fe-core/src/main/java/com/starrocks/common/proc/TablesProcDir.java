@@ -49,9 +49,13 @@ import java.util.stream.Collectors;
  */
 public class TablesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TableId").add("TableName").add("IndexNum").add("PartitionType").add("PartitionColumnName")
-            .add("PartitionNum").add("State").add("Type").add("LastConsistencyCheckTime").add("ReplicaCount")
+            .add("TableId").add("TableName").add("IndexNum").add("PartitionColumnName")
+            .add("PartitionNum").add("State").add("Type").add("LastConsistencyCheckTime")
+            .add("ReplicaCount").add("PartitionType")
             .build();
+    private static final int PARTITION_NUM_DEFAULT = 1;
+    private static final int PARTITION_REPLICA_COUNT_DEFAULT = 0;
+    private static final String NULL_STRING_DEFAULT = FeConstants.null_string;
 
     private Database db;
 
@@ -106,13 +110,13 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfo.add(table.getId());
                 tableInfo.add(table.getName());
                 tableInfo.add(this.findIndexNum(tableType, table));
-                tableInfo.add(this.findPartitionType(tableType, table));
                 tableInfo.add(this.findPartitionKey(tableType, table));
                 tableInfo.add(this.findPartitionNum(tableType, table));
                 tableInfo.add(this.findState(tableType, table));
                 tableInfo.add(tableType);
                 tableInfo.add(TimeUtils.longToTimeString(table.getLastCheckTime()));
                 tableInfo.add(this.findRelicaCount(tableType, table));
+                tableInfo.add(this.findPartitionType(tableType, table));
                 tableInfos.add(tableInfo);
             }
         } finally {
@@ -143,7 +147,7 @@ public class TablesProcDir implements ProcDirInterface {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getReplicaCount();
         }
-        return 0;
+        return PARTITION_REPLICA_COUNT_DEFAULT;
     }
 
     private String findState(TableType tableType, Table table) {
@@ -151,7 +155,7 @@ public class TablesProcDir implements ProcDirInterface {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getState().toString();
         }
-        return FeConstants.null_string;
+        return NULL_STRING_DEFAULT;
     }
 
     private int findPartitionNum(TableType tableType, Table table) {
@@ -163,7 +167,7 @@ public class TablesProcDir implements ProcDirInterface {
                 return olapTable.getPartitions().size();
             }
         }
-        return 1;
+        return PARTITION_NUM_DEFAULT;
     }
 
     private String findPartitionKey(TableType tableType, Table table) {
@@ -183,7 +187,7 @@ public class TablesProcDir implements ProcDirInterface {
                         .collect(Collectors.joining(", "));
             }
         }
-        return FeConstants.null_string;
+        return NULL_STRING_DEFAULT;
     }
 
     private String findPartitionType(TableType tableType, Table table) {
@@ -202,7 +206,7 @@ public class TablesProcDir implements ProcDirInterface {
             OlapTable olapTable = (OlapTable) table;
             return String.valueOf(olapTable.getIndexNameToId().size());
         }
-        return FeConstants.null_string;
+        return NULL_STRING_DEFAULT;
     }
 
 }
