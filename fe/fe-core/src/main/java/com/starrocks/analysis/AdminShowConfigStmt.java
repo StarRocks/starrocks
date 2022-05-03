@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // admin show frontend config;
 public class AdminShowConfigStmt extends ShowStmt {
@@ -77,5 +78,10 @@ public class AdminShowConfigStmt extends ShowStmt {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminShowConfigStatement(this, context);
     }
 }

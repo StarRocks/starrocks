@@ -264,4 +264,25 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
     }
+
+    @Test
+    public void testAdminShow() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze("default_cluster");
+
+        String adminShowConfigsql = "admin show frontend config like '%parallel%';";
+        StatementBase statementBase1 = UtFrameUtils.parseStmtWithNewParser(adminShowConfigsql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx()));
+    }
 }

@@ -41,6 +41,9 @@ statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
 
+    // Admin Show Statement
+    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
 
