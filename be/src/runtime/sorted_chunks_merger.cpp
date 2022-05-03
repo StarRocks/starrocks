@@ -290,7 +290,7 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
 }
 
 CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile)
-        : _state(state), _profile(profile) {}
+        : _state(state), _profile(profile), _sort_exprs(nullptr) {}
 
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                 const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
