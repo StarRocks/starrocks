@@ -171,15 +171,26 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     return Status::OK();
 }
 
+// this is a more efficient way to check if a weak_ptr has been initialized
+// ref: https://stackoverflow.com/a/45507610
+// after compiler optimization, it generates far fewer instructions than std::weak_ptr::expired() and std::weak_ptr::lock()
+// see: https://godbolt.org/z/16bWqqM5n
+inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
+    using wp = std::weak_ptr<QueryContext>;
+    return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
     bool offer_task_success = false;
-    // we should hold a weak ptr because query context may be released before running io task
-    std::weak_ptr<QueryContext> wp = state->exec_env()->query_context_mgr()->get(state->query_id());
+    // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
+    if (is_uninitialized(_query_ctx)) {
+        _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+    }
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp, this, state,
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
                                                                     chunk_source_index](int worker_id) {
             if (auto sp = wp.lock()) {
                 {
@@ -209,7 +220,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
             if (auto sp = wp.lock()) {
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
