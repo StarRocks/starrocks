@@ -101,7 +101,7 @@ void GlobalDriverExecutor::_worker_thread() {
                     LOG(WARNING) << "[Driver] Process exceed limit, query_id="
                                  << print_id(driver->query_ctx()->query_id())
                                  << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                    query_ctx->cancel(Status::Corruption("exceed limit, is big query"));
+                    query_ctx->cancel(Status::Cancelled("exceed big query limit"));
                 } else {
                     LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                                  << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
