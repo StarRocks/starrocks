@@ -612,7 +612,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
                 Type.BITMAP,
-                true, true, true));
+                true, false, true));
         // TODO(ml): supply function symbol
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_INTERSECT, Lists.newArrayList(Type.BITMAP),
                 Type.BITMAP, Type.BITMAP,

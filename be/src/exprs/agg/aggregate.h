@@ -102,7 +102,9 @@ public:
     // Rows are peers if they compare equal to each other using the specified ordering expression.
     virtual void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                            int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                           int64_t frame_end) const {}
+                                           int64_t frame_end) const {
+        assert(false);
+    }
 
     // For window functions
     // A peer group is all of the rows that are peers within the specified ordering.
