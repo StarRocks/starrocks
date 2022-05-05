@@ -89,12 +89,12 @@ StarRocks 可以通过滚动升级的方式，平滑进行升级。**升级顺�
 #### BE 升级
 
 ```shell
-cd be_work_dir 
+cd be_work_dir
+sh bin/stop_be.sh
 mv lib lib.bak 
 mv bin bin.bak
 cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
 cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
-sh bin.bak/stop_be.sh
 sh bin/start_be.sh --daemon
 ps aux | grep starrocks_be
 ```
@@ -102,12 +102,12 @@ ps aux | grep starrocks_be
 #### FE 升级
 
 ```shell
-cd fe_work_dir 
+cd fe_work_dir
+sh bin/stop_fe.sh
 mv lib lib.bak 
 mv bin bin.bak
 cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
 cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
-sh bin.bak/stop_fe.sh
 sh bin/start_fe.sh --daemon
 ps aux | grep StarRocksFE
 ```
