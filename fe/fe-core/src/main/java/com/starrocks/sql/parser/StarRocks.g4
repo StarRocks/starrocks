@@ -32,6 +32,9 @@ statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterialized
 
+    // Catalog Statement
+    | createExternalCatalogStatement                                                        #createCatalog
+
     // DML Statement
     | insertStatement                                                                       #insert
     | updateStatement                                                                       #update
@@ -49,7 +52,6 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
-    | CREATE EXTERNAL CATALOG identifierOrString properties                                 #createExternalCatalog
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -122,6 +124,13 @@ dropMaterializedViewStatement
 alterSystemStatement
     : ALTER SYSTEM alterClause
     ;
+
+// ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+createExternalCatalogStatement
+    :CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    ;
+
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 

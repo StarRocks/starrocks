@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Resource;
@@ -37,27 +38,4 @@ public class CreateCatalogStmt extends DdlStmt {
         return catalogType;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        // check name
-        FeNameFormat.checkResourceName(catalogName);
-
-        // check type in properties
-        if (properties == null || properties.isEmpty()) {
-            throw new AnalysisException("catalog properties can't be null");
-        }
-
-        String type = properties.get(TYPE);
-        if (type == null) {
-            throw new AnalysisException("catalog type can't be null");
-        }
-        catalogType = type;
-    }
 }

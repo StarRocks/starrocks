@@ -1049,8 +1049,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateExternalCatalog(StarRocksParser.CreateExternalCatalogContext context) {
-        String name = context.identifierOrString().getText();
+    public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
             List<Property> propertyList = visit(context.properties().property(), Property.class);
@@ -1058,7 +1058,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateCatalogStmt(name, properties);
+        return new CreateCatalogStmt(identifier.getValue(), properties);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
