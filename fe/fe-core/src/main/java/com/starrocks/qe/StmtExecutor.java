@@ -1039,176 +1039,204 @@ public class StmtExecutor {
                     "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
         }
 
-        TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
-        MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+        int retryTimes = 3;
         long transactionId = -1;
-        if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            transactionId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                                    externalTable.getSourceTableHost(),
-                                    externalTable.getSourceTablePort(),
-                                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                                            FrontendOptions.getLocalHostAddress()),
-                                    sourceType,
-                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-        } else {
-            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                    database.getId(),
-                    Lists.newArrayList(targetTable.getId()),
-                    label,
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                            FrontendOptions.getLocalHostAddress()),
-                    sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-
-            // add table indexes to transaction state
-            TransactionState txnState =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .getTransactionState(database.getId(), transactionId);
-            if (txnState == null) {
-                throw new DdlException("txn does not exist: " + transactionId);
-            }
-            if (targetTable instanceof OlapTable) {
-                txnState.addTableIndexes((OlapTable) targetTable);
-            }
-        }
-
-        // Every time set no send flag and clean all data in buffer
-        if (context.getMysqlChannel() != null) {
-            context.getMysqlChannel().reset();
-        }
-        long createTime = System.currentTimeMillis();
-
         long loadedRows = 0;
         int filteredRows = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
-        try {
-            if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
-                OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-                dataSink.init(context.getExecutionId(), transactionId, database.getId(),
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                dataSink.complete();
-            }
+        long createTime = System.currentTimeMillis();
+        for (int i = 0; i < retryTimes; i++) {
+            try {
+                if (i > 0) {
+                    if (!(stmt instanceof InsertStmt)) {
+                        break;
+                    }
 
-            coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
-                    execPlan.getDescTbl().toThrift());
-            coord.setQueryType(TQueryType.LOAD);
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
-            coord.exec();
+                    // sleep for retry
+                    Thread.sleep(10000L);
 
-            coord.join(context.getSessionVariable().getQueryTimeoutS());
-            if (!coord.isDone()) {
-                coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
-            }
-
-            if (!coord.getExecStatus().ok()) {
-                String errMsg = coord.getExecStatus().getErrorMsg();
-                LOG.warn("insert failed: {}", errMsg);
-                ErrorReport.reportDdlException(errMsg, ErrorCode.ERR_FAILED_WHEN_INSERT);
-            }
-
-            LOG.debug("delta files is {}", coord.getDeltaUrls());
-
-            if (coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL) != null) {
-                loadedRows = Long.parseLong(coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
-            }
-            if (coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL) != null) {
-                filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
-            }
-
-            // if in strict mode, insert will fail if there are filtered rows
-            if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
-                    context.getState().setError("Insert has filtered data in strict mode, tracking_url="
-                            + coord.getTrackingUrl());
-                    return;
+                    // reset execution id and label
+                    UUID uuid = UUID.randomUUID();
+                    context.setExecutionId(
+                            new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                    String stmtLabel = ((InsertStmt) stmt).getLabel();
+                    label = Strings.isNullOrEmpty(stmtLabel) ?
+                            "insert_" + DebugUtil.printId(context.getExecutionId())
+                            : stmtLabel;
                 }
-            }
-
-            if (loadedRows == 0 && filteredRows == 0) {
+                TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
+                MetricRepo.COUNTER_LOAD_ADD.increase(1L);
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    transactionId =
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                                    .beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                                            Lists.newArrayList(externalTable.getSourceTableId()), label,
+                                            externalTable.getSourceTableHost(),
+                                            externalTable.getSourceTablePort(),
+                                            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                                                    FrontendOptions.getLocalHostAddress()),
+                                            sourceType,
+                                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                } else {
+                    transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+                            database.getId(),
+                            Lists.newArrayList(targetTable.getId()),
+                            label,
+                            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                                    FrontendOptions.getLocalHostAddress()),
+                            sourceType,
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+
+                    // add table indexes to transaction state
+                    TransactionState txnState =
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                                    .getTransactionState(database.getId(), transactionId);
+                    if (txnState == null) {
+                        throw new DdlException("txn does not exist: " + transactionId);
+                    }
+                    if (targetTable instanceof OlapTable) {
+                        txnState.addTableIndexes((OlapTable) targetTable);
+                    }
+                }
+
+                // Every time set no send flag and clean all data in buffer
+                if (context.getMysqlChannel() != null) {
+                    context.getMysqlChannel().reset();
+                }
+
+                if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                    OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                    dataSink.init(context.getExecutionId(), transactionId, database.getId(),
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    dataSink.complete();
+                }
+
+                coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
+                        execPlan.getDescTbl().toThrift());
+                coord.setQueryType(TQueryType.LOAD);
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+                coord.exec();
+
+                coord.join(context.getSessionVariable().getQueryTimeoutS());
+                if (!coord.isDone()) {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                }
+
+                if (!coord.getExecStatus().ok()) {
+                    String errMsg = coord.getExecStatus().getErrorMsg();
+                    LOG.warn("insert failed: {}", errMsg);
+                    ErrorReport.reportDdlException(errMsg, ErrorCode.ERR_FAILED_WHEN_INSERT);
+                }
+
+                LOG.debug("delta files is {}", coord.getDeltaUrls());
+
+                if (coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL) != null) {
+                    loadedRows = Long.parseLong(coord.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
+                }
+                if (coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL) != null) {
+                    filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
+                }
+
+                // if in strict mode, insert will fail if there are filtered rows
+                if (context.getSessionVariable().getEnableInsertStrict()) {
+                    if (filteredRows > 0) {
+                        context.getState().setError("Insert has filtered data in strict mode, tracking_url="
+                                + coord.getTrackingUrl());
+                        return;
+                    }
+                }
+
+                if (loadedRows == 0 && filteredRows == 0) {
+                    if (targetTable instanceof ExternalOlapTable) {
+                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                                externalTable.getSourceTableDbId(), transactionId,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    } else {
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(),
+                                transactionId,
+                                TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
+                        );
+                    }
+                    context.getState().setOk();
+                    return;
+                }
+
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                            coord.getCommitInfos())) {
+                        txnStatus = TransactionStatus.VISIBLE;
+                        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                    }
+                    // TODO: wait remote txn finished
                 } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(),
+                    if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                            database,
                             transactionId,
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                    );
+                            TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                        txnStatus = TransactionStatus.VISIBLE;
+                        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                        // collect table-level metrics
+                        if (null != targetTable) {
+                            TableMetricsEntity entity =
+                                    TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
+                            entity.counterInsertLoadFinishedTotal.increase(1L);
+                            entity.counterInsertLoadRowsTotal.increase(loadedRows);
+                            entity.counterInsertLoadBytesTotal
+                                    .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                        }
+                    } else {
+                        txnStatus = TransactionStatus.COMMITTED;
+                    }
                 }
-                context.getState().setOk();
+            } catch (Throwable t) {
+                LOG.warn("handle dml stmt fail: {}, retried: {}", label, i, t);
+                if (transactionId != -1L) {
+                    // if any throwable being thrown during insert operation, first we should abort this txn
+                    try {
+                        if (targetTable instanceof ExternalOlapTable) {
+                            ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                                    externalTable.getSourceTableDbId(), transactionId,
+                                    externalTable.getSourceTableHost(),
+                                    externalTable.getSourceTablePort(),
+                                    t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                        } else {
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                    database.getId(), transactionId,
+                                    t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                        }
+                    } catch (Exception abortTxnException) {
+                        // just print a log if abort txn failed. This failure do not need to pass to user.
+                        // user only concern abort how txn failed.
+                        LOG.warn("errors when abort txn", abortTxnException);
+                    }
+                }
+
+                if ((stmt instanceof InsertStmt) && (i < retryTimes - 1)) {
+                    continue;
+                }
+
+                // if not using old load usage pattern, error will be returned directly to user
+                StringBuilder sb = new StringBuilder(t.getMessage());
+                if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
+                    sb.append(". url: ").append(coord.getTrackingUrl());
+                }
+                context.getState().setError(sb.toString());
                 return;
             }
 
-            if (targetTable instanceof ExternalOlapTable) {
-                ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
-                        externalTable.getSourceTableDbId(), transactionId,
-                        externalTable.getSourceTableHost(),
-                        externalTable.getSourceTablePort(),
-                        coord.getCommitInfos())) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                }
-                // TODO: wait remote txn finished
-            } else {
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                        database,
-                        transactionId,
-                        TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
-                    txnStatus = TransactionStatus.VISIBLE;
-                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                    // collect table-level metrics
-                    if (null != targetTable) {
-                        TableMetricsEntity entity =
-                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
-                        entity.counterInsertLoadFinishedTotal.increase(1L);
-                        entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                        entity.counterInsertLoadBytesTotal
-                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
-                    }
-                } else {
-                    txnStatus = TransactionStatus.COMMITTED;
-                }
-            }
-        } catch (Throwable t) {
-            // if any throwable being thrown during insert operation, first we should abort this txn
-            LOG.warn("handle insert stmt fail: {}", label, t);
-            try {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
-                } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
-                }
-            } catch (Exception abortTxnException) {
-                // just print a log if abort txn failed. This failure do not need to pass to user.
-                // user only concern abort how txn failed.
-                LOG.warn("errors when abort txn", abortTxnException);
-            }
-
-            // if not using old load usage pattern, error will be returned directly to user
-            StringBuilder sb = new StringBuilder(t.getMessage());
-            if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
-                sb.append(". url: ").append(coord.getTrackingUrl());
-            }
-            context.getState().setError(sb.toString());
-            return;
+            break;
         }
 
         String errMsg = "";
