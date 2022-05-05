@@ -335,7 +335,7 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
 
 ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_OBJECT> builder(size);
+    ColumnBuilder<TYPE_BIGINT> builder(size);
 
     const constexpr PrimitiveType TYPE = TYPE_INT;
     ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0].get());
