@@ -11,10 +11,11 @@
 
 namespace starrocks::vectorized {
 struct JavaUDAFState {
-    JavaUDAFState(jobject&& handle_) : handle(std::move(handle_)){};
+    JavaUDAFState(JavaGlobalRef&& handle) : _handle(std::move(handle)){};
     ~JavaUDAFState() = default;
+    jobject handle() const { return _handle.handle(); }
     // UDAF State
-    jobject handle;
+    JavaGlobalRef _handle;
 };
 // Column to DirectByteBuffer, which could avoid some memory copy,
 // directly access the C++ address space in Java
