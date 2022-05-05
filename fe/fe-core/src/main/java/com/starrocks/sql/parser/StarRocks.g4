@@ -128,7 +128,7 @@ alterSystemStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    :CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
     ;
 
 
