@@ -1887,7 +1887,6 @@ TEST_F(VecBitmapFunctionsTest, arrayToBitmapTest) {
         auto s = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
 
         s->append_datum(Datum(DatumArray{}));
-        s->append_datum(Datum(DatumArray{Datum((int32_t)0)});
 
         auto result = ArrayFunctions::array_contains(nullptr, {s});
 
