@@ -132,7 +132,7 @@ public class Analyzer {
 
         @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
-            AdminShowConfigStmtAnalyzer.analyze(adminShowConfigStmt, session);
+            AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
             return null;
         }
 

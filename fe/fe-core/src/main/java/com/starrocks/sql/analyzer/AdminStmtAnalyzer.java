@@ -2,7 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.cluster.ClusterNamespace;
@@ -13,11 +13,19 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class AdminStmtAnalyzer {
+    public static void analyze(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
+        new AdminStmtAnalyzerVisitor().visit(adminShowConfigStmt, session);
+    }
+
     public static void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
         new AdminStmtAnalyzerVisitor().visit(adminShowReplicaDistributionStmt, session);
     }
 
     static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        public void analyze(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
+            visit(adminShowConfigStmt, session);
+        }
+
         public void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
             visit(adminShowReplicaDistributionStmt, session);
         }
