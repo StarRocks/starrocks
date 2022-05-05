@@ -99,7 +99,8 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, ConnectContext session) {
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                               ConnectContext session) {
             // check auth
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");

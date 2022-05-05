@@ -1053,7 +1053,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
             return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null,
                     new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))));
-        }else {
+        } else {
             return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null));
         }
     }

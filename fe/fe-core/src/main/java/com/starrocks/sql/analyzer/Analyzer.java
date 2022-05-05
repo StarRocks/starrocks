@@ -81,7 +81,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, ConnectContext session) {
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                               ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
