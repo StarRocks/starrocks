@@ -309,6 +309,13 @@ public class BDBJEJournal implements Journal {
                 // Copy the missing log files from a member of the replication group who owns the files
                 LOG.warn("catch insufficient log exception. will recover and try again.", insufficientLogEx);
                 bdbEnvironment.refreshAndSetup(insufficientLogEx);
+            } catch (Throwable t) {
+                LOG.warn("catch exception, sleep and retry", t);
+                try {
+                    Thread.sleep(5000L);
+                } catch (InterruptedException ie) {
+
+                }
             }
         }
     }
