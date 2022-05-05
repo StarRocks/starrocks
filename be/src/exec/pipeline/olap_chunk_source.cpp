@@ -337,13 +337,13 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     return chunk;
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
 
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         ChunkUniquePtr chunk(
                 ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
@@ -359,7 +359,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
     return _status;
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
                                                                         size_t* num_read_chunks, int worker_id,
                                                                         workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
@@ -368,7 +368,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
 
     using namespace vectorized;
     int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent);
 
