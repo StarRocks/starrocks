@@ -253,6 +253,19 @@ public:
     // @todo: these functions belong to math function?
     // =====================================
 
+    DEFINE_VECTORIZED_FN(descrypt_date);
+    DEFINE_VECTORIZED_FN(descrypt_datetime);
+    DEFINE_VECTORIZED_FN(descrypt_boolean);
+    DEFINE_VECTORIZED_FN(descrypt_tinyint);
+    DEFINE_VECTORIZED_FN(descrypt_smallint);
+    DEFINE_VECTORIZED_FN(descrypt_int);
+    DEFINE_VECTORIZED_FN(descrypt_bigint);
+    DEFINE_VECTORIZED_FN(descrypt_largeint);
+    DEFINE_VECTORIZED_FN(descrypt_float);
+    DEFINE_VECTORIZED_FN(descrypt_double);
+    DEFINE_VECTORIZED_FN(descrypt_decimalv2);
+    DEFINE_VECTORIZED_FN(descrypt_varchar);
+
     // rand's auxiliary method
     static Status rand_prepare(starrocks_udf::FunctionContext* context,
                                starrocks_udf::FunctionContext::FunctionStateScope scope);

@@ -714,4 +714,26 @@ ColumnPtr MathFunctions::rand_seed(FunctionContext* context, const Columns& colu
     return rand(context, columns);
 }
 
+#define M(type) \
+    ColumnPtr MathFunctions::descrypt_##type(FunctionContext* context, const Columns& columns) { return columns[2]; }
+
+#define DESCRYPT_FOR_TYPES(FUNC) \
+    FUNC(date)                   \
+    FUNC(datetime)               \
+    FUNC(boolean)                \
+    FUNC(tinyint)                \
+    FUNC(smallint)               \
+    FUNC(int)                    \
+    FUNC(bigint)                 \
+    FUNC(largeint)               \
+    FUNC(float)                  \
+    FUNC(double)                 \
+    FUNC(decimalv2)              \
+    FUNC(varchar)
+
+DESCRYPT_FOR_TYPES(M)
+
+#undef DESCRYPT_FOR_TYPES
+#undef M
+
 } // namespace starrocks::vectorized

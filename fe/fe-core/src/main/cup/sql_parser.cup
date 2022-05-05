@@ -268,7 +268,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_TO, KW_TRANSACTION, KW_TRIGGERS, KW_TRIM, KW_TRUE, KW_TRUNCATE, KW_TYPE, KW_TYPES,
     KW_UNCOMMITTED, KW_UNBOUNDED, KW_UNION, KW_UNIQUE, KW_UNSIGNED, KW_USE, KW_USER, KW_USING, KW_UNINSTALL,
     KW_VALUE, KW_VALUES, KW_VARCHAR, KW_VARIABLES, KW_VERBOSE, KW_VIEW,
-    KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
+    KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_ENCRYPT, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
     KW_YEAR, KW_EVERY;
 
 terminal COMMA, DOT, DOTDOTDOT, AT, STAR, LPAREN, RPAREN, COLON, SEMICOLON, LBRACE, RBRACE, LBRACKET, RBRACKET, DIVIDE, MOD, ADD, SUBTRACT;
@@ -463,7 +463,7 @@ nonterminal ParseNode load_property;
 nonterminal List<ParseNode> opt_load_property_list;
 
 // Boolean
-nonterminal Boolean opt_negative, opt_is_allow_null, opt_is_key, opt_read_only;
+nonterminal Boolean opt_negative, opt_is_allow_null, opt_is_key, opt_read_only, need_encrypt;
 nonterminal String opt_from_rollup, opt_to_rollup, function_type;
 nonterminal ColumnPosition opt_col_pos;
 
@@ -2264,8 +2264,22 @@ opt_is_key ::=
 	:}
 	;
 
+need_encrypt ::=
+        {:
+                RESULT = false;
+        :}
+        | KW_ENCRYPT:encrypt
+        {:
+                RESULT = true;
+        :}
+        | KW_ENCRYPT:key LPAREN STRING_LITERAL:encrypt COMMA STRING_LITERAL:password RPAREN
+        {:
+                RESULT = true;
+        :}
+        ;
+
 column_definition ::=
-    ident:columnName type_def:typeDef opt_character_name:characterName opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
+    ident:columnName type_def:typeDef need_encrypt:encrypt opt_character_name:characterName opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
     {:
         ColumnDef columnDef = new ColumnDef(columnName, typeDef, characterName, isKey, aggType, isAllowNull, defaultValue, comment);
         RESULT = columnDef;

@@ -409,6 +409,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("sqlblacklist", new Integer(SqlParserSymbols.KW_SQLBLACKLIST));
         keywordMap.put("||", new Integer(SqlParserSymbols.KW_PIPE));
         keywordMap.put("every", new Integer(SqlParserSymbols.KW_EVERY));
+        keywordMap.put("encrypt", new Integer(SqlParserSymbols.KW_ENCRYPT));
    }
     
   // map from token id to token description

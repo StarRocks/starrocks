@@ -730,4 +730,17 @@ vectorized_functions = [
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
+
+    [150280, 'descrypt', 'DATE',      ['VARCHAR', 'VARCHAR', 'DATE',],       'MathFunctions::descrypt_date'],
+    [150281, 'descrypt', 'DATETIME',  ['VARCHAR', 'VARCHAR', 'DATETIME'],    'MathFunctions::descrypt_datetime'],
+    [150282, 'descrypt', 'BOOLEAN',   ['VARCHAR', 'VARCHAR', 'BOOLEAN'],     'MathFunctions::descrypt_boolean'],
+    [150283, 'descrypt', 'TINYINT',   ['VARCHAR', 'VARCHAR', 'TINYINT'],     'MathFunctions::descrypt_tinyint'],
+    [150284, 'descrypt', 'SMALLINT',  ['VARCHAR', 'VARCHAR', 'SMALLINT'],    'MathFunctions::descrypt_smallint'],
+    [150285, 'descrypt', 'INT',       ['VARCHAR', 'VARCHAR', 'INT'],         'MathFunctions::descrypt_int'],
+    [150286, 'descrypt', 'BIGINT',    ['VARCHAR', 'VARCHAR', 'BIGINT'],      'MathFunctions::descrypt_bigint'],
+    [150287, 'descrypt', 'LARGEINT',  ['VARCHAR', 'VARCHAR', 'LARGEINT'],    'MathFunctions::descrypt_largeint'],
+    [150288, 'descrypt', 'FLOAT',     ['VARCHAR', 'VARCHAR', 'FLOAT'],       'MathFunctions::descrypt_float'],
+    [150289, 'descrypt', 'DOUBLE',    ['VARCHAR', 'VARCHAR', 'DOUBLE'],      'MathFunctions::descrypt_double'],
+    [150290, 'descrypt', 'DECIMALV2', ['VARCHAR', 'VARCHAR', 'DECIMALV2'],   'MathFunctions::descrypt_decimalv2'],
+    [150291, 'descrypt', 'VARCHAR',   ['VARCHAR', 'VARCHAR', 'VARCHAR'],     'MathFunctions::descrypt_varchar'], 
 ]
