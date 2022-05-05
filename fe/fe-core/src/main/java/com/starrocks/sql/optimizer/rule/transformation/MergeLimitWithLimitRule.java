@@ -13,20 +13,50 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
+/*
+ * Merge multiple limit, can be support:
+ *
+ *      Limit (less rows limit)
+ *        |                       ===>  Limit(less rows limit)
+ *      Limit (more rows limit)
+ *
+ * can't merge like:
+ *
+ *      Limit (more rows limit)
+ *        |
+ *      Limit (less rows limit)
+ *
+ * */
 public class MergeLimitWithLimitRule extends TransformationRule {
     public MergeLimitWithLimitRule() {
         super(RuleType.TF_MERGE_LIMIT_WITH_LIMIT, Pattern.create(OperatorType.LOGICAL_LIMIT)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_LIMIT, OperatorType.PATTERN_LEAF)));
     }
 
-    // eg.
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        // Any limit operator can be merged with global limit, no scene where the child is local limit
+        LogicalLimitOperator childLimit = (LogicalLimitOperator) input.getInputs().get(0).getOp();
+        return childLimit.isGlobal();
+    }
+
+    // eg.1, child limit is smaller than parent, child must gather
     // before:
-    // Limit 1, 5 (hit line range: 1 ~ 6, output line range: 6 ~ 11)
-    //     |
-    // Limit 5, 2 (hit line range: 5 ~ 7, output line range: 5 ~ 7)
+    //   Limit 1, 5 (hit line range: [1, 6), output line range: [6, 7))
+    //      |
+    // Global-Limit 5, 2 (hit line range: [5, 7), output line range: [5, 7))
     //
     // after:
-    // Limit 6, 1 (hit line range: 6 ~ 7, output line range: 6 ~ 7)
+    // Init-Limit 6, 2 (hit line range: [6, 7), output line range: [6, 7))
+    //
+    // eg.2, child limit is larger than parent, child don't gather
+    // before:
+    //   Limit 1, 2 (hit line range: [1, 3), output line range: [6, 8))
+    //      |
+    // Global-Limit 5, 5 (hit line range: [5, 10), output line range: [5, 10))
+    //
+    // after:
+    // Local-Limit 6, 2 (hit line range: [6, 8), output line range: [6, 8))
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
@@ -52,7 +82,13 @@ public class MergeLimitWithLimitRule extends TransformationRule {
             offset = Operator.DEFAULT_OFFSET;
         }
 
-        return Lists.newArrayList(OptExpression.create(new LogicalLimitOperator(limit, offset),
-                input.getInputs().get(0).getInputs()));
+        Operator result;
+        if (l1.getLimit() <= l2.getLimit()) {
+            result = new LogicalLimitOperator(limit, offset, LogicalLimitOperator.Phase.LOCAL);
+        } else {
+            result = new LogicalLimitOperator(limit, offset, LogicalLimitOperator.Phase.INIT);
+        }
+
+        return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));
     }
 }

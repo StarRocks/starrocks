@@ -28,11 +28,8 @@ public class PushDownLimitDirectRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         OperatorType type = input.getInputs().get(0).getOp().getOpType();
-
-        // 1. Has offset can't push down
-        return !limit.hasOffset() && ALLOW_PUSH_DOWN_LIMIT_LIST.contains(type);
+        return ALLOW_PUSH_DOWN_LIMIT_LIST.contains(type);
     }
 
     @Override

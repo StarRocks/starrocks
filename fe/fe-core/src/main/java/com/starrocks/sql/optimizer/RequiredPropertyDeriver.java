@@ -14,7 +14,6 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -55,12 +54,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitOperator(Operator node, ExpressionContext context) {
         List<PhysicalPropertySet> requiredProps = new ArrayList<>();
         for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
-            // @todo: resolve required gather property by check child limit
-            if (!node.hasLimit() && context.getChildOperator(childIndex).hasLimit()) {
-                requiredProps.add(createLimitGatherProperty(context.getChildOperator(childIndex).getLimit()));
-            } else {
-                requiredProps.add(PhysicalPropertySet.EMPTY);
-            }
+            requiredProps.add(PhysicalPropertySet.EMPTY);
         }
         requiredProperties.add(requiredProps);
         return null;
@@ -149,13 +143,6 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             return null;
         }
 
-        LogicalOperator child = (LogicalOperator) context.getChildOperator(0);
-        // If child has limit, we need to gather data to one instance
-        if (child.hasLimit() && (node.getType().isGlobal() && !node.isSplit())) {
-            requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(child.getLimit())));
-            return null;
-        }
-
         if (!node.getType().isLocal()) {
             List<Integer> columns = node.getPartitionByColumns().stream().map(ColumnRefOperator::getId).collect(
                     Collectors.toList());
@@ -178,15 +165,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalTopN(PhysicalTopNOperator topN, ExpressionContext context) {
-        LogicalOperator child = (LogicalOperator) context.getChildOperator(0);
-        // If child has limit, we need to gather data to one instance
-        if (child.hasLimit() && (topN.getSortPhase().isFinal() && !topN.isSplit())) {
-            PhysicalPropertySet requiredProperty = createLimitGatherProperty(child.getLimit());
-            requiredProperties.add(Lists.newArrayList(requiredProperty));
-        } else {
-            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
-        }
-
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         return null;
     }
 
@@ -237,13 +216,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     private void processSetOperationChildProperty(ExpressionContext context) {
         List<PhysicalPropertySet> childProperty = new ArrayList<>();
         for (int i = 0; i < context.arity(); ++i) {
-            LogicalOperator child = (LogicalOperator) context.getChildOperator(i);
-            // If child has limit, we need to gather data to one instance
-            if (child.hasLimit()) {
-                childProperty.add(createLimitGatherProperty(child.getLimit()));
-            } else {
-                childProperty.add(PhysicalPropertySet.EMPTY);
-            }
+            childProperty.add(PhysicalPropertySet.EMPTY);
         }
 
         // Use Any to forbidden enforce some property, will add shuffle in FragmentBuilder

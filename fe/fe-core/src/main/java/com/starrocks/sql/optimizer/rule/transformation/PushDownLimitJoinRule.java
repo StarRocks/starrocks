@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -23,29 +24,32 @@ public class PushDownLimitJoinRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
-        LogicalJoinOperator join = (LogicalJoinOperator) input.getInputs().get(0).getOp();
-
-        // 1. Has offset can't push down
-        // 2. Has predicate can't push down
-        return !limit.hasOffset() && join.getPredicate() == null;
+        return limit.isLocal();
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
-        OptExpression child = input.inputAt(0);
-        LogicalJoinOperator join = (LogicalJoinOperator) child.getOp();
-        JoinOperator joinType = join.getJoinType();
+        Preconditions.checkState(!limit.hasOffset());
 
-        // set limit
-        join.setLimit(limit.getLimit());
+        OptExpression child = input.inputAt(0);
+        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder()
+                .withOperator((LogicalJoinOperator) child.getOp())
+                .setLimit(limit.getLimit()).build();
+
+        OptExpression result = OptExpression.create(newJoin, child.getInputs());
+        JoinOperator joinType = newJoin.getJoinType();
+
+        if (newJoin.getPredicate() != null) {
+            return Lists.newArrayList(result);
+        }
 
         if (joinType.isSemiAntiJoin()) {
-            return Lists.newArrayList(child);
-        } else if (joinType.isInnerJoin() && join.getOnPredicate() != null) {
-            return Lists.newArrayList(child);
-        } else if (joinType.isCrossJoin() && join.getOnPredicate() != null) {
-            return Lists.newArrayList(child);
+            return Lists.newArrayList(result);
+        } else if (joinType.isInnerJoin() && newJoin.getOnPredicate() != null) {
+            return Lists.newArrayList(result);
+        } else if (joinType.isCrossJoin() && newJoin.getOnPredicate() != null) {
+            return Lists.newArrayList(result);
         }
 
         // Cross-Join || Full-Outer-Join
@@ -60,10 +64,10 @@ public class PushDownLimitJoinRule extends TransformationRule {
 
         for (int index : pushDownChildIdx) {
             OptExpression nl = new OptExpression(new LogicalLimitOperator(limit.getLimit()));
-            nl.getInputs().add(child.inputAt(index));
-            child.getInputs().set(index, nl);
+            nl.getInputs().add(result.inputAt(index));
+            result.getInputs().set(index, nl);
         }
 
-        return Lists.newArrayList(child);
+        return Lists.newArrayList(result);
     }
 }
