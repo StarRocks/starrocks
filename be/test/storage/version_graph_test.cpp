@@ -202,4 +202,87 @@ TEST(VersionGraphTest, capture) {
     EXPECT_EQ(max_version, -1);
 }
 
+TEST(VersionGraphTest, multi_edge) {
+    VersionGraph graph;
+
+    std::vector<RowsetMetaSharedPtr> rs_meta;
+    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+    rs_meta.back()->set_start_version(0);
+    rs_meta.back()->set_end_version(5);
+
+    for (int i = 0; i < 10; i = i + 2) {
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+        rs_meta.back()->set_start_version(i);
+        rs_meta.back()->set_end_version(i + 1);
+    }
+
+    for (int i = 0; i < 10; i++) {
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+        rs_meta.back()->set_start_version(i);
+        rs_meta.back()->set_end_version(i);
+    }
+
+    int64_t max_version = -1;
+    graph.construct_version_graph(rs_meta, &max_version);
+
+    {
+        std::vector<Version> version_path;
+        EXPECT_EQ(graph.capture_consistent_versions(Version(0, 8), &version_path).ok(), true);
+        EXPECT_EQ(version_path.size(), 3);
+        EXPECT_EQ(version_path[0].first, 0);
+        EXPECT_EQ(version_path[0].second, 5);
+        EXPECT_EQ(version_path[1].first, 6);
+        EXPECT_EQ(version_path[1].second, 7);
+        EXPECT_EQ(version_path[2].first, 8);
+        EXPECT_EQ(version_path[2].second, 8);
+    }
+
+}
+
+TEST(VersionGraphTest, remove_version) {
+    VersionGraph graph;
+
+    std::vector<RowsetMetaSharedPtr> rs_meta;
+    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+    rs_meta.back()->set_start_version(0);
+    rs_meta.back()->set_end_version(5);
+
+    for (int i = 0; i < 10; i = i + 2) {
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+        rs_meta.back()->set_start_version(i);
+        rs_meta.back()->set_end_version(i + 1);
+    }
+
+    for (int i = 0; i < 10; i++) {
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+        rs_meta.back()->set_start_version(i);
+        rs_meta.back()->set_end_version(i);
+    }
+
+    int64_t max_version = -1;
+    graph.construct_version_graph(rs_meta, &max_version);
+
+    {
+        std::vector<Version> version_path;
+        EXPECT_EQ(graph.capture_consistent_versions(Version(0, 8), &version_path).ok(), true);
+        EXPECT_EQ(version_path.size(), 3);
+        EXPECT_EQ(version_path[0].first, 0);
+        EXPECT_EQ(version_path[0].second, 5);
+        EXPECT_EQ(version_path[1].first, 6);
+        EXPECT_EQ(version_path[1].second, 7);
+        EXPECT_EQ(version_path[2].first, 8);
+        EXPECT_EQ(version_path[2].second, 8);
+    }
+
+    EXPECT_EQ(graph.delete_version_from_graph(Version(0, 5)).ok(), true);
+    for (int i = 0; i < 10; i = i + 2) {
+        EXPECT_EQ(graph.delete_version_from_graph(Version(i, i + 1)).ok(), true);
+    }
+    for (int i = 0; i < 10; i++) {
+        EXPECT_EQ(graph.delete_version_from_graph(Version(i, i)).ok(), true);
+    }
+
+    EXPECT_EQ(graph._version_graph.size(), 0);
+}
+
 } // namespace starrocks::vectorized
