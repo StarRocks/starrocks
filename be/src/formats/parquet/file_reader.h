@@ -16,7 +16,7 @@ namespace starrocks {
 class RandomAccessFile;
 
 namespace vectorized {
-class HdfsFileReaderParam;
+class HdfsScannerContext;
 } // namespace vectorized
 
 } // namespace starrocks
@@ -30,7 +30,7 @@ public:
     FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
-    Status init(vectorized::HdfsFileReaderParam* param);
+    Status init(vectorized::HdfsScannerContext* scanner_ctx);
 
     Status get_next(vectorized::ChunkPtr* chunk);
 
@@ -112,7 +112,7 @@ private:
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    vectorized::HdfsFileReaderParam* _param;
+    vectorized::HdfsScannerContext* _scanner_ctx;
 };
 
 } // namespace starrocks::parquet

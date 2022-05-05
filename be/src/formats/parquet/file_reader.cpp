@@ -27,14 +27,14 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_siz
 
 FileReader::~FileReader() = default;
 
-Status FileReader::init(vectorized::HdfsFileReaderParam* param) {
-    _param = param;
+Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
+    _scanner_ctx = ctx;
     RETURN_IF_ERROR(_parse_footer());
 
     std::unordered_set<std::string> names;
     _file_metadata->schema().get_field_names(&names);
-    param->set_columns_from_file(names);
-    ASSIGN_OR_RETURN(_is_file_filtered, param->should_skip_by_evaluating_not_existed_slots());
+    _scanner_ctx->set_columns_from_file(names);
+    ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
         return Status::OK();
     }
@@ -56,7 +56,7 @@ Status FileReader::_parse_footer() {
 
     uint64_t to_read = std::min(_file_size, footer_buf_size);
     {
-        SCOPED_RAW_TIMER(&_param->stats->footer_read_ns);
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
     }
     // check magic
@@ -75,7 +75,7 @@ Status FileReader::_parse_footer() {
         }
         footer_buf = new uint8[to_read];
         {
-            SCOPED_RAW_TIMER(&_param->stats->footer_read_ns);
+            SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
         }
     }
@@ -112,9 +112,9 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
 }
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
-    if (!_param->min_max_conjunct_ctxs.empty()) {
-        auto min_chunk = vectorized::ChunkHelper::new_chunk(*_param->min_max_tuple_desc, 0);
-        auto max_chunk = vectorized::ChunkHelper::new_chunk(*_param->min_max_tuple_desc, 0);
+    if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
+        auto min_chunk = vectorized::ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
+        auto max_chunk = vectorized::ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
 
         bool exist = false;
         RETURN_IF_ERROR(_read_min_max_chunk(row_group, &min_chunk, &max_chunk, &exist));
@@ -122,7 +122,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             return false;
         }
 
-        for (auto& min_max_conjunct_ctx : _param->min_max_conjunct_ctxs) {
+        for (auto& min_max_conjunct_ctx : _scanner_ctx->min_max_conjunct_ctxs) {
             ASSIGN_OR_RETURN(auto min_column, min_max_conjunct_ctx->evaluate(min_chunk.get()));
             ASSIGN_OR_RETURN(auto max_column, min_max_conjunct_ctx->evaluate(max_chunk.get()));
 
@@ -140,9 +140,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
 
 Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vectorized::ChunkPtr* min_chunk,
                                        vectorized::ChunkPtr* max_chunk, bool* exist) const {
-    const vectorized::HdfsFileReaderParam& param = *_param;
-    for (size_t i = 0; i < param.min_max_tuple_desc->slots().size(); i++) {
-        const auto* slot = param.min_max_tuple_desc->slots()[i];
+    const vectorized::HdfsScannerContext& ctx = *_scanner_ctx;
+    for (size_t i = 0; i < ctx.min_max_tuple_desc->slots().size(); i++) {
+        const auto* slot = ctx.min_max_tuple_desc->slots()[i];
         const auto* column_meta = _get_column_meta(row_group, slot->col_name());
         if (column_meta == nullptr) {
             int col_idx = _get_partition_column_idx(slot->col_name());
@@ -152,8 +152,8 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
                 (*max_chunk)->columns()[i]->append_nulls(1);
             } else {
                 // is partition column
-                auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(
-                        param.partition_values[col_idx]);
+                auto* const_column =
+                        vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(ctx.partition_values[col_idx]);
 
                 (*min_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
                 (*max_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
@@ -171,7 +171,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
                 column_order = column_idx < column_orders.size() ? &column_orders[column_idx] : nullptr;
             }
 
-            Status status = _decode_min_max_column(*field, param.timezone, slot->type(), *column_meta, column_order,
+            Status status = _decode_min_max_column(*field, ctx.timezone, slot->type(), *column_meta, column_order,
                                                    &(*min_chunk)->columns()[i], &(*max_chunk)->columns()[i]);
             if (!status.ok()) {
                 *exist = false;
@@ -185,8 +185,8 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
 }
 
 int FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (size_t i = 0; i < _param->partition_columns.size(); i++) {
-        if (_param->partition_columns[i].col_name == col_name) {
+    for (size_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
+        if (_scanner_ctx->partition_columns[i].col_name == col_name) {
             return i;
         }
     }
@@ -325,7 +325,7 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 }
 
 void FileReader::_prepare_read_columns() {
-    const vectorized::HdfsFileReaderParam& param = *_param;
+    const vectorized::HdfsScannerContext& param = *_scanner_ctx;
     for (auto& materialized_column : param.materialized_columns) {
         int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name);
         if (field_index < 0) continue;
@@ -344,14 +344,14 @@ void FileReader::_prepare_read_columns() {
 
 Status FileReader::_create_and_init_group_reader(int row_group_number) {
     auto row_group_reader = _row_group(row_group_number);
-    const vectorized::HdfsFileReaderParam& fd_param = *_param;
+    const vectorized::HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
     GroupReaderParam param;
-    param.tuple_desc = fd_param.tuple_desc;
-    param.conjunct_ctxs_by_slot = fd_param.conjunct_ctxs_by_slot;
+    param.tuple_desc = fd_scanner_ctx.tuple_desc;
+    param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
     param.read_cols = _read_cols;
-    param.timezone = fd_param.timezone;
-    param.stats = fd_param.stats;
+    param.timezone = fd_scanner_ctx.timezone;
+    param.stats = fd_scanner_ctx.stats;
 
     RETURN_IF_ERROR(row_group_reader->init(param));
     _row_group_readers.emplace_back(row_group_reader);
@@ -361,7 +361,7 @@ Status FileReader::_create_and_init_group_reader(int row_group_number) {
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = _get_row_group_start_offset(row_group);
 
-    for (auto* scan_range : _param->scan_ranges) {
+    for (auto* scan_range : _scanner_ctx->scan_ranges) {
         size_t scan_start = scan_range->offset;
         size_t scan_end = scan_range->length + scan_start;
 
@@ -411,8 +411,8 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _param->append_not_exised_columns_to_chunk(chunk, row_count);
-                _param->append_partition_column_to_chunk(chunk, row_count);
+                _scanner_ctx->append_not_exised_columns_to_chunk(chunk, row_count);
+                _scanner_ctx->append_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -430,8 +430,8 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
 Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _param->append_not_exised_columns_to_chunk(chunk, read_size);
-        _param->append_partition_column_to_chunk(chunk, read_size);
+        _scanner_ctx->append_not_exised_columns_to_chunk(chunk, read_size);
+        _scanner_ctx->append_partition_column_to_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();
     }
