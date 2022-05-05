@@ -76,7 +76,7 @@ public class Analyzer {
 
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
-            AdminSetReplicaStatusStmtAnalyzer.analyze(statement, session);
+            AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -126,7 +126,7 @@ public class Analyzer {
 
         @Override
         public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
-            AdminSetStmtAnalyzer.analyze(adminSetConfigStmt, session);
+            AdminStmtAnalyzer.analyze(adminSetConfigStmt, session);
             return null;
         }
 
