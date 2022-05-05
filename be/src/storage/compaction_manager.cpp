@@ -17,6 +17,15 @@ CompactionManager::CompactionManager() : _next_task_id(0) {
     DCHECK(st.ok());
 }
 
+void CompactionManager::init() {
+    _max_task_num = static_cast<int32_t>(
+            StorageEngine::instance()->get_store_num() *
+            (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
+    if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
+        _max_task_num = config::max_compaction_concurrency;
+    }
+}
+
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
     bool should_notify = false;
     {

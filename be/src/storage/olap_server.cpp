@@ -117,6 +117,9 @@ Status StorageEngine::start_bg_threads() {
         LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
     } else {
         // new compaction framework
+
+        // compaction_manager must init before any comapction_scheduler starts
+        _compaction_manager->init();
         _compaction_scheduler = std::thread([] {
             CompactionScheduler compaction_scheduler;
             compaction_scheduler.schedule();
