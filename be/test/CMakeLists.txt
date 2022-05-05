@@ -116,6 +116,7 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./storage/decimal12_test.cpp
+        ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
