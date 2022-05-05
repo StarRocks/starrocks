@@ -39,28 +39,43 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     SchemaId id = schema_pb.id();
     DCHECK_NE(TabletSchema::invalid_id(), id);
     MapShard* shard = get_shard(id);
-    std::unique_lock l(shard->mtx);
-
-    auto it = shard->map.find(id);
-    if (it == shard->map.end()) {
-        auto ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
-        shard->map.emplace(id, ptr);
-        return std::make_pair(ptr, true);
-    } else {
-        std::shared_ptr<const TabletSchema> ptr = it->second.lock();
-        if (UNLIKELY(!ptr)) {
-            ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
-            it->second = std::weak_ptr<const TabletSchema>(ptr);
-            return std::make_pair(ptr, true);
+    // |result|: return value
+    // |ptr|: the shared_ptr whose id is equal to `id` in map
+    // |insert|: insert into map or not
+    // We use shared schema to save mem usage, but the premise is that we need to ensure that no two different
+    // TabletSchemaPBs have the same id. But we can't guarantee it after schema change so far, so we should
+    // check the consistent of tablet schema.
+    // If check failed, we will create a new tablet_schema as return value, but we must hold the original schema
+    // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
+    // a dead lock(#issue 5646)
+    TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr;
+    bool insert = false;
+    {
+        std::unique_lock l(shard->mtx);
+        auto it = shard->map.find(id);
+        if (it == shard->map.end()) {
+            result = TabletSchema::create(_mem_tracker, schema_pb, this);
+            shard->map.emplace(id, result);
+            insert = true;
         } else {
-            if (UNLIKELY(!check_schema_unique_id(schema_pb, ptr))) {
-                ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
-                it->second = std::weak_ptr<const TabletSchema>(ptr);
-                return std::make_pair(ptr, true);
+            ptr = it->second.lock();
+            if (UNLIKELY(!ptr)) {
+                result = TabletSchema::create(_mem_tracker, schema_pb, this);
+                it->second = std::weak_ptr<const TabletSchema>(result);
+                insert = true;
+            } else {
+                if (UNLIKELY(!check_schema_unique_id(schema_pb, ptr))) {
+                    result = TabletSchema::create(_mem_tracker, schema_pb, nullptr);
+                } else {
+                    result = ptr;
+                }
+                insert = false;
             }
-            return std::make_pair(ptr, false);
         }
     }
+
+    return std::make_pair(result, insert);
 }
 
 size_t TabletSchemaMap::erase(SchemaId id) {
