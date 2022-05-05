@@ -331,7 +331,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
     // If tablet is PrimaryKey tablet, we should dump snapshot meta file first and then link files
     // to snapshot directory
-    // The reason is ablet clone assumes rowset file is immutable, but during rowset apply for partial update,
+    // The reason is tablet clone assumes rowset file is immutable, but during rowset apply for partial update,
     // rowset file may be changed.
     // When doing partial update, if dump snapshot meta file first, there are four conditions as below
     //  1. rowset status is committed in meta, rowset file is partial rowset
@@ -341,7 +341,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
     //  4. rowset status is applied in meta, rowset file is full rowset
     // case1 and case4 is normal case, we don't need do additional process.
     // case2 is almost the same as case1. In normal case, partial rowset files will be delete after rowset apply. But
-    // we do a hard link of partial rowset files, so the partial rowset files will not be delete until snaoshot dir is
+    // we do a hard link of partial rowset files, so the partial rowset files will not be delete until snapshot dir is
     // deleted. So the src BE will download the partial rowset files.
     // case3 is a bit trick. If the rowset status is committed in meta but the rowset file is full rowset. The src be
     // will download the full rowset file and apply it again. But we handle this contingency in partial rowset apply,
