@@ -31,7 +31,7 @@ public:
                 size_t row_num) const override final {
         int num_args = ctx->get_num_args();
         jvalue args[num_args + 1];
-        args[0].l = this->data(state).handle;
+        args[0].l = this->data(state).handle();
         for (int i = 0; i < num_args; ++i) {
             auto& method_type = ctx->impl()->udaf_ctxs()->update->method_desc[i + 2];
             args[i + 1] = cast_to_jvalue<handle_null>(method_type.type, method_type.is_box, columns[i], row_num);
@@ -62,9 +62,9 @@ public:
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
-        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
         memcpy(udaf_ctx->buffer_data.data(), slice.get_data(), slice.get_size());
-        udaf_ctx->_func->merge(this->data(state).handle, udaf_ctx->buffer->handle());
+        udaf_ctx->_func->merge(this->data(state).handle(), udaf_ctx->buffer->handle());
     }
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
@@ -82,15 +82,15 @@ public:
 
         size_t old_size = column->get_bytes().size();
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
-        int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
+        int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle());
         if (udaf_ctx->buffer->capacity() < serialize_size) {
             udaf_ctx->buffer_data.resize(serialize_size);
             udaf_ctx->buffer =
                     std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
         }
-        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get());
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
 
-        udaf_ctx->_func->serialize(this->data(state).handle, udaf_ctx->buffer->handle());
+        udaf_ctx->_func->serialize(this->data(state).handle(), udaf_ctx->buffer->handle());
         size_t new_size = old_size + serialize_size;
         column->get_bytes().resize(new_size);
         column->get_offset().emplace_back(new_size);
@@ -100,7 +100,7 @@ public:
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override final {
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
-        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
+        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle());
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
         release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
     }
@@ -112,7 +112,7 @@ public:
         auto* udf_ctxs = ctx->impl()->udaf_ctxs();
         // 1 convert input as state
         // 1.1 create state list
-        auto rets = helper.batch_call(ctx, udf_ctxs->handle, udf_ctxs->create->method, chunk_size);
+        auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), chunk_size);
         // 1.2 convert input as input array
         int num_cols = ctx->get_num_args();
         std::vector<DirectByteBuffer> buffers;
@@ -125,11 +125,11 @@ public:
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols, chunk_size,
                                                       &args);
         // 2 batch call update
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
-                            args.data(), args.size());
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                            ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         // 3 get serialize size
         jintArray serialize_szs = (jintArray)helper.int_batch_call(
-                ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method, chunk_size);
+                ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), chunk_size);
         int length = env->GetArrayLength(serialize_szs);
         std::vector<int> slice_sz(length);
         helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
@@ -141,8 +141,8 @@ public:
         // chunk size
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), chunk_size);
         jobject state_and_buffer[2] = {rets, buffer_array};
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->serialize->method,
-                            state_and_buffer, 2);
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                            ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
         std::vector<Slice> slices(chunk_size);
         // 5 ready
         int offsets = 0;
@@ -173,7 +173,7 @@ public:
 
     // Call Destroy method
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        ctx->impl()->udaf_ctxs()->_func->destroy(data(ptr).handle);
+        ctx->impl()->udaf_ctxs()->_func->destroy(data(ptr)._handle);
         data(ptr).~State();
     }
 
@@ -192,8 +192,8 @@ public:
         auto arr = JavaDataTypeConverter::convert_to_object_array(states, state_offset, batch_size);
         args.emplace_back(arr);
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
-                            args.data(), args.size());
+        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                            ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         for (int i = 0; i < args.size(); ++i) {
             helper.getEnv()->DeleteLocalRef(args[i]);
         }
@@ -217,8 +217,9 @@ public:
         ConvertDirectBufferVistor vistor(buffers);
         int num_cols = ctx->get_num_args();
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
-        helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle, ctx->impl()->udaf_ctxs()->update->method,
-                                   this->data(state).handle, args.data(), num_cols);
+        helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                   ctx->impl()->udaf_ctxs()->update->method.handle(), this->data(state).handle(),
+                                   args.data(), num_cols);
         for (int i = 0; i < num_cols; ++i) {
             env->DeleteLocalRef(args[i]);
         }

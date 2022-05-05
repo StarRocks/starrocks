@@ -225,7 +225,7 @@ jobject JavaDataTypeConverter::convert_to_object_array(uint8_t** data, size_t of
     auto* env = helper.getEnv();
     jobjectArray arr = env->NewObjectArray(num_rows, helper.object_class(), nullptr);
     for (int i = 0; i < num_rows; ++i) {
-        env->SetObjectArrayElement(arr, i, reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle);
+        env->SetObjectArrayElement(arr, i, reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle());
     }
     return arr;
 }
