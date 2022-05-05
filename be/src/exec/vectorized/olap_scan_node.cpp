@@ -202,6 +202,10 @@ OlapScanNode::~OlapScanNode() {
         close(runtime_state());
     }
     DCHECK(is_closed());
+    if (!_opened_tablet_ids.empty()) {
+        VLOG(1) << "close rowsets for " << _opened_tablet_ids << " query:" << print_id(_runtime_state->query_id());
+        _opened_tablet_ids.clear();
+    }
 }
 
 void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
@@ -539,6 +543,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
 }
 
 Status OlapScanNode::_capture_tablet_rowsets() {
+    _opened_tablet_ids.clear();
     _tablet_rowsets.resize(_scan_ranges.size());
     for (int i = 0; i < _scan_ranges.size(); ++i) {
         const auto& scan_range = _scan_ranges[i];
@@ -564,8 +569,11 @@ Status OlapScanNode::_capture_tablet_rowsets() {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
         }
+        StringAppendF(&_opened_tablet_ids, "%ld,", tablet_id);
     }
-
+    if (!_opened_tablet_ids.empty()) {
+        VLOG(1) << "open rowsets for " << _opened_tablet_ids << " query:" << print_id(_runtime_state->query_id());
+    }
     return Status::OK();
 }
 

@@ -55,7 +55,8 @@ bool OlapScanOperator::is_finished() const {
     return ScanOperator::is_finished();
 }
 
-Status OlapScanOperator::do_prepare(RuntimeState*) {
+Status OlapScanOperator::do_prepare(RuntimeState* state) {
+    _queryid = state->query_id();
     RETURN_IF_ERROR(_capture_tablet_rowsets());
     return Status::OK();
 }
@@ -64,8 +65,16 @@ void OlapScanOperator::do_close(RuntimeState* state) {
     _ctx->unref(state);
 }
 
+OlapScanOperator::~OlapScanOperator() {
+    if (!_opened_tablet_ids.empty()) {
+        VLOG(1) << "close rowsets for " << _opened_tablet_ids << " query:" << print_id(_queryid);
+        _opened_tablet_ids.clear();
+    }
+}
+
 Status OlapScanOperator::_capture_tablet_rowsets() {
     const auto& morsels = this->morsel_queue()->morsels();
+    _opened_tablet_ids.clear();
     _tablet_rowsets.resize(morsels.size());
     for (int i = 0; i < morsels.size(); ++i) {
         ScanMorsel* scan_morsel = (ScanMorsel*)morsels[i].get();
@@ -92,8 +101,11 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
         }
+        StringAppendF(&_opened_tablet_ids, "%ld,", tablet_id);
     }
-
+    if (!_opened_tablet_ids.empty()) {
+        VLOG(1) << "open rowsets for " << _opened_tablet_ids << " query:" << print_id(_queryid);
+    }
     return Status::OK();
 }
 

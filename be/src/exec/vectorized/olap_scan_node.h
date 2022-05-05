@@ -155,6 +155,7 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    std::string _opened_tablet_ids;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

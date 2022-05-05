@@ -35,7 +35,7 @@ public:
     OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                      OlapScanContextPtr ctx);
 
-    ~OlapScanOperator() override = default;
+    ~OlapScanOperator() override;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -52,8 +52,9 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
     OlapScanContextPtr _ctx;
+    TUniqueId _queryid;
+    std::string _opened_tablet_ids;
 };
 
 } // namespace pipeline
