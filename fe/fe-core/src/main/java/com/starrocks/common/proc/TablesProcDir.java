@@ -115,7 +115,7 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfo.add(this.findState(tableType, table));
                 tableInfo.add(tableType);
                 tableInfo.add(TimeUtils.longToTimeString(table.getLastCheckTime()));
-                tableInfo.add(this.findRelicaCount(tableType, table));
+                tableInfo.add(this.findReplicaCount(tableType, table));
                 tableInfo.add(this.findPartitionType(tableType, table));
                 tableInfos.add(tableInfo);
             }
@@ -142,7 +142,7 @@ public class TablesProcDir implements ProcDirInterface {
         return result;
     }
 
-    private long findRelicaCount(TableType tableType, Table table) {
+    private long findReplicaCount(TableType tableType, Table table) {
         if (tableType == TableType.OLAP) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getReplicaCount();
