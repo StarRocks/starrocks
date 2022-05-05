@@ -384,9 +384,6 @@ public class DatabaseTransactionMgr {
             return;
         }
 
-        if (tabletCommitInfos == null || tabletCommitInfos.isEmpty()) {
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
@@ -463,10 +460,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-        if (tableToPartition.isEmpty()) {
-            // table or all partitions are being dropped
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-        }
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
