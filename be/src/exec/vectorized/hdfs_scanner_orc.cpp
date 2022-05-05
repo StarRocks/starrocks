@@ -147,8 +147,8 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
     }
 }
 
-OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
-                                       const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader)
+OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
+                                       OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
           _current_stripe_index(0),
