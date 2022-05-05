@@ -43,7 +43,6 @@
 #include "exec/vectorized/connector_scan_node.h"
 #include "exec/vectorized/cross_join_node.h"
 #include "exec/vectorized/dict_decode_node.h"
-#include "exec/vectorized/es_http_scan_node.h"
 #include "exec/vectorized/except_node.h"
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"

@@ -5,9 +5,9 @@
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
+#include "exec/es/es_scroll_parser.h"
 #include "exec/es/es_scroll_query.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/es_http_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 

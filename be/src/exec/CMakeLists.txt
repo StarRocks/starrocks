@@ -96,8 +96,6 @@ set(EXEC_FILES
     vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
-    vectorized/es_http_scan_node.cpp
-    vectorized/es_http_scanner.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
     vectorized/mysql_scan_node.cpp
