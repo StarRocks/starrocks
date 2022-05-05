@@ -36,9 +36,9 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     return status;
 }
 
-Status HdfsScanner::_build_file_read_param() {
-    HdfsFileReaderParam& param = _file_read_param;
-    std::vector<ColumnPtr>& partition_values = param.partition_values;
+Status HdfsScanner::_build_scanner_context() {
+    HdfsScannerContext& ctx = _scanner_ctx;
+    std::vector<ColumnPtr>& partition_values = ctx.partition_values;
 
     // evaluate partition values.
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -53,35 +53,35 @@ Status HdfsScanner::_build_file_read_param() {
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
 
-        HdfsFileReaderParam::ColumnInfo column;
+        HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
         column.col_idx = _scanner_params.materialize_index_in_chunk[i];
         column.col_type = slot->type();
         column.slot_id = slot->id();
         column.col_name = slot->col_name();
 
-        param.materialized_columns.emplace_back(std::move(column));
+        ctx.materialized_columns.emplace_back(std::move(column));
     }
 
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
         auto* slot = _scanner_params.partition_slots[i];
-        HdfsFileReaderParam::ColumnInfo column;
+        HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
         column.col_idx = _scanner_params.partition_index_in_chunk[i];
         column.col_type = slot->type();
         column.slot_id = slot->id();
         column.col_name = slot->col_name();
 
-        param.partition_columns.emplace_back(std::move(column));
+        ctx.partition_columns.emplace_back(std::move(column));
     }
 
-    param.tuple_desc = _scanner_params.tuple_desc;
-    param.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
-    param.scan_ranges = _scanner_params.scan_ranges;
-    param.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
-    param.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
-    param.timezone = _runtime_state->timezone();
-    param.stats = &_stats;
+    ctx.tuple_desc = _scanner_params.tuple_desc;
+    ctx.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
+    ctx.scan_ranges = _scanner_params.scan_ranges;
+    ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
+    ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    ctx.timezone = _runtime_state->timezone();
+    ctx.stats = &_stats;
 
     return Status::OK();
 }
@@ -110,7 +110,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     }
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
-    _build_file_read_param();
+    _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
         _is_open = true;
@@ -197,7 +197,7 @@ void HdfsScanner::update_counter() {
     do_update_counter(profile);
 }
 
-void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::string>& names) {
+void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::string>& names) {
     for (auto& column : materialized_columns) {
         if (names.find(column.col_name) == names.end()) {
             not_existed_slots.push_back(column.slot_desc);
@@ -212,7 +212,7 @@ void HdfsFileReaderParam::set_columns_from_file(const std::unordered_set<std::st
     }
 }
 
-void HdfsFileReaderParam::append_not_exised_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::append_not_exised_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -226,7 +226,7 @@ void HdfsFileReaderParam::append_not_exised_columns_to_chunk(vectorized::ChunkPt
     }
 }
 
-StatusOr<bool> HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
+StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
     // build chunk for evaluation.
@@ -240,7 +240,7 @@ StatusOr<bool> HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots(
     return !(chunk->has_rows());
 }
 
-void HdfsFileReaderParam::append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     if (partition_columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -265,7 +265,7 @@ void HdfsFileReaderParam::append_partition_column_to_chunk(vectorized::ChunkPtr*
     }
 }
 
-bool HdfsFileReaderParam::can_use_dict_filter_on_slot(SlotDescriptor* slot) const {
+bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const {
     if (!slot->type().is_string_type()) {
         return false;
     }
