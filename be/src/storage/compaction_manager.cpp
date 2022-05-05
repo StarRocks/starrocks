@@ -9,6 +9,12 @@
 namespace starrocks {
 
 CompactionManager::CompactionManager() : _next_task_id(0) {
+    _max_task_num = static_cast<int32_t>(
+            StorageEngine::instance()->get_store_num() *
+            (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
+    if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
+        _max_task_num = config::max_compaction_concurrency;
+    }
     auto st = ThreadPoolBuilder("up_candidates")
                       .set_min_threads(1)
                       .set_max_threads(5)
@@ -76,15 +82,10 @@ void CompactionManager::update_tablet(TabletSharedPtr tablet, bool need_update_c
 }
 
 bool CompactionManager::register_task(CompactionTask* compaction_task) {
-    if (!compaction_task) {
+    if (!compaction_task || check_if_exceed_max_task_num()) {
         return false;
     }
     std::lock_guard lg(_tasks_mutex);
-    if (config::max_compaction_task_num >= 0 && _running_tasks.size() >= config::max_compaction_task_num) {
-        LOG(WARNING) << "register compaction task failed for running tasks reach max limit:"
-                     << config::max_compaction_task_num;
-        return false;
-    }
     TabletSharedPtr& tablet = compaction_task->tablet();
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
