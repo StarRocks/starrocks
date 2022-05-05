@@ -145,6 +145,8 @@ Status StorageEngine::_open() {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
+    _compaction_manager->init();
+
     _effective_cluster_id = config::cluster_id;
     RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
 

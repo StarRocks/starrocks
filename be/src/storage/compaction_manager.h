@@ -27,6 +27,15 @@ public:
 
     ~CompactionManager() = default;
 
+    void init() {
+        _max_task_num = static_cast<int32_t>(
+                StorageEngine::instance()->get_store_num() *
+                (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
+        if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
+            _max_task_num = config::max_compaction_concurrency;
+        }
+    }
+
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
         return _compaction_candidates.size();

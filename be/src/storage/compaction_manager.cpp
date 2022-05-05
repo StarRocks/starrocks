@@ -9,12 +9,6 @@
 namespace starrocks {
 
 CompactionManager::CompactionManager() : _next_task_id(0) {
-    _max_task_num = static_cast<int32_t>(
-            StorageEngine::instance()->get_store_num() *
-            (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
-    if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
-        _max_task_num = config::max_compaction_concurrency;
-    }
     auto st = ThreadPoolBuilder("up_candidates")
                       .set_min_threads(1)
                       .set_max_threads(5)
