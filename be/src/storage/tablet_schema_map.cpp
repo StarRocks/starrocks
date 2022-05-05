@@ -46,7 +46,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     // TabletSchemaPBs have the same id. But we can't guarantee it after schema change so far, so we should
     // check the consistent of tablet schema.
     // If check failed, we will create a new tablet_schema as return value, but we must hold the original schema
-    // in map until the shard lock is release. If not, we may be deconstruct the original scheam which will cause
+    // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
     // a dead lock(#issue 5646)
     TabletSchemaPtr result = nullptr;
     TabletSchemaPtr ptr = nullptr;
