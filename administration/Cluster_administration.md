@@ -94,7 +94,7 @@ mv lib lib.bak
 mv bin bin.bak
 cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
 cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
-sh bin/stop_be.sh
+sh bin.bak/stop_be.sh
 sh bin/start_be.sh --daemon
 ps aux | grep starrocks_be
 ```
@@ -107,7 +107,7 @@ mv lib lib.bak
 mv bin bin.bak
 cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
 cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
-sh bin/stop_fe.sh
+sh bin.bak/stop_fe.sh
 sh bin/start_fe.sh --daemon
 ps aux | grep StarRocksFE
 ```

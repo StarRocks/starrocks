@@ -202,7 +202,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * load_mem_limit
 
-    用于指定导入操作的内存限制。默认为 0，即表示不使用该变量，而采用 exec_mem_limit 作为导入操作的内存限制。
+    用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 exec_mem_limit 作为导入操作的内存限制。
 
     这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 exec_mem_limit。否则，INSERT 的查询部分内存限制为 exec_mem_limit，而导入部分限制为 load_mem_limit。
 
