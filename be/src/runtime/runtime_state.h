@@ -119,7 +119,7 @@ public:
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
-    const bool& cancelled_ref() const { return _is_cancelled; }
+    const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
     void set_fragment_root_id(PlanNodeId id) {
         DCHECK(_root_node_id == -1) << "Should not set this twice.";
@@ -154,8 +154,8 @@ public:
     // _unreported_error_idx to _errors_log.size()
     void get_unreported_errors(std::vector<std::string>* new_errors);
 
-    bool is_cancelled() const { return _is_cancelled; }
-    void set_is_cancelled(bool v) { _is_cancelled = v; }
+    bool is_cancelled() const { return _is_cancelled.load(std::memory_order_acquire); }
+    void set_is_cancelled(bool v) { _is_cancelled.store(v, std::memory_order_release); }
 
     void set_be_number(int be_number) { _be_number = be_number; }
     int be_number() const { return _be_number; }
@@ -334,7 +334,7 @@ private:
     std::shared_ptr<ObjectPool> _obj_pool;
 
     // if true, execution should stop with a CANCELLED status
-    bool _is_cancelled;
+    std::atomic<bool> _is_cancelled{false};
 
     int _per_fragment_instance_idx;
     int _num_per_fragment_instances = 0;
