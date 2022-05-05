@@ -100,7 +100,7 @@ private:
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
-    OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsFileReaderParam& reader_params,
+    OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
                        OrcChunkReader* reader);
     bool filterOnOpeningStripe(uint64_t stripeIndex, const orc::proto::StripeInformation* stripeInformation) override;
     bool filterOnPickRowGroup(size_t rowGroupIdx, const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
@@ -116,7 +116,7 @@ public:
 
 private:
     const HdfsScannerParams& _scanner_params;
-    const HdfsFileReaderParam& _reader_params;
+    const HdfsScannerContext& _scanner_ctx;
     uint64_t _current_stripe_index;
     bool _init_use_dict_filter_slots;
     std::vector<pair<SlotDescriptor*, uint64_t>> _use_dict_filter_slots;
@@ -147,10 +147,10 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
     }
 }
 
-OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
-                                       const HdfsFileReaderParam& reader_params, OrcChunkReader* reader)
+OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
+                                       OrcChunkReader* reader)
         : _scanner_params(scanner_params),
-          _reader_params(reader_params),
+          _scanner_ctx(scanner_ctx),
           _current_stripe_index(0),
           _init_use_dict_filter_slots(false),
           _can_do_filter_on_orc_cvb(true),
@@ -206,9 +206,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         } else {
             // search partition columns.
             int part_idx = 0;
-            const int part_size = _reader_params.partition_columns.size();
+            const int part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_reader_params.partition_columns[part_idx].col_name == slot->col_name()) {
+                if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
                     break;
                 }
             }
@@ -218,7 +218,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(
-                        _reader_params.partition_values[part_idx]);
+                        _scanner_ctx.partition_values[part_idx]);
                 min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
                 max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
             }
@@ -227,7 +227,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
-    for (auto& min_max_conjunct_ctx : _reader_params.min_max_conjunct_ctxs) {
+    for (auto& min_max_conjunct_ctx : _scanner_ctx.min_max_conjunct_ctxs) {
         // TODO: add a warning log here
         auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
         auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
@@ -263,9 +263,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
-        for (auto& col : _reader_params.materialized_columns) {
+        for (auto& col : _scanner_ctx.materialized_columns) {
             SlotDescriptor* slot = col.slot_desc;
-            if (!_reader_params.can_use_dict_filter_on_slot(slot)) {
+            if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
             int32_t column_index = _reader->get_column_id_by_name(col.col_name);
@@ -359,7 +359,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        ExecNode::eval_conjuncts(_reader_params.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
+        ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
         if (dict_value_chunk->num_rows() == 0) {
             // release memory early.
             _dict_filter_eval_cache.clear();
@@ -389,8 +389,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
-    _file_read_param.set_columns_from_file(known_column_names);
-    ASSIGN_OR_RETURN(auto skip, _file_read_param.should_skip_by_evaluating_not_existed_slots());
+    _scanner_ctx.set_columns_from_file(known_column_names);
+    ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
         _should_skip_file = true;
@@ -420,13 +420,13 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state, _src_slot_descriptors);
-    _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_reader.get());
+    _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_params, _scanner_ctx, _orc_reader.get());
     _orc_reader->disable_broker_load_mode();
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
-    RETURN_IF_ERROR(_orc_reader->set_timezone(_file_read_param.timezone));
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
         for (const auto& it : _conjunct_ctxs_by_slot) {
@@ -488,15 +488,15 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
-            _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
             {
                 SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-                for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+                for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
                     // do evaluation.
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
