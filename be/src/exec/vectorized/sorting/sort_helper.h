@@ -77,7 +77,7 @@ static std::string dubug_column(const Column* column, const PermutationType& per
 
 // TODO: reduce duplicate code
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
+static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
                                                            NullPred null_pred, bool is_asc_order, bool is_null_first,
                                                            Permutation& permutation, Tie& tie,
@@ -87,7 +87,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (UNLIKELY(cancel)) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;
@@ -139,7 +139,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column,
+static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
                                                   const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
@@ -148,7 +148,7 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (UNLIKELY(cancel)) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;

@@ -47,15 +47,16 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    DCHECK(_num_running_io_tasks == 0);
-
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    for (auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr) {
-            chunk_source->close(state);
-            chunk_source = nullptr;
+    // for the running io task, we can't close its chunk sources.
+    // After ScanOperator::close, these chunk sources are no longer meaningful,
+    // just release resources by their default destructor
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
         }
     }
 
@@ -99,9 +100,7 @@ bool ScanOperator::has_output() const {
 
 bool ScanOperator::pending_finish() const {
     DCHECK(_is_finished);
-    // If there isn't next morsel, and any io task is active,
-    // we just wait for the io thread to end.
-    return _num_running_io_tasks > 0;
+    return false;
 }
 
 bool ScanOperator::is_finished() const {
@@ -172,30 +171,46 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     return Status::OK();
 }
 
+// this is a more efficient way to check if a weak_ptr has been initialized
+// ref: https://stackoverflow.com/a/45507610
+// after compiler optimization, it generates far fewer instructions than std::weak_ptr::expired() and std::weak_ptr::lock()
+// see: https://godbolt.org/z/16bWqqM5n
+inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
+    using wp = std::weak_ptr<QueryContext>;
+    return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
     bool offer_task_success = false;
+    // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
+    if (is_uninitialized(_query_ctx)) {
+        _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+    }
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [this, state, chunk_source_index](int worker_id) {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                size_t num_read_chunks = 0;
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, _is_finished, &num_read_chunks, worker_id, _workgroup);
-                // TODO (by laotan332): More detailed information is needed
-                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-                _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
+                                                                    chunk_source_index](int worker_id) {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    size_t num_read_chunks = 0;
+                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                            _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                    // TODO (by laotan332): More detailed information is needed
+                    _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+                    _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
-                // for big query check
-                COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
-                               _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-                _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                    // for big query check
+                    COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
+                                   _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                }
+
+                _num_running_io_tasks--;
+                _is_io_task_running[chunk_source_index] = false;
             }
-
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
         });
 
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
@@ -205,14 +220,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [this, state, chunk_source_index]() {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
-            }
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                }
 
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
+                _num_running_io_tasks--;
+                _is_io_task_running[chunk_source_index] = false;
+            }
         };
         // TODO(by satanson): set a proper priority
         task.priority = 20;

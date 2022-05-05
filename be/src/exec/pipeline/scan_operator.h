@@ -69,6 +69,8 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    // we should hold a weak ptr because query context may be released before running io task
+    std::weak_ptr<QueryContext> _query_ctx;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };
