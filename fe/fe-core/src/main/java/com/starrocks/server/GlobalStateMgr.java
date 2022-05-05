@@ -307,7 +307,6 @@ import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.mortbay.log.Log;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -5888,7 +5887,7 @@ public class GlobalStateMgr {
         // check Mv exists,name must be different from view/mv/table which exists in metadata
         String mvName = statement.getTableName().getTbl();
         String dbName = statement.getTableName().getDb();
-        Log.debug("begin create materialized view: {}", mvName);
+        LOG.debug("Begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);
         if (db == null) {
@@ -5899,20 +5898,15 @@ public class GlobalStateMgr {
         try {
             if (db.getTable(mvName) != null) {
                 if (statement.isIfNotExists()) {
-                    LOG.info("create materialized view [{}] which already exists", mvName);
+                    LOG.info("Create materialized view [{}] which already exists", mvName);
                     return;
                 } else {
-                    // todo create mv error code and use it.
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
                 }
             }
         } finally {
             db.readUnlock();
         }
-        // todo need mv entity, can't do now
-        // generate some partition desc partitionExpDesc -> rangePartitionDesc or other
-        // check properties, need table info which in meta
-        // convert query Statement to sql
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {

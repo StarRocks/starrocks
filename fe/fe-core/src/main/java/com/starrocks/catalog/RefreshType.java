@@ -12,6 +12,5 @@ public enum RefreshType {
     RefreshType(String typeString) {
         this.typeString = typeString;
     }
-
-
+    
 }

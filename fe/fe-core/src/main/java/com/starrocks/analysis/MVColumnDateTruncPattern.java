@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.PrimitiveType;
 
-public class MVColumnDateFormatPattern implements MVColumnPattern {
+public class MVColumnDateTruncPattern implements MVColumnPattern {
 
     @Override
     public boolean match(Expr expr) {
@@ -32,12 +32,13 @@ public class MVColumnDateFormatPattern implements MVColumnPattern {
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
         String fnNameString = fnExpr.getFnName().getFunction();
-        if (!fnNameString.equalsIgnoreCase("date_format")) {
+        if (!fnNameString.equalsIgnoreCase("date_trunc")) {
             return false;
         }
-        if (fnExpr.getChild(0) instanceof SlotRef && fnExpr.getChild(1) instanceof StringLiteral) {
-            SlotRef slotRef = (SlotRef) fnExpr.getChild(0);
+        if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
             PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
+            // must check slotRef type, because function analyze don't check it.
             if ((primitiveType == PrimitiveType.DATETIME || primitiveType == PrimitiveType.DATE)
                     && slotRef.getTblNameWithoutAnalyzed() != null) {
                 return true;
@@ -51,6 +52,6 @@ public class MVColumnDateFormatPattern implements MVColumnPattern {
 
     @Override
     public String toString() {
-        return "date_format(datetime|date,varchar)";
+        return "date_trunc(varchar,datetime|date)";
     }
 }

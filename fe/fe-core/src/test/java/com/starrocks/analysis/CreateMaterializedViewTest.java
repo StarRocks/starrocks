@@ -1,23 +1,4 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/analysis/CreateMaterializedViewStmtTest.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.analysis;
 
@@ -26,6 +7,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.utframe.StarRocksAssert;
@@ -152,16 +134,16 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testDisabled(){
+    public void testDisabled() {
         Config.enable_materialized_view = false;
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -172,15 +154,15 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testExists(){
+    public void testExists() {
         String sql = "create materialized view tbl1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
@@ -191,15 +173,15 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testIfNotExists(){
+    public void testIfNotExists() {
         String sql = "create materialized view if not exists tbl1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
@@ -209,17 +191,16 @@ public class CreateMaterializedViewTest {
         }
     }
 
-
     @Test
     public void testFullDescPartitionByFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -234,10 +215,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from test.tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from test.tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -254,10 +235,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from test.tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from test.tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -273,10 +254,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss, k2) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select date_trunc('month',tbl1.k1) ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -290,10 +271,10 @@ public class CreateMaterializedViewTest {
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1 s1, k2 s2 from tbl2 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1 s1, k2 s2 from tbl2;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -308,10 +289,10 @@ public class CreateMaterializedViewTest {
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1 s1, k2 s2 from tbl3 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1 s1, k2 s2 from tbl3;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -326,10 +307,10 @@ public class CreateMaterializedViewTest {
                 "partition by (s1) " +
                 "distributed by hash(s2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1 s1, k2 s2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -343,10 +324,10 @@ public class CreateMaterializedViewTest {
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -360,10 +341,10 @@ public class CreateMaterializedViewTest {
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select tbl1.k1, tbl1.k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1, tbl1.k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -377,10 +358,10 @@ public class CreateMaterializedViewTest {
                 "partition by (k1) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1, tbl1.k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1, tbl1.k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -393,10 +374,10 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view mv1 " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1, tbl1.k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1, tbl1.k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -411,10 +392,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(ss) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1 ss, *  from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select k1 ss, *  from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -428,10 +409,10 @@ public class CreateMaterializedViewTest {
                 "partition by (s8) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select sqrt(tbl1.k1) s1, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select sqrt(tbl1.k1) s1, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -445,14 +426,50 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1) ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select date_trunc(tbl1.k1) ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "No matching function with signature: date_format(date).");
+            assertEquals(e.getMessage(), "No matching function with signature: date_trunc(date).");
+        }
+    }
+
+    @Test
+    public void testPartitionByAllowedFunctionNoCorrParams() {
+        String sql = "create materialized view mv1 " +
+                "partition by (ss) " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('%y%m',k1) ss, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "date_trunc function can't support argument other than year|quarter|month|week|day");
+        }
+    }
+
+    @Test
+    public void testPartitionByAllowedFunctionNoCorrParams1() {
+        String sql = "create materialized view mv1 " +
+                "partition by (ss) " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('month',k2) ss, k2 from tbl2;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Materialized view partition function date_trunc must match pattern:date_trunc(varchar,datetime|date)");
         }
     }
 
@@ -462,10 +479,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select sqrt(tbl1.k1) ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select sqrt(tbl1.k1) ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -476,17 +493,17 @@ public class CreateMaterializedViewTest {
     @Test
     public void testPartitionByNoAlias() {
         String sql = "create materialized view mv1 " +
-                "partition by (date_format(k1,'%Y%m')) " +
+                "partition by (date_trunc('month',k1)) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select k1, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select k1, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Partition exp date_format(k1, '%Y%m') must be alias of select item");
+            assertEquals(e.getMessage(), "Partition exp date_trunc('month', k1) must be alias of select item");
         }
     }
 
@@ -495,10 +512,10 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select tbl1.k1 ss from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -512,10 +529,10 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select tbl1.k1 ss from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -531,10 +548,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async EVERY(INTERVAL 2 MINUTE)" +
-                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
@@ -556,10 +573,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -573,27 +590,31 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh manual " +
-                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) statementBase;
+            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            assertEquals(refreshSchemeDesc.getType(), RefreshType.MANUAL);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Unsupported refresh type: manual");
+            Assert.fail(e.getMessage());
         }
     }
 
     @Test
-    public void testRefreshStartBeforeCurr(){
+    public void testRefreshStartBeforeCurr() {
         String sql = "create materialized view mv1 " +
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR)" +
-                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -607,10 +628,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(t1.k1,'%Y%m') ss, t1.k2 from tbl1 t1 union select * from tbl2 t2 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select t1.k1 ss, t1.k2 from tbl1 t1 union select * from tbl2 t2;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -624,10 +645,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(t1.k1,'%Y%m') ss, t1.k2 from test2.tbl3 t1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select t1.k1 ss, t1.k2 from test2.tbl3 t1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -641,10 +662,10 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'%Y%m') ss, tbl1.k2 from mysql_external_table tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -659,15 +680,15 @@ public class CreateMaterializedViewTest {
                 "partition by (ss) " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'%Y%m'), k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
-                ");";
+                ")" +
+                "as select date_trunc('month',tbl1.k1), k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(),
-                    "Materialized view query statement select item date_format(`tbl1`.`k1`, '%Y%m') must has alias except base select item");
+                    "Materialized view query statement select item date_trunc('month', `tbl1`.`k1`) must has alias except base select item");
         }
     }
 

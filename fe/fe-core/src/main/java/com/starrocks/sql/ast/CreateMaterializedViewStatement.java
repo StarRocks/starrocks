@@ -5,11 +5,9 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import org.spark_project.guava.collect.Maps;
 
 import java.util.List;
 import java.util.Map;
@@ -29,28 +27,33 @@ import java.util.Map;
 public class CreateMaterializedViewStatement extends DdlStmt {
 
     private TableName tableName;
-
     private boolean ifNotExists;
-
     private String comment;
-
     private RefreshSchemeDesc refreshSchemeDesc;
-
     private PartitionExpDesc partitionExpDesc;
-
     private Map<String, String> properties;
-
     private QueryStatement queryStatement;
-
     private DistributionDesc distributionDesc;
-
     private KeysType myKeyType = KeysType.DUP_KEYS;
-
     protected String inlineViewDef;
-
+    // if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
+    private boolean isReplay = false;
+    // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
 
-    private Map<Column, Expr> columnExprMap = Maps.newHashMap();
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
+                                           RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
+                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           QueryStatement queryStatement) {
+        this.tableName = tableName;
+        this.ifNotExists = ifNotExists;
+        this.comment = comment;
+        this.refreshSchemeDesc = refreshSchemeDesc;
+        this.partitionExpDesc = partitionExpDesc;
+        this.distributionDesc = distributionDesc;
+        this.properties = properties;
+        this.queryStatement = queryStatement;
+    }
 
     public TableName getTableName() {
         return tableName;
@@ -124,37 +127,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.queryStatement = queryStatement;
     }
 
-    //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
-    private boolean isReplay = false;
-
     public List<Column> getMvColumnItems() {
         return mvColumnItems;
     }
 
     public void setMvColumnItems(List<Column> mvColumnItems) {
         this.mvColumnItems = mvColumnItems;
-    }
-
-    public void setColumnExprMap(Map<Column, Expr> columnExprMap) {
-        this.columnExprMap = columnExprMap;
-    }
-
-    public Map<Column, Expr> getColumnExprMap() {
-        return columnExprMap;
-    }
-
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
-                                           DistributionDesc distributionDesc, Map<String, String> properties,
-                                           QueryStatement queryStatement) {
-        this.tableName = tableName;
-        this.ifNotExists = ifNotExists;
-        this.comment = comment;
-        this.refreshSchemeDesc = refreshSchemeDesc;
-        this.partitionExpDesc = partitionExpDesc;
-        this.distributionDesc = distributionDesc;
-        this.properties = properties;
-        this.queryStatement = queryStatement;
     }
 
     @Override

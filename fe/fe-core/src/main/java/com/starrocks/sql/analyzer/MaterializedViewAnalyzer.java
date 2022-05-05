@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
@@ -7,34 +8,33 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.HashDistributionDesc;
-import com.starrocks.analysis.MVColumnDateFormatPattern;
+import com.starrocks.analysis.MVColumnDateTruncPattern;
 import com.starrocks.analysis.MVColumnPattern;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -48,7 +48,7 @@ public class MaterializedViewAnalyzer {
     static {
         FN_NAME_TO_PATTERN = Maps.newHashMap();
         // can add some other functions
-        FN_NAME_TO_PATTERN.put("date_format", new MVColumnDateFormatPattern());
+        FN_NAME_TO_PATTERN.put("date_trunc", new MVColumnDateTruncPattern());
     }
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -81,36 +81,38 @@ public class MaterializedViewAnalyzer {
             }
             // analyze query statement, can check table and column is exists in meta
             Analyzer.analyze(queryStatement, context);
-            // check table is in this database and is OlapTable
-            Map<String, TableRelation> tableRelationHashMap = new HashMap<>();
-            extractTableRelation(selectRelation.getRelation(), tableRelationHashMap);
-            tableRelationHashMap.forEach((tbl, tableRelation) -> {
-                if (!tableRelation.getName().getDb().equals(statement.getTableName().getDb())) {
+            // collect table from query statement
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            tableNameTableMap.forEach((tableName, table) -> {
+                if (!tableName.getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException("Materialized view do not support table which is in other database");
                 }
-                if (!(tableRelation.getTable() instanceof OlapTable)) {
+                if (!(table instanceof OlapTable)) {
                     throw new SemanticException("Materialized view only support olap tables");
                 }
             });
-            // set column
-            setColumn(statement, selectRelation);
-            // check partition SlotRef
-            checkExpInColumn(partitionExpDesc, statement);
-            // check partition Expr
+            Map<Column, Expr> columnExprMap = Maps.newHashMap();
+            // get outputExpressions and convert it to columns which in selectRelation
+            // write the columns into createMaterializedViewStatement
+            // record the relationship between columns and outputExpressions for next check
+            setColumn(statement, selectRelation, columnExprMap);
+            // check partition expressions all in column list which in createMaterializedViewStatement
+            // write the relationship between partition expressions and columns into partitionExpDesc
+            checkExpInColumn(partitionExpDesc, statement, columnExprMap);
+            // check if partition expression functions is in allow list if it exists
             checkPartitionExpParams(partitionExpDesc);
-            //check partition key must be base table partition key
-            checkPartitionKey(partitionExpDesc, tableRelationHashMap);
-            // check distribution
+            // check partition key must be base table partition key
+            checkPartitionKeyWithBaseTable(partitionExpDesc, tableNameTableMap);
+            // check and analyze distribution
             checkDistribution(statement);
-            //set view def
-            String viewSql = ViewDefBuilder.build(queryStatement);
-            statement.setInlineViewDef(viewSql);
+            // convert queryStatement to sql and set
+            statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             return null;
         }
 
-        private void setColumn(CreateMaterializedViewStatement statement, QueryRelation queryRelation) {
+        private void setColumn(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
+                               Map<Column, Expr> columnExprMap) {
             List<Column> mvColumns = Lists.newArrayList();
-            Map<Column, Expr> columnExprMap = Maps.newHashMap();
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
@@ -119,12 +121,11 @@ public class MaterializedViewAnalyzer {
                 columnExprMap.put(column, outputExpression.get(i));
             }
             statement.setMvColumnItems(mvColumns);
-            statement.setColumnExprMap(columnExprMap);
         }
 
-        private void checkExpInColumn(PartitionExpDesc partitionExpDesc, CreateMaterializedViewStatement statement) {
+        private void checkExpInColumn(PartitionExpDesc partitionExpDesc, CreateMaterializedViewStatement statement,
+                                      Map<Column, Expr> columnExprMap) {
             List<Column> mvColumnItems = statement.getMvColumnItems();
-            Map<Column, Expr> columnExprMap = statement.getColumnExprMap();
             for (Column mvColumnItem : mvColumnItems) {
                 List<SlotRef> slotRefs = partitionExpDesc.getSlotRefs();
                 for (SlotRef slotRef : slotRefs) {
@@ -158,19 +159,20 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionKey(PartitionExpDesc partitionExpDesc,
-                                       Map<String, TableRelation> tableRelationHashMap) {
+        private void checkPartitionKeyWithBaseTable(PartitionExpDesc partitionExpDesc,
+                                                    Map<TableName, Table> tableNameTableMap) {
             SlotRef slotRef = null;
             List<Expr> exprs = partitionExpDesc.getExprs();
             for (Expr expr : exprs) {
                 if (expr instanceof FunctionCallExpr) {
-                    slotRef = (SlotRef) expr.getChild(0);
+                    // get column from expression
+                    slotRef = getColumnFromFunctionCallExpr(((FunctionCallExpr) expr));
                 } else {
                     slotRef = ((SlotRef) expr);
                 }
-                //must have table relation
-                TableRelation tableRelation = tableRelationHashMap.get(slotRef.getTblNameWithoutAnalyzed().getTbl());
-                PartitionInfo partitionInfo = ((OlapTable) tableRelation.getTable()).getPartitionInfo();
+                // must have table
+                Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
+                PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
                 if (partitionInfo instanceof SinglePartitionInfo) {
                     if (partitionExpDesc.getExprs().size() > 0) {
                         throw new SemanticException("Materialized view partition key in partition exp " +
@@ -188,6 +190,14 @@ public class MaterializedViewAnalyzer {
                     }
                 }
             }
+        }
+
+        private SlotRef getColumnFromFunctionCallExpr(FunctionCallExpr expr) {
+            FunctionName fnName = expr.getFnName();
+            if (fnName.getFunction().equals("date_trunc")) {
+                return (SlotRef) expr.getChild(1);
+            }
+            return (SlotRef) expr.getChild(0);
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {
@@ -213,15 +223,6 @@ public class MaterializedViewAnalyzer {
             } catch (AnalysisException e) {
                 LOG.error("distributionDesc " + distributionDesc + "analyze failed", e);
                 throw new SemanticException(e.getMessage());
-            }
-        }
-
-        private void extractTableRelation(Relation relation, Map<String, TableRelation> tableRelationHashMap) {
-            if (relation instanceof TableRelation) {
-                tableRelationHashMap.put(((TableRelation) relation).getName().getTbl(), (TableRelation) relation);
-            } else if (relation instanceof JoinRelation) {
-                extractTableRelation(((JoinRelation) relation).getLeft(), tableRelationHashMap);
-                extractTableRelation(((JoinRelation) relation).getRight(), tableRelationHashMap);
             }
         }
 

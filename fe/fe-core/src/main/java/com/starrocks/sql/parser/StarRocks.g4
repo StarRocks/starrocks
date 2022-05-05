@@ -155,8 +155,8 @@ createMaterializedViewStatement
     (PARTITION BY '(' primaryExpression (',' primaryExpression)* ')')?
     distributionDesc?
     refreshSchemeDesc
-    AS queryStatement
     properties?
+    AS queryStatement
     ;
 
 showMaterializedViewStatement
