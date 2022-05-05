@@ -194,18 +194,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
-                "  2:EXCHANGE\n" +
-                "     limit: 5\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
+                "  2:Project\n" +
                 "  |  <slot 1> : 1: t1a\n" +
                 "  |  <slot 2> : 2: t1b\n" +
                 "  |  <slot 11> : NULL\n" +
@@ -218,6 +207,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  <slot 18> : NULL\n" +
                 "  |  limit: 5\n" +
                 "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 5\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: test_all_type\n" +
                 "     PREAGGREGATION: ON\n" +

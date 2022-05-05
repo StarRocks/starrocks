@@ -570,7 +570,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, Column> scanColumnMap = com.google.common.collect.Maps.newHashMap();
         scanColumnMap.put(column1, new Column("column1", Type.DATE, false));
 
-        OptExpression expression = OptExpression.create(new LogicalLimitOperator(1, 1),
+        OptExpression expression = OptExpression.create(LogicalLimitOperator.init(1, 1),
                 OptExpression.create(new LogicalOlapScanOperator(
                         olapTable1,
 

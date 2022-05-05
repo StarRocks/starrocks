@@ -63,7 +63,7 @@ public class PushDownLimitJoinRule extends TransformationRule {
         }
 
         for (int index : pushDownChildIdx) {
-            OptExpression nl = new OptExpression(new LogicalLimitOperator(limit.getLimit()));
+            OptExpression nl = new OptExpression(LogicalLimitOperator.local(limit.getLimit()));
             nl.getInputs().add(result.inputAt(index));
             result.getInputs().set(index, nl);
         }

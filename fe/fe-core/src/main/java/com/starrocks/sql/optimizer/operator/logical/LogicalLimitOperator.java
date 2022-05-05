@@ -36,11 +36,23 @@ public class LogicalLimitOperator extends LogicalOperator {
         this.phase = Phase.INIT;
     }
 
-    public LogicalLimitOperator(long limit, long offset, Phase phase) {
+    private LogicalLimitOperator(long limit, long offset, Phase phase) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
         this.offset = offset;
         this.phase = phase;
+    }
+
+    public static LogicalLimitOperator init(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.INIT);
+    }
+
+    public static LogicalLimitOperator global(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.GLOBAL);
+    }
+
+    public static LogicalLimitOperator local(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.LOCAL);
     }
 
     private LogicalLimitOperator(Builder builder) {

@@ -284,7 +284,7 @@ class QueryTransformer {
         if (limit == null) {
             return subOpt;
         }
-        LogicalLimitOperator limitOperator = new LogicalLimitOperator(limit.getLimit(), limit.getOffset());
+        LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
         return subOpt.withNewRoot(limitOperator);
     }
 

@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -45,6 +46,7 @@ public class MergeLimitDirectRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        Preconditions.checkState(!limit.hasOffset());
         LogicalOperator op = (LogicalOperator) input.getInputs().get(0).getOp();
         op.setLimit(limit.getLimit());
 

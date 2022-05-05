@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -35,11 +36,10 @@ public class SplitLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        Preconditions.checkState(!limit.hasOffset());
 
-        LogicalLimitOperator global =
-                new LogicalLimitOperator(limit.getLimit(), limit.getOffset(), LogicalLimitOperator.Phase.GLOBAL);
-        LogicalLimitOperator local =
-                new LogicalLimitOperator(limit.getLimit(), limit.getOffset(), LogicalLimitOperator.Phase.LOCAL);
+        LogicalLimitOperator global = LogicalLimitOperator.global(limit.getLimit());
+        LogicalLimitOperator local = LogicalLimitOperator.local(limit.getLimit());
 
         return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, input.getInputs())));
     }
