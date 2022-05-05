@@ -49,6 +49,7 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
+    | CREATE EXTERNAL CATALOG identifierOrString properties                                 #createExternalCatalog
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
