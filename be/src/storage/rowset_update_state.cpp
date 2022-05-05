@@ -115,10 +115,10 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         }
         dest = std::move(col);
     }
-    for (const auto& upsert : upserts()) {
+    for (const auto& upsert : _upserts) {
         _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
     }
-    for (const auto& one_delete : deletes()) {
+    for (const auto& one_delete : _deletes) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
