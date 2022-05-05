@@ -64,7 +64,6 @@ private:
     constexpr static int kShardSize = 16;
 
     bool check_schema_unique_id(const TabletSchemaPB& schema_pb, const std::shared_ptr<const TabletSchema>& schema_ptr);
-
     struct MapShard {
         mutable std::mutex mtx;
         phmap::flat_hash_map<SchemaId, std::weak_ptr<const TabletSchema>> map;
