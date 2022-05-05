@@ -19,4 +19,10 @@ public class AdminShowTest {
         analyzeSuccess("admin show frontend config;");
         analyzeSuccess("admin show frontend config like '%parallel%';");
     }
+
+    @Test
+    public void TestAdminShowReplicaDistribution() {
+        analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;");
+        analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);");
+    }
 }

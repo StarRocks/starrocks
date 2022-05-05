@@ -11,6 +11,7 @@ import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -88,6 +89,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
@@ -1041,6 +1043,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue());
         }
         return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaDistribution(StarRocksParser.AdminShowReplicaDistributionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        if (context.PARTITION() != null) {
+            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null,
+                    new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))));
+        }else {
+            return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null));
+        }
     }
 
     @Override

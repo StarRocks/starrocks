@@ -4,6 +4,7 @@ package com.starrocks.sql;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -171,6 +172,7 @@ public class StatementPlanner {
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AdminShowConfigStmt
+                || statement instanceof AdminShowReplicaDistributionStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -189,6 +191,7 @@ public class StatementPlanner {
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AdminShowConfigStmt
+                || statement instanceof AdminShowReplicaDistributionStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt

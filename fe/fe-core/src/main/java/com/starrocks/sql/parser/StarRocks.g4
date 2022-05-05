@@ -37,12 +37,11 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
-    // Admin Set Statement
+    // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-
-    // Admin Show Statement
     | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName (PARTITION identifierList)?        #adminShowReplicaDistribution
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -690,7 +689,7 @@ nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
-    | DATA | DATABASE | DATE | DATETIME | DAY
+    | DATA | DATABASE | DATE | DATETIME | DAY | DISTRIBUTION
     | END | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL

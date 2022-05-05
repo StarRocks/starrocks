@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -76,6 +77,12 @@ public class Analyzer {
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
             AdminSetReplicaStatusStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
