@@ -124,14 +124,14 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
             }
         }
 
-        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
+        VLOG(7) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
     }
 
     // TODO(Murphy): avoid sort the null datums in the column
     RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation, tie, range,
                                           build_tie, limit, limited));
 
-    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
+    VLOG(7) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
 
     return Status::OK();
 }
@@ -266,11 +266,11 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
             }
         }
 
-        VLOG(3) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
+        VLOG(7) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
                                dubug_column(column, permutation));
     }
 
-    VLOG(2) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
+    VLOG(7) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
                            fmt::join(tie, ","));
     return Status::OK();
 }
