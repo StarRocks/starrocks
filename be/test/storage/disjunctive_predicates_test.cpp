@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/disjunctive_predicates.h"
+#include "storage/vectorized/disjunctive_predicates.h"
 
 #include <gtest/gtest.h>
 
@@ -11,7 +11,7 @@
 #include "common/object_pool.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/vectorized/column_predicates.h"
 #include "util/value_generator.h"
 
 namespace starrocks::vectorized {
