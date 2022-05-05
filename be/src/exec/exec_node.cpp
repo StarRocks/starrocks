@@ -480,8 +480,13 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::MYSQL_SCAN_NODE:
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::ES_HTTP_SCAN_NODE:
-        *node = pool->add(new vectorized::EsHttpScanNode(pool, tnode, descs));
+    case TPlanNodeType::ES_HTTP_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::ES;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+    }
         return Status::OK();
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));

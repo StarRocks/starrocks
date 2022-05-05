@@ -9,7 +9,7 @@
 #include "column/chunk.h"
 #include "common/global_types.h"
 #include "exec/es/es_scan_reader.h"
-#include "exec/vectorized/es_http_components.h"
+#include "exec/es/es_scroll_parser.h"
 #include "runtime/mem_pool.h"
 #include "util/runtime_profile.h"
 
