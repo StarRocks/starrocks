@@ -62,6 +62,10 @@ Status ESDataSource::open(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_build_conjuncts());
+    RETURN_IF_ERROR(_try_skip_constant_conjuncts());
+    if (_no_data) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_normalize_conjuncts());
     RETURN_IF_ERROR(_create_scanner());
     _init_counter();
@@ -109,7 +113,7 @@ Status ESDataSource::_try_skip_constant_conjuncts() {
             ASSIGN_OR_RETURN(ColumnPtr value, _conjunct_ctx->evaluate(nullptr));
             DCHECK(value->is_constant());
             if (value->only_null() || value->get(0).get_uint8() == 0) {
-                _eos = true;
+                _no_data = true;
             }
         }
     }
@@ -117,8 +121,6 @@ Status ESDataSource::_try_skip_constant_conjuncts() {
 }
 
 Status ESDataSource::_normalize_conjuncts() {
-    RETURN_IF_ERROR(_try_skip_constant_conjuncts());
-
     std::vector<bool> validate_res;
     BooleanQueryBuilder::validate(_predicates, &validate_res);
     DCHECK(validate_res.size() == _predicates.size());
@@ -141,7 +143,6 @@ Status ESDataSource::_normalize_conjuncts() {
 }
 
 static std::string get_host_port(const std::vector<TNetworkAddress>& es_hosts) {
-    std::string host_port;
     std::string localhost = BackendOptions::get_localhost();
 
     TNetworkAddress host = es_hosts[0];
@@ -179,7 +180,7 @@ Status ESDataSource::_create_scanner() {
             ESScrollQueryBuilder::build(_properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
     const std::string& host = _properties.at(ESScanReader::KEY_HOST_PORT);
-    _es_reader = _pool->add(new ESScanReader(host, _properties, _doc_value_mode));
+    _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode));
     RETURN_IF_ERROR(_es_reader->open());
     return Status::OK();
 }
@@ -193,14 +194,14 @@ void ESDataSource::close(RuntimeState* state) {
 
 void ESDataSource::_init_counter() {
     _read_counter = ADD_COUNTER(_runtime_profile, "ReadCounter", TUnit::UNIT);
-    _rows_read_counter = ADD_COUNTER(_runtime_profile, "ReadRowsCounter", TUnit::UNIT);
-    _read_timer = ADD_TIMER(_runtime_profile, "ReadTime");
-    _materialize_timer = ADD_TIMER(_runtime_profile, "ReadMaterializeTime");
+    _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _read_timer = ADD_TIMER(_runtime_profile, "TotalRawReadTime(*)");
+    _materialize_timer = ADD_TIMER(_runtime_profile, "MaterializeTupleTime(*)");
 }
 
 Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     SCOPED_TIMER(_read_timer);
-    if (_line_eof && _batch_eof) {
+    if (_no_data || (_line_eof && _batch_eof)) {
         return Status::EndOfFile("");
     }
 

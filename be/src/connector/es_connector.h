@@ -70,10 +70,9 @@ private:
     std::vector<int> _predicate_idx;
     // Predicates will push down to ES
     std::vector<EsPredicate*> _predicates;
-    bool _eos = false;
+    bool _no_data = false;
     bool _line_eof = false;
     bool _batch_eof = false;
-    bool _doc_value_mode = false;
     int64_t _rows_read_number = 0;
     int64_t _rows_return_number = 0;
 
