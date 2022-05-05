@@ -11,6 +11,9 @@ class OlapScanNode;
 
 namespace pipeline {
 
+// It does some common preparation works for OlapScan, after its local waiting set is ready
+// and before OlapScanOperator::pull_chunk. That is, OlapScanOperator depends on
+// it and waits until it is finished.
 class OlapScanPrepareOperator final : public SourceOperator {
 public:
     OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
