@@ -12,6 +12,7 @@ import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -1055,6 +1056,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))));
         } else {
             return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null));
+        }
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaStatus(StarRocksParser.AdminShowReplicaStatusContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+        if (context.PARTITION() != null) {
+            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null,
+                    new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))), where);
+        } else {
+            return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null), where);
         }
     }
 

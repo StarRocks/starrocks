@@ -277,17 +277,22 @@ public class PrivilegeCheckerTest {
 
         String adminShowConfigsql = "admin show frontend config like '%parallel%';";
         String adminShowReplicaDistributionsql = "ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1;";
+        String adminShowReplicaStatussql = "ADMIN SHOW REPLICA Status FROM db1.tbl1;";
         StatementBase statementBase1 = UtFrameUtils.parseStmtWithNewParser(adminShowConfigsql, starRocksAssert.getCtx());
         StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(adminShowReplicaDistributionsql, starRocksAssert.getCtx());
+        StatementBase statementBase3 = UtFrameUtils.parseStmtWithNewParser(adminShowReplicaStatussql, starRocksAssert.getCtx());
 
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase3, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx()));
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase3, starRocksAssert.getCtx()));
     }
 }

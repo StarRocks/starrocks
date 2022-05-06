@@ -38,6 +38,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -161,6 +162,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return statusFilter;
     }
 
+    public Expr getWhere() {
+        return where;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -177,5 +182,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         } else {
             return RedirectStatus.NO_FORWARD;
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminShowReplicaStatusStatement(this, context);
     }
 }

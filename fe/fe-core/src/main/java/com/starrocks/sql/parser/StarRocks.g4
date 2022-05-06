@@ -42,6 +42,8 @@ statement
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
     | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName (PARTITION identifierList)?        #adminShowReplicaDistribution
+    | ADMIN SHOW REPLICA STATUS FROM qualifiedName (PARTITION identifierList)?
+            (WHERE where=expression)?                                                       #adminShowReplicaStatus
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
