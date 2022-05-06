@@ -112,6 +112,8 @@ public class IcebergUtil {
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
                                          List<Expression> icebergPredicates) {
+        // TODO: use planWith(executorService) after
+        // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
         Expression filterExpressions = Expressions.alwaysTrue();
         if (!icebergPredicates.isEmpty()) {
