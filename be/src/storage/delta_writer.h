@@ -61,7 +61,11 @@ public:
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
-    void abort();
+    //
+    // with_log is used to control whether to print the log when rollback txn.
+    // with_log is false when there is no data load into one partition and abort
+    // the related txn.
+    void abort(bool with_log = true);
 
     int64_t txn_id() const { return _opt.txn_id; }
 
@@ -89,8 +93,7 @@ public:
 private:
     enum State {
         kUninitialized,
-        kInitialized,
-        kPrepared,
+        kWriting,
         kClosed,
         kAborted,
         kCommitted, // committed state can transfer to kAborted state
@@ -123,6 +126,7 @@ private:
     const TabletSchema* _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
+    bool _with_rollback_log;
 };
 
 } // namespace vectorized
