@@ -98,8 +98,29 @@ public class ListPartitionInfoTest {
 
     @Test
     public void testToSqlForSingle() {
+        List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
+        String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), partitionId);
+        String target = "PARTITION BY LIST(`province`)(\n" +
+                "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
+                "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
+                ")";
+        Assert.assertEquals(sql, target);
+    }
+
+    @Test
+    public void testToSqlForMulti() {
+        List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
+        String sql = this.listPartitionInfoForMulti.toSql(this.findTableForMultiListPartition(), partitionId);
+        String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
+                "  PARTITION p1 VALUES IN (('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin')) (\"replication_num\" = \"1\"),\n" +
+                "  PARTITION p2 VALUES IN (('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing')) (\"replication_num\" = \"1\")\n" +
+                ")";
+        Assert.assertEquals(sql, target);
+    }
+
+    public OlapTable findTableForSingleListPartition() {
         long id = 1000L;
-        String tableName = "testTable";
+        String tableName = "testTbl";
         List<Column> baseSchema =
                 Lists.newArrayList(new Column("id", Type.BIGINT),
                         new Column("province", Type.BIGINT));
@@ -111,25 +132,21 @@ public class ListPartitionInfoTest {
         OlapTable table = new OlapTable(id, tableName, baseSchema, null,
                 this.listPartitionInfo, null);
         table.setTableProperty(tableProperty);
-        Partition p1 = new Partition(10001L, "p1", null, null);
-        Partition p2 = new Partition(10002L, "p2", null, null);
+
+        MaterializedIndex materializedIndex = new MaterializedIndex();
+        HashDistributionInfo distributionInfo =
+                new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
+
+        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
         table.addPartition(p1);
         table.addPartition(p2);
-
-        List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
-        String sql = this.listPartitionInfo.toSql(table, partitionId);
-
-        String target = "PARTITION BY LIST(`province`)(\n" +
-                "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
-                "  PARTITION p2 VALUES IN (\'shanghai\',\'beijing\')\n" +
-                ")";
-        Assert.assertEquals(sql, target);
+        return table;
     }
 
-    @Test
-    public void testToSqlForMulti() {
+    public OlapTable findTableForMultiListPartition() {
         long id = 1000L;
-        String tableName = "testTable";
+        String tableName = "testTbl";
         List<Column> baseSchema =
                 Lists.newArrayList(new Column("id", Type.BIGINT), new Column("province", Type.BIGINT),
                         new Column("dt", Type.DATE));
@@ -141,19 +158,16 @@ public class ListPartitionInfoTest {
         OlapTable table = new OlapTable(id, tableName, baseSchema, null,
                 this.listPartitionInfoForMulti, null);
         table.setTableProperty(tableProperty);
-        Partition p1 = new Partition(10001L, "p1", null, null);
-        Partition p2 = new Partition(10002L, "p2", null, null);
+
+        MaterializedIndex materializedIndex = new MaterializedIndex();
+        HashDistributionInfo distributionInfo =
+                new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
+
+        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
+        Partition p2 = new Partition(10002L, "p2", materializedIndex, distributionInfo);
         table.addPartition(p1);
         table.addPartition(p2);
-
-        List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
-        String sql = this.listPartitionInfoForMulti.toSql(table, partitionId);
-
-        String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
-                "  PARTITION p1 VALUES IN (('2022-04-15','guangdong'),('2022-04-15','tianjin')) (\"replication_num\" = \"1\"),\n" +
-                "  PARTITION p2 VALUES IN (('2022-04-16','shanghai'),('2022-04-16','beijing')) (\"replication_num\" = \"1\")\n" +
-                ")";
-        Assert.assertEquals(sql, target);
+        return table;
     }
 
 }

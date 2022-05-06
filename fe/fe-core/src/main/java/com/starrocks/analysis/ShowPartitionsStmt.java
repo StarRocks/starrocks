@@ -138,8 +138,30 @@ public class ShowPartitionsStmt extends ShowStmt {
             LOG.debug("process SHOW PROC '{}';", stringBuilder.toString());
 
             node = ProcService.getInstance().open(stringBuilder.toString());
+
+            this.analyzeOrderBy();
         } finally {
             db.readUnlock();
+        }
+    }
+
+    /**
+     * analyze order by clause if not null and init the orderByPairs
+     *
+     * @throws AnalysisException
+     */
+    private void analyzeOrderBy() throws AnalysisException {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
+            orderByPairs = new ArrayList<>();
+            for (OrderByElement orderByElement : orderByElements) {
+                if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                    throw new AnalysisException("Should order by column");
+                }
+                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                int index = ((PartitionsProcDir) node).analyzeColumn(slotRef.getColumnName());
+                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                orderByPairs.add(orderByPair);
+            }
         }
     }
 
@@ -159,20 +181,7 @@ public class ShowPartitionsStmt extends ShowStmt {
             analyzeSubPredicate(whereClause);
         }
 
-        // order by
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = PartitionsProcDir.analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
-
+        // analyze limit clause if not null
         if (limitElement != null) {
             limitElement.analyze(analyzer);
         }
