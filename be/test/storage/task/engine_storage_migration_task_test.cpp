@@ -284,7 +284,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
     tablet_manager->start_trash_sweep();
-    starrocks::ExecEnv::GetInstance()->storage_engine()->clean_unused_txns();
+    starrocks::ExecEnv::GetInstance()->storage_engine()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
