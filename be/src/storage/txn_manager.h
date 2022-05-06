@@ -88,7 +88,8 @@ public:
                         int64_t version);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
-    Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
+    Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                        bool with_log = true);
 
     Status delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
 
@@ -107,7 +108,7 @@ public:
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                        SchemaHash schema_hash, const TabletUid& tablet_uid);
+                        SchemaHash schema_hash, const TabletUid& tablet_uid, bool with_log = true);
 
     // remove the txn from txn manager
     // delete the related rowset if it is not null

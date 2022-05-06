@@ -594,7 +594,8 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1101);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1102);
@@ -662,7 +663,8 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1103);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1104);
@@ -725,7 +727,8 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1203);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
