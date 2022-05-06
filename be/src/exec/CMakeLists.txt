@@ -44,6 +44,7 @@ set(EXEC_FILES
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
     es/es_query_builder.cpp
+    es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
     parquet_builder.cpp
@@ -95,9 +96,6 @@ set(EXEC_FILES
     vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
-    vectorized/es_http_scan_node.cpp
-    vectorized/es_http_scanner.cpp
-    vectorized/es_http_components.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
     vectorized/mysql_scan_node.cpp
