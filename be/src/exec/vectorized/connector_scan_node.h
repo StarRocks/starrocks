@@ -27,6 +27,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    const std::vector<TScanRangeParams>& split_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
     // for pipline APIs
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(

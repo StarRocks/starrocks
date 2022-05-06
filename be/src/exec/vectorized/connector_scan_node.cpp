@@ -520,6 +520,19 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
     return Status::OK();
 }
 
+const std::vector<TScanRangeParams>& ConnectorScanNode::split_scan_ranges(
+        const std::vector<TScanRangeParams>& scan_ranges) {
+    _scan_ranges = scan_ranges;
+    if (scan_ranges.size() == 0) {
+        // If scan ranges size is zero,
+        // it means data source provider does not support reading by scan ranges.
+        // So here we insert a single placeholder, to force data source provider
+        // to create at least one data source
+        _scan_ranges.emplace_back(TScanRangeParams());
+    }
+    return _scan_ranges;
+}
+
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);

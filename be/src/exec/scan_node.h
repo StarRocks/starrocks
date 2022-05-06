@@ -59,6 +59,11 @@ public:
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
 
+    // pass `scan ranges` from frontend, maybe we can try to split scan ranges further.
+    virtual const std::vector<TScanRangeParams>& split_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+        return scan_ranges;
+    }
+
     bool is_scan_node() const override { return true; }
 
     RuntimeProfile::Counter* bytes_read_counter() const { return _bytes_read_counter; }
