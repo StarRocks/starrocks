@@ -152,9 +152,9 @@ submitTaskStatement
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     comment?
-    (PARTITION BY '(' primaryExpression (',' primaryExpression)* ')')?
+    (PARTITION BY primaryExpression)?
     distributionDesc?
-    refreshSchemeDesc
+    refreshSchemeDesc?
     properties?
     AS queryStatement
     ;

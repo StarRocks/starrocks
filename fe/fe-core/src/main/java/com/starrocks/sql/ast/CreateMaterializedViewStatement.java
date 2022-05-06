@@ -30,7 +30,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeDesc refreshSchemeDesc;
-    private PartitionExpDesc partitionExpDesc;
+    private ExpressionPartitionDesc expressionPartitionDesc;
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
@@ -42,14 +42,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private List<Column> mvColumnItems = Lists.newArrayList();
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
+                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
         this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.partitionExpDesc = partitionExpDesc;
+        this.expressionPartitionDesc = expressionPartitionDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.queryStatement = queryStatement;
@@ -87,12 +87,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public PartitionExpDesc getPartitionExpDesc() {
-        return partitionExpDesc;
+    public ExpressionPartitionDesc getPartitionExpDesc() {
+        return expressionPartitionDesc;
     }
 
-    public void setPartitionExpDesc(PartitionExpDesc partitionExpDesc) {
-        this.partitionExpDesc = partitionExpDesc;
+    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
+        this.expressionPartitionDesc = expressionPartitionDesc;
     }
 
     public DistributionDesc getDistributionDesc() {

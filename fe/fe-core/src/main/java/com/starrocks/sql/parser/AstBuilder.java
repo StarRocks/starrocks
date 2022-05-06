@@ -30,6 +30,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -80,6 +81,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -112,6 +114,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -124,13 +127,13 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
-import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
@@ -143,6 +146,7 @@ import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -409,7 +413,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
     @Override
-    public ParseNode visitCreateMaterializedViewStatement(StarRocksParser.CreateMaterializedViewStatementContext context) {
+    public ParseNode visitCreateMaterializedViewStatement(
+            StarRocksParser.CreateMaterializedViewStatementContext context) {
         if (!Config.enable_experimental_mv) {
             throw new ParsingException("The experimental mv is disabled");
         }
@@ -418,22 +423,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        List<StarRocksParser.PrimaryExpressionContext> primaryExpressionContexts = context.primaryExpression();
-        if (primaryExpressionContexts.size() > 1) {
-            throw new IllegalArgumentException("Partition expressions currently only support one");
-        }
-        List<SlotRef> partitionExpressions = Lists.newArrayList();
-        for (StarRocksParser.PrimaryExpressionContext primaryExpressionContext : primaryExpressionContexts) {
-            Expr expr = (Expr) visit(primaryExpressionContext);
-            if (!(expr instanceof SlotRef)) {
-                throw new IllegalArgumentException("Partition exp " + expr.toSql() + " must be alias of select item");
-            }
-            partitionExpressions.add(((SlotRef) expr));
-        }
-        PartitionExpDesc partitionExpDesc = new PartitionExpDesc(partitionExpressions);
-        RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
-        // get query statement
+        // process query statement
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        // process properties
         // get properties if exists
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -442,10 +434,44 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
+        //process refresh
+        RefreshSchemeDesc refreshSchemeDesc = null;
+        if (context.refreshSchemeDesc() == null) {
+            refreshSchemeDesc = new SyncRefreshSchemeDesc();
+        } else {
+            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
+            if (context.primaryExpression() != null) {
+                throw new IllegalArgumentException(
+                        "Refresh type sync no support manual partition");
+            }
+            if (context.distributionDesc() != null) {
+                throw new IllegalArgumentException(
+                        "Refresh type sync no support manual distribution");
+            }
+            String sql = AST2SQL.toString(queryStatement);
+            StatementBase statement = SqlParser.parseWithOldParser(sql, sqlMode, 0);
+            if (!(statement instanceof SelectStmt)) {
+                throw new IllegalArgumentException("Materialized view query statement only support select");
+            }
+            // old mv stmt dbname form base table
+            return new CreateMaterializedViewStmt(tableName.getTbl(), (SelectStmt) statement, properties);
+        }
+        // process partition
+        ExpressionPartitionDesc expressionPartitionDesc = null;
+        if (context.primaryExpression() != null) {
+            Expr expr = (Expr) visit(context.primaryExpression());
+            if (!(expr instanceof SlotRef)) {
+                throw new IllegalArgumentException("Partition exp " + expr.toSql() + " must be alias of select item");
+            }
+            expressionPartitionDesc = new ExpressionPartitionDesc(((SlotRef) expr));
+        }
+        // process distribution
         DistributionDesc distributionDesc =
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc());
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
-                refreshSchemeDesc, partitionExpDesc, distributionDesc, properties, queryStatement);
+                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
     }
 
     @Override
@@ -2172,7 +2198,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         if (context.ASYNC() != null) {
-            if (context.string() != null) {
+            if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
                 DateTimeFormatter dateTimeFormatter = null;
                 try {
@@ -2189,9 +2215,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                     stringLiteral.getStringValue() + " is incorrect");
                 }
             }
-            if (context.interval() == null) {
-                throw new IllegalArgumentException("Refresh every must be specified");
-            }
             intervalLiteral = (IntervalLiteral) visit(context.interval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                 throw new IllegalArgumentException(
@@ -2199,7 +2222,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
-            throw new IllegalArgumentException("Unsupported refresh type: " + context.SYNC().getText());
+            return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc();
         }
@@ -2237,7 +2260,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 format,
                 properties);
     }
-
 
     @Override
     public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
