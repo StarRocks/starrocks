@@ -131,7 +131,6 @@ createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
     ;
 
-
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
