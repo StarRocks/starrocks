@@ -340,6 +340,9 @@ public:
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
+    inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
+    void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
+
 private:
     // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
     static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
@@ -399,6 +402,7 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
+    std::atomic<bool> _in_ready_queue{false};
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

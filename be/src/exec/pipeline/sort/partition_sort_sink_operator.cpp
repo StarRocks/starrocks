@@ -45,6 +45,11 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectoriz
 }
 
 Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    // skip sorting if cancelled
+    if (state->is_cancelled()) {
+        _is_finished = true;
+        return Status::Cancelled("runtime state is cancelled");
+    }
     RETURN_IF_ERROR(_chunks_sorter->finish(state));
 
     // Current partition sort is ended, and

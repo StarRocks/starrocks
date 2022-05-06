@@ -84,8 +84,7 @@ public:
     // output chunks will be produced
     virtual bool is_finished() const = 0;
 
-    // pending_finish returns whether this operator still has pending i/o task which executed in i/o threads
-    // and has reference to the object owned by the operator or FragmentContext.
+    // pending_finish returns whether this operator still has reference to the object owned by the operator or FragmentContext.
     // It can ONLY be called after calling set_finished().
     // When a driver's sink operator is finished, the driver should wait for pending i/o task completion.
     // Otherwise, pending tasks shall reference to destructed objects in the operator or FragmentContext,
