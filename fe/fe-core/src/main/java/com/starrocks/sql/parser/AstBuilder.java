@@ -28,6 +28,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -319,6 +320,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
+    }
+
+    // ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateCatalogStmt(catalogName, properties);
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------
