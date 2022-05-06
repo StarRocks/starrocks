@@ -47,6 +47,8 @@ ScanOperator::~ScanOperator() {
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
+    _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
         auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
@@ -381,10 +383,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories ops;
 
-    auto& morsel_queues = context->fragment_context()->morsel_queues();
-    auto source_id = scan_operator->plan_node_id();
-    DCHECK(morsel_queues.count(source_id));
-    auto& morsel_queue = morsel_queues[source_id];
+    const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_operator.get());
 
     // ScanOperator's degree_of_parallelism is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1

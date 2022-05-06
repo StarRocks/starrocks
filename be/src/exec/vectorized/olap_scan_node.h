@@ -52,6 +52,9 @@ public:
     Status close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
+            const TExecPlanFragmentParams& request) override;
 
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
@@ -129,6 +132,10 @@ private:
     size_t _scanner_concurrency() const;
     void _estimate_scan_and_output_row_bytes();
 
+    StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
+                                                   const TExecPlanFragmentParams& request, int64_t* scan_dop,
+                                                   int64_t* splitted_scan_rows) const;
+    StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
