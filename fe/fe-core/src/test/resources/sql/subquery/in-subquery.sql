@@ -180,7 +180,7 @@ LEFT SEMI JOIN (join-predicate [3: v3 = 8: max] post-join-predicate [null])
         EXCHANGE SHUFFLE[3]
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
+    EXCHANGE SHUFFLE[8]
         AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[7: v6]] having [null]
             EXCHANGE SHUFFLE[7]
                 AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[7: v6]] having [null]
