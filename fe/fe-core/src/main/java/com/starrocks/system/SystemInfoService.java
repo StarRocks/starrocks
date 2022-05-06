@@ -172,19 +172,18 @@ public class SystemInfoService {
     }
 
     public void updateBackendAddress(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
-        Pair<String, Integer> discardedHostAndPort = modifyBackendAddressClause.getDiscardedHostPort();
-        Pair<String, Integer> newlyEffectiveHostAndPort = modifyBackendAddressClause.getNewlyEffectiveHostPort();
-        if (getBackendWithHeartbeatPort(discardedHostAndPort.first, discardedHostAndPort.second) == null) {
+        Pair<String, Integer> wantToModifyHostPort = modifyBackendAddressClause.getWantToModifyHostPortPair();
+        String fqdn = modifyBackendAddressClause.getFqdn();
+        if (getBackendWithHeartbeatPort(wantToModifyHostPort.first, wantToModifyHostPort.second) == null) {
             throw new DdlException("backend does not exists[" + 
-                discardedHostAndPort.first + ":" + 
-                discardedHostAndPort.second + "]");
+                wantToModifyHostPort.first + ":" + 
+                wantToModifyHostPort.second + "]");
         }
         // update idToBackend
-        Backend preUpdateBackend = getBackendWithHeartbeatPort(discardedHostAndPort.first, discardedHostAndPort.second);
+        Backend preUpdateBackend = getBackendWithHeartbeatPort(wantToModifyHostPort.first, wantToModifyHostPort.second);
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         Backend updateBackend = copiedBackends.get(preUpdateBackend.getId());
-        updateBackend.setHost(newlyEffectiveHostAndPort.first);
-        updateBackend.setHeartbeatPort(newlyEffectiveHostAndPort.second);
+        updateBackend.setHost(fqdn);
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // log

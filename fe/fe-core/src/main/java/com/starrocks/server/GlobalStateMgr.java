@@ -1749,23 +1749,23 @@ public class GlobalStateMgr {
     }
 
     public void updateFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        Pair<String, Integer> dPair = modifyFrontendAddressClause.getDiscardedHostPort();
-        Pair<String, Integer> nPair = modifyFrontendAddressClause.getNewlyEffectiveHostPort();
-        if (dPair.first.equals(selfNode.first) && dPair.second == selfNode.second && feType == FrontendNodeType.MASTER) {
+        Pair<String, Integer> wPair = modifyFrontendAddressClause.getWantToModifyHostPortPair();
+        String fqdn = modifyFrontendAddressClause.getFqdn();
+        if (wPair.first.equals(selfNode.first) && wPair.second.equals(selfNode.second) && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not modify current master node.");
         }
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(dPair.first, dPair.second);
+            Frontend fe = checkFeExist(wPair.first, wPair.second);
             if (fe == null) {
-                throw new DdlException("frontend does not exist[" + dPair.first + ":" + dPair.second + "]");
+                throw new DdlException("frontend does not exist[" + wPair.first + ":" + wPair.second + "]");
             }
             // step 1 update the fe information stored in bdb
-            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(fe.getNodeName(), nPair.first, nPair.second);
+            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(fe.getNodeName(), fqdn, wPair.second);
             // step 2 update the fe information stored in memory
-            fe.updateHostAndEditLogPort(nPair.first, nPair.second);
+            fe.updateHostAndEditLogPort(fqdn, wPair.second);
             frontends.put(fe.getNodeName(), fe);
             
             // editLog

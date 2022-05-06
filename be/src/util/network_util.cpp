@@ -102,9 +102,9 @@ Status hostname_to_ip_addrs(const std::string& name, std::vector<std::string>* a
     return Status::OK();
 }
 
-bool hostname_is_ip(const std::string& host) {
+bool is_valid_ip(const std::string& ip) {
     unsigned char buf[sizeof(struct in6_addr)];
-    int ret = inet_pton(AF_INET, host.data(), buf);
+    int ret = inet_pton(AF_INET, ip.data(), buf);
     return ret > 0;
 }
 

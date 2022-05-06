@@ -77,7 +77,7 @@ public:
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = host;
-        if (!hostname_is_ip(host)) {
+        if (!is_valid_ip(host)) {
             realhost = hostname_to_ip(host);
             if (realhost == "") {
                 LOG(WARNING) << "failed to get ip from host";
