@@ -102,7 +102,7 @@ public:
             for (uint16_t i = 0; i < sel_size; ++i) {
                 uint16_t data_idx = sel[i];
                 sel[new_size] = data_idx;
-                new_size += _predicate_operator.eval_at(lowcard_column, i);
+                new_size += _predicate_operator.eval_at(lowcard_column, data_idx);
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
@@ -110,7 +110,7 @@ public:
             for (uint16_t i = 0; i < sel_size; ++i) {
                 uint16_t data_idx = sel[i];
                 sel[new_size] = data_idx;
-                new_size += !null_data[data_idx] && _predicate_operator.eval_at(lowcard_column, i);
+                new_size += !null_data[data_idx] && _predicate_operator.eval_at(lowcard_column, data_idx);
             }
         }
         return new_size;

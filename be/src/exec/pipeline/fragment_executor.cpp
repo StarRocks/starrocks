@@ -5,7 +5,6 @@
 #include <unordered_map>
 
 #include "exec/exchange_node.h"
-#include "exec/pipeline/connector_scan_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -14,7 +13,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"

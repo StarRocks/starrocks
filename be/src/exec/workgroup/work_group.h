@@ -164,7 +164,7 @@ private:
     WorkGroupType _type;
 
     // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
-    int64_t _big_query_mem_limit = 500;
+    int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
     int64_t _big_query_cpu_core_second_limit = 0;
 

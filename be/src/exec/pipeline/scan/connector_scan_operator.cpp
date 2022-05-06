@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/connector_scan_operator.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "column/chunk.h"
 #include "exec/vectorized/connector_scan_node.h"
@@ -31,11 +31,18 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
                                              ScanNode* scan_node)
         : ScanOperator(factory, id, driver_sequence, scan_node) {}
 
-Status ConnectorScanOperator::do_prepare(RuntimeState*) {
+Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+
     return Status::OK();
 }
 
-void ConnectorScanOperator::do_close(RuntimeState*) {}
+void ConnectorScanOperator::do_close(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    Expr::close(conjunct_ctxs, state);
+}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
@@ -101,12 +108,12 @@ StatusOr<vectorized::ChunkPtr> ConnectorChunkSource::get_next_chunk_from_buffer(
     return chunk;
 }
 
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
     }
 
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         vectorized::ChunkPtr chunk;
         _status = _read_chunk(&chunk);
         if (!_status.ok()) {
@@ -120,7 +127,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size
     }
     return _status;
 }
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
                                                                              size_t* num_read_chunks, int worker_id,
                                                                              workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
@@ -128,7 +135,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
     }
 
     int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent);
 

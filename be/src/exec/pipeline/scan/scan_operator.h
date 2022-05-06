@@ -35,7 +35,7 @@ public:
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
-    // interface for different scan node
+    /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
@@ -69,6 +69,8 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    // we should hold a weak ptr because query context may be released before running io task
+    std::weak_ptr<QueryContext> _query_ctx;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };

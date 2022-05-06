@@ -89,7 +89,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         if (leftTableId == rightTableId && !colocateIndex.isSameGroup(leftTableId, rightTableId)) {
             return createPropertySetByDistribution(leftScanDistributionSpec);
         } else {
-            Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
+            Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
             if (!requiredShuffleDesc.isPresent()) {
                 return createPropertySetByDistribution(leftScanDistributionSpec);
             }
@@ -189,14 +189,14 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 // bucket join
                 return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
-            } else if ((leftDistributionDesc.isJoinShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
-                    (rightDistributionDesc.isJoinShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
+            } else if ((leftDistributionDesc.isShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
+                    (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
                 // shuffle join
                 return computeHashJoinDistributionPropertyInfo(node,
                         computeShuffleJoinOutputProperty(leftShuffleColumns),
                         leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
-            } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // coordinator can not bucket shuffle data from left to right
                 Preconditions.checkState(false, "Children output property distribution error");
                 return PhysicalPropertySet.EMPTY;
@@ -211,7 +211,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     }
 
     private PhysicalPropertySet computeShuffleJoinOutputProperty(List<Integer> leftShuffleColumns) {
-        Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
+        Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
         if (!requiredShuffleDesc.isPresent()) {
             return PhysicalPropertySet.EMPTY;
         }
@@ -221,18 +221,20 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return createPropertySetByDistribution(leftShuffleDistribution);
     }
 
-    private Optional<HashDistributionDesc> getRequiredShuffleJoinDesc() {
+    private Optional<HashDistributionDesc> getRequiredShuffleDesc() {
         if (!requirements.getDistributionProperty().isShuffle()) {
             return Optional.empty();
         }
 
         HashDistributionDesc requireDistributionDesc =
                 ((HashDistributionSpec) requirements.getDistributionProperty().getSpec()).getHashDistributionDesc();
-        if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
-            return Optional.empty();
+
+        if (HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType()) ||
+                HashDistributionDesc.SourceType.SHUFFLE_AGG.equals(requireDistributionDesc.getSourceType())) {
+            return Optional.of(requireDistributionDesc);
         }
 
-        return Optional.of(requireDistributionDesc);
+        return Optional.empty();
     }
 
     @Override

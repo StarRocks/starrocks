@@ -116,7 +116,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* open_limit;
 };
 
-struct HdfsFileReaderParam {
+struct HdfsScannerContext {
     struct ColumnInfo {
         int col_idx;
         TypeDescriptor col_type;
@@ -230,14 +230,14 @@ private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
-    Status _build_file_read_param();
+    Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
     std::atomic_bool _pending_token = false;
 
-    HdfsFileReaderParam _file_read_param;
+    HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;

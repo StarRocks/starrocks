@@ -101,7 +101,7 @@ void GlobalDriverExecutor::_worker_thread() {
                     LOG(WARNING) << "[Driver] Process exceed limit, query_id="
                                  << print_id(driver->query_ctx()->query_id())
                                  << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                    query_ctx->cancel(Status::Corruption("exceed limit, is big query"));
+                    query_ctx->cancel(Status::Cancelled("exceed big query limit"));
                 } else {
                     LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                                  << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
@@ -159,6 +159,14 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
         } else {
             this->_driver_queue->put_back(driver);
         }
+    }
+}
+
+void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
+    // if driver is already in ready queue, we should cancel it
+    // otherwise, just ignore it and wait for the poller to schedule
+    if (driver->is_in_ready_queue()) {
+        this->_driver_queue->cancel(driver);
     }
 }
 
