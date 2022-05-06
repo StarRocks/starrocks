@@ -22,7 +22,10 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.HeartbeatResponse;
 
 import java.io.DataInput;
@@ -32,10 +35,10 @@ import java.util.List;
 
 public class HbPackage implements Writable {
 
+    @SerializedName(value = "hbResults")
     private List<HeartbeatResponse> hbResults = Lists.newArrayList();
 
     public HbPackage() {
-
     }
 
     public void addHbResponse(HeartbeatResponse result) {
@@ -52,14 +55,17 @@ public class HbPackage implements Writable {
         return hbPackage;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(hbResults.size());
-        for (HeartbeatResponse heartbeatResult : hbResults) {
-            heartbeatResult.write(out);
-        }
+    // V2 deserialization using JSON format
+    public static HbPackage readV2(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), HbPackage.class);
     }
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    // Deprecated
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
