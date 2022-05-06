@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackendCoreStat {
-    private static final int DEFAULT_CORES_OF_BE = 8;
+    private static final int DEFAULT_CORES_OF_BE = 1;
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
