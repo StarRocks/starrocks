@@ -322,6 +322,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
 
+    // ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateCatalogStmt(catalogName, properties);
+    }
+
     // ------------------------------------------- Alter Clause --------------------------------------------------------
 
     @Override
@@ -1046,19 +1062,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
-    }
-
-    @Override
-    public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateCatalogStmt(identifier.getValue(), properties);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
