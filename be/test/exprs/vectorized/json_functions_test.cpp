@@ -14,8 +14,8 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
-#include "util/json.h"
 #include "testutil/assert.h"
+#include "util/json.h"
 
 namespace starrocks {
 namespace vectorized {

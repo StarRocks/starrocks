@@ -11,11 +11,13 @@
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/substitute.h"
+#include "storage/fs/file_block_manager.h"
 #include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
@@ -32,6 +34,13 @@
 #include "util/path_util.h"
 
 namespace starrocks {
+
+enum PartialUpdateCloneCase {
+    CASE1, // rowset status is committed in meta, rowset file is partial rowset
+    CASE2, // rowset status is committed in meta, rowset file is partial rowset, but rowset is apply success after link file
+    CASE3, // rowset status is committed in meta, rowset file is full rowset
+    CASE4  // rowset status is applied in meta, rowset file is full rowset
+};
 
 class TabletUpdatesTest : public testing::Test {
 public:
@@ -68,6 +77,43 @@ public:
             CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
         return *writer->build();
+    }
+
+    RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                          std::vector<int32_t>& column_indexes,
+                                          std::shared_ptr<TabletSchema> partial_schema) {
+        // create partial rowset
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_type = BETA_ROWSET;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+
+        writer_context.partial_update_tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.tablet_schema = partial_schema.get();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+
+        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+        EXPECT_TRUE(2 == chunk->num_columns());
+        auto& cols = chunk->columns();
+        for (size_t i = 0; i < keys.size(); i++) {
+            cols[0]->append_datum(vectorized::Datum(keys[i]));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        RowsetSharedPtr partial_rowset = *writer->build();
+
+        return partial_rowset;
     }
 
     RowsetSharedPtr create_rowsets(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
@@ -316,6 +362,18 @@ public:
         CHECK(st.ok()) << st;
         return tablet_manager->get_tablet(new_tablet_id, false);
     }
+
+    void test_load_snapshot_incremental_with_partial_rowset_old();
+    void test_load_snapshot_incremental_with_partial_rowset_new(PartialUpdateCloneCase update_case);
+
+    void tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1, std::vector<int32_t>& column_indexes,
+                         const std::shared_ptr<TabletSchema>& partial_schema);
+    void snapshot_prepare(const TabletSharedPtr& tablet, const std::vector<int64_t>& delta_versions,
+                          std::string* snapshot_id_path, std::string* snapshot_dir,
+                          std::vector<RowsetSharedPtr>* snapshot_rowsets,
+                          std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
+                          TabletMetaSharedPtr snapshot_tablet_meta);
+    void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
 
 protected:
     TabletSharedPtr _tablet;
@@ -1223,6 +1281,301 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
 
     st = tablet1->updates()->load_snapshot(*snapshot_meta);
     ASSERT_TRUE(st.ok()) << st;
+}
+
+void TabletUpdatesTest::tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1,
+                                        std::vector<int32_t>& column_indexes,
+                                        const std::shared_ptr<TabletSchema>& partial_schema) {
+    std::vector<int64_t> keys0 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (int i = 0; i < 4; i++) {
+        ASSERT_TRUE(tablet0->rowset_commit(i + 2 /*version*/, create_rowset(tablet0, keys0)).ok());
+    }
+
+    {
+        EditVersion version;
+        std::vector<RowsetSharedPtr> applied_rowsets;
+        ASSERT_TRUE(tablet0->updates()->get_applied_rowsets(5, &applied_rowsets, &version).ok());
+    }
+
+    // create a partial rowset, commit but not apply
+    tablet0->updates()->stop_apply(true);
+    RowsetSharedPtr partial_rowset = create_partial_rowset(tablet0, keys0, column_indexes, partial_schema);
+    ASSERT_TRUE(tablet0->rowset_commit(6, partial_rowset).ok());
+    ASSERT_EQ(tablet0->updates()->max_version(), 6);
+    EditVersion latest_applied_verison;
+    tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+    ASSERT_EQ(latest_applied_verison.major(), 5);
+    LOG(INFO) << "commit partial rowset success";
+
+    // create rowsets for tablet1
+    std::vector<int64_t> keys1 = {0, 1, 2, 3};
+    for (int i = 0; i < 2; i++) {
+        ASSERT_TRUE(tablet1->rowset_commit(i + 2 /*version*/, create_rowset(tablet1, keys1)).ok());
+    }
+}
+
+void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const std::vector<int64_t>& delta_versions,
+                                         std::string* snapshot_id_path, std::string* snapshot_dir,
+                                         std::vector<RowsetSharedPtr>* snapshot_rowsets,
+                                         std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
+                                         TabletMetaSharedPtr snapshot_tablet_meta) {
+    std::shared_lock rdlock(tablet->get_header_lock());
+    for (int64_t v : delta_versions) {
+        auto rowset = tablet->get_inc_rowset_by_version(Version{v, v});
+        if (rowset == nullptr && tablet->max_continuous_version_from_beginning().second >= v) {
+            LOG(WARNING) << "version " << v << " has been merged";
+            ASSERT_TRUE(false);
+        } else if (rowset == nullptr) {
+            LOG(WARNING) << "no incremental rowset " << v;
+            ASSERT_TRUE(false);
+        }
+        snapshot_rowsets->emplace_back(std::move(rowset));
+    }
+
+    tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
+    snapshot_tablet_meta->delete_alter_task();
+    rdlock.unlock();
+
+    *snapshot_id_path = SnapshotManager::instance()->calc_snapshot_id_path(tablet, 3600);
+    ASSERT_TRUE(!snapshot_id_path->empty());
+    *snapshot_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet, *snapshot_id_path);
+    (void)FileUtils::remove_all(*snapshot_dir);
+    ASSERT_TRUE(FileUtils::create_dir(*snapshot_dir).ok());
+
+    snapshot_rowset_metas->reserve(snapshot_rowsets->size());
+    for (const auto& rowset : *snapshot_rowsets) {
+        snapshot_rowset_metas->emplace_back(rowset->rowset_meta());
+    }
+}
+
+void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet,
+                                      SegmentFooterPB* footer) {
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
+    ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
+
+    std::set<std::string> files;
+    ASSERT_TRUE(FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default()).ok());
+    files.erase("meta");
+
+    for (const auto& f : files) {
+        std::string src = meta_dir + "/" + f;
+        std::string dst = tablet->schema_hash_path() + "/" + f;
+        ASSERT_TRUE(Env::Default()->link_file(src, dst).ok());
+        LOG(INFO) << "Linked " << src << " to " << dst;
+    }
+
+    // Pretend that tablet0 is a peer replica of tablet1
+    snapshot_meta->tablet_meta().set_tablet_id(tablet->tablet_id());
+    snapshot_meta->tablet_meta().set_schema_hash(tablet->schema_hash());
+    for (auto& rm : snapshot_meta->rowset_metas()) {
+        rm.set_tablet_id(tablet->tablet_id());
+    }
+    LOG(INFO) << "tablet1 start load snapshot";
+
+    ASSERT_TRUE(tablet->updates()->load_snapshot(*snapshot_meta).ok());
+    ASSERT_EQ(6, tablet->updates()->max_version());
+    ASSERT_EQ(6, tablet->updates()->version_history_count());
+
+    EditVersion full_edit_version;
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    ASSERT_TRUE(tablet->updates()->get_applied_rowsets(6, &applied_rowsets, &full_edit_version).ok());
+    ASSERT_EQ(5, applied_rowsets.size());
+
+    RowsetSharedPtr last_rowset = applied_rowsets.back();
+    int64_t num_segments = last_rowset->num_segments();
+    ASSERT_EQ(1, num_segments);
+    std::string rowset_path = last_rowset->rowset_path();
+    std::string segment_path =
+            strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
+    std::unique_ptr<fs::ReadableBlock> rblock;
+    //std::shared_ptr<fs::BlockManager> block_mgr;
+    //ASSIGN_OR_ABORT(block_mgr, fs::fs_util::block_manager("posix://"));
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    ASSERT_TRUE(block_mgr->open_block(segment_path, &rblock).ok());
+
+    ASSERT_TRUE(Segment::parse_segment_footer(rblock.get(), footer, nullptr, nullptr).ok());
+    rblock->close();
+}
+
+void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old() {
+    srand(GetCurrentTimeMicros());
+    auto tablet0 = create_tablet(rand(), rand());
+    auto tablet1 = create_tablet(rand(), rand());
+
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+    });
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet1->tablet_schema(), column_indexes);
+    tablets_prepare(tablet0, tablet1, column_indexes, partial_schema);
+
+    // try to do snapshot
+    std::vector<int64_t> delta_versions = {4, 5, 6};
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
+    std::vector<RowsetSharedPtr> snapshot_rowsets;
+    std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+    std::string snapshot_id_path;
+    std::string snapshot_dir;
+    snapshot_prepare(tablet0, delta_versions, &snapshot_id_path, &snapshot_dir, &snapshot_rowsets,
+                     &snapshot_rowset_metas, snapshot_tablet_meta);
+
+    // link files first and then build snapshot meta file
+    for (const auto& rowset : snapshot_rowsets) {
+        ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
+    }
+
+    // apply rowset
+    tablet0->updates()->stop_apply(false);
+    tablet0->updates()->check_for_apply();
+
+    {
+        EditVersion version;
+        std::vector<RowsetSharedPtr> applied_rowsets;
+        Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
+        EditVersion latest_applied_verison;
+        tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+        ASSERT_EQ(latest_applied_verison.major(), 6);
+    }
+
+    ASSERT_TRUE(SnapshotManager::instance()
+                        ->make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet0,
+                                                       snapshot_rowset_metas, 0, 4 /*TSNAPSHOT_REQ_VERSION2*/)
+                        .ok());
+
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, snapshot_id_path);
+    SegmentFooterPB footer;
+    load_snapshot(meta_dir, tablet1, &footer);
+    ASSERT_EQ(footer.columns_size(), 2);
+}
+
+TEST_F(TabletUpdatesTest, load_snapshot_incremental_with_partial_rowset_old) {
+    test_load_snapshot_incremental_with_partial_rowset_old();
+}
+
+void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(PartialUpdateCloneCase update_case) {
+    srand(GetCurrentTimeMicros());
+    auto tablet0 = create_tablet(rand(), rand());
+    auto tablet1 = create_tablet(rand(), rand());
+
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
+        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+    });
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet1->tablet_schema(), column_indexes);
+    tablets_prepare(tablet0, tablet1, column_indexes, partial_schema);
+    if (update_case == CASE4) {
+        tablet0->updates()->stop_apply(false);
+        tablet0->updates()->check_for_apply();
+        {
+            EditVersion version;
+            std::vector<RowsetSharedPtr> applied_rowsets;
+            Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
+            EditVersion latest_applied_verison;
+            tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+            ASSERT_EQ(latest_applied_verison.major(), 6);
+        }
+    }
+
+    // try to do snapshot
+    std::vector<int64_t> delta_versions = {4, 5, 6};
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
+    std::vector<RowsetSharedPtr> snapshot_rowsets;
+    std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+    std::string snapshot_id_path;
+    std::string snapshot_dir;
+    DeferOp remove([&]() {
+        (void)FileUtils::remove_all(snapshot_dir);
+        (void)FileUtils::remove_all(snapshot_id_path);
+    });
+
+    snapshot_prepare(tablet0, delta_versions, &snapshot_id_path, &snapshot_dir, &snapshot_rowsets,
+                     &snapshot_rowset_metas, snapshot_tablet_meta);
+
+    ASSERT_TRUE(SnapshotManager::instance()
+                        ->make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet0,
+                                                       snapshot_rowset_metas, 0, 4 /*TSNAPSHOT_REQ_VERSION2*/)
+                        .ok());
+    switch (update_case) {
+    case CASE1: {
+        // rowset status is committed in meta, rowset file is partial rowset
+        // link files directly
+        for (const auto& rowset : snapshot_rowsets) {
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
+        }
+        break;
+    }
+    case CASE2: {
+        // rowset status is committed in meta, rowset file is partial rowset, but rowset is apply success after link file
+        // link files first and do apply
+        for (const auto& rowset : snapshot_rowsets) {
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
+        }
+
+        tablet0->updates()->stop_apply(false);
+        tablet0->updates()->check_for_apply();
+        {
+            EditVersion version;
+            std::vector<RowsetSharedPtr> applied_rowsets;
+            Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
+            EditVersion latest_applied_verison;
+            tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+            ASSERT_EQ(latest_applied_verison.major(), 6);
+        }
+        break;
+    }
+    case CASE3: {
+        // rowset status is committed in meta, rowset file is full rowset
+        // apply first and then do link files
+        tablet0->updates()->stop_apply(false);
+        tablet0->updates()->check_for_apply();
+
+        {
+            EditVersion version;
+            std::vector<RowsetSharedPtr> applied_rowsets;
+            Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
+            EditVersion latest_applied_verison;
+            tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+            ASSERT_EQ(latest_applied_verison.major(), 6);
+        }
+
+        for (const auto& rowset : snapshot_rowsets) {
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
+        }
+        break;
+    }
+    case CASE4: {
+        // rowset status is applied in meta, rowset file is full rowset
+        // rowsets applied success, link files directly
+        for (const auto& rowset : snapshot_rowsets) {
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
+        }
+        break;
+    }
+    default:
+        return;
+    }
+
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, snapshot_id_path);
+    SegmentFooterPB footer;
+    load_snapshot(meta_dir, tablet1, &footer);
+    ASSERT_EQ(footer.columns_size(), 3);
+}
+
+TEST_F(TabletUpdatesTest, test_load_snapshot_incremental_with_partial_rowset_new) {
+    test_load_snapshot_incremental_with_partial_rowset_new(CASE1);
+    test_load_snapshot_incremental_with_partial_rowset_new(CASE2);
+    test_load_snapshot_incremental_with_partial_rowset_new(CASE3);
+    test_load_snapshot_incremental_with_partial_rowset_new(CASE4);
 }
 
 // NOLINTNEXTLINE

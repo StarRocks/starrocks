@@ -214,6 +214,10 @@ public:
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 
+    void get_latest_applied_version(EditVersion* latest_applied_version) {
+        return _get_latest_applied_version(latest_applied_version);
+    }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -321,6 +325,11 @@ private:
                                      const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
+
+    // these functions is only used in ut
+    void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
+
+    void check_for_apply() { _check_for_apply(); }
 
 private:
     Tablet& _tablet;

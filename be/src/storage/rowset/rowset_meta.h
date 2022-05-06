@@ -173,7 +173,7 @@ public:
 
     void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
 
-    void release_txn_meta() { _rowset_meta_pb.release_txn_meta(); }
+    void clear_txn_meta() { _rowset_meta_pb.clear_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb.empty(); }
 
