@@ -370,9 +370,6 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
             }
         }
         it->second.erase(tablet_info);
-        LOG(INFO) << "rollback transaction from engine successfully."
-                  << " partition_id: " << key.first << ", transaction_id: " << key.second
-                  << ", tablet: " << tablet_info.to_string();
         if (with_log) {
             LOG(INFO) << "rollback transaction from engine successfully."
                       << " partition_id: " << key.first << ", transaction_id: " << key.second
