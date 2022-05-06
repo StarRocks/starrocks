@@ -10,6 +10,7 @@
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -21,8 +22,10 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "storage/task/engine_publish_version_task.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/delta_writer.h"
 #include "testutil/assert.h"
 #include "util/cpu_info.h"
 #include "util/disk_info.h"
@@ -133,6 +136,37 @@ public:
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
     }
 
+    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+        TSlotDescriptorBuilder builder;
+
+        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+            return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
+        } else {
+            return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
+        }
+    }
+
+    TupleDescriptor* _create_tuple_desc() {
+        TDescriptorTableBuilder table_builder;
+        TTupleDescriptorBuilder tuple_builder;
+
+        for (size_t i = 0; i < 3; i++) {
+            tuple_builder.add_slot(_create_slot_desc(_primitive_type[i], _names[i], i));
+        }
+
+        tuple_builder.build(&table_builder);
+
+        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+        std::vector<bool> nullable_tuples = std::vector<bool>{false};
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+
+        return tuple_desc;
+    }
+
     void do_cycle_migration() {
         TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
@@ -155,10 +189,119 @@ public:
         EngineStorageMigrationTask migration_task_2(12345, 1111, source_path);
         ASSERT_OK(migration_task_2.execute());
     }
+
+    void do_migration_fail() {
+        TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+        TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
+        ASSERT_TRUE(tablet != nullptr);
+        ASSERT_EQ(tablet->tablet_id(), 12345);
+        DataDir* source_path = tablet->data_dir();
+        tablet.reset();
+        DataDir* dest_path = nullptr;
+        DataDir* data_dir_1 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0];
+        DataDir* data_dir_2 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[1];
+        if (source_path == data_dir_1) {
+            dest_path = data_dir_2;
+        } else {
+            dest_path = data_dir_1;
+        }
+        EngineStorageMigrationTask migration_task(12345, 1111, dest_path);
+        auto st = migration_task.execute();
+        ASSERT_FALSE(st.ok());
+    }
+
+private:
+    PrimitiveType _primitive_type[3] = {PrimitiveType::TYPE_INT, PrimitiveType::TYPE_VARCHAR, PrimitiveType::TYPE_INT};
+
+    std::string _names[3] = {"k1", "k2", "v1"};
+    ObjectPool _pool;
 };
 
 TEST_F(EngineStorageMigrationTaskTest, test_cycle_migration) {
     do_cycle_migration();
+}
+
+TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) {
+    TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+    TabletUid old_tablet_uid;
+    {
+        TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
+        old_tablet_uid = tablet->tablet_uid();
+    }
+    vectorized::DeltaWriterOptions writer_options;
+    writer_options.tablet_id = 12345;
+    writer_options.schema_hash = 1111;
+    writer_options.write_type = vectorized::LOAD;
+    writer_options.txn_id = 2222;
+    writer_options.partition_id = 10;
+    writer_options.load_id.set_hi(1000);
+    writer_options.load_id.set_lo(2222);
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    writer_options.tuple_desc = tuple_desc;
+    writer_options.slots = &tuple_desc->slots();
+
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = vectorized::DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok());
+        auto delta_writer = std::move(writer_status.value());
+        ASSERT_TRUE(delta_writer != nullptr);
+        // add sleep to add time of tablet create time gap
+        sleep(2);
+        // do migration check, migration will fail
+        do_migration_fail();
+        TabletUid new_tablet_uid;
+        {
+            TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
+            new_tablet_uid = tablet->tablet_uid();
+        }
+        // the migration fail. so the tablet will not change
+        ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
+        // prepare chunk
+        std::vector<std::string> test_data;
+        auto chunk = vectorized::ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        std::vector<uint32_t> indexes;
+        indexes.reserve(1024);
+        for (size_t i = 0; i < 1024; ++i) {
+            indexes.push_back(i);
+            test_data.push_back("well" + std::to_string(i));
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            Slice field_1(test_data[i]);
+            cols[1]->append_datum(vectorized::Datum(field_1));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+        }
+        auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
+        ASSERT_TRUE(st.ok());
+        st = delta_writer->close();
+        ASSERT_TRUE(st.ok());
+        st = delta_writer->commit();
+        ASSERT_TRUE(st.ok());
+    }
+    // make sure to release delta_writer from here
+    // or it will not release the tablet in gc
+
+    // clean trash and unused txns after commit
+    // it will clean no tablet and txns
+    tablet_manager->start_trash_sweep();
+    starrocks::ExecEnv::GetInstance()->storage_engine()->_clean_unused_txns();
+
+    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
+    ASSERT_EQ(1, tablet_related_rs.size());
+    TVersion version = 3;
+    // publish version for txn
+    for (auto& tablet_rs : tablet_related_rs) {
+        const TabletInfo& tablet_info = tablet_rs.first;
+        const RowsetSharedPtr& rowset = tablet_rs.second;
+        EnginePublishVersionTask publish_task(2222, 10, version, tablet_info, rowset);
+        auto st = publish_task.finish();
+        // success because the related transaction is GCed
+        ASSERT_TRUE(st.ok());
+    }
+    auto tablet = tablet_manager->get_tablet(12345);
+    Version max_version = tablet->max_version();
+    ASSERT_EQ(3, max_version.first);
 }
 
 } // namespace starrocks
@@ -230,8 +373,7 @@ int main(int argc, char** argv) {
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    starrocks::FileUtils::remove_all(root_path_1);
-    starrocks::FileUtils::remove_all(root_path_2);
+    starrocks::FileUtils::remove_all(storage_root.value());
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();

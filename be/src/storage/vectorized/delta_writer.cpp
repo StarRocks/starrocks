@@ -30,16 +30,16 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _rowset_writer(nullptr),
           _mem_table(nullptr),
           _tablet_schema(nullptr),
-          _flush_token(nullptr) {}
+          _flush_token(nullptr),
+          _with_rollback_log(true) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
-    case kInitialized:
         break;
-    case kPrepared:
+    case kWriting:
     case kClosed:
     case kAborted:
         _garbage_collection();
@@ -54,7 +54,7 @@ void DeltaWriter::_garbage_collection() {
     Status rollback_status = Status::OK();
     if (_tablet != nullptr) {
         TxnManager* txn_mgr = _storage_engine->txn_manager();
-        rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
+        rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id, _with_rollback_log);
     }
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
@@ -121,9 +121,17 @@ Status DeltaWriter::_init() {
                 continue;
             }
         }
+
+        std::lock_guard push_lock(_tablet->get_push_lock());
+        auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+        if (!st.ok()) {
+            _set_state(kAborted);
+            return st;
+        }
         break;
     }
 
+    // from here, make sure to set state to kAborted if error happens
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
 
     std::size_t partial_col_num = _opt.slots->size();
@@ -138,10 +146,10 @@ Status DeltaWriter::_init() {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             int32_t index = _tablet->field_index(slot_col_name);
             if (index < 0) {
-                std::stringstream ss;
-                ss << "invalid column name: " << slot_col_name;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
+                auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
+                LOG(WARNING) << msg;
+                _set_state(kAborted);
+                return Status::InvalidArgument(msg);
             }
             writer_context.referenced_column_ids.push_back(index);
         }
@@ -166,7 +174,7 @@ Status DeltaWriter::_init() {
     writer_context.global_dicts = _opt.global_dicts;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
-        _set_state(kUninitialized);
+        _set_state(kAborted);
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
                                        st.to_string());
         LOG(WARNING) << msg;
@@ -176,39 +184,17 @@ Status DeltaWriter::_init() {
     _tablet_schema = writer_context.tablet_schema;
     _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
-    _set_state(kInitialized);
-    return Status::OK();
-}
-
-Status DeltaWriter::_prepare() {
-    Status st;
-    auto state = _get_state();
-    switch (state) {
-    case kUninitialized:
-    case kCommitted:
-    case kAborted:
-    case kClosed:
-        return Status::InternalError(
-                fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
-    case kPrepared:
-        return Status::OK();
-    case kInitialized: {
-        std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
-        std::lock_guard push_lock(_tablet->get_push_lock());
-        st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        if (!st.ok()) {
-            _set_state(kAborted);
-            return st;
-        }
-        _set_state(kPrepared);
-    } break;
-    }
+    _set_state(kWriting);
     return Status::OK();
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    RETURN_IF_ERROR(_prepare());
+    auto state = _get_state();
+    if (state != kWriting) {
+        return Status::InternalError(
+                fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+    }
     Status st;
     bool full = _mem_table->insert(chunk, indexes, from, size);
     if (_mem_tracker->limit_exceeded()) {
@@ -231,7 +217,6 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    Status st;
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
@@ -240,11 +225,8 @@ Status DeltaWriter::close() {
         return Status::InternalError(fmt::format("cannot close delta writer in {} state", _state_name(state)));
     case kClosed:
         return Status::OK();
-    case kInitialized:
-        _set_state(kClosed);
-        return st;
-    case kPrepared:
-        st = _flush_memtable_async();
+    case kWriting:
+        auto st = _flush_memtable_async();
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
@@ -271,9 +253,8 @@ Status DeltaWriter::commit() {
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
-    case kInitialized:
     case kAborted:
-    case kPrepared:
+    case kWriting:
         return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
                                                  _opt.tablet_id, _state_name(state)));
     case kCommitted:
@@ -325,8 +306,9 @@ Status DeltaWriter::commit() {
     return Status::OK();
 }
 
-void DeltaWriter::abort() {
+void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted);
+    _with_rollback_log = with_log;
 }
 
 int64_t DeltaWriter::partition_id() const {
@@ -337,12 +319,10 @@ const char* DeltaWriter::_state_name(State state) const {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";
-    case kInitialized:
-        return "kInitialized";
     case kAborted:
         return "kAborted";
-    case kPrepared:
-        return "kPrepared";
+    case kWriting:
+        return "kWriting";
     case kCommitted:
         return "kCommitted";
     case kClosed:
