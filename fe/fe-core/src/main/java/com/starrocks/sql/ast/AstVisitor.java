@@ -45,6 +45,8 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
@@ -252,6 +254,14 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
         return visitNode(clause, context);
     }
 

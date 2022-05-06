@@ -89,6 +89,8 @@ public class AlterSystemStmt extends DdlStmt {
     private static boolean isNewAlterSystemClause(AlterClause clause) {
         return clause instanceof AddBackendClause
                 || clause instanceof DropBackendClause
-                || clause instanceof FrontendClause;
+                || clause instanceof ModifyBackendAddressClause
+                || clause instanceof ModifyFrontendAddressClause;
+
     }
 }

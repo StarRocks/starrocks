@@ -27,11 +27,10 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
 
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
-            new Pair<String, Integer>("originalHost", 1000), 
-            new Pair<String, Integer>("newHost", 1000)
+            new Pair<String, Integer>("originalHost", 1000), "sandbox"
         );
         GlobalStateMgr.getCurrentSystemInfo().updateBackendAddress(clause);    
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithHeartbeatPort("newHost", 1000);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
     }
 
@@ -39,10 +38,8 @@ public class SystemInfoServiceTest {
     public void testUpdateBackendAddressNotFoundBe() throws Exception {
         Backend be = new Backend(100, "originalHost", 1000);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
-
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
-            new Pair<String, Integer>("originalHost-test", 1000), 
-            new Pair<String, Integer>("newHost", 1000)
+            new Pair<String, Integer>("originalHost-test", 1000), "sandbox"
         );
         GlobalStateMgr.getCurrentSystemInfo().updateBackendAddress(clause);    
     }

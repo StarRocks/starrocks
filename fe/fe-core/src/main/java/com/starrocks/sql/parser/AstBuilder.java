@@ -67,6 +67,8 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
@@ -162,6 +164,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.parser.StarRocksParser.ModifyBackendHostClauseContext;
+import com.starrocks.sql.parser.StarRocksParser.ModifyFrontendHostClauseContext;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -621,6 +625,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitModifyBackendHostClause(ModifyBackendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1));
+    }
+
+    @Override
     public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         if (context.FOLLOWER() != null) {
@@ -644,6 +655,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
+    }
+
+    @Override
+    public ParseNode visitModifyFrontendHostClause(ModifyFrontendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------

@@ -268,8 +268,10 @@ public class MockedFrontend {
     }
 
     private void waitForCatalogReady() throws FeStartException {
-        while (!GlobalStateMgr.getCurrentState().isReady()) {
+        int tryCount = 0;
+        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 15) {
             try {
+                tryCount ++;
                 Thread.sleep(1000);
                 System.out.println("globalStateMgr is not ready, wait for 1 second");
             } catch (InterruptedException e) {
