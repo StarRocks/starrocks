@@ -6,7 +6,7 @@
 #include <memory>
 
 #include "common/config.h"
-#include "exec/pipeline/connector_scan_operator.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -129,8 +129,12 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto factory = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this);
-    return pipeline::decompose_scan_node_to_pipeline(factory, this, context);
+    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this);
+
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+
+    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
 // ==============================================================

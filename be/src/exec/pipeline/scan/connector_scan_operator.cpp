@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/connector_scan_operator.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "column/chunk.h"
 #include "exec/vectorized/connector_scan_node.h"
@@ -31,11 +31,18 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
                                              ScanNode* scan_node)
         : ScanOperator(factory, id, driver_sequence, scan_node) {}
 
-Status ConnectorScanOperator::do_prepare(RuntimeState*) {
+Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+
     return Status::OK();
 }
 
-void ConnectorScanOperator::do_close(RuntimeState*) {}
+void ConnectorScanOperator::do_close(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    Expr::close(conjunct_ctxs, state);
+}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);

@@ -1,17 +1,17 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 
 #include "column/chunk.h"
-#include "connector_scan_operator.h"
-#include "exec/pipeline/connector_scan_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+
 namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
@@ -99,7 +99,7 @@ bool ScanOperator::has_output() const {
 }
 
 bool ScanOperator::pending_finish() const {
-    DCHECK(_is_finished);
+    DCHECK(is_finished());
     return false;
 }
 
@@ -301,10 +301,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
     RETURN_IF_ERROR(do_prepare(state));
+
     return Status::OK();
 }
 
@@ -314,8 +312,7 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+
     OperatorFactory::close(state);
 }
 
@@ -324,21 +321,20 @@ void ScanOperatorFactory::close(RuntimeState* state) {
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories operators;
-    // Create a shared RefCountedRuntimeFilterCollector
-    auto&& rc_rf_probe_collector =
-            std::make_shared<RcRfProbeCollector>(1, std::move(scan_node->runtime_filter_collector()));
-    // Initialize OperatorFactory's fields involving runtime filters.
-    scan_node->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
+
     // ScanOperator's degree_of_parallelism is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
     const auto degree_of_parallelism =
             std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
     scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+
     operators.emplace_back(std::move(scan_operator));
+
     size_t limit = scan_node->limit();
     if (limit != -1) {
         operators.emplace_back(
