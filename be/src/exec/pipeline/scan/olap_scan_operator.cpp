@@ -68,7 +68,7 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
     const auto& morsels = this->morsel_queue()->morsels();
     _tablet_rowsets.resize(morsels.size());
     for (int i = 0; i < morsels.size(); ++i) {
-        ScanMorsel* scan_morsel = (ScanMorsel*)morsels[i].get();
+        auto* scan_morsel = down_cast<ScanMorsel*>(morsels[i].get());
         auto* scan_range = scan_morsel->get_olap_scan_range();
 
         // Get version.
@@ -98,7 +98,7 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
 }
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+    auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
     return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                              olap_scan_node, _ctx.get());
 }

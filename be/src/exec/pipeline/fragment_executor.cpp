@@ -283,14 +283,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
             DCHECK(morsel_queue->num_morsels() == 0 || cur_pipeline_dop <= morsel_queue->num_morsels());
-            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(cur_pipeline_dop);
-            DCHECK(morsel_queue_per_driver.size() == cur_pipeline_dop);
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     fragment_ctx.get(), driver_id++);
-                driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
+                driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
