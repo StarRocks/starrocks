@@ -132,6 +132,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
+    _morsel->init_tablet_reader_params(&_params);
     _decide_chunk_size();
 
     PredicateParser parser(_tablet->tablet_schema());
