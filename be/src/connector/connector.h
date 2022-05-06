@@ -31,9 +31,9 @@ public:
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
 
     // how many rows read from storage
-    virtual int64_t raw_rows_read() const { return 0; }
+    virtual int64_t raw_rows_read() const = 0;
     // how mnay rows returned after filtering.
-    virtual int64_t num_rows_read() const { return 0; }
+    virtual int64_t num_rows_read() const = 0;
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -76,6 +76,7 @@ class Connector {
 public:
     // supported connectors.
     static const std::string HIVE;
+    static const std::string ES;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
