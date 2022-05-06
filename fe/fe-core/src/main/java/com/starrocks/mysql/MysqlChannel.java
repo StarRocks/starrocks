@@ -205,9 +205,14 @@ public class MysqlChannel {
             // Nothing to send
             return;
         }
+
         sendBuffer.flip();
-        realNetSend(sendBuffer);
-        sendBuffer.clear();
+        try {
+            realNetSend(sendBuffer);
+        } finally {
+            sendBuffer.clear();
+        }
+
         isSend = true;
     }
 
@@ -239,14 +244,13 @@ public class MysqlChannel {
     }
 
     private void writeBuffer(ByteBuffer buffer) throws IOException {
-        long leftLength = sendBuffer.capacity() - sendBuffer.position();
         // If too long for buffer, send buffered data.
-        if (leftLength < buffer.remaining()) {
+        if (sendBuffer.remaining() < buffer.remaining()) {
             // Flush data in buffer.
             flush();
         }
         // Send this buffer if large enough
-        if (buffer.remaining() > sendBuffer.capacity()) {
+        if (buffer.remaining() > sendBuffer.remaining()) {
             realNetSend(buffer);
             return;
         }
