@@ -187,9 +187,6 @@ public:
 
     void compaction_check();
 
-    // public for ut
-    size_t compaction_check_one_round();
-
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -250,6 +247,8 @@ private:
     Status _perform_update_compaction(DataDir* data_dir);
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
+
+    size_t _compaction_check_one_round();
 
 private:
     struct CompactionCandidate {
