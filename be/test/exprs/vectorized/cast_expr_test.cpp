@@ -1414,6 +1414,7 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->get_data()[0]);
     EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->get_data()[0]);
     EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->get_data()[0]);
+    EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
 
     // implicit json type case
     EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1")->get_data()[0]);

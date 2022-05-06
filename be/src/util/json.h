@@ -130,6 +130,7 @@ inline Status fromVPackException(const vpack::Exception& e) {
 inline JsonType fromVPackType(vpack::ValueType type) {
     switch (type) {
     case vpack::ValueType::Null:
+    case vpack::ValueType::None:
         return JsonType::JSON_NULL;
     case vpack::ValueType::Bool:
         return JsonType::JSON_BOOL;

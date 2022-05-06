@@ -89,7 +89,7 @@ uint64_t JsonValue::serialize_size() const {
 
 // NOTE: JsonValue must be a valid JSON, which means to_string should not fail
 StatusOr<std::string> JsonValue::to_string() const {
-    if (binary_.empty()) {
+    if (binary_.empty() || to_vslice().type() == vpack::ValueType::None) {
         return "";
     }
     return callVPack<std::string>([this]() {
