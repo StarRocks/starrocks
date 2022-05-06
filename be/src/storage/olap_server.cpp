@@ -118,8 +118,8 @@ Status StorageEngine::start_bg_threads() {
     } else {
         // new compaction framework
 
-        // compaction_manager must init before any comapction_scheduler starts
-        _compaction_manager->init();
+        // compaction_manager must init_max_task_num() before any comapction_scheduler starts
+        _compaction_manager->init_max_task_num();
         _compaction_scheduler = std::thread([] {
             CompactionScheduler compaction_scheduler;
             compaction_scheduler.schedule();

@@ -28,7 +28,7 @@ public:
 
     ~CompactionManager() = default;
 
-    void init();
+    void init_max_task_num();
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
