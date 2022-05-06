@@ -25,19 +25,19 @@ import java.util.Map;
 
 public class AdminStmtAnalyzer {
     public static void analyze(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().visit(adminSetConfigStmt, session);
+        new AdminStmtAnalyzerVisitor().analyze(adminSetConfigStmt, session);
     }
 
     public static void analyze(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().visit(adminSetReplicaStatusStmt, session);
+        new AdminStmtAnalyzerVisitor().analyze(adminSetReplicaStatusStmt, session);
     }
 
     public static void analyze(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().visit(adminShowConfigStmt, session);
+        new AdminStmtAnalyzerVisitor().analyze(adminShowConfigStmt, session);
     }
 
     public static void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().visit(adminShowReplicaDistributionStmt, session);
+        new AdminStmtAnalyzerVisitor().analyze(adminShowReplicaDistributionStmt, session);
     }
 
     public static void analyze(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt, ConnectContext session) {
