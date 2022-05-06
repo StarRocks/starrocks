@@ -299,26 +299,25 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // colocate join
-                if (!"BUCKET".equalsIgnoreCase(hint) &&
-                        canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
+                if ("BUCKET".equalsIgnoreCase(hint) ||
+                        !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
                                 rightShuffleColumns)) {
-                    return visitOperator(node, context);
-                } else {
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
-                    return visitOperator(node, context);
                 }
-            } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isJoinShuffle()) {
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isShuffle()) {
                 // bucket join
                 transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
                 enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isJoinShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isShuffle()) {
                 // shuffle join
                 return visitOperator(node, context);
             } else {
+                //noinspection ConstantConditions
                 Preconditions.checkState(false, "Children output property distribution error");
             }
         } else {

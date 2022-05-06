@@ -157,8 +157,9 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
-        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update serialize)"));
-        Assert.assertTrue(replayPair.second.contains("4:AGGREGATE (merge finalize)"));
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));
+        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)"));
     }
 
     @Test
@@ -244,7 +245,7 @@ public class ReplayFromDumpTest {
                 "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
                 "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
                 "  |  cardinality: 39142590"));
-        Assert.assertTrue(replayPair.second.contains("16:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
