@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/jdbc_scanner.h"
 #include "util/blocking_queue.hpp"
 #include "util/spinlock.h"
@@ -56,7 +56,6 @@ private:
     std::atomic<bool> _is_finished{false};
 
     const TJDBCScanNode& _jdbc_scan_node;
-    const std::vector<ExprContext*>& _conjunct_ctxs;
     int64_t _limit;
 
     TupleDescriptor* _result_tuple_desc = nullptr;
