@@ -128,10 +128,6 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-bool ConnectorScanNode::support_multi_scan_ranges() const {
-    return _data_source_provider->support_multi_scan_ranges();
-}
-
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this);
 
@@ -140,7 +136,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
-    if (!support_multi_scan_ranges()) {
+    if (!_data_source_provider->insert_local_exchange_operator()) {
         operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
                                                                           operators, context->degree_of_parallelism());
     }
@@ -513,6 +509,13 @@ Status ConnectorScanNode::close(RuntimeState* state) {
 
 Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     _scan_ranges = scan_ranges;
+    if (scan_ranges.size() == 0) {
+        // If scan ranges size is zero,
+        // it means data source provider does not support reading by scan ranges.
+        // So here we insert a single placeholder, to force data source provider
+        // to create at least one data source
+        _scan_ranges.emplace_back(TScanRangeParams());
+    }
     COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
 }

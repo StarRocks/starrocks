@@ -34,8 +34,6 @@ public:
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
 
-    bool support_multi_scan_ranges() const;
-
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;

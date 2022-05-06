@@ -70,7 +70,7 @@ public:
     Status open(RuntimeState* state) { return Status::OK(); }
     void close(RuntimeState* state) {}
 
-    virtual bool support_multi_scan_ranges() const { return true; }
+    virtual bool insert_local_exchange_operator() const { return false; }
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
