@@ -20,7 +20,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
-
 import java.util.List;
 import java.util.Map;
 
