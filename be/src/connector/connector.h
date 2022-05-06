@@ -69,6 +69,8 @@ public:
     Status prepare(RuntimeState* state) { return Status::OK(); }
     Status open(RuntimeState* state) { return Status::OK(); }
     void close(RuntimeState* state) {}
+
+    virtual bool support_multi_scan_ranges() const { return true; }
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
@@ -77,6 +79,7 @@ public:
     // supported connectors.
     static const std::string HIVE;
     static const std::string ES;
+    static const std::string JDBC;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

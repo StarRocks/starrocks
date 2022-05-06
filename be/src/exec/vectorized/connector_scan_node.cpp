@@ -128,13 +128,23 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
+bool ConnectorScanNode::support_multi_scan_ranges() const {
+    return _data_source_provider->support_multi_scan_ranges();
+}
+
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this);
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
-    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+
+    if (!support_multi_scan_ranges()) {
+        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
+                                                                          operators, context->degree_of_parallelism());
+    }
+    return operators;
 }
 
 // ==============================================================

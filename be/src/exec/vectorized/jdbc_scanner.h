@@ -33,11 +33,11 @@ struct JDBCScannerProfile {
 
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, pipeline::ScanOperator* op)
+    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
             : _scan_ctx(context),
               _tuple_desc(tuple_desc),
               _slot_descs(tuple_desc->slots()),
-              _runtime_profile(op->unique_metrics()) {}
+              _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner();
 

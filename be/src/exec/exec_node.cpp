@@ -493,8 +493,15 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::DECODE_NODE:
         *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::JDBC_SCAN_NODE:
-        *node = pool->add(new vectorized::JDBCScanNode(pool, tnode, descs));
+    case TPlanNodeType::JDBC_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::JDBC;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+    }
+
+        //        *node = pool->add(new vectorized::JDBCScanNode(pool, tnode, descs));
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
