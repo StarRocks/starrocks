@@ -59,10 +59,8 @@ public:
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
 
-    // pass `scan ranges` from frontend, maybe we can try to split scan ranges further.
-    virtual const std::vector<TScanRangeParams>& split_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
-        return scan_ranges;
-    }
+    // If this scan node accept empty scan ranges.
+    virtual bool accept_empty_scan_ranges() const { return true; }
 
     bool is_scan_node() const override { return true; }
 
