@@ -322,7 +322,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
 
-    // ------------------------------------------- Catalog Statement -------------------------------------------------------
+    // ------------------------------------------- Catalog Statement ---------------------------------------------------
 
     @Override
     public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
@@ -378,6 +378,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new AdminSetReplicaStatusStmt(properties);
     }
+
 
 
 
