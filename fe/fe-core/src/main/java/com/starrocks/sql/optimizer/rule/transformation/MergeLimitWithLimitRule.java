@@ -36,9 +36,9 @@ public class MergeLimitWithLimitRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        // Any limit operator can be merged with global limit, no scene where the child is local limit
+        // Any limit operator can be merged with global/init limit, no scene where the child is local limit
         LogicalLimitOperator childLimit = (LogicalLimitOperator) input.getInputs().get(0).getOp();
-        return childLimit.isGlobal();
+        return childLimit.isGlobal() || childLimit.isInit();
     }
 
     // eg.1, child limit is smaller than parent, child must gather
@@ -82,7 +82,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         if (l1.getLimit() <= l2.getLimit()) {
             result = LogicalLimitOperator.local(limit);
         } else {
-            result = LogicalLimitOperator.init(limit, Operator.DEFAULT_OFFSET);
+            result = LogicalLimitOperator.init(limit);
         }
 
         return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));

@@ -22,25 +22,15 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     private final Phase phase;
 
-    public LogicalLimitOperator(long limit) {
-        super(OperatorType.LOGICAL_LIMIT);
-        this.limit = limit;
-        offset = DEFAULT_OFFSET;
-        phase = Phase.INIT;
-    }
-
-    public LogicalLimitOperator(long limit, long offset) {
-        super(OperatorType.LOGICAL_LIMIT);
-        this.limit = limit;
-        this.offset = offset;
-        this.phase = Phase.INIT;
-    }
-
-    private LogicalLimitOperator(long limit, long offset, Phase phase) {
+    public LogicalLimitOperator(long limit, long offset, Phase phase) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
         this.offset = offset;
         this.phase = phase;
+    }
+
+    public static LogicalLimitOperator init(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.INIT);
     }
 
     public static LogicalLimitOperator init(long limit, long offset) {
@@ -68,6 +58,10 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     public long getOffset() {
         return offset;
+    }
+
+    public Phase getPhase() {
+        return phase;
     }
 
     public boolean isInit() {

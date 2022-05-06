@@ -225,6 +225,14 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
+        // @todo: check the condition is right?
+        //
+        // If scan tablet sum leas than 1, don't need required gather, because work machine always less than 1?
+        // if (context.getRootProperty().isExecuteInOneTablet()) {
+        //     requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+        //     return null;
+        // }
+
         // limit node in Memo means that the limit cannot be merged into other nodes.
         requiredProperties.add(Lists.newArrayList(createLimitGatherProperty(node.getLimit())));
         return null;

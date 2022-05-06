@@ -15,9 +15,9 @@ import java.util.List;
 
 /*
  * e.g.
- *    Project                 Limit(Global/Init)
+ *    Project                    Limit(Global)
  *        |                           |
- *   Limit(Global/Init)   =>       Project
+ *   Limit(Global)   =>            Project
  *        |                           |
  *       ...                         ...
  */
@@ -38,10 +38,7 @@ public class PushDownProjectLimitRule extends TransformationRule {
         LogicalLimitOperator limit = (LogicalLimitOperator) project.getInputs().get(0).getOp();
         Preconditions.checkState(!limit.hasOffset());
         LogicalLimitOperator newLimit = LogicalLimitOperator.global(limit.getLimit());
-
-        List<OptExpression> child = project.getInputs().get(0).getInputs();
-        project.getInputs().clear();
-        project.getInputs().addAll(child);
-        return Lists.newArrayList(OptExpression.create(newLimit, project));
+        return Lists.newArrayList(OptExpression.create(newLimit,
+                OptExpression.create(project.getOp(), project.getInputs().get(0).getInputs())));
     }
 }

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
@@ -209,9 +210,11 @@ public class Optimizer {
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another MergeTwoProjectRule
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
+        ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectLimitRule());
+
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);

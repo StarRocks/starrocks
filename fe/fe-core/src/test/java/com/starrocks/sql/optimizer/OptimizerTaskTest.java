@@ -570,10 +570,8 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, Column> scanColumnMap = com.google.common.collect.Maps.newHashMap();
         scanColumnMap.put(column1, new Column("column1", Type.DATE, false));
 
-        OptExpression expression = OptExpression.create(LogicalLimitOperator.init(1, 1),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable1,
-
+        OptExpression expression = OptExpression.create(LogicalLimitOperator.init(1, 0),
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1,
                         scanColumnMap, Maps.newHashMap(), null, -1, null)));
 
         Optimizer optimizer = new Optimizer();
@@ -898,7 +896,7 @@ public class OptimizerTaskTest {
                         new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null, -1,
                                 null)));
 
-        OptExpression limit = OptExpression.create(new LogicalLimitOperator(1), agg);
+        OptExpression limit = OptExpression.create(LogicalLimitOperator.init(1), agg);
 
         OptExpression expression = OptExpression.create(
                 new LogicalProjectOperator(projectColumnMap), limit);

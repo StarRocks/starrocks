@@ -40,7 +40,7 @@ public class PushDownLimitUnionRule extends TransformationRule {
         // push down
         List<OptExpression> newUnionChild = Lists.newArrayList();
         for (OptExpression unionChild : child.getInputs()) {
-            OptExpression nl = new OptExpression(new LogicalLimitOperator(limit.getLimit()));
+            OptExpression nl = new OptExpression(LogicalLimitOperator.local(limit.getLimit()));
             nl.getInputs().add(unionChild);
             newUnionChild.add(nl);
         }
