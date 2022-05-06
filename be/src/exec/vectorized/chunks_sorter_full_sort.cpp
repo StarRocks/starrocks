@@ -49,7 +49,12 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         SCOPED_TIMER(_sort_timer);
 
         // Check column overflow problem
-        RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
+        // TODO upgrade to large binary column if overflow
+        if (_unsorted_chunk->reach_capacity_limit()) {
+            LOG(WARNING) << fmt::format("Sorter encounter big chunk overflow with {} rows and {} bytes",
+                                        _unsorted_chunk->num_rows(), _unsorted_chunk->bytes_usage());
+            return Status::InternalError("Sorter encounter big chunk overflow");
+        }
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
         _sort_permutation.resize(0);
