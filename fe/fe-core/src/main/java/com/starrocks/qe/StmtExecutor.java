@@ -1101,8 +1101,13 @@ public class StmtExecutor {
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
-                coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                if (!coord.checkBackendState()) {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
+                } else {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                }
             }
 
             if (!coord.getExecStatus().ok()) {
