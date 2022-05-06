@@ -1,10 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/olap_chunk_source.h"
+#include "exec/pipeline/scan/olap_chunk_source.h"
 
 #include "column/column_helper.h"
 #include "common/constexpr.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/olap_scan_context.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
@@ -23,18 +24,13 @@
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                                 vectorized::OlapScanNode* scan_node)
+OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                 vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
         : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
+          _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
-          _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()) {
-    _conjunct_ctxs = scan_node->conjunct_ctxs();
-    _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
-    _scan_range = scan_morsel->get_olap_scan_range();
-}
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
@@ -52,31 +48,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _init_counter(state);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
-    OlapScanConjunctsManager& cm = _conjuncts_manager;
-    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_olap_scan_node.key_column_name;
-    cm.runtime_filters = _runtime_bloom_filters;
-    cm.runtime_state = state;
-
-    const TQueryOptions& query_options = state->query_options();
-    int32_t max_scan_key_num;
-    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
-        max_scan_key_num = query_options.max_scan_key_num;
-    } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
-    }
-    bool enable_column_expr_predicate = false;
-    if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
-        enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
-    }
-    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
-    RETURN_IF_ERROR(_build_scan_range(_runtime_state));
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
+
     return Status::OK();
 }
 
@@ -126,27 +99,6 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
 }
 
-Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
-    _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
-
-    // FixMe(kks): Ensure this logic is right.
-    int scanners_per_tablet = 64;
-    int num_ranges = _key_ranges.size();
-    int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
-    for (int i = 0; i < num_ranges;) {
-        _scanner_ranges.push_back(_key_ranges[i].get());
-        i++;
-        for (int j = 1;
-             i < num_ranges && j < ranges_per_scanner && _key_ranges[i]->end_include == _key_ranges[i - 1]->end_include;
-             ++j, ++i) {
-            _scanner_ranges.push_back(_key_ranges[i].get());
-        }
-    }
-    return Status::OK();
-}
-
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     TTabletId tablet_id = scan_range->tablet_id;
     SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
@@ -178,7 +130,7 @@ void OlapChunkSource::_decide_chunk_size() {
     }
 }
 
-Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -193,7 +145,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(&parser, &preds));
+    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(&parser, &preds));
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -210,7 +162,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     }
 
     // Range
-    for (auto key_range : key_ranges) {
+    for (const auto& key_range : key_ranges) {
         if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
             continue;
         }
@@ -291,7 +243,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
-    RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
+    RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
@@ -304,7 +256,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
+    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
     }
 
@@ -337,13 +289,13 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     return chunk;
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
 
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         ChunkUniquePtr chunk(
                 ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
@@ -359,7 +311,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
     return _status;
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, bool& can_finish,
+Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
                                                                         size_t* num_read_chunks, int worker_id,
                                                                         workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
@@ -368,7 +320,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
 
     using namespace vectorized;
     int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent);
 
@@ -449,9 +401,9 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
-        if (!_not_push_down_conjuncts.empty()) {
+        if (!_scan_ctx->not_push_down_conjuncts().empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk));
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scan_ctx->not_push_down_conjuncts(), chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()
@@ -470,7 +422,6 @@ void OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
-    _dict_optimize_parser.close(state);
 }
 
 int64_t OlapChunkSource::last_spent_cpu_time_ns() {

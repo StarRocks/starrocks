@@ -6,7 +6,7 @@
 
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
-#include "exec/pipeline/chunk_source.h"
+#include "exec/pipeline/scan/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
@@ -28,10 +28,12 @@ class RuntimeFilterProbeCollector;
 namespace pipeline {
 
 class ScanOperator;
+class OlapScanContext;
+
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                    vectorized::OlapScanNode* scan_node);
+    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
+                    OlapScanContext* scan_ctx);
 
     ~OlapChunkSource() override = default;
 
@@ -47,9 +49,10 @@ public:
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
-    Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
-    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
-                                                           int worker_id, workgroup::WorkGroupPtr running_wg) override;
+    Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) override;
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
+                                                           size_t* num_read_chunks, int worker_id,
+                                                           workgroup::WorkGroupPtr running_wg) override;
 
     // Return last bytes of Scan or Exchange Data, then reset it
     int64_t last_spent_cpu_time_ns() override;
@@ -63,32 +66,28 @@ private:
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
 
     Status _get_tablet(const TInternalScanRange* scan_range);
-    Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(vectorized::TabletReaderParams* params);
-    Status _build_scan_range(RuntimeState* state);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
 
-    vectorized::TabletReaderParams _params = {};
-
+private:
+    vectorized::TabletReaderParams _params{};
     vectorized::OlapScanNode* _scan_node;
+    OlapScanContext* _scan_ctx;
+
     const int64_t _limit; // -1: no limit
-    std::vector<ExprContext*> _conjunct_ctxs;
-    const std::vector<ExprContext*>& _runtime_in_filters;
-    const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
-    // The conjuncts couldn't push down to storage engine
-    std::vector<ExprContext*> _not_push_down_conjuncts;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
@@ -98,10 +97,6 @@ private:
 
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
-    std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
-    std::vector<OlapScanRange*> _scanner_ranges;
-    vectorized::OlapScanConjunctsManager _conjuncts_manager;
-    vectorized::DictOptimizeParser _dict_optimize_parser;
 
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.

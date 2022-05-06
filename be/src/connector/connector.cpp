@@ -2,6 +2,7 @@
 
 #include "connector/connector.h"
 
+#include "connector/es_connector.h"
 #include "connector/hive_connector.h"
 
 namespace starrocks {
@@ -24,12 +25,14 @@ ConnectorManager* ConnectorManager::default_instance() {
 }
 
 const std::string Connector::HIVE = "hive";
+const std::string Connector::ES = "es";
 
 class ConnectorManagerInit {
 public:
     ConnectorManagerInit() {
         ConnectorManager* cm = ConnectorManager::default_instance();
         cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
+        cm->put(Connector::ES, std::make_unique<ESConnector>());
     }
 };
 

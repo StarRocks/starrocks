@@ -91,6 +91,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
             _aggregator->update_num_input_rows(chunk_size);
         }
+        RETURN_IF_ERROR(_aggregator->check_has_error());
     }
 
     if (!_aggregator->is_none_group_by_exprs()) {
@@ -115,6 +116,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
     }
+
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());

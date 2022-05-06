@@ -19,7 +19,7 @@
 namespace starrocks::parquet {
 
 static vectorized::HdfsScanStats g_hdfs_scan_stats;
-using starrocks::vectorized::HdfsFileReaderParam;
+using starrocks::vectorized::HdfsScannerContext;
 
 // TODO: min/max conjunct
 class FileReaderTest : public testing::Test {
@@ -30,14 +30,14 @@ public:
 private:
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
 
-    HdfsFileReaderParam* _create_param();
-    HdfsFileReaderParam* _create_param_for_partition();
-    HdfsFileReaderParam* _create_param_for_not_exist();
+    HdfsScannerContext* _create_context();
+    HdfsScannerContext* _create_context_for_partition();
+    HdfsScannerContext* _create_context_for_not_exist();
 
-    HdfsFileReaderParam* _create_file2_base_param();
-    HdfsFileReaderParam* _create_param_for_min_max();
-    HdfsFileReaderParam* _create_param_for_filter_file();
-    HdfsFileReaderParam* _create_param_for_dict_filter();
+    HdfsScannerContext* _create_file2_base_context();
+    HdfsScannerContext* _create_context_for_min_max();
+    HdfsScannerContext* _create_context_for_filter_file();
+    HdfsScannerContext* _create_context_for_dict_filter();
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
@@ -108,11 +108,11 @@ void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, Tuple
     return;
 }
 
-void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsFileReaderParam::ColumnInfo>* columns) {
+void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsScannerContext::ColumnInfo>* columns) {
     columns->clear();
     for (int i = 0; i < tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = tuple_desc->slots()[i];
-        HdfsFileReaderParam::ColumnInfo c;
+        HdfsScannerContext::ColumnInfo c;
         c.col_name = slot->col_name();
         c.col_idx = i;
         c.slot_id = slot->id();
@@ -264,8 +264,8 @@ std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string
     return *FileSystem::Default()->new_random_access_file(file_path);
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param() {
-    auto* param = _pool.add(new HdfsFileReaderParam());
+HdfsScannerContext* FileReaderTest::_create_context() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
 
     TupleDescriptor* tuple_desc;
     SlotDesc slot_descs[] = {
@@ -276,16 +276,16 @@ HdfsFileReaderParam* FileReaderTest::_create_param() {
             {""},
     };
     create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    param->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &param->materialized_columns);
-    param->scan_ranges.emplace_back(_create_scan_range());
-    param->stats = &g_hdfs_scan_stats;
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range());
+    ctx->stats = &g_hdfs_scan_stats;
 
-    return param;
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param_for_partition() {
-    auto* param = _pool.add(new HdfsFileReaderParam());
+HdfsScannerContext* FileReaderTest::_create_context_for_partition() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
 
     TupleDescriptor* tuple_desc;
     SlotDesc slot_descs[] = {
@@ -297,19 +297,19 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_partition() {
             {""},
     };
     create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    param->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &param->partition_columns);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->partition_columns);
     auto column = vectorized::ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(1, 1);
-    param->partition_values.emplace_back(column);
+    ctx->partition_values.emplace_back(column);
 
-    param->scan_ranges.emplace_back(_create_scan_range());
-    param->stats = &g_hdfs_scan_stats;
+    ctx->scan_ranges.emplace_back(_create_scan_range());
+    ctx->stats = &g_hdfs_scan_stats;
 
-    return param;
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param_for_not_exist() {
-    auto* param = _pool.add(new HdfsFileReaderParam());
+HdfsScannerContext* FileReaderTest::_create_context_for_not_exist() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
 
     TupleDescriptor* tuple_desc;
     SlotDesc slot_descs[] = {
@@ -321,17 +321,17 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_not_exist() {
             {""},
     };
     create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    param->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &param->materialized_columns);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
 
-    param->scan_ranges.emplace_back(_create_scan_range());
-    param->stats = &g_hdfs_scan_stats;
+    ctx->scan_ranges.emplace_back(_create_scan_range());
+    ctx->stats = &g_hdfs_scan_stats;
 
-    return param;
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
-    auto* param = _pool.add(new HdfsFileReaderParam());
+HdfsScannerContext* FileReaderTest::_create_file2_base_context() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
 
     // tuple desc and conjuncts
     SlotDesc slot_descs[] = {
@@ -343,8 +343,8 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
     };
     TupleDescriptor* tuple_desc;
     create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    param->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &param->materialized_columns);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
 
     // scan range
     auto* scan_range = _pool.add(new THdfsScanRange());
@@ -352,32 +352,32 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
     scan_range->offset = 4;
     scan_range->length = 850;
     scan_range->file_length = _file_2_size;
-    param->scan_ranges.emplace_back(scan_range);
+    ctx->scan_ranges.emplace_back(scan_range);
 
-    param->timezone = "Asia/Shanghai";
-    param->stats = &g_hdfs_scan_stats;
+    ctx->timezone = "Asia/Shanghai";
+    ctx->stats = &g_hdfs_scan_stats;
 
-    return param;
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param_for_min_max() {
-    auto* param = _create_file2_base_param();
+HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
+    auto* ctx = _create_file2_base_context();
 
     SlotDesc min_max_slots[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    create_tuple_descriptor(&_pool, min_max_slots, &param->min_max_tuple_desc);
+    create_tuple_descriptor(&_pool, min_max_slots, &ctx->min_max_tuple_desc);
 
     // create min max conjuncts
     // c1 >= 1
-    _create_conjunct_ctxs_for_min_max(&param->min_max_conjunct_ctxs);
+    _create_conjunct_ctxs_for_min_max(&ctx->min_max_conjunct_ctxs);
 
-    return param;
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param_for_filter_file() {
-    auto* param = _create_file2_base_param();
+HdfsScannerContext* FileReaderTest::_create_context_for_filter_file() {
+    auto* ctx = _create_file2_base_context();
 
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
@@ -390,23 +390,23 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_filter_file() {
 
     TupleDescriptor* tuple_desc;
     create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    param->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &param->materialized_columns);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
 
     // create conjuncts
     // c5 >= 1
-    param->conjunct_ctxs_by_slot[4] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_filter_file(&param->conjunct_ctxs_by_slot[4]);
-    return param;
+    ctx->conjunct_ctxs_by_slot[4] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_filter_file(&ctx->conjunct_ctxs_by_slot[4]);
+    return ctx;
 }
 
-HdfsFileReaderParam* FileReaderTest::_create_param_for_dict_filter() {
-    auto* param = _create_file2_base_param();
+HdfsScannerContext* FileReaderTest::_create_context_for_dict_filter() {
+    auto* ctx = _create_file2_base_context();
     // create conjuncts
     // c3 = "c"
-    param->conjunct_ctxs_by_slot[2] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_dict_filter(&param->conjunct_ctxs_by_slot[2]);
-    return param;
+    ctx->conjunct_ctxs_by_slot[2] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_dict_filter(&ctx->conjunct_ctxs_by_slot[2]);
+    return ctx;
 }
 
 THdfsScanRange* FileReaderTest::_create_scan_range() {
@@ -462,8 +462,8 @@ TEST_F(FileReaderTest, TestInit) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
-    auto* param = _create_param();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 }
 
@@ -475,8 +475,8 @@ TEST_F(FileReaderTest, TestGetNext) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
-    auto* param = _create_param();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -497,8 +497,8 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
-    auto* param = _create_param_for_partition();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context_for_partition();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -519,8 +519,8 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
 
     // init
-    auto* param = _create_param_for_not_exist();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context_for_not_exist();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -541,8 +541,8 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
-    auto* param = _create_param_for_min_max();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context_for_min_max();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -566,8 +566,8 @@ TEST_F(FileReaderTest, TestFilterFile) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
-    auto* param = _create_param_for_filter_file();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context_for_filter_file();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // check file is filtered
@@ -586,8 +586,8 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
 
     // init
-    auto* param = _create_param_for_dict_filter();
-    Status status = file_reader->init(param);
+    auto* ctx = _create_context_for_dict_filter();
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column

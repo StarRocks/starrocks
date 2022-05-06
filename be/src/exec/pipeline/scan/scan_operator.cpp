@@ -1,17 +1,17 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 
 #include "column/chunk.h"
-#include "connector_scan_operator.h"
-#include "exec/pipeline/connector_scan_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+
 namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
@@ -47,15 +47,16 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    DCHECK(_num_running_io_tasks == 0);
-
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    for (auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr) {
-            chunk_source->close(state);
-            chunk_source = nullptr;
+    // for the running io task, we can't close its chunk sources.
+    // After ScanOperator::close, these chunk sources are no longer meaningful,
+    // just release resources by their default destructor
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
         }
     }
 
@@ -98,10 +99,8 @@ bool ScanOperator::has_output() const {
 }
 
 bool ScanOperator::pending_finish() const {
-    DCHECK(_is_finished);
-    // If there isn't next morsel, and any io task is active,
-    // we just wait for the io thread to end.
-    return _num_running_io_tasks > 0;
+    DCHECK(is_finished());
+    return false;
 }
 
 bool ScanOperator::is_finished() const {
@@ -172,30 +171,46 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     return Status::OK();
 }
 
+// this is a more efficient way to check if a weak_ptr has been initialized
+// ref: https://stackoverflow.com/a/45507610
+// after compiler optimization, it generates far fewer instructions than std::weak_ptr::expired() and std::weak_ptr::lock()
+// see: https://godbolt.org/z/16bWqqM5n
+inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
+    using wp = std::weak_ptr<QueryContext>;
+    return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
     bool offer_task_success = false;
+    // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
+    if (is_uninitialized(_query_ctx)) {
+        _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+    }
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [this, state, chunk_source_index](int worker_id) {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                size_t num_read_chunks = 0;
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, _is_finished, &num_read_chunks, worker_id, _workgroup);
-                // TODO (by laotan332): More detailed information is needed
-                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-                _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
+                                                                    chunk_source_index](int worker_id) {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    size_t num_read_chunks = 0;
+                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                            _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                    // TODO (by laotan332): More detailed information is needed
+                    _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+                    _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
-                // for big query check
-                COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
-                               _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-                _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                    // for big query check
+                    COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
+                                   _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                }
+
+                _num_running_io_tasks--;
+                _is_io_task_running[chunk_source_index] = false;
             }
-
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
         });
 
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
@@ -205,14 +220,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [this, state, chunk_source_index]() {
-            {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
-            }
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+            if (auto sp = wp.lock()) {
+                {
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                }
 
-            _num_running_io_tasks--;
-            _is_io_task_running[chunk_source_index] = false;
+                _num_running_io_tasks--;
+                _is_io_task_running[chunk_source_index] = false;
+            }
         };
         // TODO(by satanson): set a proper priority
         task.priority = 20;
@@ -284,10 +301,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
     RETURN_IF_ERROR(do_prepare(state));
+
     return Status::OK();
 }
 
@@ -297,8 +312,7 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+
     OperatorFactory::close(state);
 }
 
@@ -307,21 +321,20 @@ void ScanOperatorFactory::close(RuntimeState* state) {
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories operators;
-    // Create a shared RefCountedRuntimeFilterCollector
-    auto&& rc_rf_probe_collector =
-            std::make_shared<RcRfProbeCollector>(1, std::move(scan_node->runtime_filter_collector()));
-    // Initialize OperatorFactory's fields involving runtime filters.
-    scan_node->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
+
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
+
     // ScanOperator's degree_of_parallelism is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
     const auto degree_of_parallelism =
             std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
     scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+
     operators.emplace_back(std::move(scan_operator));
+
     size_t limit = scan_node->limit();
     if (limit != -1) {
         operators.emplace_back(

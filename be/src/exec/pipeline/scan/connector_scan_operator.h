@@ -4,13 +4,14 @@
 
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
+
 class ScanNode;
-}
-namespace starrocks::pipeline {
+
+namespace pipeline {
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -55,9 +56,10 @@ public:
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
-    Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
-    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
-                                                           int worker_id, workgroup::WorkGroupPtr running_wg) override;
+    Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) override;
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
+                                                           size_t* num_read_chunks, int worker_id,
+                                                           workgroup::WorkGroupPtr running_wg) override;
 
 private:
     Status _read_chunk(vectorized::ChunkPtr* chunk);
@@ -86,4 +88,5 @@ private:
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

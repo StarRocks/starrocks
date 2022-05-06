@@ -77,7 +77,7 @@ static std::string dubug_column(const Column* column, const PermutationType& per
 
 // TODO: reduce duplicate code
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
+static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
                                                            NullPred null_pred, bool is_asc_order, bool is_null_first,
                                                            Permutation& permutation, Tie& tie,
@@ -87,7 +87,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (UNLIKELY(cancel)) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;
@@ -124,14 +124,14 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
             }
         }
 
-        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
+        VLOG(7) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
     }
 
     // TODO(Murphy): avoid sort the null datums in the column
     RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation, tie, range,
                                           build_tie, limit, limited));
 
-    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
+    VLOG(7) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
 
     return Status::OK();
 }
@@ -139,7 +139,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 template <class NullPred>
-static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column,
+static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
                                                   const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
@@ -148,7 +148,7 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (UNLIKELY(cancel)) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;
@@ -266,11 +266,11 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
             }
         }
 
-        VLOG(3) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
+        VLOG(7) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
                                dubug_column(column, permutation));
     }
 
-    VLOG(2) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
+    VLOG(7) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
                            fmt::join(tie, ","));
     return Status::OK();
 }

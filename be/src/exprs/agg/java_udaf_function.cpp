@@ -7,6 +7,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "jni.h"
@@ -28,26 +29,16 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(id, url, checksum, &libpath));
     auto* udaf_ctx = context->impl()->udaf_ctxs();
-    udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
-    RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
-    udaf_ctx->analyzer = std::make_unique<ClassAnalyzer>();
+    auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+    auto analyzer = std::make_unique<ClassAnalyzer>();
+    RETURN_IF_ERROR(udf_classloader->init());
 
-    udaf_ctx->udaf_class = udaf_ctx->udf_classloader->getClass(symbol);
-    if (udaf_ctx->udaf_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("couldn't found clazz:{}", symbol));
-    }
-
-    udaf_ctx->udaf_state_class = udaf_ctx->udf_classloader->getClass(state);
-    if (udaf_ctx->udaf_state_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("couldn't found clazz:{}", state));
-    }
-
-    RETURN_IF_ERROR(udaf_ctx->udaf_class.newInstance(&udaf_ctx->handle));
+    ASSIGN_OR_RETURN(udaf_ctx->udaf_class, udf_classloader->getClass(symbol));
+    ASSIGN_OR_RETURN(udaf_ctx->udaf_state_class, udf_classloader->getClass(state));
+    ASSIGN_OR_RETURN(udaf_ctx->handle, udaf_ctx->udaf_class.newInstance());
 
     udaf_ctx->buffer_data.resize(DEFAULT_UDAF_BUFFER_SIZE);
     udaf_ctx->buffer = std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
-
-    auto* analyzer = udaf_ctx->analyzer.get();
 
     auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
         std::string method_name = name;
@@ -71,7 +62,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, context, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();
 }

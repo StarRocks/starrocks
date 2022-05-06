@@ -129,7 +129,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
     _stats.raw_rows_read += ck->num_rows();
-    for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+    for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         // do evaluation.
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
         ExecNode::eval_conjuncts(it.second, ck.get());
@@ -215,11 +215,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         if (!has_error) {
             // Partition column not stored in text file, we should append these columns
             // when we select partition column.
-            int num_part_columns = _file_read_param.partition_columns.size();
+            int num_part_columns = _scanner_ctx.partition_columns.size();
             for (int p = 0; p < num_part_columns; ++p) {
                 int index = _scanner_params.partition_index_in_chunk[p];
                 Column* column = _column_raw_ptrs[index];
-                ColumnPtr partition_value = _file_read_param.partition_values[p];
+                ColumnPtr partition_value = _scanner_ctx.partition_values[p];
                 DCHECK(partition_value->is_constant());
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
                 ColumnPtr data_column = const_column->data_column();

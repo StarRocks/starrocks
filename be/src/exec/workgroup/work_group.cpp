@@ -266,11 +266,6 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
-    // If there is only one query, skip it
-    if (_num_queries <= 1) {
-        return false;
-    }
-
     // Check big query run time
     if (_big_query_cpu_core_second_limit) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
