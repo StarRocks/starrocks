@@ -65,7 +65,7 @@ public class HbPackage implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    // Deprecated
+    @Deprecated
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
