@@ -132,7 +132,7 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c0_const = true;
         arg0_data_column->resize(1);
-        c0 = ConstColumn::create(arg0_data_column,arg0_values.size());
+        c0 = ConstColumn::create(arg0_data_column, arg0_values.size());
     } else {
         if (arg0_null_flags.empty()) {
             // normal Column
@@ -367,11 +367,8 @@ TEST_F(VecMathFunctionsTest, DecimalTruncateByColTest) {
             {"123.00000", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"},
             {0, 1, 0, 0, 0, 0, 1});
     // truncate(v,d), v is const column
-    testRoundDecimal<TYPE_TRUNCATE>(
-            {"12345.6789", "12345.6789", "12345.6789", "12345.6789"}, {}, 15, 5,
-            {1, 2, 3, 4}, {},
-            {"12345.60000", "12345.67000", "12345.67800", "12345.67890"}, {}
-    );
+    testRoundDecimal<TYPE_TRUNCATE>({"12345.6789", "12345.6789", "12345.6789", "12345.6789"}, {}, 15, 5, {1, 2, 3, 4},
+                                    {}, {"12345.60000", "12345.67000", "12345.67800", "12345.67890"}, {});
 }
 
 TEST_F(VecMathFunctionsTest, RoundUpToTest) {
