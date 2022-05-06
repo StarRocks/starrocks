@@ -41,7 +41,7 @@ public class AdminStmtAnalyzer {
     }
 
     public static void analyze(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().visit(adminShowReplicaStatusStmt, session);
+        new AdminStmtAnalyzerVisitor().analyze(adminShowReplicaStatusStmt, session);
     }
 
     static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -59,6 +59,10 @@ public class AdminStmtAnalyzer {
 
         public void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
             visit(adminShowReplicaDistributionStmt, session);
+        }
+
+        public void analyze(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt, ConnectContext session) {
+            visit(adminShowReplicaStatusStmt, session);
         }
 
         @Override
