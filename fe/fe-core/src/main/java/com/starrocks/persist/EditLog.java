@@ -638,6 +638,7 @@ public class EditLog {
                     catalog.replayModifyTableColocate(info);
                     break;
                 }
+                case OperationType.OP_HEARTBEAT_V2:
                 case OperationType.OP_HEARTBEAT: {
                     final HbPackage hbPackage = (HbPackage) journal.getData();
                     Catalog.getCurrentHeartbeatMgr().replayHearbeat(hbPackage);
@@ -1256,7 +1257,7 @@ public class EditLog {
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
-        logEdit(OperationType.OP_HEARTBEAT, hbPackage);
+        logEdit(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
 
     public void logAddFunction(Function function) {

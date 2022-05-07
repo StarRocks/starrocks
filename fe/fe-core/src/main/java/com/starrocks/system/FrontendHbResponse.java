@@ -21,6 +21,7 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -35,11 +36,17 @@ import java.io.IOException;
  */
 public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
+    @SerializedName(value = "name")
     private String name;
+    @SerializedName(value = "queryPort")
     private int queryPort;
+    @SerializedName(value = "rpcPort")
     private int rpcPort;
+    @SerializedName(value = "replayedJournalId")
     private long replayedJournalId;
+    @SerializedName(value = "feStartTime")
     private long feStartTime;
+    @SerializedName(value = "feVersion")
     private String feVersion;
 
     public FrontendHbResponse() {

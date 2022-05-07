@@ -70,6 +70,7 @@ public class Backend implements Writable {
     private volatile int httpPort; // web service
     private volatile int beRpcPort; // be rpc port
     private volatile int brpcPort = -1;
+    private volatile int cpuCores = 0; // Cpu cores of backend
 
     private volatile long lastUpdateMs;
     private volatile long lastStartTime;
@@ -667,6 +668,12 @@ public class Backend implements Writable {
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
                 this.lastStartTime = hbResponse.getHbTime();
+            }
+
+            if (this.cpuCores != hbResponse.getCpuCores()) {
+                isChanged = true;
+                this.cpuCores = hbResponse.getCpuCores();
+                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
             }
 
             heartbeatErrMsg = "";
