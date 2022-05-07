@@ -4,30 +4,28 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class DropCatalogStmt extends DdlStmt {
 
-    private final String catalogName;
+    private final String name;
 
-    public DropCatalogStmt(String catalogName) {
-        this.catalogName = catalogName;
+    public DropCatalogStmt(String name) {
+        this.name = name;
     }
 
-    public String getCatalogName() {
-        return catalogName;
+    public String getName() {
+        return name;
     }
 
     public void analyze() throws SemanticException {
         // TODO check permission
-        if (Strings.isNullOrEmpty(catalogName)) {
+        if (Strings.isNullOrEmpty(name)) {
             throw new SemanticException("'catalog name' can not be null or empty");
         }
 
-        if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+        if (name.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             throw new SemanticException("Can't drop the default internal catalog");
         }
     }
@@ -41,7 +39,7 @@ public class DropCatalogStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP EXTERNAL CATALOG ");
-        sb.append("\'" + catalogName + "\'");
+        sb.append("\'" + name + "\'");
         return sb.toString();
     }
 }

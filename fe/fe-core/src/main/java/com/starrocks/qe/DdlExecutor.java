@@ -242,7 +242,7 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof CreateCatalogStmt) {
             globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
         } else if (ddlStmt instanceof DropCatalogStmt) {
-            globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getCatalogName());
+            globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getName());
         } else {
             throw new DdlException("Unknown statement.");
         }
