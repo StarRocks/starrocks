@@ -18,6 +18,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.util.ThreadPools;
 
 import java.util.List;
 import java.util.Map;
@@ -25,11 +26,11 @@ import java.util.Optional;
 import java.util.Properties;
 
 public class IcebergUtil {
-    
+
     static {
-        if (Config.iceberg_enable_custom_worker_thread) {
+        if (Config.enable_iceberg_custom_worker_thread) {
             Properties props = System.getProperties();
-            props.setProperty("iceberg.worker.num-threads", String.valueOf(Config.iceberg_worker_num_threads));
+            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
     }
 

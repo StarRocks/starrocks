@@ -1332,7 +1332,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static boolean iceberg_enable_custom_worker_thread = false;
+    public static boolean enable_iceberg_custom_worker_thread = false;
 
     /**
      * size of iceberg worker pool
