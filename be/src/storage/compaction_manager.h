@@ -66,11 +66,6 @@ public:
         return _data_dir_to_base_task_num_map[data_dir];
     }
 
-    uint16_t running_tasks_num_for_type(CompactionType type) {
-        std::lock_guard lg(_tasks_mutex);
-        return _type_to_task_num_map[type];
-    }
-
     uint64_t next_compaction_task_id() { return ++_next_task_id; }
 
 private:

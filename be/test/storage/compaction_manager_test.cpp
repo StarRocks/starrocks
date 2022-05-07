@@ -116,9 +116,6 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     ASSERT_FALSE(ret);
 
     ASSERT_EQ(config::max_compaction_task_num, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(config::max_compaction_task_num,
-              StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
-    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(BASE_COMPACTION));
     StorageEngine::instance()->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
@@ -136,34 +133,19 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
     config::cumulative_compaction_num_threads_per_disk = 4;
-    config::max_cumulative_compaction_task = 1;
-    for (int i = 0; i < config::max_cumulative_compaction_task; i++) {
+    for (int i = 0; i < 1; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
 
-    ret = StorageEngine::instance()->compaction_manager()->register_task(
-            tasks[config::max_cumulative_compaction_task].get());
-    ASSERT_FALSE(ret);
-
-    ASSERT_EQ(config::max_cumulative_compaction_task,
-              StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(CUMULATIVE_COMPACTION));
     StorageEngine::instance()->compaction_manager()->clear_tasks();
 
     config::base_compaction_num_threads_per_disk = 4;
-    config::max_base_compaction_task = 1;
-    for (int i = 0; i < config::max_base_compaction_task + 1; i++) {
+    for (int i = 0; i < 1; i++) {
         tasks[i]->set_compaction_type(BASE_COMPACTION);
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
-        if (i < config::max_base_compaction_task) {
-            ASSERT_TRUE(ret);
-        } else {
-            ASSERT_FALSE(ret);
-        }
+        ASSERT_TRUE(ret);
     }
-    ASSERT_EQ(config::max_base_compaction_task, StorageEngine::instance()->compaction_manager()->running_tasks_num());
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(BASE_COMPACTION));
     for (int i = 0; i < tablets.size(); i++) {
         std::unique_ptr<CompactionContext> compaction_context;
         tablets[i]->set_compaction_context(compaction_context);

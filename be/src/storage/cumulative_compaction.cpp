@@ -11,8 +11,7 @@
 namespace starrocks::vectorized {
 
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
-        : Compaction(mem_tracker, std::move(tablet)),
-          _cumulative_rowset_size_threshold(config::cumulative_compaction_budgeted_bytes) {}
+        : Compaction(mem_tracker, std::move(tablet)) {}
 
 CumulativeCompaction::~CumulativeCompaction() {}
 
