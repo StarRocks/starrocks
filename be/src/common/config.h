@@ -709,6 +709,9 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
 
+// return error when loading is empty.
+CONF_mBool(empty_load_as_error, "true");
+
 } // namespace config
 
 } // namespace starrocks
