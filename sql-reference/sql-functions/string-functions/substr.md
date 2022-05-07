@@ -1,4 +1,4 @@
-# substr, sunstring
+# substr, substring
 
 ## 功能
 
