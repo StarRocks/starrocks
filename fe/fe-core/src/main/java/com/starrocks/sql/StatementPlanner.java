@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -179,7 +180,8 @@ public class StatementPlanner {
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
-                || statement instanceof CreateCatalogStmt;
+                || statement instanceof CreateCatalogStmt
+                || statement instanceof SubmitTaskStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -206,6 +208,7 @@ public class StatementPlanner {
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
                 || statement instanceof DropMaterializedViewStmt
-                || statement instanceof CreateCatalogStmt;
+                || statement instanceof CreateCatalogStmt
+                || statement instanceof SubmitTaskStmt;
     }
 }

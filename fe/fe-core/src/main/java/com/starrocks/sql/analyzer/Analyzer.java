@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticUtils;
@@ -96,6 +97,19 @@ public class Analyzer {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
             CTASAnalyzer.transformCTASStmt((CreateTableAsSelectStmt) statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitSubmitTaskStmt(SubmitTaskStmt statement, ConnectContext context) {
+            CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
+            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+            Analyzer.analyze(queryStatement, context);
+            String sb = "CREATE TABLE " +
+                    createTableAsSelectStmt.getCreateTableStmt().getDbTbl().toSql() + " AS " +
+                    ViewDefBuilder.build(queryStatement);
+            statement.setSqlText(sb);
+            TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
             return null;
         }
 

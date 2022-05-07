@@ -28,6 +28,9 @@ statement
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
 
+    // Task Statement
+    | submitTaskStatement                                                                   #submitTask
+
     // Materialized View Statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterialized
@@ -107,6 +110,14 @@ alterViewStatement
 
 dropViewStatement
     : DROP VIEW (IF EXISTS)? qualifiedName
+    ;
+
+// ------------------------------------------- Task Statement ----------------------------------------------------------
+
+submitTaskStatement
+    : SUBMIT TASK qualifiedName?
+    sessionPropertis?
+    AS createTableAsSelectStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -565,6 +576,10 @@ partitionValue
 
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+sessionPropertis
+    : SESSION '(' property (',' property)* ')'
     ;
 
 properties

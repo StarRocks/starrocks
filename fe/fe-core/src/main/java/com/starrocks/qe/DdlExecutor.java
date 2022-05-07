@@ -90,6 +90,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
@@ -240,6 +241,8 @@ public class DdlExecutor {
             globalStateMgr.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateCatalogStmt) {
             globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
+        } else if (ddlStmt instanceof SubmitTaskStmt) {
+            throw new DdlException("SubmitTaskStmt is unsupported.");
         } else {
             throw new DdlException("Unknown statement.");
         }
