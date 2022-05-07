@@ -73,7 +73,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows);
+        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
     }
 
     private static void getByteBoxedResult(int numRows, Byte[] boxedArr, long columnAddr) {
@@ -91,7 +91,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows);
+        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
     }
 
     private static void getShortBoxedResult(int numRows, Short[] boxedArr, long columnAddr) {
@@ -109,7 +109,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 2L);
+        unsafe.copyMemory(dataArr, shortArrayBaseOffset, null, addrs[1], numRows * 2L);
     }
 
     // getIntBoxedResult
@@ -147,7 +147,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 8L);
+        unsafe.copyMemory(dataArr, longArrayBaseOffset, null, addrs[1], numRows * 8L);
     }
 
     private static void getFloatBoxedResult(int numRows, Float[] boxedArr, long columnAddr) {
@@ -165,7 +165,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 4L);
+        unsafe.copyMemory(dataArr, floatArrayBaseOffset, null, addrs[1], numRows * 4L);
     }
 
     private static void getDoubleBoxedResult(int numRows, Double[] boxedArr, long columnAddr) {
@@ -183,7 +183,7 @@ public class UDFHelper {
         // memcpy to uint8_t array
         unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 8L);
+        unsafe.copyMemory(dataArr, doubleArrayBaseOffset, null, addrs[1], numRows * 8L);
     }
 
     private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
