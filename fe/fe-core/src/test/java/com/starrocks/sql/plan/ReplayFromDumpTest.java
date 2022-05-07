@@ -299,9 +299,9 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  15:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates: (CAST(2: v2 AS DOUBLE) = CAST(8: v2 AS DOUBLE)) OR (3: v3 = 8: v2), " +
+                "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR)) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
     }
 
@@ -322,7 +322,7 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains(" 33:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
