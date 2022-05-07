@@ -6400,7 +6400,7 @@ public class GlobalStateMgr {
             db.readUnlock();
         }
     }
-
+    
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();

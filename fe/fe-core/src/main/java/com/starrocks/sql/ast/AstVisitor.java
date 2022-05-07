@@ -30,6 +30,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropCatalogStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -202,6 +203,10 @@ public abstract class AstVisitor<R, C> {
 
     // ----------------- Catalog Clause -------------
     public R visitCreateCatalogStatement(CreateCatalogStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitDropCatalogStatement(DropCatalogStmt stmt, C context) {
         return visitStatement(stmt, context);
     }
 

@@ -10,6 +10,8 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.persist.CreateExternalCatalogOperationLog;
+import com.starrocks.persist.DropExternalCatalogOperationLog;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,5 +52,24 @@ public class CatalogMgr {
 
     public boolean catalogExists(String catalogName) {
         return catalogs.containsKey(catalogName);
+    }
+
+    public void replayCreateCatalog(CreateExternalCatalogOperationLog log) throws DdlException {
+        String type = log.getCatalogType();
+        String catalogName = log.getCatalogName();
+        Map<String, String> properties = log.getProperties();
+        if (Strings.isNullOrEmpty(type)) {
+            throw new DdlException("Missing properties 'type'");
+        }
+
+        Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+        connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+        Catalog catalog = new ExternalCatalog(catalogName, properties);
+        catalogs.put(catalogName, catalog);
+    }
+
+    public void replayDropCatalog(DropExternalCatalogOperationLog log) {
+        String catalogName = log.getCatalogName();
+        dropCatalog(catalogName);
     }
 }

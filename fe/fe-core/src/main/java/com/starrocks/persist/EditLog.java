@@ -812,6 +812,16 @@ public class EditLog {
                     globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
+                case OperationType.OP_CREATE_EXTERNAL_CATALOG: {
+                    CreateExternalCatalogOperationLog createExternalCatalogOperationLog =
+                            (CreateExternalCatalogOperationLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayCreateCatalog(createExternalCatalogOperationLog);
+                }
+                case OperationType.OP_DROP_EXTERNAL_CATALOG: {
+                    DropExternalCatalogOperationLog dropExternalCatalogOperationLog =
+                            (DropExternalCatalogOperationLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayDropCatalog(dropExternalCatalogOperationLog);
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1388,5 +1398,13 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logCreateCatalog(CreateExternalCatalogOperationLog log) {
+        logEdit(OperationType.OP_CREATE_EXTERNAL_CATALOG, log);
+    }
+
+    public void logDropCatalog(DropExternalCatalogOperationLog log) {
+        logEdit(OperationType.OP_DROP_EXTERNAL_CATALOG, log);
     }
 }
