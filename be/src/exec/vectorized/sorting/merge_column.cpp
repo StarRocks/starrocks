@@ -4,6 +4,7 @@
 
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
@@ -257,6 +258,17 @@ public:
     }
 };
 
+SortedRun::SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs)
+        : chunk(ichunk), range(0, ichunk->num_rows()) {
+    DCHECK(ichunk);
+    if (!ichunk->is_empty()) {
+        for (auto& expr : *exprs) {
+            auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), ichunk.get());
+            orderby.push_back(column);
+        }
+    }
+}
+
 void SortedRun::reset() {
     chunk->reset();
     orderby.clear();
@@ -301,6 +313,31 @@ ChunkUniquePtr SortedRun::clone_slice() const {
         ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
         cloned->append(*chunk, range.first, slice_rows);
         return cloned;
+    }
+}
+
+ChunkPtr SortedRun::steal_chunk(size_t size) {
+    if (empty()) {
+        return {};
+    }
+    if (size >= num_rows()) {
+        ChunkPtr res;
+        if (range.first == 0 && range.second == chunk->num_rows()) {
+            // No others reference this chunk
+            res = chunk;
+        } else {
+            res = chunk->clone_empty(num_rows());
+            res->append(*chunk, range.first, num_rows());
+        }
+        range.first = range.second = 0;
+        chunk.reset();
+        return res;
+    } else {
+        size_t required_rows = std::min(size, num_rows());
+        ChunkPtr res = chunk->clone_empty(required_rows);
+        res->append(*chunk, range.first, required_rows);
+        range.first += required_rows;
+        return res;
     }
 }
 
@@ -398,11 +435,11 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
     int left_index = -1;
     int right_index = -1;
     auto left_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++left_index < left.num_chunks()) {
                         // TODO: avoid copy
-                        *output = left.get_chunk(left_index)->clone_unique().release();
+                        *output = left.get_chunk(left_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;
@@ -413,10 +450,10 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             },
             sort_exprs);
     auto right_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++right_index < right.num_chunks()) {
-                        *output = right.get_chunk(right_index)->clone_unique().release();
+                        *output = right.get_chunk(right_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;
@@ -435,15 +472,15 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
-    if (chunks.empty()) {
-        return Status::OK();
-    }
+                           const std::vector<SortedRuns>& runs_batch, SortedRuns* output, size_t limit) {
     std::deque<SortedRuns> queue;
-    for (auto& chunk : chunks) {
-        if (!chunk->is_empty()) {
-            queue.push_back(SortedRun(chunk, sort_exprs));
+    for (auto& runs : runs_batch) {
+        if (runs.num_chunks() > 0) {
+            queue.push_back(runs);
         }
+    }
+    if (queue.empty()) {
+        return Status::OK();
     }
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
@@ -469,14 +506,15 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     return Status::OK();
 }
 
-// Merge multiple chunks in two-way merge
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit) {
-    SortedRuns merged;
-    merge_sorted_chunks(descs, sort_exprs, chunks, &merged, limit);
-    *output = merged.assemble();
-
-    return Status::OK();
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
+    std::vector<SortedRuns> runs;
+    for (auto& chunk : chunks) {
+        if (!chunk->is_empty()) {
+            runs.push_back(SortedRun(chunk, sort_exprs));
+        }
+    }
+    return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,
