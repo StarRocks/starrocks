@@ -384,6 +384,9 @@ public class DatabaseTransactionMgr {
             return;
         }
 
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
+            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
