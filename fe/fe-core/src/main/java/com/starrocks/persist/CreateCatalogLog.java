@@ -12,14 +12,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
-public class CreateExternalCatalogOperationLog implements Writable {
+public class CreateCatalogLog implements Writable {
 
     @SerializedName(value = "catalogName")
     private String catalogName;
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    public CreateExternalCatalogOperationLog(String catalogName, Map<String, String> properties) {
+    public CreateCatalogLog(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
         this.properties = properties;
     }
@@ -42,7 +42,7 @@ public class CreateExternalCatalogOperationLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static CreateExternalCatalogOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), CreateExternalCatalogOperationLog.class);
+    public static CreateCatalogLog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), CreateCatalogLog.class);
     }
 }

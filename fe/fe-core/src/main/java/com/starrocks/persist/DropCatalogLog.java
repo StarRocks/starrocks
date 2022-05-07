@@ -11,12 +11,12 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class DropExternalCatalogOperationLog implements Writable {
+public class DropCatalogLog implements Writable {
 
     @SerializedName(value = "catalogName")
     private String catalogName;
 
-    public DropExternalCatalogOperationLog(String catalogName) {
+    public DropCatalogLog(String catalogName) {
         this.catalogName = catalogName;
     }
 
@@ -29,7 +29,7 @@ public class DropExternalCatalogOperationLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static DropExternalCatalogOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropExternalCatalogOperationLog.class);
+    public static DropCatalogLog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), DropCatalogLog.class);
     }
 }

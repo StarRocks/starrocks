@@ -10,8 +10,8 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.persist.CreateExternalCatalogOperationLog;
-import com.starrocks.persist.DropExternalCatalogOperationLog;
+import com.starrocks.persist.CreateCatalogLog;
+import com.starrocks.persist.DropCatalogLog;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,7 +54,7 @@ public class CatalogMgr {
         return catalogs.containsKey(catalogName);
     }
 
-    public void replayCreateCatalog(CreateExternalCatalogOperationLog log) throws DdlException {
+    public void replayCreateCatalog(CreateCatalogLog log) throws DdlException {
         String type = log.getCatalogType();
         String catalogName = log.getCatalogName();
         Map<String, String> properties = log.getProperties();
@@ -68,7 +68,7 @@ public class CatalogMgr {
         catalogs.put(catalogName, catalog);
     }
 
-    public void replayDropCatalog(DropExternalCatalogOperationLog log) {
+    public void replayDropCatalog(DropCatalogLog log) {
         String catalogName = log.getCatalogName();
         dropCatalog(catalogName);
     }

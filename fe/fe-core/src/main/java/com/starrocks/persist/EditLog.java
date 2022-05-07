@@ -813,14 +813,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_EXTERNAL_CATALOG: {
-                    CreateExternalCatalogOperationLog createExternalCatalogOperationLog =
-                            (CreateExternalCatalogOperationLog) journal.getData();
-                    globalStateMgr.getCatalogMgr().replayCreateCatalog(createExternalCatalogOperationLog);
+                    CreateCatalogLog CreateCatalogLog =
+                            (CreateCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayCreateCatalog(CreateCatalogLog);
                 }
                 case OperationType.OP_DROP_EXTERNAL_CATALOG: {
-                    DropExternalCatalogOperationLog dropExternalCatalogOperationLog =
-                            (DropExternalCatalogOperationLog) journal.getData();
-                    globalStateMgr.getCatalogMgr().replayDropCatalog(dropExternalCatalogOperationLog);
+                    DropCatalogLog DropCatalogLog =
+                            (DropCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayDropCatalog(DropCatalogLog);
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
@@ -1400,11 +1400,11 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 
-    public void logCreateCatalog(CreateExternalCatalogOperationLog log) {
+    public void logCreateCatalog(CreateCatalogLog log) {
         logEdit(OperationType.OP_CREATE_EXTERNAL_CATALOG, log);
     }
 
-    public void logDropCatalog(DropExternalCatalogOperationLog log) {
+    public void logDropCatalog(DropCatalogLog log) {
         logEdit(OperationType.OP_DROP_EXTERNAL_CATALOG, log);
     }
 }
