@@ -359,31 +359,21 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         size_t offset = min_chunk.compared_row();
         size_t min_chunk_num_rows = min_chunk._chunk->num_rows();
         size_t append_row_num = 0;
-        size_t max_same_source_count = _mask_buffer->max_same_source_count(child, min_chunk_num_rows);
+        size_t max_same_source_count = _mask_buffer->max_same_source_count(child, min_chunk.remaining_rows());
         if (max_same_source_count == min_chunk_num_rows) {
-            if (offset == 0) {
-                // all rows in |min_chunk| are from the same source chunk and |min_chunk|'s current offset is 0,
-                // so here we swap the whole min_chunk out.
-                if (rows == 0) {
-                    chunk->swap_chunk(*min_chunk._chunk);
-                    for (int i = 0; i < min_chunk_num_rows; ++i) {
-                        source_masks->emplace_back(_mask_buffer->current());
-                        _mask_buffer->advance();
-                    }
-                    return fill(child);
-                } else {
-                    // retrieve |min_chunk| next time to avoid memory copy.
-                    break;
+            DCHECK(offset == 0);
+            // all rows in |min_chunk| are from the same source chunk and |min_chunk|'s current offset is 0,
+            // so here we swap the whole min_chunk out.
+            if (rows == 0) {
+                chunk->swap_chunk(*min_chunk._chunk);
+                for (int i = 0; i < min_chunk_num_rows; ++i) {
+                    source_masks->emplace_back(_mask_buffer->current());
+                    _mask_buffer->advance();
                 }
+                return fill(child);
             } else {
-                // all rows in |min_chunk| are from the same source chunk, but |min_chunk|'s current offset is larger than 0,
-                // here we append the remaining rows in |min_chunk| to the chunk.
-                size_t remaining_row_num = min_chunk.remaining_rows();
-                if (rows + remaining_row_num <= _chunk_size) {
-                    append_row_num = remaining_row_num;
-                } else {
-                    append_row_num = _chunk_size - rows;
-                }
+                // retrieve |min_chunk| next time to avoid memory copy.
+                break;
             }
         } else {
             // `max_same_source_count` rows in |min_chunk| are from the same source chunk,
@@ -396,7 +386,6 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         }
 
         DCHECK_GT(append_row_num, 0);
-
         chunk->append(*min_chunk._chunk, offset, append_row_num);
         min_chunk.advance(append_row_num);
         rows += append_row_num;
