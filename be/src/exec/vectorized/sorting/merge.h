@@ -29,13 +29,7 @@ struct SortedRun {
 
     SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
 
-    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs) : chunk(ichunk), range(0, ichunk->num_rows()) {
-        for (auto& expr : *exprs) {
-            auto maybe_column = expr->evaluate(ichunk.get());
-            CHECK(maybe_column.ok());
-            orderby.push_back(maybe_column.value());
-        }
-    }
+    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs);
 
     SortedRun& operator=(const SortedRun& rhs) {
         if (&rhs == this) return *this;
@@ -54,9 +48,10 @@ struct SortedRun {
         return range.second - range.first;
     }
     const Column* get_column(int index) const { return orderby[index].get(); }
-    bool empty() const { return range.second == range.first; }
+    bool empty() const { return range.second == range.first || chunk == nullptr; }
     void reset();
     void resize(size_t size);
+    int64_t mem_usage() const { return chunk->memory_usage(); }
     int debug_dump() const;
 
     // Check if two run has intersect, if not we don't need to merge them row by row
@@ -66,12 +61,16 @@ struct SortedRun {
     // Clone this SortedRun, could be the entire chunk or slice of chunk
     ChunkUniquePtr clone_slice() const;
 
+    // Steal part of chunk from the start, avoid copy if possible
+    // After steal out, this run will not reference the chunk anymore
+    ChunkPtr steal_chunk(size_t size);
+
     int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const;
 };
 
 // Multiple sorted chunks kept the order, without any intersection
 struct SortedRuns {
-    std::vector<SortedRun> chunks;
+    std::deque<SortedRun> chunks;
 
     SortedRuns() = default;
     ~SortedRuns() = default;
@@ -82,6 +81,16 @@ struct SortedRuns {
     size_t num_chunks() const { return chunks.size(); }
     size_t num_rows() const;
     void resize(size_t size);
+    SortedRun& front() { return chunks.front(); }
+    void pop_front() { chunks.pop_front(); }
+    int64_t mem_usage() const {
+        int64_t res = 0;
+        for (auto& run : chunks) {
+            res += run.mem_usage();
+        }
+        return res;
+    }
+
     bool is_sorted(const SortDescs& sort_desc) const;
     ChunkPtr assemble() const;
     int debug_dump() const;
@@ -141,9 +150,9 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
                                    SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit);
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<SortedRuns>& runs_batch, SortedRuns* output, size_t limit);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,

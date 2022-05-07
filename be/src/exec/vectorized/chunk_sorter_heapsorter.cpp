@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
@@ -96,10 +97,11 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-DataSegment* HeapChunkSorter::get_result_data_segment() {
-    return &_merged_segment;
+SortedRuns HeapChunkSorter::get_sorted_runs() {
+    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
 }
-uint64_t HeapChunkSorter::get_partition_rows() const {
+
+size_t HeapChunkSorter::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 

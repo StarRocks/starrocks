@@ -89,7 +89,11 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
 
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
-    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output, 0));
+    SortedRuns output_run;
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs,
+                                  {SortedRun(left_chunk, &sort_exprs), SortedRun(right_chunk, &sort_exprs)},
+                                  &output_run, 0));
+    output = output_run.assemble();
     ASSERT_EQ(expected_size, output->num_rows());
     ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
 
@@ -181,6 +185,26 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2048, merged->get(1).get_int32());
 }
 
+TEST(SortingTest, steal_chunk) {
+    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
+    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+
+    for (size_t chunk_size : std::vector<size_t>{1, 3, 4, 5, 7, 33, 101, 205}) {
+        SortedRun run(chunk, chunk->columns());
+        ChunkPtr sum = chunk->clone_empty();
+        while (!run.empty()) {
+            ChunkPtr stealed = run.steal_chunk(chunk_size);
+            sum->append(*stealed);
+        }
+        ASSERT_EQ(chunk->num_rows(), sum->num_rows());
+        ASSERT_EQ(chunk->num_columns(), sum->num_columns());
+        ASSERT_TRUE(run.empty());
+        ASSERT_TRUE(run.chunk == nullptr);
+    }
+}
+
 TEST(SortingTest, sorted_runs) {
     ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
     ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
@@ -260,7 +284,7 @@ TEST(SortingTest, merge_sorted_stream) {
     std::vector<int> chunk_probe_index(num_runs, 0);
     std::vector<int> chunk_run_max(num_runs, 0);
     for (int run = 0; run < num_runs; run++) {
-        ChunkProvider chunk_probe_supplier = [&, run](Chunk** output, bool* eos) -> bool {
+        ChunkProvider chunk_probe_supplier = [&, run](ChunkUniquePtr* output, bool* eos) -> bool {
             if (chunk_probe_index[run]++ > num_chunks_per_run) {
                 *output = nullptr;
                 *eos = true;
@@ -272,8 +296,7 @@ TEST(SortingTest, merge_sorted_stream) {
                             build_sorted_column(type_desc, col_idx, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
                     columns.push_back(column);
                 }
-                ChunkUniquePtr chunk = std::make_unique<Chunk>(columns, map);
-                *output = chunk.release();
+                *output = std::make_unique<Chunk>(columns, map);
             }
             return true;
         };
