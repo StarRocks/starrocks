@@ -1101,6 +1101,12 @@ public class StmtExecutor {
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
+                /*
+		 * In this case, There are two factors that lead query cancelled:
+		 * 1: TIMEOUT
+		 * 2: BE EXCEPTION
+		 * So we should distinguish these two factors.
+		 */
                 if (!coord.checkBackendState()) {
                     coord.cancel();
                     ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
