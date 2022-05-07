@@ -7,7 +7,6 @@
 #include "exec/vectorized/file_scanner.h"
 #include "exprs/vectorized/json_functions.h"
 #include "fs/fs.h"
-#include "fs/fs_stream_pipe.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
 #include "util/raw_container.h"

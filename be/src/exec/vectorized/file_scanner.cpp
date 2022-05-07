@@ -9,7 +9,6 @@
 #include "exec/decompressor.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_stream_pipe.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"

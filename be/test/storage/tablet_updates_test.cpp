@@ -1630,7 +1630,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
         std::string dst = tablet->schema_hash_path() + "/" + f;
-        ASSERT_TRUE(Env::Default()->link_file(src, dst).ok());
+        ASSERT_TRUE(FileSystem::Default()->link_file(src, dst).ok());
         LOG(INFO) << "Linked " << src << " to " << dst;
     }
 
