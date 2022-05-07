@@ -97,5 +97,12 @@ private:
     std::atomic<size_t> _pop_index;
 };
 
+class PhysicalSplitMorselQueue final : public MorselQueue {
+public:
+
+private:
+    Morsels _morsels;
+};
+
 } // namespace pipeline
 } // namespace starrocks
