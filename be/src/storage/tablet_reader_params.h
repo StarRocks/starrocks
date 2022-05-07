@@ -9,6 +9,7 @@
 #include "runtime/global_dicts.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -50,11 +51,18 @@ struct TabletReaderParams {
 
     RuntimeProfile* profile = nullptr;
 
-    std::string to_string() const;
     int chunk_size = 1024;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
+
+    // They are useless, when rowset_id is "" or rowid_range is empty.
+    std::string rowset_id = "";
+    uint64_t segment_id = 0;
+    Range rowid_range;
+
+public:
+    std::string to_string() const;
 };
 
 } // namespace vectorized

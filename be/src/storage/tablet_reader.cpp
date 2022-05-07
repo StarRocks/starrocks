@@ -117,9 +117,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.version = _version.second;
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
+    rs_opts.segment_id = params.segment_id;
+    rs_opts.rowid_range = params.rowid_range;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
+        if (!params.rowset_id.empty() && params.rowset_id != rowset->rowset_id().to_string()) {
+            continue;
+        }
+
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
     }
     return Status::OK();

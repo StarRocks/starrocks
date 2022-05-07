@@ -257,6 +257,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         seg_options.version = options.version;
         seg_options.meta = options.meta;
     }
+    seg_options.rowid_range = options.rowid_range;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -279,6 +280,11 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+
+        if (!options.rowid_range.empty() && options.segment_id != seg_ptr->id()) {
+            continue;
+        }
+
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

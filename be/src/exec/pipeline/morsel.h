@@ -39,6 +39,8 @@ public:
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
+
+
 };
 
 class MorselQueue {

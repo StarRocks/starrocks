@@ -57,6 +57,10 @@ public:
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
+
+    // They are useless, when rowid_range is empty.
+    uint64_t segment_id = 0;
+    Range rowid_range;
 };
 
 } // namespace starrocks::vectorized
