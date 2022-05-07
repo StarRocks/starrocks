@@ -236,7 +236,6 @@ TEST(VersionGraphTest, multi_edge) {
         EXPECT_EQ(version_path[2].first, 8);
         EXPECT_EQ(version_path[2].second, 8);
     }
-
 }
 
 TEST(VersionGraphTest, remove_version) {
