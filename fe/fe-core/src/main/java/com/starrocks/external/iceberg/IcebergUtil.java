@@ -4,7 +4,6 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.Config;
 import com.starrocks.external.hive.HdfsFileFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
@@ -18,25 +17,12 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.util.ThreadPools;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 
 public class IcebergUtil {
-    private static final Logger LOG = LogManager.getLogger(IcebergUtil.class);
-
-    static {
-        if (Config.enable_iceberg_custom_worker_thread) {
-            LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
-            Properties props = System.getProperties();
-            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
-        }
-    }
 
     /**
      * Get Iceberg table identifier by table property
