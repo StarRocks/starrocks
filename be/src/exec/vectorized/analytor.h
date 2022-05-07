@@ -160,9 +160,16 @@ private:
     bool _input_eos = false;
 
     int64_t _current_row_position = 0;
+
+    // Record the start pos of current partition
     int64_t _partition_start = 0;
+    // Record the end pos of current partition.
+    // If the end position has not been found during the iteration, _partition_end = _partition_start.
     int64_t _partition_end = 0;
+    // Used to record the first position of the latest Chunk that is not equal to the PartitionKey.
+    // If not found, it points to the last position + 1.
     int64_t _found_partition_end = 0;
+
     // A peer group is all of the rows that are peers within the specified ordering.
     // Rows are peers if they compare equal to each other using the specified ordering expression.
     int64_t _peer_group_start = 0;
