@@ -65,11 +65,13 @@ Status JDBCDataSource::open(RuntimeState* state) {
 
 void JDBCDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
+        _scanner->reset_jni_env();
         _scanner->close(state);
     }
 }
 
 Status JDBCDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    RETURN_IF_ERROR(_scanner->reset_jni_env());
     bool eos = false;
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));

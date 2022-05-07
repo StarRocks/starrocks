@@ -47,6 +47,10 @@ public:
 
     Status close(RuntimeState* state);
 
+    // if execution threads has been changed, we have to reset jni env
+    // because jni env can not be used across threads.
+    Status reset_jni_env();
+
 private:
     void _init_profile();
 
