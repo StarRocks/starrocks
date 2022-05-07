@@ -77,6 +77,10 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
+import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.BrokerHbResponse;
+import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.system.HeartbeatResponse;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -152,6 +156,13 @@ public class GsonUtils {
             .registerSubtype(LocalTablet.class, LocalTablet.class.getSimpleName(), true)
             .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
 
+    // runtime adapter for HeartbeatResponse
+    private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor = RuntimeTypeAdapterFactory
+            .of(HeartbeatResponse.class, "clazz")
+            .registerSubtype(BackendHbResponse.class, BackendHbResponse.class.getSimpleName())
+            .registerSubtype(FrontendHbResponse.class, FrontendHbResponse.class.getSimpleName())
+            .registerSubtype(BrokerHbResponse.class, BrokerHbResponse.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -179,6 +190,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(alterJobV2TypeAdapterFactory)
             .registerTypeAdapterFactory(loadJobStateUpdateInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(tabletTypeAdapterFactory)
+            .registerTypeAdapterFactory(heartbeatResponseAdapterFactor)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)

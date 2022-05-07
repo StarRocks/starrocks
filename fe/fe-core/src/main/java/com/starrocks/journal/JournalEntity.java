@@ -444,6 +444,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_HEARTBEAT_V2: {
+                data = HbPackage.readV2(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_FUNCTION: {
                 data = Function.read(in);
                 isRead = true;
