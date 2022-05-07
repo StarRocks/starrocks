@@ -62,7 +62,7 @@ public class CatalogStmtTest {
         AnalyzeTestUtil.analyzeFail(sql_2);
         String sql_3 = "DROP EXTERNAL CATALOG default";
         AnalyzeTestUtil.analyzeFail(sql_3);
-        Assert.assertEquals("DROP EXTERNAL CATALOG catalog_1", stmt.toSql());
+        Assert.assertEquals("DROP EXTERNAL CATALOG 'catalog_1'", stmt.toSql());
     }
 
     @Test
