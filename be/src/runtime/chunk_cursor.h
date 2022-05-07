@@ -86,7 +86,6 @@ private:
     bool _is_pipeline;
 };
 
-using ChunkProvider = std::function<bool(Chunk**, bool*)>;
 // SimpleChunkCursor a simple cursor over the SenderQueue, avoid copy the chunk
 //
 // Example:

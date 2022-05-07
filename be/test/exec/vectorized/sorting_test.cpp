@@ -278,7 +278,7 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
         null_first.push_back(true);
         map[i] = i;
     }
-    DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     std::vector<std::unique_ptr<Chunk>> left_chunks;
     std::vector<std::unique_ptr<Chunk>> right_chunks;
@@ -312,7 +312,7 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
             return false;
         }
         if (chunk && eos) {
-            *chunk = left_chunks[left_index++].release();
+            *chunk = std::move(left_chunks[left_index++]);
         }
         return true;
     };
@@ -323,7 +323,7 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
             return false;
         }
         if (chunk && eos) {
-            *chunk = right_chunks[right_index++].release();
+            *chunk = std::move(right_chunks[right_index++]);
         }
         return true;
     };

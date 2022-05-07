@@ -831,12 +831,14 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
 
     std::vector<vectorized::ChunkProvider> chunk_providers;
     for (SenderQueue* q : _sender_queues) {
-        auto f = [q](vectorized::Chunk** chunk, bool* eos) -> bool {
+        auto f = [q](vectorized::ChunkUniquePtr* chunk, bool* eos) -> bool {
             if (!q->has_chunk()) {
                 return false;
             }
             if (chunk != nullptr && eos != nullptr) {
-                *eos = !q->try_get_chunk(chunk);
+                vectorized::Chunk* out;
+                *eos = !q->try_get_chunk(&out);
+                *chunk = ChunkUniquePtr(out);
             }
             return true;
         };
