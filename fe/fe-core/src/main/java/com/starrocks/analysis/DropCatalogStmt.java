@@ -41,7 +41,7 @@ public class DropCatalogStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP EXTERNAL CATALOG ");
-        sb.append(catalogName);
+        sb.append("\'" + catalogName + "\'");
         return sb.toString();
     }
 }
