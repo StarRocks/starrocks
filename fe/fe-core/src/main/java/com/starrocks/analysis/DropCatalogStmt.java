@@ -26,11 +26,6 @@ public class DropCatalogStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(catalogName)) {
             throw new SemanticException("'catalog name' can not be null or empty");
         }
-        try {
-            FeNameFormat.checkCatalogName(catalogName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
 
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             throw new SemanticException("Can't drop the default internal catalog");
