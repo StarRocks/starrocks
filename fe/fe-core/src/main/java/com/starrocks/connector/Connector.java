@@ -9,4 +9,13 @@ public interface Connector {
      * @return a ConnectorMetadata instance of connector
      */
     ConnectorMetadata getMetadata();
+
+    /**
+     * Shutdown the connector by releasing any held resources such as
+     * threads, sockets, etc. This method will only be called when no
+     * queries are using the connector. After this method is called,
+     * no methods will be called on the connector or any objects that
+     * have been returned from the connector.
+     */
+    default void shutdown() {}
 }

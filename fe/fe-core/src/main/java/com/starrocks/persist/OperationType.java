@@ -206,4 +206,5 @@ public class OperationType {
 
     // external hive table column change
     public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
+
 }

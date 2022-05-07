@@ -196,6 +196,7 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
@@ -501,6 +502,10 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
+    private MetadataMgr metadataMgr;
+    private CatalogMgr catalogMgr;
+    private ConnectorMgr connectorMgr;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -678,6 +683,9 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
+        this.metadataMgr = new MetadataMgr();
+        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
     }
 
     public static void destroyCheckpoint() {
@@ -812,6 +820,18 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public CatalogMgr getCatalogMgr() {
+        return catalogMgr;
+    }
+
+    public ConnectorMgr getConnectorMgr() {
+        return connectorMgr;
+    }
+
+    public MetadataMgr getMetadataMgr() {
+        return metadataMgr;
     }
 
     // Use tryLock to avoid potential dead lock
