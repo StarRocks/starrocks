@@ -78,8 +78,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                         // reasons,
                         // some users may rely on this error message.
                         status = Status::InternalError("too many filtered rows");
-                    } else if (ctx->number_loaded_rows == 0 && config::empty_load_as_error) {
-                        status = Status::InternalError("all partitions have no load data");
                     }
 
                     if (ctx->number_filtered_rows > 0 &&
