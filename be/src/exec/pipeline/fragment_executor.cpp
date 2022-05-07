@@ -58,10 +58,10 @@ static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vect
 
     // If this scan node does not accept non-empty scan ranges, create a placeholder one.
     if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
+        morsels.emplace_back(std::make_unique<FixedMorselQueue>(node_id, TScanRangeParams()));
     } else {
         for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
+            morsels.emplace_back(std::make_unique<FixedMorselQueue>(node_id, scan_range));
         }
     }
     return morsels;

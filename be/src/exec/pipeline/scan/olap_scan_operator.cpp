@@ -65,11 +65,10 @@ void OlapScanOperator::do_close(RuntimeState* state) {
 }
 
 Status OlapScanOperator::_capture_tablet_rowsets() {
-    const auto& morsels = this->morsel_queue()->morsels();
-    _tablet_rowsets.resize(morsels.size());
+    auto olap_scan_ranges = this->morsel_queue()->olap_scan_ranges();
+    _tablet_rowsets.resize(olap_scan_ranges.size());
     for (int i = 0; i < morsels.size(); ++i) {
-        auto* scan_morsel = down_cast<ScanMorsel*>(morsels[i].get());
-        auto* scan_range = scan_morsel->get_olap_scan_range();
+        auto* scan_range = olap_scan_ranges[i];
 
         // Get version.
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);

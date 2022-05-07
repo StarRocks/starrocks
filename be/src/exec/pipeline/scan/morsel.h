@@ -70,27 +70,26 @@ private:
 /// MorselQueue.
 class MorselQueue {
 public:
-    MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
+    MorselQueue() = default;
+    virtual ~MorselQueue() = default;
 
-    const Morsels& morsels() const { return _morsels; }
+    virtual std::vector<TInternalScanRange*> olap_scan_ranges() const = 0;
 
-    size_t num_morsels() const { return _num_morsels; }
+    virtual size_t num_morsels() const = 0;
+    virtual bool empty() const = 0;
+    virtual std::optional<MorselPtr> try_get() = 0;
+};
 
-    std::optional<MorselPtr> try_get() {
-        auto idx = _pop_index.load();
-        // prevent _num_morsels from superfluous addition
-        if (idx >= _num_morsels) {
-            return {};
-        }
-        idx = _pop_index.fetch_add(1);
-        if (idx < _num_morsels) {
-            return std::move(_morsels[idx]);
-        } else {
-            return {};
-        }
-    }
+class FixedMorselQueue final : public MorselQueue {
+public:
+    FixedMorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
+    ~FixedMorselQueue() override = default;
 
-    bool empty() const { return _pop_index >= _num_morsels; }
+    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
+
+    size_t num_morsels() const override { return _num_morsels; }
+    bool empty() const override { return _pop_index >= _num_morsels; }
+    std::optional<MorselPtr> try_get() override;
 
 private:
     Morsels _morsels;
