@@ -26,7 +26,7 @@ public class CatalogMgr {
         this.connectorMgr = connectorMgr;
     }
 
-    public void createCatalog(CreateCatalogStmt stmt) throws DdlException {
+    public synchronized void createCatalog(CreateCatalogStmt stmt) throws DdlException {
         String type = stmt.getCatalogType();
         String catalogName = stmt.getCatalogName();
         Map<String, String> properties = stmt.getProperties();
@@ -41,7 +41,7 @@ public class CatalogMgr {
         // TODO edit log
     }
 
-    public void dropCatalog(String catalogName) {
+    public synchronized void dropCatalog(String catalogName) {
         Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
         connectorMgr.removeConnector(catalogName);
         catalogs.remove(catalogName);

@@ -29,7 +29,7 @@ public class ConnectorMgr {
         addConnectorFactory(new HiveConnectorFactory());
     }
 
-    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory) {
+    public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
