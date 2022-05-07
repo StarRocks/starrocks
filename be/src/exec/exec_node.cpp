@@ -47,7 +47,6 @@
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/intersect_node.h"
-#include "exec/vectorized/jdbc_scan_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -500,8 +499,6 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
     }
-
-        //        *node = pool->add(new vectorized::JDBCScanNode(pool, tnode, descs));
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
