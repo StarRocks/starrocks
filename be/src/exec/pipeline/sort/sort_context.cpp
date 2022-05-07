@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
 
@@ -9,56 +10,44 @@ namespace starrocks::pipeline {
 
 using vectorized::Permutation;
 using vectorized::Columns;
+using vectorized::SortedRun;
+using vectorized::SortedRuns;
 
 ChunkPtr SortContext::pull_chunk() {
     if (!_is_merge_finish) {
         _merge_inputs();
         _is_merge_finish = true;
     }
-    if (_next_output_row >= _total_rows || _merged_chunk->is_empty()) {
+    if (_merged_runs.num_chunks() == 0) {
         return {};
     }
-
-    // TODO: avoid the chopping
-    // Chop the merged chunk for output
-    size_t chunk_size = std::min<size_t>(_state->chunk_size(), _total_rows - _next_output_row);
+    size_t required_rows = _state->chunk_size();
+    required_rows = std::min<size_t>(required_rows, _total_rows);
     if (_limit > 0) {
-        chunk_size = std::min<size_t>(chunk_size, _limit);
+        required_rows = std::min<size_t>(required_rows, _limit);
     }
 
-    ChunkPtr res = _merged_chunk->clone_empty_with_slot(chunk_size);
-    res->append(*_merged_chunk, _next_output_row, chunk_size);
-    _next_output_row += chunk_size;
+    SortedRun& run = _merged_runs.front();
+    ChunkPtr res = run.steal_chunk(required_rows);
+    if (run.empty()) {
+        _merged_runs.pop_front();
+    }
     return res;
 }
 
-void SortContext::_merge_inputs() {
+Status SortContext::_merge_inputs() {
     int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
     int64_t require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
 
-    std::vector<ChunkPtr> partial_sorted_chunks;
+    std::vector<SortedRuns> partial_sorted_runs;
     for (int i = 0; i < _num_partition_sinkers; ++i) {
         auto& partition_sorter = _chunks_sorter_partions[i];
-        auto data_segment = partition_sorter->get_result_data_segment();
-        if (data_segment != nullptr) {
-            size_t partition_rows = partition_sorter->get_partition_rows();
-            Permutation* sorted_permutation = partition_sorter->get_permutation();
-
-            if (partition_rows > 0) {
-                ChunkPtr sorted_chunk = data_segment->chunk;
-                if (sorted_permutation) {
-                    ChunkPtr assemble = sorted_chunk->clone_empty(sorted_permutation->size());
-                    append_by_permutation(assemble.get(), {sorted_chunk}, *sorted_permutation);
-                    partial_sorted_chunks.emplace_back(assemble);
-                } else {
-                    partial_sorted_chunks.emplace_back(sorted_chunk);
-                }
-            }
-        }
+        partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
     }
 
-    // TODO: avoid merge into a big chunk
-    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, require_rows);
+    RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &_merged_runs, require_rows));
+
+    return Status::OK();
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
