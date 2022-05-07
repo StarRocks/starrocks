@@ -232,7 +232,7 @@ parser code {:
 :};
 
 // Total keywords of starrocks
-terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ANALYZE, KW_ANTI, KW_ARRAY, KW_AS, KW_ASC, KW_AUTHORS,
+terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ANTI, KW_ARRAY, KW_AS, KW_ASC, KW_AUTHORS,
     KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BITMAP, KW_BITMAP_UNION, KW_BOOLEAN, KW_BOTH, KW_BROKER, KW_BACKENDS, KW_BY, KW_BUILTIN,
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
@@ -706,45 +706,6 @@ uninstall_plugin_stmt ::=
     KW_UNINSTALL KW_PLUGIN ident_or_text:name
     {:
         RESULT = new UninstallPluginStmt(name);
-    :}
-    ;
-
-// analyze statment
-analyze_stmt ::=
-    KW_ANALYZE KW_TABLE table_name:tbl opt_col_list:cols opt_properties:properties
-    {:
-        RESULT = new AnalyzeStmt(tbl, cols, properties, true);
-    :}
-    | KW_ANALYZE KW_FULL KW_TABLE table_name:tbl opt_col_list:cols opt_properties:properties
-    {:
-        RESULT = new AnalyzeStmt(tbl, cols, properties, false);
-    :}
-    ;
-
-create_analyze_stmt ::=
-    KW_CREATE KW_ANALYZE KW_ALL opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(true, properties);
-    :}
-    | KW_CREATE KW_ANALYZE KW_FULL KW_ALL opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(false, properties);
-    :}
-    | KW_CREATE KW_ANALYZE KW_DATABASE ident:db opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(db, true, properties);
-    :}
-    | KW_CREATE KW_ANALYZE KW_FULL KW_DATABASE ident:db opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(db, false, properties);
-    :}
-    | KW_CREATE KW_ANALYZE KW_TABLE table_name:tbl opt_col_list:cols opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(tbl, cols, true, properties);
-    :}
-    | KW_CREATE KW_ANALYZE KW_FULL KW_TABLE table_name:tbl opt_col_list:cols opt_properties:properties
-    {:
-        RESULT = new CreateAnalyzeJobStmt(tbl, cols, false, properties);
     :}
     ;
 
@@ -1847,10 +1808,6 @@ drop_stmt ::=
     {:
         RESULT = new DropResourceStmt(resourceName);
     :}
-    | KW_DROP KW_ANALYZE INTEGER_LITERAL:id
-    {:
-        RESULT = new DropAnalyzeJobStmt(id);
-    :}
     | KW_DROP KW_RESOURCE_GROUP ident:name
     {:
         RESULT = new DropWorkGroupStmt(name);
@@ -2668,10 +2625,6 @@ show_param ::=
     | KW_TRANSACTION opt_db:dbName opt_wild_where
     {:
         RESULT = new ShowTransactionStmt(dbName, parser.where);
-    :}
-    | KW_ANALYZE
-    {:
-        RESULT = new ShowAnalyzeStmt();
     :}
     | KW_RESOURCE_GROUPS opt_all:list_all
     {:
