@@ -29,6 +29,7 @@ public class UDFHelper {
 
     // return byteAddr
     public static native long resizeStringData(long columnAddr, int byteSize);
+
     // [nullAddr, dataAddr]
     public static native long[] getAddrs(long columnAddr);
 
@@ -47,11 +48,11 @@ public class UDFHelper {
             f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             unsafe = (Unsafe) f.get(null);
-            byteArrayBaseOffset =  (long) unsafe.arrayBaseOffset(byte[].class);
+            byteArrayBaseOffset = (long) unsafe.arrayBaseOffset(byte[].class);
             intArrayBaseOffset = (long) unsafe.arrayBaseOffset(int[].class);
             shortArrayBaseOffset = (long) unsafe.arrayBaseOffset(short[].class);
             longArrayBaseOffset = (long) unsafe.arrayBaseOffset(long[].class);
-            floatArrayBaseOffset = (long)unsafe.arrayBaseOffset(float[].class);
+            floatArrayBaseOffset = (long) unsafe.arrayBaseOffset(float[].class);
             doubleArrayBaseOffset = (long) unsafe.arrayBaseOffset(double[].class);
         } catch (NoSuchFieldException | IllegalAccessException ignored) {
         }
@@ -64,7 +65,7 @@ public class UDFHelper {
             if (boxedArr[i] == null) {
                 nulls[i] = 1;
             } else {
-                dataArr[i] = (byte) (boxedArr[i]?1:0);
+                dataArr[i] = (byte) (boxedArr[i] ? 1 : 0);
             }
         }
 
@@ -197,7 +198,7 @@ public class UDFHelper {
             } else {
                 byteRes[i] = column[i].getBytes(StandardCharsets.UTF_8);
             }
-            offset +=  byteRes[i].length;
+            offset += byteRes[i].length;
             offsets[i] = offset;
         }
         byte[] bytes = new byte[offsets[numRows - 1]];
@@ -223,7 +224,7 @@ public class UDFHelper {
                 break;
             }
             case TYPE_TINYINT: {
-                getByteBoxedResult(numRows, (Byte[])boxedResult, columnAddr);
+                getByteBoxedResult(numRows, (Byte[]) boxedResult, columnAddr);
                 break;
             }
             case TYPE_SMALLINT: {
@@ -235,7 +236,7 @@ public class UDFHelper {
                 break;
             }
             case TYPE_FLOAT: {
-                getFloatBoxedResult(numRows, (Float[])boxedResult, columnAddr);
+                getFloatBoxedResult(numRows, (Float[]) boxedResult, columnAddr);
                 break;
             }
             case TYPE_DOUBLE: {
@@ -243,7 +244,7 @@ public class UDFHelper {
                 break;
             }
             case TYPE_BIGINT: {
-                getBigIntBoxedResult(numRows, (Long[])boxedResult, columnAddr);
+                getBigIntBoxedResult(numRows, (Long[]) boxedResult, columnAddr);
                 break;
             }
             case TYPE_VARCHAR: {
@@ -254,7 +255,6 @@ public class UDFHelper {
                 throw new UnsupportedOperationException("unsupported type:" + type);
         }
     }
-
 
     // create boxed array
     //
@@ -538,7 +538,7 @@ public class UDFHelper {
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
         Object[] parameter = new Object[inputs.length];
-        Object[] res = (Object[]) Array.newInstance(method.getReturnType() ,batchSize);
+        Object[] res = (Object[]) Array.newInstance(method.getReturnType(), batchSize);
 
         try {
             for (int i = 0; i < batchSize; ++i) {
