@@ -7,6 +7,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -177,7 +178,8 @@ public class StatementPlanner {
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
-                || statement instanceof ShowTableStmt;
+                || statement instanceof ShowTableStmt
+                || statement instanceof CreateCatalogStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -203,6 +205,7 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
-                || statement instanceof DropMaterializedViewStmt;
+                || statement instanceof DropMaterializedViewStmt
+                || statement instanceof CreateCatalogStmt;
     }
 }
