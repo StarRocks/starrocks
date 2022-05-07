@@ -8,16 +8,23 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class CatalogStmtTest {
+    private static StarRocksAssert starRocksAssert;
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+        String createTbl = "create table db1.tbl1(k1 varchar(32), catalog varchar(32), external varchar(32), k4 int) "
+                + "distributed by hash(k1) buckets 3 properties('replication_num' = '1')";
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("db1").useDatabase("tbl1");
+        starRocksAssert.withTable(createTbl);
     }
 
     @Test
@@ -36,6 +43,14 @@ public class CatalogStmtTest {
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
         Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
+    }
+
+    @Test
+    public void testSelectNonReservedCol() {
+        String sql_1 = "select * from db1.tbl1";
+        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        String sql_3 = "select k1, catalog, external from db1.tbl1";
+        AnalyzeTestUtil.analyzeSuccess(sql_3);
     }
 
     @Test
