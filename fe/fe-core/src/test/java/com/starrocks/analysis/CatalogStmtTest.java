@@ -8,16 +8,23 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class CatalogStmtTest {
+    private static StarRocksAssert starRocksAssert;
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+        String createTbl = "create table db1.tbl1(k1 varchar(32), catalog varchar(32), external varchar(32), k4 int) "
+                + "distributed by hash(k1) buckets 3 properties('replication_num' = '1')";
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("db1").useDatabase("tbl1");
+        starRocksAssert.withTable(createTbl);
     }
 
     @Test
@@ -36,6 +43,26 @@ public class CatalogStmtTest {
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
         Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
+    }
+
+    @Test
+    public void testSelectNonReservedCol() {
+        String sql_1 = "select * from db1.tbl1";
+        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        String sql_3 = "select k1, catalog, external from db1.tbl1";
+        AnalyzeTestUtil.analyzeSuccess(sql_3);
+    }
+
+    @Test
+    public void testDropCatalogParserAndAnalyzer() {
+        String sql_1 = "DROP EXTERNAL CATALOG catalog_1";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertTrue(stmt instanceof DropCatalogStmt);
+        String sql_2 = "DROP EXTERNAL CATALOG";
+        AnalyzeTestUtil.analyzeFail(sql_2);
+        String sql_3 = "DROP EXTERNAL CATALOG default";
+        AnalyzeTestUtil.analyzeFail(sql_3);
+        Assert.assertEquals("DROP EXTERNAL CATALOG catalog_1", stmt.toSql());
     }
 
     @Test
@@ -64,4 +91,31 @@ public class CatalogStmtTest {
         Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));
     }
 
+
+    @Test
+    public void testDropCatalog() throws Exception {
+        String createSql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String dropSql = "DROP EXTERNAL CATALOG hive_catalog";
+
+
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        StatementBase createStmtBase = AnalyzeTestUtil.analyzeSuccess(createSql);
+        Assert.assertTrue(createStmtBase instanceof CreateCatalogStmt);
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) createStmtBase;
+        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), createCatalogStmt);
+        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertTrue(connectorMgr.connectorExists("hive_catalog"));
+        Assert.assertTrue(metadataMgr.connectorMetadataExists("hive_catalog"));
+
+        StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
+        Assert.assertTrue(dropStmtBase instanceof DropCatalogStmt);
+        DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
+        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), dropCatalogStmt);
+        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+        Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));
+    }
 }

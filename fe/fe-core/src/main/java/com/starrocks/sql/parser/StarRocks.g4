@@ -34,6 +34,7 @@ statement
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
+    | dropExternalCatalogStatement                                                          #dropCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -129,6 +130,10 @@ alterSystemStatement
 
 createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    ;
+
+dropExternalCatalogStatement
+    : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -695,9 +700,9 @@ number
 nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
+    | CAST | CATALOG | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
-    | END | EXTRACT | EVERY
+    | END | EXTERNAL | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
