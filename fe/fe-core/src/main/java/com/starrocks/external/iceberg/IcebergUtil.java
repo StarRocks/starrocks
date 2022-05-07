@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public class IcebergUtil {
-
     /**
      * Get Iceberg table identifier by table property
      */
