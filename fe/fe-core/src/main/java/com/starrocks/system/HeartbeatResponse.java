@@ -21,8 +21,10 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -42,9 +44,11 @@ public class HeartbeatResponse implements Writable {
         OK, BAD
     }
 
+    @SerializedName(value = "type")
     protected Type type;
     protected boolean isTypeRead = false;
 
+    @SerializedName(value = "status")
     protected HbStatus status;
 
     /**
@@ -98,8 +102,7 @@ public class HeartbeatResponse implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-        Text.writeString(out, status.name());
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public void readFields(DataInput in) throws IOException {

@@ -21,6 +21,7 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -33,8 +34,11 @@ import java.io.IOException;
  */
 public class BrokerHbResponse extends HeartbeatResponse implements Writable {
 
+    @SerializedName(value = "name")
     private String name;
+    @SerializedName(value = "host")
     private String host;
+    @SerializedName(value = "port")
     private int port;
 
     public BrokerHbResponse() {
