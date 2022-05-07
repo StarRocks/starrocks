@@ -195,6 +195,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
 
     Columns sort_columns;
     for (ExprContext* expr : *_sort_exprs) {
+        // TODO: handle the error correctly
         auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
         sort_columns.push_back(column);
     }
