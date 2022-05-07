@@ -37,6 +37,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,7 +56,7 @@ public class BackendsProcDir implements ProcDirInterface {
             .add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
             .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
             .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-            .add("DataUsedPct").build();
+            .add("DataUsedPct").add("CpuCores").build();
 
     public static final int HOSTNAME_INDEX = 3;
 
@@ -186,6 +187,9 @@ public class BackendsProcDir implements ProcDirInterface {
                 dataUsed = (double) dataUsedB * 100 / dataTotalB;
             }
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
+
+            // Num CPU cores
+            backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
 
             comparableBackendInfos.add(backendInfo);
         }
