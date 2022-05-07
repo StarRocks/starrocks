@@ -2,9 +2,9 @@
 
 #include "exec/vectorized/jdbc_scan_node.h"
 
-#include "exec/pipeline/jdbc_scan_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/jdbc_scan_operator.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::vectorized {

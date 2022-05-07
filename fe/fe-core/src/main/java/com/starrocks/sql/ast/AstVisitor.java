@@ -22,6 +22,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -63,7 +64,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -198,6 +198,11 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    // ----------------- Catalog Clause -------------
+    public R visitCreateCatalogStatement(CreateCatalogStmt stmt, C context) {
+        return visitStatement(stmt, context);
     }
 
     // ----------------- Alter Clause ---------------

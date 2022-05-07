@@ -167,7 +167,8 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             }
 
             // shuffle aggregation
-            requiredProperties.add(Lists.newArrayList(createShuffleAggPropertySet(columns)));
+            requiredProperties.add(
+                    Lists.newArrayList(computeAggRequiredShuffleProperties(requirementsFromParent, columns)));
             return null;
         }
 

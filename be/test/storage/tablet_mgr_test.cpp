@@ -284,7 +284,7 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
     // because there maybe other tablets exists in storage engine
     ASSERT_GE(tablets_count, 20);
 
-    size_t num = StorageEngine::instance()->compaction_check_one_round();
+    size_t num = StorageEngine::instance()->_compaction_check_one_round();
     ASSERT_GE(num, 20);
 }
 

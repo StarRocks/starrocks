@@ -14,12 +14,19 @@ public class MetadataMgr {
 
     private final ConcurrentHashMap<String, ConnectorMetadata> connectorMetadatas = new ConcurrentHashMap<>();
 
+    public MetadataMgr() {
+    }
+
     public void addMetadata(String catalogName, ConnectorMetadata metadata) {
         connectorMetadatas.put(catalogName, metadata);
     }
 
     public void removeMetadata(String catalogName) {
         connectorMetadatas.remove(catalogName);
+    }
+
+    public boolean connectorMetadataExists(String catalogName) {
+        return connectorMetadatas.containsKey(catalogName);
     }
 
     // get metadata by catalog name

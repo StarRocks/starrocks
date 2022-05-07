@@ -44,6 +44,7 @@ set(EXEC_FILES
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
     es/es_query_builder.cpp
+    es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
     parquet_builder.cpp
@@ -95,9 +96,6 @@ set(EXEC_FILES
     vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
-    vectorized/es_http_scan_node.cpp
-    vectorized/es_http_scanner.cpp
-    vectorized/es_http_components.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
     vectorized/mysql_scan_node.cpp
@@ -135,15 +133,17 @@ set(EXEC_FILES
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/limit_operator.cpp
-    pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
-    pipeline/scan_operator.cpp
-    pipeline/olap_scan_operator.cpp
-    pipeline/connector_scan_operator.cpp
-    pipeline/jdbc_scan_operator.cpp
+    pipeline/scan/scan_operator.cpp
+    pipeline/scan/olap_chunk_source.cpp
+    pipeline/scan/olap_scan_operator.cpp
+    pipeline/scan/olap_scan_prepare_operator.cpp
+    pipeline/scan/olap_scan_context.cpp
+    pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

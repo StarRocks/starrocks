@@ -4,8 +4,8 @@
 
 #include <utility>
 
-#include "exec/pipeline/chunk_source.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/scan/chunk_source.h"
 
 namespace starrocks {
 namespace pipeline {

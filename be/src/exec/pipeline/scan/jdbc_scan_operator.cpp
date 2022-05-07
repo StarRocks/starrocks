@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/jdbc_scan_operator.h"
+#include "exec/pipeline/scan/jdbc_scan_operator.h"
 
 #include <sstream>
 
@@ -17,7 +17,6 @@ JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, int32_t
                                    const TJDBCScanNode& jdbc_scan_node)
         : ScanOperator(factory, id, driver_sequence, scan_node),
           _jdbc_scan_node(jdbc_scan_node),
-          _conjunct_ctxs(scan_node->conjunct_ctxs()),
           _limit(scan_node->limit()),
           _result_chunks(config::doris_scanner_queue_size) {}
 

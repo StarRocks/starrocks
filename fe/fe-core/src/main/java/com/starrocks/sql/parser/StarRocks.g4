@@ -32,6 +32,9 @@ statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterialized
 
+    // Catalog Statement
+    | createExternalCatalogStatement                                                        #createCatalog
+
     // DML Statement
     | insertStatement                                                                       #insert
     | updateStatement                                                                       #update
@@ -120,6 +123,12 @@ dropMaterializedViewStatement
 
 alterSystemStatement
     : ALTER SYSTEM alterClause
+    ;
+
+// ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+createExternalCatalogStatement
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------

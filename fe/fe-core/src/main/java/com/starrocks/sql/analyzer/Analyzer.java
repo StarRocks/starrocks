@@ -11,6 +11,7 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -167,6 +168,12 @@ public class Analyzer {
         @Override
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
             AlterSystemStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+            statement.analyze();
             return null;
         }
     }

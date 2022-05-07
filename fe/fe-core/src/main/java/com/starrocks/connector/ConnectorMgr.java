@@ -2,34 +2,69 @@
 
 package com.starrocks.connector;
 
-import java.util.Map;
+import com.google.common.base.Preconditions;
+import com.starrocks.common.DdlException;
+import com.starrocks.connector.hive.HiveConnectorFactory;
+import com.starrocks.server.MetadataMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
-    private final ConcurrentMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
+    private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
+    private final ConcurrentHashMap<String, Connector> connectors = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
 
-    /**
-     * add connectorFactory
-     *
-     * @param connectorFactory - a connector factory instance
-     */
-    public void addConnectorFactory(ConnectorFactory connectorFactory) {
-        connectorFactories.putIfAbsent(connectorFactory.name(), connectorFactory);
+    private final MetadataMgr metadataMgr;
+
+    public ConnectorMgr(MetadataMgr metadataMgr) {
+        this.metadataMgr = metadataMgr;
+        init();
     }
 
-    /**
-     * create a connector provided by connector name
-     *
-     * @param connectorName - a string specify a kind of connector
-     * @param properties    - a map of string kv for instantiate a connector
-     * @return a connector instance
-     */
-    public Connector createConnector(String connectorName, Map<String, String> properties) {
-        ConnectorContext context = new ConnectorContext(properties);
+    // TODO load jar by plugin
+    private void init() {
+        addConnectorFactory(new HiveConnectorFactory());
+    }
 
-        ConnectorFactory connectorFactory = connectorFactories.get(connectorName);
-        return connectorFactory.createConnector(context);
+    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory) {
+        Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
+        ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
+                connectorFactory.name(), connectorFactory);
+        Preconditions.checkArgument(existingConnectorFactory == null,
+                "Connector '$s' is already registered", connectorFactory.name());
+    }
+
+    public Connector createConnector(ConnectorContext context) throws DdlException {
+        String catalogName = context.getCatalogName();
+        String type = context.getType();
+        ConnectorFactory connectorFactory = connectorFactories.get(type);
+        Preconditions.checkNotNull(connectorFactory, "Cannot load %s connector factory", type);
+        Preconditions.checkState(!connectors.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+
+        Connector connector = connectorFactory.createConnector(context);
+        connectors.put(catalogName, connector);
+        registerConnectorInternal(connector, context);
+        return connector;
+    }
+
+    public void removeConnector(String catalogName) {
+        Preconditions.checkState(connectors.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+        removeConnectorInternal(catalogName);
+        connectors.remove(catalogName);
+    }
+
+    public boolean connectorExists(String catalogName) {
+        return connectors.containsKey(catalogName);
+    }
+
+    private void registerConnectorInternal(Connector connector, ConnectorContext context) {
+        metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
+    }
+
+    private void removeConnectorInternal(String catalogName) {
+        metadataMgr.removeMetadata(catalogName);
     }
 }

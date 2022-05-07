@@ -887,7 +887,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testCastDatePredicate() throws Exception {
-        OlapTable lineitem = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:test").getTable("lineitem");
+        OlapTable lineitem =
+                (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
         connectContext.getGlobalStateMgr().setStatisticStorage(mock);
@@ -1112,5 +1113,59 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                         "and dt < timestamp('2021-12-29 00:00:00.0')";
         plan = getFragmentPlan(sql);
         assertContains(plan, "partitions=1/4");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild1() throws Exception {
+        String sql = "select * from (select v2, sum(v3) as x3 from t0 group by v2) j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v2 = j1.v3 and j0.x3 = j1.x2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild2() throws Exception {
+        String sql = "select * from t0 j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v3 = j1.v3 and j0.v2 = j1.x2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:AGGREGATE (merge finalize)");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild3() throws Exception {
+        String sql = "select * from (select v2, sum(v3) as x3 from t0 group by v2) j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v2 = j1.v3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  equal join conjunct: 2: v2 = 7: v3\n" +
+                "  |  \n" +
+                "  |----7:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: sum(8: sum)\n" +
+                "  |    |  group by: 7: v3\n" +
+                "  |    |  \n" +
+                "  |    6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:AGGREGATE (merge finalize)");
+    }
+
+    @Test
+    public void testOneStageAggJoinChild() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select xx.v2, sum(xx.v3) from (select * from t0 join t1 on t0.v2 = t1.v5) as xx group by xx.v2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
     }
 }

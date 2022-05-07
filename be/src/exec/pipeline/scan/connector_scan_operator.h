@@ -4,13 +4,14 @@
 
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
+
 class ScanNode;
-}
-namespace starrocks::pipeline {
+
+namespace pipeline {
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -87,4 +88,5 @@ private:
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks
