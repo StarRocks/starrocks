@@ -4,6 +4,7 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Config;
 import com.starrocks.external.hive.HdfsFileFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
@@ -21,8 +22,17 @@ import org.apache.iceberg.expressions.Expressions;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 
 public class IcebergUtil {
+    
+    static {
+        if (Config.iceberg_enable_custom_worker_thread) {
+            Properties props = System.getProperties();
+            props.setProperty("iceberg.worker.num-threads", String.valueOf(Config.iceberg_worker_num_threads));
+        }
+    }
+
     /**
      * Get Iceberg table identifier by table property
      */
