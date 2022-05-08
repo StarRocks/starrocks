@@ -215,7 +215,9 @@ public:
     }
 
     Operators& operators() { return _operators; }
-    SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+    SourceOperator* source_operator() {
+        return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
+    }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.

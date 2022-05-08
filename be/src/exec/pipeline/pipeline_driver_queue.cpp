@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 
@@ -110,8 +111,10 @@ size_t QuerySharedDriverQueue::size() {
 
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
-    driver->query_ctx()->incr_cur_scan_rows_num(driver->source_operator()->get_last_scan_rows_num());
-    driver->query_ctx()->incr_cur_scan_bytes(driver->source_operator()->get_last_scan_rows_num());
+    if (SourceOperator* source_operator = driver->source_operator()) {
+        driver->query_ctx()->incr_cur_scan_rows_num(source_operator->get_last_scan_rows_num());
+        driver->query_ctx()->incr_cur_scan_bytes(source_operator->get_last_scan_rows_num());
+    }
 }
 
 int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) const {
@@ -304,8 +307,10 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     }
 
     // Update scan rows
-    query_ctx->incr_cur_scan_rows_num(driver->source_operator()->get_last_scan_rows_num());
-    query_ctx->incr_cur_scan_bytes(driver->source_operator()->get_last_scan_bytes());
+    if (auto source = driver->source_operator()) {
+        query_ctx->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
+        query_ctx->incr_cur_scan_bytes(source->get_last_scan_bytes());
+    }
 
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
