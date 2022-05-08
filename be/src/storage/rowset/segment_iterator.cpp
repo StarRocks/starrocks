@@ -687,11 +687,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     Chunk* chunk = _context->_read_chunk.get();
 
     while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
-        if (chunk_capacity - chunk_start > chunk_capacity / 4) {
-            RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
-        } else {
-            RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity / 4));
-        }
+        RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
 
