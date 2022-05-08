@@ -90,15 +90,8 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
     // to compatible with old compaction framework
     // TODO: can be optimized to use just one lock
     int64_t last_failure_ms = 0;
-    uint16_t task_num = StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(
-            compaction_task->compaction_type());
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
-        if (config::max_cumulative_compaction_task >= 0 && task_num >= config::max_cumulative_compaction_task) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for cumulative compaction limit:" << config::max_cumulative_compaction_task;
-            return false;
-        }
         std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
@@ -117,11 +110,6 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
         }
         last_failure_ms = tablet->last_cumu_compaction_failure_time();
     } else {
-        if (config::max_base_compaction_task >= 0 && task_num >= config::max_base_compaction_task) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for base compaction limit:" << config::max_base_compaction_task;
-            return false;
-        }
         std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for base lock";

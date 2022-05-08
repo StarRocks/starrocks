@@ -258,14 +258,12 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
-CONF_mInt32(base_compaction_write_mbytes_per_sec, "5");
 
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
-CONF_mInt64(cumulative_compaction_budgeted_bytes, "104857600");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 // cumulative compaction skips recently published deltas in order to prevent
 // compacting a version that might be queried (in case the query planning phase took some time).
@@ -300,9 +298,6 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 CONF_mBool(enable_compaction, "true");
 CONF_Bool(enable_event_based_compaction_framework, "false");
 CONF_mInt32(max_compaction_task_num, "4");
-// < 0 means no limit
-CONF_mInt32(max_cumulative_compaction_task, "-1");
-CONF_mInt32(max_base_compaction_task, "1");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
