@@ -286,9 +286,7 @@ CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 CONF_Int32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
-CONF_mInt32(base_compaction_trace_threshold, "120");
-CONF_mInt32(cumulative_compaction_trace_threshold, "60");
-CONF_mInt32(update_compaction_trace_threshold, "20");
+CONF_mInt32(compaction_trace_threshold, "60");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
