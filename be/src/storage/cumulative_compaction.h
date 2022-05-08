@@ -24,9 +24,6 @@ protected:
     std::string compaction_name() const override { return "cumulative compaction"; }
 
     ReaderType compaction_type() const override { return ReaderType::READER_CUMULATIVE_COMPACTION; }
-
-private:
-    int64_t _cumulative_rowset_size_threshold;
 };
 
 } // namespace starrocks::vectorized
