@@ -125,6 +125,7 @@ public:
     Status init();
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
+    size_t size();
     void remove(const TUniqueId& query_id);
     // used for graceful exit
     void clear();
@@ -146,6 +147,9 @@ private:
 
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
+
+    const char* _metric_name = "pip_query_ctx_cnt";
+    std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
 } // namespace pipeline

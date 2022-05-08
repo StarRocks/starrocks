@@ -187,7 +187,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&driver_executor_thread_pool));
-    _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
+    _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(max_thread_num);
 
     _driver_limiter = new pipeline::DriverLimiter(max_thread_num * config::pipeline_max_num_drivers_per_exec_thread);
@@ -199,7 +199,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&wg_driver_executor_thread_pool));
-    _wg_driver_executor = new pipeline::GlobalDriverExecutor(std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor =
+            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(max_thread_num);
 
     _master_info = new TMasterInfo();
