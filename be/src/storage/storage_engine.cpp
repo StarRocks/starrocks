@@ -611,7 +611,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::cumulative_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -652,7 +652,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::base_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -691,7 +691,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::update_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
