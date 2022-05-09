@@ -52,10 +52,17 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
+static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
+                                            int node_id) {
     Morsels morsels;
-    for (const auto& scan_range : scan_ranges) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
+
+    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
+    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
+        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
+    } else {
+        for (const auto& scan_range : scan_ranges) {
+            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
+        }
     }
     return morsels;
 }
@@ -227,7 +234,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
+        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 

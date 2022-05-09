@@ -59,6 +59,9 @@ public:
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
 
+    // If this scan node accept empty scan ranges.
+    virtual bool accept_empty_scan_ranges() const { return true; }
+
     bool is_scan_node() const override { return true; }
 
     RuntimeProfile::Counter* bytes_read_counter() const { return _bytes_read_counter; }
