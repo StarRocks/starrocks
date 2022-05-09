@@ -483,6 +483,20 @@ void Analytor::find_partition_end() {
     }
 }
 
+bool Analytor::find_and_check_partition_end() {
+    if (_partition_columns.empty() || _input_rows == 0) {
+        _found_partition_end = _input_rows;
+        return false;
+    }
+
+    int64_t start = _found_partition_end;
+    _found_partition_end = static_cast<int64_t>(_partition_columns[0]->size());
+    for (auto& column : _partition_columns) {
+        _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
+    }
+    return _found_partition_end != static_cast<int64_t>(_partition_columns[0]->size());
+}
+
 void Analytor::find_peer_group_end() {
     // current peer group data don't output finished
     if (_current_row_position < _peer_group_end) {
@@ -498,9 +512,17 @@ void Analytor::find_peer_group_end() {
     }
 }
 
-void Analytor::reset_state_for_new_partition() {
+void Analytor::reset_state_for_cur_partition() {
     _partition_start = _partition_end;
     _partition_end = _found_partition_end;
+    _current_row_position = _partition_start;
+    reset_window_state();
+    DCHECK_GE(_current_row_position, 0);
+}
+
+void Analytor::reset_state_for_next_partition() {
+    _partition_end = _found_partition_end;
+    _partition_start = _partition_end;
     _current_row_position = _partition_start;
     reset_window_state();
     DCHECK_GE(_current_row_position, 0);
@@ -534,6 +556,7 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     _removed_from_buffer_rows += remove_count;
     _partition_start -= remove_count;
     _partition_end -= remove_count;
+    _found_partition_end -= remove_count;
     _current_row_position -= remove_count;
     _peer_group_start -= remove_count;
     _peer_group_end -= remove_count;
@@ -558,7 +581,9 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
         frame_start = std::max<int64_t>(frame_start, _partition_start);
-        frame_end = std::min<int64_t>(frame_end, _partition_end);
+        // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
+        // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
+        frame_end = std::min<int64_t>(frame_end, _found_partition_end);
         _agg_functions[i]->update_batch_single_state(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 peer_group_start, peer_group_end, frame_start, frame_end);
