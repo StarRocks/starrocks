@@ -9,7 +9,7 @@ import com.starrocks.connector.ConnectorFactory;
 public class HiveConnectorFactory implements ConnectorFactory {
     @Override
     public Connector createConnector(ConnectorContext context) {
-        return new HiveConnector();
+        return new HiveConnector(context);
     }
 
     @Override
