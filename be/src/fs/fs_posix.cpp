@@ -265,6 +265,8 @@ class PosixFileSystem : public FileSystem {
 public:
     ~PosixFileSystem() override = default;
 
+    Type type() const override { return POSIX; }
+
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));

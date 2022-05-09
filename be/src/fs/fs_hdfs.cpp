@@ -97,6 +97,8 @@ public:
     HdfsFileSystem(HdfsFileSystem&&) = delete;
     void operator=(HdfsFileSystem&&) = delete;
 
+    Type type() const override { return HDFS; }
+
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
