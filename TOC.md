@@ -130,7 +130,6 @@
       + [EXPORT](/sql-reference/sql-statements/data-manipulation/EXPORT.md)
       + [GROUP BY](/sql-reference/sql-statements/data-manipulation/GROUP%20BY.md)
       + [INSERT](/sql-reference/sql-statements/data-manipulation/insert.md)
-      + [LOAD](/sql-reference/sql-statements/data-manipulation/LOAD.md)
       + [PAUSE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md)
       + [RESUME ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
       + [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)
