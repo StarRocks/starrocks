@@ -318,7 +318,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         ctx->receive_bytes += remove_bytes;
     }
-    ctx->read_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
+    ctx->total_received_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
 }
 
 void StreamLoadAction::free_handler_ctx(void* param) {
@@ -330,6 +330,7 @@ void StreamLoadAction::free_handler_ctx(void* param) {
     if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel(Status::Cancelled("Cancelled"));
     }
+    _exec_env->load_stream_mgr()->remove(ctx->id);
     if (ctx->unref()) {
         delete ctx;
     }

@@ -71,6 +71,7 @@ import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
+import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.master.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -116,6 +117,7 @@ public class HttpServer {
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);
+        TransactionLoadAction.registerAction(controller);
         GetLoadInfoAction.registerAction(controller);
         SetConfigAction.registerAction(controller);
         GetDdlStmtAction.registerAction(controller);

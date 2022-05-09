@@ -41,6 +41,7 @@
 namespace starrocks {
 
 #ifdef BE_TEST
+std::string k_response_str;
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
@@ -116,8 +117,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 }
             });
     if (!st.ok()) {
-        // no need to check unref's return value
-        ctx->unref();
+        if (ctx->unref()) {
+            delete ctx;
+        }
         return st;
     }
 #else
@@ -209,14 +211,13 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-void StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
+Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
 
     TNetworkAddress master_addr = _exec_env->master_info()->network_address;
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
-    request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.__set_reason(ctx->status.get_error_msg());
 
@@ -234,10 +235,15 @@ void StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnRollback(result, request); });
     if (!rpc_st.ok()) {
         LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.get_error_msg() << ctx->brief();
+        return rpc_st;
+    }
+    if (result.status.status_code != TStatusCode::TXN_NOT_EXISTS) {
+        return result.status;
     }
 #else
     result = k_stream_load_rollback_result;
 #endif
+    return Status::OK();
 }
 
 bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAttachment* attach) {

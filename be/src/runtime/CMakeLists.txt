@@ -66,6 +66,7 @@ set(RUNTIME_FILES
     snapshot_loader.cpp
     query_statistics.cpp 
     message_body_sink.cpp
+    stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
     stream_load/stream_load_pipe.cpp
