@@ -1,11 +1,15 @@
-# 导出总览
+# Export
 
-数据导出（Export）是 StarRocks 提供的一种将数据导出并存储到其他介质上的功能。该功能可以将用户指定的表或分区的数据，以**文本**的格式，通过 Broker 进程导出到远端存储上，如 HDFS/阿里云OSS/AWS S3（或者兼容S3协议的对象存储） 等。
+## Export 总览
+
+StarRocks 拥有 Export 一种将数据导出并存储到其他介质上的功能。该功能可以将用户指定的表或分区的数据，以文本的格式，通过 Broker 进程导出到远端存储上，如 HDFS/阿里云OSS/AWS S3（或者兼容S3协议的对象存储） 等。
 
 本章介绍StarRocks数据导出的基本原理、使用方式、最佳实践以及注意事项。
 
 ## 名词解释
 
+* **FE**：Frontend，StarRocks的前端节点。负责元数据管理和请求接入。
+* **BE**：Backend，StarRocks的后端节点。负责查询执行和数据存储。
 * **Broker**：StarRocks 可以通过 Broker 进程对远端存储进行文件操作。
 * **Tablet**：数据分片。一个表会分成 1 个或多个分区，每个分区会划分成多个数据分片。
 
@@ -22,11 +26,10 @@
 上图描述的处理流程主要包括：
 
 1. 用户提交一个 Export 作业到 FE。
-2. FE 的导出调度器会通过两阶段来执行一个导出作业：
 
-    a.  PENDING：FE 生成**一个** ExportPendingTask，向 BE 发送 snapshot 命令，对所有涉及到的 Tablet 做一个快照，并生成**多个**查询计划。
+2. PENDING阶段：FE 生成**一个** ExportPendingTask，向 BE 发送 snapshot 命令，对所有涉及到的 Tablet 做一个快照，并生成**多个**查询计划。
 
-    b.  EXPORTING：FE 生成**一个** ExportExportingTask，开始执行**一个个**的查询计划。
+3. EXPORTING阶段：FE 生成**一个** ExportExportingTask，BE和Broker会根据FE生成的查询计划配合完成数据导出工作。
 
 ### 查询计划拆分
 
@@ -36,11 +39,11 @@ Export 作业会生成多个查询计划，每个查询计划负责扫描一部�
 
 ### 查询计划执行
 
-一个查询计划扫描多个分片，将读取的数据以行的形式组织，每 1024 行为一个 batch，调用 Broker 写入到远端存储上。
+一个查询计划扫描多个分片，将读取的数据以行的形式组织，**每 1024 行**为  **一个** batch，调用 Broker 写入到远端存储上。
 
 查询计划遇到错误会整体自动重试 3 次。如果一个查询计划重试 3 次依然失败，则整个作业失败。
 
-StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__starrocks_export_tmp_921d8f80-7c9d-11eb-9342-acde48001122` 的临时目录（其中 `921d8f80-7c9d-11eb-9342-acde48001122` 为作业的 query id）。导出的数据首先会写入这个临时目录。每个查询计划会生成一个文件，文件名示例：
+StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__starrocks_export_tmp_921d8f80-7c9d-11eb-9342-acde48001122` 的临时目录（其中 `921d8f80-7c9d-11eb-9342-acde48001122` 为作业的 query id）。导出的数据首先会写入这个临时目录。导入成功后每个查询计划会生成一个文件，文件名示例：
 
 `lineorder_921d8f80-7c9d-11eb-9342-acde48001122_1_2_0.csv.1615471540361`
 
@@ -61,13 +64,13 @@ StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__
 
 #### Broker 参数
 
-导出作业需要借助 Broker 进程访问远端存储，不同的 Broker 需要提供不同的参数，具体请参阅 Broker文档。
+导出作业需要借助 Broker 进程访问远端存储，不同的 Broker 需要提供不同的参数，具体请参阅 [Broker文档](../administration/Configuration.md)。
 
 ### 使用示例
 
 #### 提交导出作业
 
-数据导出命令的详细语法可以通过 `HELP EXPORT` 查看。导出作业举例如下：
+导出作业举例如下：
 
 ~~~sql
 EXPORT TABLE db1.tbl1 
@@ -111,12 +114,12 @@ PROPERTIES如下：
 提交作业后，可以通过 `SHOW EXPORT` 命令查询导出作业状态。
 
 ~~~sql
-SHOW EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
+SHOW EXPORT WHERE queryid = "edee47f0-abe1-11ec-b9d1-00163e1e238f";
 ~~~
 
 结果举例如下：
 
-~~~sql
+~~~plain text
      JobId: 14008
      State: FINISHED
   Progress: 100%
@@ -129,7 +132,8 @@ FinishTime: 2019-06-25 17:08:34
   ErrorMsg: N/A
 ~~~
 
-* JobId：作业的唯一 ID
+* JobId：作业的Job ID
+* QueryId：作业的查询ID
 * State：作业状态：
   * PENDING：作业待调度
   * EXPORING：数据导出中
