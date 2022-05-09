@@ -375,7 +375,7 @@ void Analytor::reset_window_state() {
     }
 }
 
-void Analytor::get_window_function_result(int32_t start, int32_t end) {
+void Analytor::get_window_function_result(size_t start, size_t end) {
     DCHECK_GT(end, start);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         vectorized::Column* agg_column = _result_window_columns[i].get();
@@ -384,19 +384,19 @@ void Analytor::get_window_function_result(int32_t start, int32_t end) {
     }
 }
 
-bool Analytor::is_partition_finished(int64_t found_partition_end) {
+bool Analytor::is_partition_finished() {
     if (_input_eos) {
         return true;
     }
 
     // There is no partition, or it hasn't fetched any chunk.
-    if (_partition_ctxs.empty() || found_partition_end == 0) {
+    if (_partition_ctxs.empty() || _found_partition_end == 0) {
         return false;
     }
 
     // If found_partition_end == _partition_columns[0]->size(),
     // the next chunk maybe also belongs to the current partition.
-    return found_partition_end != _partition_columns[0]->size();
+    return _found_partition_end != _partition_columns[0]->size();
 }
 
 Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
@@ -421,24 +421,6 @@ Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
     _output_chunk_index++;
     _window_result_position = 0;
     return Status::OK();
-}
-
-size_t Analytor::compute_memory_usage() {
-    size_t memory_usage = 0;
-    for (size_t i = 0; i < _partition_columns.size(); ++i) {
-        memory_usage += _partition_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _order_columns.size(); ++i) {
-        memory_usage += _order_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-            memory_usage += _agg_intput_columns[i][j]->memory_usage();
-        }
-    }
-    return memory_usage;
 }
 
 void Analytor::create_agg_result_columns(int64_t chunk_size) {
@@ -471,33 +453,34 @@ void Analytor::append_column(size_t chunk_size, vectorized::Column* dst_column, 
     }
 }
 
-bool Analytor::is_new_partition(int64_t found_partition_end) {
+bool Analytor::is_new_partition() {
     // _current_row_position >= _partition_end : current partition data has been processed
     // _partition_end == 0 : the first partition
     return ((_current_row_position >= _partition_end) &
-            ((_partition_end == 0) | (_partition_end != found_partition_end)));
+            ((_partition_end == 0) | (_partition_end != _found_partition_end)));
 }
 
 int64_t Analytor::get_total_position(int64_t local_position) {
     return _removed_from_buffer_rows + local_position;
 }
 
-int64_t Analytor::find_partition_end() {
+void Analytor::find_partition_end() {
     // current partition data don't consume finished
     if (_current_row_position < _partition_end) {
-        return _partition_end;
+        _found_partition_end = _partition_end;
+        return;
     }
 
     if (_partition_columns.empty() || _input_rows == 0) {
-        return _input_rows;
+        _found_partition_end = _input_rows;
+        return;
     }
 
-    int64_t found_partition_end = _partition_columns[0]->size();
+    _found_partition_end = _partition_columns[0]->size();
     for (size_t i = 0; i < _partition_columns.size(); ++i) {
         vectorized::Column* column = _partition_columns[i].get();
-        found_partition_end = _find_first_not_equal(column, _partition_end, found_partition_end);
+        _found_partition_end = _find_first_not_equal(column, _partition_end, _found_partition_end);
     }
-    return found_partition_end;
 }
 
 void Analytor::find_peer_group_end() {
@@ -516,9 +499,9 @@ void Analytor::find_peer_group_end() {
     }
 }
 
-void Analytor::reset_state_for_new_partition(int64_t found_partition_end) {
+void Analytor::reset_state_for_new_partition() {
     _partition_start = _partition_end;
-    _partition_end = found_partition_end;
+    _partition_end = _found_partition_end;
     _current_row_position = _partition_start;
     reset_window_state();
     DCHECK_GE(_current_row_position, 0);

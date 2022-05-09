@@ -58,6 +58,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropAnalyzeJobStmt;
+import com.starrocks.analysis.DropCatalogStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
@@ -241,6 +242,8 @@ public class DdlExecutor {
             globalStateMgr.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateCatalogStmt) {
             globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
+        } else if (ddlStmt instanceof DropCatalogStmt) {
+            globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getName());
         } else if (ddlStmt instanceof SubmitTaskStmt) {
             throw new DdlException("SubmitTaskStmt is unsupported.");
         } else {

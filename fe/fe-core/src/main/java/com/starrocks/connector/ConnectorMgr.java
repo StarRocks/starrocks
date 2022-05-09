@@ -29,12 +29,12 @@ public class ConnectorMgr {
         addConnectorFactory(new HiveConnectorFactory());
     }
 
-    public synchronized void addConnectorFactory(ConnectorFactory connectorFactory) {
+    public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,
-                "Connector '$s' is already registered", connectorFactory.name());
+                "ConnectorFactory '$s' is already registered", connectorFactory.name());
     }
 
     public Connector createConnector(ConnectorContext context) throws DdlException {
@@ -42,16 +42,24 @@ public class ConnectorMgr {
         String type = context.getType();
         ConnectorFactory connectorFactory = connectorFactories.get(type);
         Preconditions.checkNotNull(connectorFactory, "Cannot load %s connector factory", type);
-        Preconditions.checkState(!connectors.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+        Preconditions.checkState(!connectors.containsKey(catalogName), "Connector of catalog '%s' already exists", catalogName);
 
         Connector connector = connectorFactory.createConnector(context);
         connectors.put(catalogName, connector);
-        registerConnectorInternal(connector, context);
+
+        // TODO (stephen): to test behavior that failed to create connector when fe starting.
+        try {
+            registerConnectorInternal(connector, context);
+        } catch (Exception e) {
+            connectors.remove(catalogName);
+            throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
+                    catalogName, type), e);
+        }
         return connector;
     }
 
     public void removeConnector(String catalogName) {
-        Preconditions.checkState(connectors.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+        Preconditions.checkState(connectors.containsKey(catalogName), "Connector of catalog '%s' doesn't exist", catalogName);
         removeConnectorInternal(catalogName);
         connectors.remove(catalogName);
     }
@@ -60,7 +68,7 @@ public class ConnectorMgr {
         return connectors.containsKey(catalogName);
     }
 
-    private void registerConnectorInternal(Connector connector, ConnectorContext context) {
+    private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
         metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
     }
 

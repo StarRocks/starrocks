@@ -37,6 +37,7 @@ statement
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
+    | dropExternalCatalogStatement                                                          #dropCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -139,6 +140,10 @@ alterSystemStatement
 
 createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    ;
+
+dropExternalCatalogStatement
+    : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------

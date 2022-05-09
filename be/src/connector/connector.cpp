@@ -4,6 +4,8 @@
 
 #include "connector/es_connector.h"
 #include "connector/hive_connector.h"
+#include "connector/jdbc_connector.h"
+#include "jdbc_connector.h"
 
 namespace starrocks {
 namespace connector {
@@ -26,6 +28,7 @@ ConnectorManager* ConnectorManager::default_instance() {
 
 const std::string Connector::HIVE = "hive";
 const std::string Connector::ES = "es";
+const std::string Connector::JDBC = "jdbc";
 
 class ConnectorManagerInit {
 public:
@@ -33,6 +36,7 @@ public:
         ConnectorManager* cm = ConnectorManager::default_instance();
         cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
         cm->put(Connector::ES, std::make_unique<ESConnector>());
+        cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
     }
 };
 

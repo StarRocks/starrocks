@@ -39,6 +39,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropCatalogStmt;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -374,6 +375,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new CreateCatalogStmt(catalogName, properties);
+    }
+
+    @Override
+    public ParseNode visitDropExternalCatalogStatement(StarRocksParser.DropExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.catalogName);
+        String catalogName = identifier.getValue();
+        return new DropCatalogStmt(catalogName);
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------

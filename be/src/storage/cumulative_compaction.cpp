@@ -11,8 +11,7 @@
 namespace starrocks::vectorized {
 
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
-        : Compaction(mem_tracker, std::move(tablet)),
-          _cumulative_rowset_size_threshold(config::cumulative_compaction_budgeted_bytes) {}
+        : Compaction(mem_tracker, std::move(tablet)) {}
 
 CumulativeCompaction::~CumulativeCompaction() {}
 
@@ -66,6 +65,8 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     }
 
     std::sort(candidate_rowsets.begin(), candidate_rowsets.end(), Rowset::comparator);
+
+    RETURN_IF_ERROR(check_version_continuity_with_cumulative_point(candidate_rowsets));
     RETURN_IF_ERROR(check_version_continuity(candidate_rowsets));
 
     std::vector<RowsetSharedPtr> transient_rowsets;
@@ -160,6 +161,24 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     }
 
     return Status::OK();
+}
+
+Status CumulativeCompaction::check_version_continuity_with_cumulative_point(
+        const std::vector<RowsetSharedPtr>& rowsets) {
+    if (rowsets.empty()) {
+        return Status::OK();
+    }
+
+    auto start_version = rowsets.front()->start_version();
+    auto cumulative_point = _tablet->cumulative_layer_point();
+
+    if (start_version == cumulative_point) return Status::OK();
+
+    LOG(WARNING) << "candidate rowsets misses version behind cumulative point, which may be fixed "
+                    "by clone later. cumulative point: "
+                 << cumulative_point << " rowset start version: " << start_version
+                 << " rowset end version: " << rowsets.back()->end_version();
+    return Status::InternalError("cumulative compaction miss version error.");
 }
 
 } // namespace starrocks::vectorized

@@ -28,11 +28,16 @@ namespace starrocks::vectorized {
 
 JDBCScanner::~JDBCScanner() {}
 
-Status JDBCScanner::open(RuntimeState* state) {
+Status JDBCScanner::reset_jni_env() {
     _jni_env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_env == nullptr) {
         return Status::InternalError("Cannot get jni env");
     }
+    return Status::OK();
+}
+
+Status JDBCScanner::open(RuntimeState* state) {
+    RETURN_IF_ERROR(reset_jni_env());
 
     _init_profile();
 
