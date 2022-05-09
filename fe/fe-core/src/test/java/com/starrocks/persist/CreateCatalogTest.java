@@ -14,7 +14,7 @@ public class CreateCatalogTest {
     private String fileName = "./CreateCatalogTest";
 
     @After
-    public void tearDownCreate() {
+    public void tearDownCreate() throws Exception {
         File file = new File(fileName);
         file.delete();
     }

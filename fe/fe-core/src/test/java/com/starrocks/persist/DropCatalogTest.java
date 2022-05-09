@@ -14,7 +14,7 @@ public class DropCatalogTest {
 
 
     @After
-    public void tearDownDrop() {
+    public void tearDownDrop() throws Exception {
         File file = new File(fileName);
         file.delete();
     }

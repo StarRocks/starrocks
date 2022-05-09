@@ -1,15 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.analysis;
-
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DdlStmt;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;

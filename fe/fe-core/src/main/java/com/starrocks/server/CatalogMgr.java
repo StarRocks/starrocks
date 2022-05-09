@@ -4,7 +4,6 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.common.DdlException;
@@ -12,6 +11,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.CreateCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
