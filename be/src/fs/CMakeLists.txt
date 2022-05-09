@@ -28,7 +28,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXEC_FILES
     fs.cpp
     fs_posix.cpp
-    fs_util.cpp
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp

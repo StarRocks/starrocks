@@ -11,6 +11,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,11 @@ public class AnalyzeState {
      * so in Expression Analyzer, each non-deterministic function will be numbered to achieve different hash values.
      */
     private final IdGenerator<ExprId> nondeterministicIdGenerator = ExprId.createGenerator();
+
+    /**
+     * Columns that do not appear in GroupBy for use with MODE_ONLY_FULL_GROUP_BY.
+     * */
+    private final List<Expr> columnNotInGroupBy = new ArrayList<>();
 
     public AnalyzeState() {
     }
@@ -221,5 +227,9 @@ public class AnalyzeState {
 
     public ExprId getNextNondeterministicId() {
         return nondeterministicIdGenerator.getNextId();
+    }
+
+    public List<Expr> getColumnNotInGroupBy() {
+        return columnNotInGroupBy;
     }
 }
