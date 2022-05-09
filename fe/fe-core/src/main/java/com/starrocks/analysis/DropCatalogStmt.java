@@ -7,7 +7,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 
-// ToDo: to support internal catalog in the future
+// ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
 
     private final String name;
