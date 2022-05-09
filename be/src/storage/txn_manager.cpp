@@ -253,10 +253,10 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         auto it = txn_tablet_map.find(key);
         if (it != txn_tablet_map.end()) {
             it->second.erase(tablet_info);
-            LOG(INFO) << "publish txn successfully."
-                      << " partition_id: " << key.first << ", txn_id: " << key.second
-                      << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
-                      << ", version: " << version.first << "," << version.second;
+            VLOG(1) << "publish txn successfully."
+                    << " partition_id: " << key.first << ", txn_id: " << key.second
+                    << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
+                    << ", version: " << version.first << "," << version.second;
             if (it->second.empty()) {
                 txn_tablet_map.erase(it);
                 _clear_txn_partition_map_unlocked(transaction_id, partition_id);
