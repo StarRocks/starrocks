@@ -37,6 +37,7 @@ public class HiveMetaCache {
     private static final long MAX_PARTITION_CACHE_SIZE = MAX_TABLE_CACHE_SIZE * 1000L;
 
     private final HiveMetaClient client;
+    private String resourceName;
 
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>
     // for unPartitioned table, partition map is: ImmutableMap<>.of(new PartitionKey(), PartitionId)
@@ -54,7 +55,12 @@ public class HiveMetaCache {
     LoadingCache<HiveTableColumnsKey, ImmutableMap<String, HiveColumnStats>> tableColumnStatsCache;
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
+        this(hiveMetaClient, executor, null);
+    }
+
+    public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor, String resourceName) {
         this.client = hiveMetaClient;
+        this.resourceName = resourceName;
         init(executor);
     }
 

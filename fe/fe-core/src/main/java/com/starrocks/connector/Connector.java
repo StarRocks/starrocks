@@ -8,7 +8,7 @@ public interface Connector {
      *
      * @return a ConnectorMetadata instance of connector
      */
-    ConnectorMetadata getMetadata();
+    ConnectorMetadata getMetadata() throws Exception;
 
     /**
      * Shutdown the connector by releasing any held resources such as
@@ -18,4 +18,10 @@ public interface Connector {
      * have been returned from the connector.
      */
     default void shutdown() {}
+
+    /**
+     * Check whether the properties of different connector types meet the requirements.
+     * For example, hive connector must require "hive.metastore.uris" property.
+     */
+    default void validate() {}
 }
