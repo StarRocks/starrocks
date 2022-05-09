@@ -27,7 +27,6 @@
 #include <thread>
 
 #include "runtime/routine_load/data_consumer.h"
-#include "util/lru_cache.hpp"
 
 namespace starrocks {
 
