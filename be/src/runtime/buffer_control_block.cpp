@@ -138,7 +138,7 @@ Status BufferControlBlock::add_batch(std::vector<std::unique_ptr<TFetchDataResul
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
 
-    for (auto& result: results) {
+    for (auto& result : results) {
         if (_waiting_rpc.empty()) {
             _buffer_rows += result->result_batch.rows.size();
             _batch_queue.push_back(result.release());
@@ -194,7 +194,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
     if ((!_batch_queue.empty() && (total_rows + _buffer_rows) > _buffer_limit) && !_is_cancelled) {
         return false;
     }
-    for (auto& result: results) {
+    for (auto& result : results) {
         if (_waiting_rpc.empty()) {
             _buffer_rows += result->result_batch.rows.size();
             _batch_queue.push_back(result.release());

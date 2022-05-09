@@ -27,8 +27,8 @@
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/primitive_type.h"
 #include "runtime/current_thread.h"
+#include "runtime/primitive_type.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
@@ -103,8 +103,8 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chun
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                        ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
-                        : column;
+                         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
+                         : column;
         result_columns.emplace_back(std::move(column));
     }
 
@@ -113,7 +113,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chun
         TRY_CATCH_ALLOC_SCOPE_START()
         _row_buffer->reserve(128);
         size_t current_bytes = 0;
-        int current_rows= 0;
+        int current_rows = 0;
         SCOPED_TIMER(_convert_tuple_timer);
         auto result = std::make_unique<TFetchDataResult>();
         auto& result_rows = result->result_batch.rows;
