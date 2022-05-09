@@ -8,7 +8,6 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
@@ -21,7 +20,6 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -128,6 +126,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSubmitTaskStmt(SubmitTaskStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -51,6 +51,11 @@ public:
         this->scan_bytes += stats_item.scan_bytes();
     }
 
+    void add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
+        this->scan_rows += scan_rows;
+        this->scan_bytes += scan_bytes;
+    }
+
     void merge(QueryStatisticsRecvr* recvr);
 
     void clear() {

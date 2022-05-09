@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -25,20 +27,6 @@ public class ShowAnalyzeStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) {
-    }
-
-    @Override
-    public String toSql() {
-        return "SHOW ANALYZE";
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

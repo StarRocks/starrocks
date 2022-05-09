@@ -105,7 +105,7 @@ public:
     Status set_cluster_id(int32_t cluster_id);
     int32_t effective_cluster_id() const { return _effective_cluster_id; }
 
-    void start_delete_unused_rowset();
+    double delete_unused_rowset();
     void add_unused_rowset(const RowsetSharedPtr& rowset);
 
     // Obtain shard path for new tablet.

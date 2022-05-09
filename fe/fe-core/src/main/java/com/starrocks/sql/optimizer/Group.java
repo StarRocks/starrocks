@@ -183,6 +183,17 @@ public class Group {
         }
     }
 
+    public void deleteBestExpression(GroupExpression groupExpression) {
+        for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
+                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
+            Pair<Double, GroupExpression> pair = entry.getValue();
+            if (pair.second.equals(groupExpression)) {
+                iterator.remove();
+            }
+        }
+    }
+
     public GroupExpression getBestExpression(PhysicalPropertySet physicalPropertySet) {
         if (hasBestExpression(physicalPropertySet)) {
             return lowestCostExpressions.get(physicalPropertySet).second;

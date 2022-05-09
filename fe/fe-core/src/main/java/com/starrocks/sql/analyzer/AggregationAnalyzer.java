@@ -29,6 +29,8 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -43,6 +45,7 @@ import static com.google.common.collect.ImmutableSet.toImmutableSet;
  * AggregationAnalyzer is used to analyze aggregation
  */
 public class AggregationAnalyzer {
+    private final ConnectContext session;
     private final AnalyzeState analyzeState;
 
     /**
@@ -61,26 +64,13 @@ public class AggregationAnalyzer {
 
     private final Scope orderByScope;
 
-    /**
-     * Verify whether output expression is semantically valid for aggregation
-     */
-    public static void verifySourceAggregations(List<Expr> groupByExpressions, List<Expr> outputExpressions,
-                                                Scope sourceScope,
-                                                AnalyzeState analyzeState) {
-        AggregationAnalyzer analyzer = new AggregationAnalyzer(analyzeState, groupByExpressions, sourceScope, null);
-        outputExpressions.forEach(analyzer::analyze);
+    public void verify(List<Expr> expressions) {
+        expressions.forEach(this::analyze);
     }
 
-    public static void verifyOrderByAggregations(List<Expr> groupByExpressions, List<Expr> orderByExpression,
-                                                 Scope sourceScope,
-                                                 Scope orderByScope, AnalyzeState analyzeState) {
-        AggregationAnalyzer analyzer =
-                new AggregationAnalyzer(analyzeState, groupByExpressions, sourceScope, orderByScope);
-        orderByExpression.forEach(analyzer::analyze);
-    }
-
-    private AggregationAnalyzer(AnalyzeState analyzeState, List<Expr> groupingExpressions, Scope sourceScope,
-                                Scope orderByScope) {
+    public AggregationAnalyzer(ConnectContext session, AnalyzeState analyzeState, List<Expr> groupingExpressions,
+                               Scope sourceScope, Scope orderByScope) {
+        this.session = session;
         this.sourceScope = sourceScope;
         this.orderByScope = orderByScope;
         this.analyzeState = analyzeState;
@@ -126,7 +116,15 @@ public class AggregationAnalyzer {
                 return true;
             }
 
-            return groupingFields.contains(fieldId);
+            if (groupingFields.contains(fieldId)) {
+                return true;
+            } else if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(), SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
+                if (!analyzeState.getColumnNotInGroupBy().contains(node)) {
+                    analyzeState.getColumnNotInGroupBy().add(node);
+                }
+                return true;
+            }
+            return false;
         }
 
         @Override

@@ -1,9 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.Constants;
 
@@ -13,9 +14,9 @@ import java.util.Map;
 public class CreateAnalyzeJobStmt extends DdlStmt {
     private long dbId;
     private long tableId;
-    private TableName tbl;
-    private List<String> columnNames;
-    private boolean isSample;
+    private final TableName tbl;
+    private final List<String> columnNames;
+    private final boolean isSample;
     private Map<String, String> properties;
 
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties) {

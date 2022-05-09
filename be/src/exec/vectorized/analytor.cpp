@@ -375,7 +375,7 @@ void Analytor::reset_window_state() {
     }
 }
 
-void Analytor::get_window_function_result(int32_t start, int32_t end) {
+void Analytor::get_window_function_result(size_t start, size_t end) {
     DCHECK_GT(end, start);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         vectorized::Column* agg_column = _result_window_columns[i].get();
@@ -421,24 +421,6 @@ Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
     _output_chunk_index++;
     _window_result_position = 0;
     return Status::OK();
-}
-
-size_t Analytor::compute_memory_usage() {
-    size_t memory_usage = 0;
-    for (size_t i = 0; i < _partition_columns.size(); ++i) {
-        memory_usage += _partition_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _order_columns.size(); ++i) {
-        memory_usage += _order_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-            memory_usage += _agg_intput_columns[i][j]->memory_usage();
-        }
-    }
-    return memory_usage;
 }
 
 void Analytor::create_agg_result_columns(int64_t chunk_size) {
@@ -494,10 +476,10 @@ void Analytor::find_partition_end() {
         return;
     }
 
-    _found_partition_end = _partition_columns[0]->size();
-    for (size_t i = 0; i < _partition_columns.size(); ++i) {
-        vectorized::Column* column = _partition_columns[i].get();
-        _found_partition_end = _find_first_not_equal(column, _partition_end, _found_partition_end);
+    int64_t start = _found_partition_end;
+    _found_partition_end = static_cast<int64_t>(_partition_columns[0]->size());
+    for (auto& column : _partition_columns) {
+        _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
     }
 }
 
@@ -511,9 +493,8 @@ void Analytor::find_peer_group_end() {
     _peer_group_end = _partition_end;
     DCHECK(!_order_columns.empty());
 
-    for (size_t i = 0; i < _order_columns.size(); ++i) {
-        vectorized::Column* column = _order_columns[i].get();
-        _peer_group_end = _find_first_not_equal(column, _peer_group_start, _peer_group_end);
+    for (auto& column : _order_columns) {
+        _peer_group_end = _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start, _peer_group_end);
     }
 }
 
@@ -584,8 +565,7 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
     }
 }
 
-int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t start, int64_t end) {
-    int64_t target = start;
+int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end) {
     while (start + 1 < end) {
         int64_t mid = start + (end - start) / 2;
         if (column->compare_at(target, mid, *column, 1) == 0) {
