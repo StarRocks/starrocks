@@ -56,44 +56,11 @@ bool OlapScanOperator::is_finished() const {
 }
 
 Status OlapScanOperator::do_prepare(RuntimeState*) {
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
     return Status::OK();
 }
 
 void OlapScanOperator::do_close(RuntimeState* state) {
     _ctx->unref(state);
-}
-
-Status OlapScanOperator::_capture_tablet_rowsets() {
-    auto olap_scan_ranges = this->morsel_queue()->olap_scan_ranges();
-    _tablet_rowsets.resize(olap_scan_ranges.size());
-    for (int i = 0; i < olap_scan_ranges.size(); ++i) {
-        auto* scan_range = olap_scan_ranges[i];
-
-        // Get version.
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-
-        // Capture row sets of this version tablet.
-        {
-            std::shared_lock l(tablet->get_header_lock());
-            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
-        }
-    }
-
-    return Status::OK();
 }
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
