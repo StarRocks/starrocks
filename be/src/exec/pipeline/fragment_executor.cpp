@@ -67,23 +67,14 @@ static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vect
     return morsels;
 }
 
-Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
-    DCHECK(request.__isset.desc_tbl);
-    DCHECK(request.__isset.fragment);
+Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    // prevent an identical fragment instance from multiple execution caused by FE's
+    // duplicate invocations of rpc exec_plan_fragment.
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
-    const auto& coord = request.coord;
     const auto& query_options = request.query_options;
-    const auto& query_globals = request.query_globals;
-    const auto& backend_num = request.backend_num;
-    const auto& t_desc_tbl = request.desc_tbl;
-    const auto& fragment = request.fragment;
 
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
-
-    // prevent an identical fragment instance from multiple execution caused by FE's
-    // duplicate invocations of rpc exec_plan_fragment.
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
@@ -113,6 +104,17 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // initialize query's deadline
     _query_ctx->extend_lifetime();
 
+    return Status::OK();
+}
+
+StatusOr<std::unique_ptr<FragmentContext>> FragmentExecutor::_prepare_fragment_ctx(
+        const TExecPlanFragmentParams& request) {
+    const auto& coord = request.coord;
+    const auto& params = request.params;
+    const auto& query_id = params.query_id;
+    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& query_options = request.query_options;
+
     auto fragment_ctx = std::make_unique<FragmentContext>();
 
     fragment_ctx->set_query_id(query_id);
@@ -127,8 +129,14 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
+              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
+              << " backend_num=" << request.backend_num;
 
+    return fragment_ctx;
+}
+
+StatusOr<WorkGroupPtr> FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& request) {
+    // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
     // wg is always non-nullable, when request.enable_resource_group is true.
     if (request.__isset.enable_resource_group && request.enable_resource_group) {
@@ -140,19 +148,24 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
+        _query_ctx->init_query(wg.get());
     }
 
     if (_query_ctx->init_query(wg.get())) {
         _wg = wg.get();
     }
+    return wg;
+}
 
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
-    }
+Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                WorkGroupPtr wg) {
+    const auto& params = request.params;
+    const auto& query_id = params.query_id;
+    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& query_globals = request.query_globals;
+    const auto& query_options = request.query_options;
+    const auto& t_desc_tbl = request.desc_tbl;
+    const int32_t degree_of_parallelism = _calc_dop(request);
 
     fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
@@ -178,7 +191,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                       ? query_options.mem_limit * degree_of_parallelism
                                       : -1L;
     runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
-    runtime_state->set_be_number(backend_num);
+    runtime_state->set_be_number(request.backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
@@ -207,22 +220,36 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     }
     runtime_state->set_desc_tbl(desc_tbl);
+
+    return Status::OK();
+}
+
+int32_t FragmentExecutor::_calc_dop(const TExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = 1;
+    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
+        degree_of_parallelism = request.pipeline_dop;
+    } else {
+        // default dop is a half of the number of hardware threads.
+        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
+    }
+    return degree_of_parallelism;
+}
+
+Status FragmentExecutor::_prepare_exec_plan(const TExecPlanFragmentParams& request) {
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* obj_pool = runtime_state->obj_pool();
+    const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
+    const auto& params = request.params;
+    const auto& fragment = request.fragment;
+    const int32_t degree_of_parallelism = _calc_dop(request);
+
     // Set up plan
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &fragment_ctx->plan()));
-    ExecNode* plan = fragment_ctx->plan();
+    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
+    ExecNode* plan = _fragment_ctx->plan();
     plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());
-
-    // Set up global dict
-    if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
-    }
-
-    if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
-    }
 
     // Set senders of exchange nodes before pipeline build
     std::vector<ExecNode*> exch_nodes;
@@ -264,16 +291,26 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(fragment_ctx->prepare_all_pipelines());
 
+    return Status::OK();
+}
+
+Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                  WorkGroupPtr wg) {
+    const auto& fragment_instance_id = request.params.fragment_instance_id;
+
     Drivers drivers;
-    const auto& pipelines = fragment_ctx->pipelines();
+    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
+
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
         VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
-                 << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+                 << " fragment_instance_id=" << print_id(fragment_instance_id);
 
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only OlapScanOperator need a MorselQueue attached.
@@ -332,9 +369,39 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         }
     }
 
-    _fragment_ctx = fragment_ctx.get();
-    _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
-    prepare_success = true;
+    return Status::OK();
+}
+
+Status FragmentExecutor::_prepare_global_dict(const TExecPlanFragmentParams& request) {
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    // Set up global dict
+    if (request.fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+    }
+
+    if (request.fragment.__isset.load_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+    }
+    return Status::OK();
+}
+
+Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    DCHECK(request.__isset.desc_tbl);
+    DCHECK(request.__isset.fragment);
+
+    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+    RETURN_IF_ERROR(_prepare_fragment_ctx(request));
+    ASSIGN_OR_RETURN(auto fragment_ctx, _prepare_fragment_ctx(request));
+    ASSIGN_OR_RETURN(auto wg, _prepare_workgroup(request));
+    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request, wg));
+    RETURN_IF_ERROR(_prepare_exec_plan(request));
+    RETURN_IF_ERROR(_prepare_global_dict(request));
+    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request, wg));
+
+    _query_ctx->fragment_mgr()->register_ctx(request.params.fragment_instance_id, std::move(fragment_ctx));
+
     return Status::OK();
 }
 
