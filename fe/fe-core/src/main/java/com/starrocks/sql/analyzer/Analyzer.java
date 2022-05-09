@@ -28,15 +28,6 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.StatisticUtils;
-import org.apache.commons.lang3.StringUtils;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class Analyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {

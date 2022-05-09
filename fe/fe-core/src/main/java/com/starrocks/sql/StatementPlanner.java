@@ -194,7 +194,6 @@ public class StatementPlanner {
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
                 || statement instanceof CreateCatalogStmt
-                || statement instanceof DropCatalogStmt
                 || statement instanceof SubmitTaskStmt;
     }
 
@@ -228,9 +227,6 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
-                || statement instanceof DropMaterializedViewStmt
-                || statement instanceof CreateCatalogStmt
-                || statement instanceof DropCatalogStmt
                 || statement instanceof SubmitTaskStmt;
     }
 }
