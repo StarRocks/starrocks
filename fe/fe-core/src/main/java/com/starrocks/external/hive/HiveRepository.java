@@ -38,7 +38,7 @@ public class HiveRepository {
     Map<String, HiveMetaCache> metaCaches = Maps.newHashMap();
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
 
-    Executor executor = Executors.newFixedThreadPool(100);
+    Executor executor = Executors.newCachedThreadPool();
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
     private final ExecutorService partitionDaemonExecutor =
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
