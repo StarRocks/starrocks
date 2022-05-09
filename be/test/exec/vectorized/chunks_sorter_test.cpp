@@ -267,7 +267,7 @@ TEST_F(ChunksSorterTest, full_sort_chunk_overflow) {
     std::string big_string(1024, 'a');
     ColumnPtr big_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
     for (int i = 0; i < 1024; i++) {
-        big_column->append_datum(Datum(big_string));
+        big_column->append_datum(Datum(Slice(big_string)));
     }
     Columns columns{big_column};
     Chunk::SlotHashMap slots;
