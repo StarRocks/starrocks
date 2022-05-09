@@ -61,6 +61,7 @@ class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
+class CompactionManager;
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.

@@ -13,18 +13,22 @@
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
 
 class CompactionScheduler;
+class StorageEngine;
 
 class CompactionManager {
 public:
     CompactionManager();
 
     ~CompactionManager() = default;
+
+    void init_max_task_num();
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
@@ -55,6 +59,21 @@ public:
         std::lock_guard lg(_tasks_mutex);
         return _running_tasks.size();
     }
+
+    bool check_if_exceed_max_task_num() {
+        bool exceed = false;
+        std::lock_guard lg(_tasks_mutex);
+        if (config::max_compaction_concurrency == 0) {
+            LOG(WARNING) << "register compaction task failed for compaction is disabled";
+            exceed = true;
+        } else if (_running_tasks.size() >= _max_task_num) {
+            LOG(WARNING) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
+            exceed = true;
+        }
+        return exceed;
+    }
+
+    int32_t max_task_num() { return _max_task_num; }
 
     uint16_t running_cumulative_tasks_num_for_dir(DataDir* data_dir) {
         std::lock_guard lg(_tasks_mutex);
@@ -90,6 +109,7 @@ private:
 
     std::mutex _scheduler_mutex;
     std::vector<CompactionScheduler*> _schedulers;
+    int32_t _max_task_num;
 };
 
 } // namespace starrocks
