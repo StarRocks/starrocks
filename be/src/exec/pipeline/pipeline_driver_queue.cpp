@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 
@@ -299,11 +300,6 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
 
         wg->incr_total_cpu_cost(sink_operator_last_cpu_time_ns);
         query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
-    }
-
-    // Update scan rows
-    if (wg->big_query_scan_rows_limit()) {
-        query_ctx->incr_cur_scan_rows_num(driver->source_operator()->get_last_scan_rows_num());
     }
 
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);

@@ -84,6 +84,8 @@ public:
     // Record the number of rows read from the data source for big query checking
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
+    void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
+    int64_t get_scan_bytes() const { return _cur_scan_bytes; }
 
     // Record the cpu time of the query run, for big query checking
     int64_t init_wg_cpu_cost() const { return _init_wg_cpu_cost; }
@@ -114,6 +116,7 @@ private:
     int64_t _query_begin_time = 0;
     std::atomic<int64_t> _cur_cpu_cost = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
+    std::atomic<int64_t> _cur_scan_bytes = 0;
 
     int64_t _init_wg_cpu_cost = 0;
 };
