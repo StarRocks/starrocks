@@ -1,14 +1,10 @@
 # 窗口函数
 
-## 背景介绍
+## 功能
 
-窗口函数是一类特殊的内置函数。和聚合函数类似，窗口函数也是对于多个输入行做计算得到一个数据值。不同的是，窗口函数是在一个特定的窗口内对输入数据做处理，而不是按照group by来分组计算。每个窗口内的数据可以用over()从句进行排序和分组。窗口函数会**对结果集的每一行**计算出一个单独的值，而不是每个group by分组计算一个值。这种灵活的方式允许用户在select从句中增加额外的列，给用户提供了更多的机会来对结果集进行重新组织和过滤。窗口函数只能出现在select列表和最外层的order by从句中。在查询过程中，窗口函数会在最后生效，就是说，在执行完join，where和group by等操作之后再执行。窗口函数在金融和科学计算领域经常被使用到，用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
+窗口函数是一类特殊的内置函数。和聚合函数类似，窗口函数也是对于多个输入行做计算得到一个数据值。不同的是，窗口函数是在一个特定的窗口内对输入数据做处理，而不是按照 group by 来分组计算。每个窗口内的数据可以用 over() 从句进行排序和分组。窗口函数会**对结果集的每一行**计算出一个单独的值，而不是每个 group by 分组计算一个值。这种灵活的方式允许用户在 select 从句中增加额外的列，给用户提供了更多的机会来对结果集进行重新组织和过滤。窗口函数只能出现在 select 列表和最外层的 order by 从句中。在查询过程中，窗口函数会在最后生效，就是说，在执行完 join，where 和 group by 等操作之后再执行。窗口函数在金融和科学计算领域经常被使用到，用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
 
-<br/>
-
-## 使用方式
-
-窗口函数的语法：
+## 语法
 
 ~~~SQL
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
@@ -16,25 +12,19 @@ partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ~~~
 
-### Function
+## 参数说明
 
-目前支持的Function包括：
+### partition_by_clause
 
-* MIN(), MAX(), COUNT(), SUM(), AVG()
-* FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
-* ROW_NUMBER(), RANK(), DENSE_RANK()
+Partition By 从句和 Group By 类似。它把输入行按照指定的一列或多列分组，相同值的行会被分到一组。
 
-### PARTITION BY从句
+### order_by_clause
 
-Partition By从句和Group By类似。它把输入行按照指定的一列或多列分组，相同值的行会被分到一组。
-
-### ORDER BY从句
-
-Order By从句和外层的Order By基本一致。它定义了输入行的排列顺序，如果指定了Partition By，则Order By定义了每个Partition分组内的顺序。与外层Order By的唯一不同点是：OVER从句中的`Order By n`（n是正整数）相当于不做任何操作，而外层的Order By n表示按照第n列排序。
+Order By 从句和外层的 Order By 基本一致。它定义了输入行的排列顺序，如果指定了 Partition By，则Order By 定义了每个 Partition 分组内的顺序。与外层 Order By 的唯一不同点是：OVER 从句中的`Order By n`（n是正整数）相当于不做任何操作，而外层的 Order By n 表示按照第 n 列排序。
 
 举例:
 
-这个例子展示了在select列表中增加一个id列，它的值是1，2，3等等，顺序按照events表中的date_and_time列排序。
+这个例子展示了在 select 列表中增加一个 id 列，它的值是 1，2，3 等等，顺序按照 events 表中的 date_and_time 列排序。
 
 ~~~SQL
 SELECT row_number() OVER (ORDER BY date_and_time) AS id,
@@ -42,9 +32,9 @@ SELECT row_number() OVER (ORDER BY date_and_time) AS id,
 FROM events;
 ~~~
 
-### Window Clause
+### window_clause
 
-Window从句用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window从句支持的方法有：AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE()和SUM()。对于 MAX()和MIN(), window从句可以指定开始范围UNBOUNDED PRECEDING
+Window 从句用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window 从句支持的方法有：AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE() 和 SUM()。对于 MAX() 和 MIN(), Window 从句可以指定开始范围 UNBOUNDED PRECEDING
 
 语法：
 
@@ -54,7 +44,7 @@ ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | {
 
 举例：
 
-假设我们有如下的股票数据，股票代码是JDR，closing price是每天的收盘价。
+假设我们有如下的股票数据，股票代码是 JDR，closing price 是每天的收盘价。
 
 ~~~SQL
 create table stock_ticker (
@@ -85,7 +75,7 @@ order by stock_symbol, closing_date
 +--------------+---------------+---------------------+
 ~~~
 
-这个查询使用窗口函数产生moving_average这一列，它的值是3天的股票均价，即前一天、当前以及后一天三天的均价。第一天没有前一天的值，最后一天没有后一天的值，所以这两行只计算了两天的均值。这里Partition By没有起到作用，因为所有的数据都是JDR的数据，但如果还有其他股票信息，Partition By会保证窗口函数值作用在本Partition之内。
+这个查询使用窗口函数产生 moving_average 这一列，它的值是3天的股票均价，即前一天、当前以及后一天三天的均价。第一天没有前一天的值，最后一天没有后一天的值，所以这两行只计算了两天的均值。这里 Partition By 没有起到作用，因为所有的数据都是 JDR 的数据，但如果还有其他股票信息，Partition By 会保证窗口函数值作用在本 Partition 之内。
 
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
@@ -115,21 +105,25 @@ from stock_ticker;
 
 <br/>
 
-## 函数举例
+### 函数（function）
 
-本节介绍StarRocks中可以用作窗口函数的方法。
+目前支持的函数包括：
 
-<br/>
+* MIN(), MAX(), COUNT(), SUM(), AVG()
+* FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
+* ROW_NUMBER(), RANK(), DENSE_RANK()
+
+## 示例
 
 ### AVG()
 
-语法：
+**语法**
 
 ~~~SQL
-AVG([DISTINCT | ALL] *expression*) [OVER (*analytic_clause*)]
+AVG( expression ) [OVER (*analytic_clause*)]
 ~~~
 
-举例：
+**示例**
 
 计算当前行和它**前后各一行**数据的x平均值
 
@@ -166,13 +160,13 @@ where property in ('odd','even');
 
 ### COUNT()
 
-语法：
+**语法**
 
 ~~~SQL
-COUNT([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+COUNT( expression ) [OVER (analytic_clause)]
 ~~~
 
-举例：
+**示例**
 
 计算从**当前行到第一行**x出现的次数。
 
@@ -208,16 +202,16 @@ from int_t where property in ('odd','even');
 
 ### DENSE_RANK()
 
-DENSE_RANK()函数用来表示排名，与RANK()不同的是，DENSE_RANK()**不会出现空缺**数字。比如，如果出现了两个并列的1，DENSE_RANK()的第三个数仍然是2，而RANK()的第三个数是3。
+DENSE_RANK() 函数用来表示排名，与 RANK() 不同的是，DENSE_RANK() **不会出现空缺**数字。比如，如果出现了两个并列的 1，DENSE_RANK() 的第三个数仍然是 2，而 RANK() 的第三个数是 3。
 
-语法：
+**语法**
 
 ~~~SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ~~~
 
-举例：
-下例展示了按照property列分组对x列排名：
+**示例**
+下例展示了按照 property 列分组对x列排名：
 
 ~~~SQL
 select x, y,
@@ -249,15 +243,15 @@ from int_t;
 
 ### FIRST_VALUE()
 
-FIRST_VALUE()返回窗口范围内的**第一个**值。
+FIRST_VALUE() 返回窗口范围内的**第一个**值。
 
-语法：
+**语法**
 
 ~~~SQL
 FIRST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
 
-举例：
+**示例**
 
 我们有如下数据
 
@@ -279,7 +273,7 @@ from mail_merge;
 +---------+---------+--------------+
 ~~~
 
-使用FIRST_VALUE()，根据country分组，返回每个分组中第一个greeting的值：
+使用 FIRST_VALUE()，根据 country 分组，返回每个分组中第一个 greeting 的值：
 
 ~~~SQL
 select country, name,
@@ -308,15 +302,15 @@ from mail_merge;
 
 ### LAG()
 
-LAG()方法用来计算当前行**向前**数若干行的值。
+LAG() 方法用来计算当前行**向前**数若干行的值。
 
-语法：
+**语法**
 
 ~~~SQL
 LAG (expr, offset, default) OVER (partition_by_clause order_by_clause)
 ~~~
 
-举例：
+**示例**
 
 计算前一天的收盘价
 
@@ -349,7 +343,7 @@ order by closing_date;
 
 ### LAST_VALUE()
 
-LAST_VALUE()返回窗口范围内的**最后一个**值。与FIRST_VALUE()相反。
+LAST_VALUE() 返回窗口范围内的**最后一个**值。与 FIRST_VALUE() 相反。
 
 语法：
 
@@ -357,7 +351,7 @@ LAST_VALUE()返回窗口范围内的**最后一个**值。与FIRST_VALUE()相反
 LAST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
 
-使用FIRST_VALUE()举例中的数据：
+使用 FIRST_VALUE() 举例中的数据：
 
 ~~~SQL
 select country, name,
@@ -386,15 +380,15 @@ from mail_merge;
 
 ### LEAD()
 
-LEAD()方法用来计算当前行**向后**数若干行的值。
+LEAD() 方法用来计算当前行**向后**数若干行的值。
 
-语法：
+**语法**
 
 ~~~SQL
 LEAD (expr, offset, default]) OVER (partition_by_clause order_by_clause)
 ~~~
 
-举例：
+**示例**
 
 计算第二天的收盘价对比当天收盘价的走势，即第二天收盘价比当天高还是低。
 
@@ -430,13 +424,13 @@ order by closing_date;
 
 ### MAX()
 
-语法：
+**语法**
 
 ~~~SQL
-MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MAX(expression) [OVER (analytic_clause)]
 ~~~
 
-举例：
+**示例**
 
 计算**从第一行到当前行之后一行**的最大值
 
@@ -469,13 +463,13 @@ where property in ('prime','square');
 
 ### MIN()
 
-语法：
+**语法**
 
 ~~~SQL
-MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MIN(expression) [OVER (analytic_clause)]
 ~~~
 
-举例：
+**示例**
 
 计算**从第一行到当前行之后一行**的最小值
 
@@ -508,15 +502,15 @@ where property in ('prime','square');
 
 ### RANK()
 
-RANK()函数用来表示排名，与DENSE_RANK()不同的是，RANK()会**出现空缺**数字。比如，如果出现了两个并列的1，RANK()的第三个数就是3，而不是2。
+RANK() 函数用来表示排名，与 DENSE_RANK() 不同的是，RANK() 会**出现空缺**数字。比如，如果出现了两个并列的 1，RANK() 的第三个数就是 3，而不是 2。
 
-语法：
+**语法**
 
 ~~~SQL
 RANK() OVER(partition_by_clause order_by_clause)
 ~~~
 
-举例：
+**示例**
 
 根据x列进行排名
 
@@ -545,15 +539,15 @@ from int_t;
 
 ### ROW_NUMBER()
 
-为每个Partition的每一行返回一个从1开始连续递增的整数。与RANK()和DENSE_RANK()不同的是，ROW_NUMBER()返回的值**不会重复也不会出现空缺**，是**连续递增**的。
+为每个 Partition 的每一行返回一个从1开始连续递增的整数。与 RANK() 和 DENSE_RANK() 不同的是，ROW_NUMBER() 返回的值**不会重复也不会出现空缺**，是**连续递增**的。
 
-语法：
+**语法**
 
 ~~~SQL
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ~~~
 
-举例：
+**示例**
 
 ~~~SQL
 select x, y, row_number() over(partition by x order by y) as rank
@@ -580,15 +574,15 @@ from int_t;
 
 ### SUM()
 
-语法：
+**语法**
 
 ~~~SQL
-SUM([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+SUM(expression) [OVER (analytic_clause)]
 ~~~
 
-举例：
+**示例**
 
-按照property进行分组，在组内计算**当前行以及前后各一行**的x列的和。
+按照 property 进行分组，在组内计算**当前行以及前后各一行**的x列的和。
 
 ~~~SQL
 select x, property,
