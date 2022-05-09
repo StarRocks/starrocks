@@ -15,7 +15,7 @@ public:
               _analytor(std::move(analytor)) {
         _analytor->ref();
     }
-    ~AnalyticSinkOperator() = default;
+    ~AnalyticSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
