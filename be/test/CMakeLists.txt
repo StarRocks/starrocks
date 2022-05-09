@@ -253,7 +253,6 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
-        ./util/lru_cache_util_test.cpp
         ./util/md5_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
