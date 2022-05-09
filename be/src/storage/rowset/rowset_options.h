@@ -60,7 +60,7 @@ public:
 
     // They are useless, when rowid_range is empty.
     uint64_t segment_id = 0;
-    Range rowid_range;
+    SparseRange rowid_range;
 };
 
 } // namespace starrocks::vectorized

@@ -647,6 +647,8 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
+CONF_Int64(pipeline_min_scan_rows, "1048576");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.

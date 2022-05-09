@@ -59,7 +59,7 @@ public:
     bool has_delete_pred = false;
 
     // It is useless, when it is empty.
-    Range rowid_range;
+    SparseRange rowid_range;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;

@@ -59,7 +59,7 @@ struct TabletReaderParams {
     // They are useless, when rowset_id is "" or rowid_range is empty.
     std::string rowset_id = "";
     uint64_t segment_id = 0;
-    Range rowid_range;
+    SparseRange rowid_range;
 
 public:
     std::string to_string() const;

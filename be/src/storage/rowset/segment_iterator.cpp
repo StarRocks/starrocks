@@ -431,7 +431,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -1404,9 +1404,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
         return Status::OK();
     }
 
-    SparseRange rowid_range(_opts.rowid_range);
-    _scan_range = _scan_range.intersection(rowid_range);
-
+    _scan_range = _scan_range.intersection(_opts.rowid_range);
     return Status::OK();
 }
 

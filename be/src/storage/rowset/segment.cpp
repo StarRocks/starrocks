@@ -228,7 +228,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
     }
 }
 
-Status Segment::_load_index(MemTracker* mem_tracker) {
+Status Segment::load_index(MemTracker* mem_tracker) {
     return _load_index_once.call([this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
