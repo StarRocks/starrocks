@@ -12,9 +12,9 @@
 
 namespace starrocks::vectorized {
 
-class getColumnAddrVistor : public ColumnVisitorAdapter<getColumnAddrVistor> {
+class GetColumnAddrVistor : public ColumnVisitorAdapter<GetColumnAddrVistor> {
 public:
-    getColumnAddrVistor(jlong* jarr) : ColumnVisitorAdapter(this), _jarr(jarr) {}
+    GetColumnAddrVistor(jlong* jarr) : ColumnVisitorAdapter(this), _jarr(jarr) {}
 
     Status do_visit(const NullableColumn& column) {
         const auto& null_data = column.immutable_null_column_data();
@@ -62,7 +62,7 @@ jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAd
     int array_size = 3;
     auto jarr = env->NewLongArray(array_size);
     jlong array[array_size];
-    getColumnAddrVistor vistor(array);
+    GetColumnAddrVistor vistor(array);
     column->accept(&vistor);
     env->SetLongArrayRegion(jarr, 0, array_size, array);
     return jarr;
