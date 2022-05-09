@@ -18,7 +18,7 @@ namespace starrocks {
 CompactionScheduler::CompactionScheduler() {
     auto st = ThreadPoolBuilder("compact_pool")
                       .set_min_threads(1)
-                      .set_max_threads(config::max_compaction_task_num)
+                      .set_max_threads(StorageEngine::instance()->compaction_manager()->max_task_num())
                       .set_max_queue_size(1000)
                       .build(&_compaction_pool);
     DCHECK(st.ok());
@@ -61,12 +61,7 @@ void CompactionScheduler::notify() {
 }
 
 bool CompactionScheduler::_can_schedule_next() {
-    int32_t max_task_num = std::min(config::max_compaction_task_num,
-                                    static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                         (config::cumulative_compaction_num_threads_per_disk +
-                                                          config::base_compaction_num_threads_per_disk)));
-    return config::enable_compaction &&
-           StorageEngine::instance()->compaction_manager()->running_tasks_num() < max_task_num &&
+    return !StorageEngine::instance()->compaction_manager()->check_if_exceed_max_task_num() &&
            StorageEngine::instance()->compaction_manager()->candidates_size() > 0;
 }
 

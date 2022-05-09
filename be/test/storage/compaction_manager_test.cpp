@@ -85,9 +85,9 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     std::vector<std::shared_ptr<MockCompactionTask>> tasks;
     DataDir data_dir("./data_dir");
     // generate compaction task
-    config::max_compaction_task_num = 2;
-    config::cumulative_compaction_num_threads_per_disk = config::max_compaction_task_num;
-    for (int i = 0; i < config::max_compaction_task_num + 1; i++) {
+    config::max_compaction_concurrency = 2;
+    config::cumulative_compaction_num_threads_per_disk = config::max_compaction_concurrency;
+    for (int i = 0; i < config::max_compaction_concurrency + 1; i++) {
         TabletSharedPtr tablet = std::make_shared<Tablet>();
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
@@ -107,20 +107,21 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tasks.emplace_back(std::move(task));
     }
 
-    for (int i = 0; i < config::max_compaction_task_num; i++) {
+    for (int i = 0; i < config::max_compaction_concurrency; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
     bool ret = StorageEngine::instance()->compaction_manager()->register_task(
-            tasks[config::max_compaction_task_num].get());
+            tasks[config::max_compaction_concurrency].get());
     ASSERT_FALSE(ret);
 
-    ASSERT_EQ(config::max_compaction_task_num, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(config::max_compaction_concurrency, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+
     StorageEngine::instance()->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
     config::cumulative_compaction_num_threads_per_disk = 1;
-    for (int i = 0; i < config::max_compaction_task_num; i++) {
+    for (int i = 0; i < config::max_compaction_concurrency; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         if (i == 0) {
             ASSERT_TRUE(ret);
