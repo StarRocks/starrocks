@@ -9,7 +9,6 @@
 #include "exec/decompressor.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -241,7 +240,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     std::shared_ptr<SequentialFile> src_file;
     switch (range_desc.file_type) {
     case TFileType::FILE_LOCAL: {
-        RETURN_IF_ERROR(fs_util::open_file_for_sequential(FileSystem::Default(), range_desc.path, &src_file));
+        ASSIGN_OR_RETURN(src_file, FileSystem::Default()->new_sequential_file(range_desc.path));
         break;
     }
     case TFileType::FILE_STREAM: {
@@ -281,7 +280,7 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     std::shared_ptr<RandomAccessFile> src_file;
     switch (range_desc.file_type) {
     case TFileType::FILE_LOCAL: {
-        RETURN_IF_ERROR(fs_util::open_file_for_random(FileSystem::Default(), range_desc.path, &src_file));
+        ASSIGN_OR_RETURN(src_file, FileSystem::Default()->new_random_access_file(range_desc.path));
         break;
     }
     case TFileType::FILE_BROKER: {
