@@ -110,8 +110,10 @@ public:
     bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
     void find_partition_end();
+    bool find_and_check_partition_end();
     void find_peer_group_end();
-    void reset_state_for_new_partition();
+    void reset_state_for_cur_partition();
+    void reset_state_for_next_partition();
 
     void remove_unused_buffer_values(RuntimeState* state);
 
