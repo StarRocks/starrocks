@@ -681,6 +681,8 @@ CONF_Bool(manual_compact_before_data_dir_load, "false");
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "false");
 
+CONF_Int32(max_batch_publish_latency_ms, "100");
+
 } // namespace config
 
 } // namespace starrocks
