@@ -58,10 +58,10 @@ static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vect
 
     // If this scan node does not accept non-empty scan ranges, create a placeholder one.
     if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<FixedMorselQueue>(node_id, TScanRangeParams()));
+        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
     } else {
         for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<FixedMorselQueue>(node_id, scan_range));
+            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
         }
     }
     return morsels;
@@ -242,8 +242,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
-        morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
+        MorselQueuePtr morsel_queue = scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id());
+        morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
     PipelineBuilderContext context(fragment_ctx.get(), degree_of_parallelism);
