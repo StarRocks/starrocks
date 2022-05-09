@@ -126,7 +126,7 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
-            _analytor->reset_state_for_new_partition();
+            _analytor->reset_state_for_cur_partition();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
@@ -169,7 +169,7 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
-            _analytor->reset_state_for_new_partition();
+            _analytor->reset_state_for_cur_partition();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
@@ -218,7 +218,7 @@ Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* 
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
-            _analytor->reset_state_for_new_partition();
+            _analytor->reset_state_for_cur_partition();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
@@ -258,7 +258,7 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_rows_frame(RuntimeState* 
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
-            _analytor->reset_state_for_new_partition();
+            _analytor->reset_state_for_cur_partition();
         }
 
         size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
