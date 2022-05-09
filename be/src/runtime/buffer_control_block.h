@@ -67,9 +67,12 @@ public:
     ~BufferControlBlock();
 
     Status init();
-    Status add_batch(TFetchDataResult* result);
+    Status add_batch(std::unique_ptr<TFetchDataResult>& result);
+    Status add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
+
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(TFetchDataResult* result);
+    StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
+    StatusOr<bool> try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
 
     // get result from batch, use timeout?
     Status get_batch(TFetchDataResult* result);

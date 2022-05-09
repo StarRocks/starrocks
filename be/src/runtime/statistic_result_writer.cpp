@@ -60,13 +60,13 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
 
     int version = down_cast<Int32Column*>(ColumnHelper::get_data_column(result_columns[0].get()))->get_data()[0];
 
-    auto* result = new (std::nothrow) TFetchDataResult();
+    std::unique_ptr<TFetchDataResult> result(new (std::nothrow) TFetchDataResult());
 
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
-        _fill_statistic_data_v1(version, result_columns, chunk, result);
+        _fill_statistic_data_v1(version, result_columns, chunk, result.get());
     } else if (version == DICT_STATISTIC_DATA_VERSION) {
-        _fill_dict_statistic_data(version, result_columns, chunk, result);
+        _fill_dict_statistic_data(version, result_columns, chunk, result.get());
     }
 
     // Step 4: send
@@ -79,7 +79,6 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     }
 
     LOG(WARNING) << "Append statistic result to sink failed.";
-    delete result;
     return status;
 }
 

@@ -90,10 +90,14 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
                                                                    std::move(in_filters), std::move(bloom_filters)));
     }
-
-    for (auto& read_only_join_prober : _read_only_join_probers) {
-        read_only_join_prober->reference_hash_table(_join_builder.get());
+    {
+        TRY_CATCH_ALLOC_SCOPE_START()
+        for (auto& read_only_join_prober : _read_only_join_probers) {
+            read_only_join_prober->reference_hash_table(_join_builder.get());
+        }
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
+
     _join_builder->enter_probe_phase();
     for (auto& read_only_join_prober : _read_only_join_probers) {
         read_only_join_prober->enter_probe_phase();

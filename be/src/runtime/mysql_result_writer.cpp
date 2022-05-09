@@ -28,6 +28,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
+#include "runtime/current_thread.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
@@ -71,21 +72,16 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
     if (!status.ok()) {
         return status.status();
     }
-
-    TFetchDataResultPtr result = std::move(status.value());
-    auto* fetch_data = result.release();
+    TFetchDataResultPtrs result = std::move(status.value());
     SCOPED_TIMER(_result_send_timer);
-    // Note: this method will delete result pointer if status is OK
-    // TODO(kks): use std::unique_ptr instead of raw pointer
-    auto add_status = _sinker->add_batch(fetch_data);
+
+    auto add_status = _sinker->add_batch(result);
     if (status.ok()) {
         _written_rows += num_rows;
         return add_status;
     } else {
         LOG(WARNING) << "append result batch to sink failed.";
     }
-
-    delete fetch_data;
     return add_status;
 }
 
@@ -94,12 +90,10 @@ Status MysqlResultWriter::close() {
     return Status::OK();
 }
 
-StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
-    auto result = std::make_unique<TFetchDataResult>();
-    auto& result_rows = result->result_batch.rows;
-    result_rows.resize(num_rows);
+    std::vector<TFetchDataResultPtr> results;
 
     vectorized::Columns result_columns;
     // Step 1: compute expr
@@ -109,47 +103,72 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
-                         : column;
+                        ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
+                        : column;
         result_columns.emplace_back(std::move(column));
     }
 
     // Step 2: convert chunk to mysql row format row by row
     {
+        TRY_CATCH_ALLOC_SCOPE_START()
         _row_buffer->reserve(128);
+        size_t current_bytes = 0;
+        int current_rows= 0;
         SCOPED_TIMER(_convert_tuple_timer);
+        auto result = std::make_unique<TFetchDataResult>();
+        auto& result_rows = result->result_batch.rows;
+        result_rows.resize(num_rows);
+
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             for (auto& result_column : result_columns) {
                 result_column->put_mysql_row_buffer(_row_buffer, i);
             }
             size_t len = _row_buffer->length();
-            _row_buffer->move_content(&result_rows[i]);
+
+            if (UNLIKELY(current_bytes + len >= max_row_buffer_size)) {
+                result_rows.resize(current_rows);
+                results.emplace_back(std::move(result));
+
+                result = std::make_unique<TFetchDataResult>();
+                result_rows = result->result_batch.rows;
+                result_rows.resize(num_rows - current_rows);
+
+                current_bytes = 0;
+                current_rows = 0;
+            }
+            _row_buffer->move_content(&result_rows[current_rows]);
             _row_buffer->reserve(len * 1.1);
+
+            current_bytes += len;
+            current_rows += 1;
         }
+        if (current_rows > 0) {
+            result_rows.resize(current_rows);
+            results.emplace_back(std::move(result));
+        }
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
-    return result;
+    return results;
 }
 
-StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtr& result) {
+StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     SCOPED_TIMER(_result_send_timer);
-    auto* fetch_data = result.release();
-    auto num_rows = fetch_data->result_batch.rows.size();
-    auto status = _sinker->try_add_batch(fetch_data);
+    size_t num_rows = 0;
+    for (auto& result : results) {
+        num_rows += result->result_batch.rows.size();
+    }
 
+    auto status = _sinker->try_add_batch(results);
     if (status.ok()) {
         // success in add result to ResultQueue of _sinker
         if (status.value()) {
             _written_rows += num_rows;
-        } else {
-            // the result is given back to chunk
-            result.reset(fetch_data);
+            results.clear();
         }
     } else {
-        delete fetch_data;
-        if (!status.ok()) {
-            LOG(WARNING) << "Append result batch to sink failed: status=" << status.status().to_string();
-        }
+        results.clear();
+        LOG(WARNING) << "Append result batch to sink failed: status=" << status.status().to_string();
     }
     return status;
 }
