@@ -22,6 +22,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -216,6 +217,18 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                                       TransactionState.TxnStatusChangeReason txnStatusChangeReason) {
         if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             // For committed txn, update the progress.
+            return true;
+        }
+
+        if (txnStatusChangeReason != null &&
+                txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
+            // Because the max_filter_ratio of routine load task is always 1.
+            // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
+            // If no data is imported, the error "all partitions have no load data" may only be returned.
+            // In this case, the status of the transaction is ABORTED,
+            // but we still need to update the offset to skip these error lines.
+            Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
+                    txnState.getTransactionStatus());
             return true;
         }
 
