@@ -3,21 +3,14 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.job.task.Task;
-import com.starrocks.job.task.TaskBuilder;
-import com.starrocks.job.task.TaskManager;
-import com.starrocks.job.task.TaskRun;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.hadoop.util.ThreadUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.Map;
 
 public class SubmitTaskStmtTest {
