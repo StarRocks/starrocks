@@ -117,6 +117,7 @@ public class TabletInvertedIndex {
                              Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
                              ListMultimap<TStorageMedium, Long> tabletMigrationMap,
                              Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish,
+                             Map<Long, Long> transactionsToCommitTime,
                              ListMultimap<Long, Long> transactionsToClear,
                              ListMultimap<Long, Long> tabletRecoveryMap,
                              Set<Pair<Long, Integer>> tabletWithoutPartitionId) {
@@ -249,6 +250,8 @@ public class TabletInvertedIndex {
                                                     transactionsToPublish.put(transactionState.getDbId(), map);
                                                 }
                                                 map.put(transactionId, versionInfo);
+                                                transactionsToCommitTime.put(transactionId,
+                                                        transactionState.getCommitTime());
                                             }
                                         }
                                     }
