@@ -322,6 +322,7 @@ public class ReportHandler extends Daemon {
 
         // dbid -> txn id -> [partition info]
         Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish = Maps.newHashMap();
+        Map<Long, Long> transactionsToCommitTime = Maps.newHashMap();
         ListMultimap<Long, Long> transactionsToClear = LinkedListMultimap.create();
 
         // db id -> tablet id
@@ -337,6 +338,7 @@ public class ReportHandler extends Daemon {
                 foundTabletsWithInvalidSchema,
                 tabletMigrationMap,
                 transactionsToPublish,
+                transactionsToCommitTime,
                 transactionsToClear,
                 tabletRecoveryMap,
                 tabletWithoutPartitionId);
@@ -358,7 +360,7 @@ public class ReportHandler extends Daemon {
         handleClearTransactions(transactionsToClear, backendId);
 
         // 7. send publish version request to be
-        handleRepublishVersionInfo(transactionsToPublish, backendId);
+        handleRepublishVersionInfo(transactionsToPublish, transactionsToCommitTime, backendId);
 
         // 8. send recover request to be
         handleRecoverTablet(tabletRecoveryMap, backendTablets, backendId);
@@ -852,14 +854,16 @@ public class ReportHandler extends Daemon {
 
     private static void handleRepublishVersionInfo(
             Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish,
+            Map<Long, Long> transactionsToCommitTime,
             long backendId) {
         AgentBatchTask batchTask = new AgentBatchTask();
         long createPublishVersionTaskTime = System.currentTimeMillis();
         for (Long dbId : transactionsToPublish.keySet()) {
             ListMultimap<Long, TPartitionVersionInfo> map = transactionsToPublish.get(dbId);
             for (long txnId : map.keySet()) {
-                PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, map.get(txnId), createPublishVersionTaskTime);
+                long commitTime = transactionsToCommitTime.get(txnId);
+                PublishVersionTask task = new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId),
+                        createPublishVersionTaskTime);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
