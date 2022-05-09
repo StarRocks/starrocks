@@ -52,14 +52,14 @@ public class MaterializedViewTest {
         };
         MaterializedView mv = new MaterializedView();
         Assert.assertEquals(1024, mv.getClusterId());
-        Assert.assertEquals(Table.TableType.MATERIALIZEDVIEW, mv.getType());
+        Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv.getType());
         Assert.assertEquals(null, mv.getTableProperty());
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
         Assert.assertEquals(1024, mv2.getClusterId());
         Assert.assertEquals(100, mv2.getDbId());
-        Assert.assertEquals(Table.TableType.MATERIALIZEDVIEW, mv2.getType());
+        Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv2.getType());
         Assert.assertEquals(null, mv2.getTableProperty());
         Assert.assertEquals("mv2", mv2.getName());
         Assert.assertEquals(KeysType.AGG_KEYS, mv2.getKeysType());

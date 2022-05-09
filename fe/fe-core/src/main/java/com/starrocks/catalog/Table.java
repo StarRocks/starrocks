@@ -65,7 +65,7 @@ public class Table extends MetaObject implements Writable {
         HUDI,
         ODBC,
         JDBC,
-        MATERIALIZEDVIEW,
+        MATERIALIZED_VIEW,
     }
 
     @SerializedName(value = "id")
@@ -218,7 +218,7 @@ public class Table extends MetaObject implements Writable {
             table = new IcebergTable();
         } else if (type == TableType.JDBC) {
             table = new JDBCTable();
-        } else if (type == TableType.MATERIALIZEDVIEW) {
+        } else if (type == TableType.MATERIALIZED_VIEW) {
             table = MaterializedView.read(in);
             table.setTypeRead(true);
             return table;

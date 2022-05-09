@@ -11,6 +11,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.server.GlobalStateMgr;
+import jersey.repackaged.com.google.common.collect.Sets;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -51,7 +52,7 @@ public class MaterializedViewManagerTest {
         };
         MaterializedView mv = new MaterializedView(1000, 100, "mv", columns, KeysType.AGG_KEYS,
                 null, null, null);
-        List<Long> baseTableIds = Lists.newArrayList(1L, 2L, 3L);
+        Set<Long> baseTableIds = Sets.newHashSet(1L, 2L, 3L);
         mv.setBaseTableIds(baseTableIds);
         boolean ret = GlobalStateMgr.getCurrentState().getMaterializedViewManager().registerMaterializedView(mv);
         Assert.assertTrue(ret);
@@ -71,7 +72,7 @@ public class MaterializedViewManagerTest {
 
         MaterializedView mv4 = new MaterializedView(1002, 100, "mv4", columns, KeysType.AGG_KEYS,
                 null, null, null);
-        List<Long> baseTableIds2 = Lists.newArrayList(1L, 2L);
+        Set<Long> baseTableIds2 = Sets.newHashSet(1L, 2L);
         mv4.setBaseTableIds(baseTableIds2);
         ret = GlobalStateMgr.getCurrentState().getMaterializedViewManager().registerMaterializedView(mv4);
         Assert.assertTrue(ret);

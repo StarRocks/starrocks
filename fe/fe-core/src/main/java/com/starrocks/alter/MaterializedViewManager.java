@@ -37,7 +37,7 @@ public class MaterializedViewManager {
                 return false;
             }
             materializedViews.put(mv.getName(), mv);
-            List<Long> baseTableIds = mv.getBaseTableIds();
+            Set<Long> baseTableIds = mv.getBaseTableIds();
             for (Long baseTableId : baseTableIds) {
                 Set<MaterializedView> mvSet = materializedViewsForTable.getOrDefault(baseTableId, Sets.newHashSet());
                 mvSet.add(mv);
@@ -53,7 +53,7 @@ public class MaterializedViewManager {
         lock.writeLock().lock();
         try {
             materializedViews.remove(mv.getName());
-            List<Long> baseTableIds = mv.getBaseTableIds();
+            Set<Long> baseTableIds = mv.getBaseTableIds();
             for (Long baseTableId : baseTableIds) {
                 Set<MaterializedView> mvSet = materializedViewsForTable.get(baseTableId);
                 if (mvSet != null) {

@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedView;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * meta structure for materialized view
@@ -102,7 +104,7 @@ public class MaterializedView extends OlapTable {
     private MvRefreshScheme refreshScheme;
 
     @SerializedName(value = "baseTableIds")
-    private List<Long> baseTableIds;
+    private Set<Long> baseTableIds;
 
     @SerializedName(value = "active")
     private boolean active;
@@ -116,8 +118,8 @@ public class MaterializedView extends OlapTable {
 
     public MaterializedView() {
         // for persist
-        super(TableType.MATERIALIZEDVIEW);
-        this.clusterId = Catalog.getCurrentCatalog().getClusterId();
+        super(TableType.MATERIALIZED_VIEW);
+        this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
         this.tableProperty = null;
         this.state = OlapTableState.NORMAL;
         this.active = true;
@@ -127,7 +129,7 @@ public class MaterializedView extends OlapTable {
                             PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                             MvRefreshScheme refreshScheme) {
         super(id, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                Catalog.getCurrentCatalog().getClusterId(), null, TableType.MATERIALIZEDVIEW);
+                GlobalStateMgr.getCurrentState().getClusterId(), null, TableType.MATERIALIZED_VIEW);
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
@@ -159,11 +161,11 @@ public class MaterializedView extends OlapTable {
         return tTableDescriptor;
     }
 
-    public List<Long> getBaseTableIds() {
+    public Set<Long> getBaseTableIds() {
         return baseTableIds;
     }
 
-    public void setBaseTableIds(List<Long> baseTableIds) {
+    public void setBaseTableIds(Set<Long> baseTableIds) {
         this.baseTableIds = baseTableIds;
     }
 
