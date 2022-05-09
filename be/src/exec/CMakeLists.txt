@@ -114,7 +114,6 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
-    vectorized/jdbc_scan_node.cpp
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp
     vectorized/sorting/merge_column.cpp
@@ -143,7 +142,6 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
-    pipeline/scan/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
