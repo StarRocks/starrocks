@@ -582,10 +582,6 @@ distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     ;
 
-sessionPropertis
-    : SESSION '(' property (',' property)* ')'
-    ;
-
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
