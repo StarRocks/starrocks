@@ -21,6 +21,9 @@ public:
 protected:
     Status pick_rowsets_to_compact() override;
 
+    // check_version_continuity_with_cumulative_point checks whether the input rowsets is continuous with cumulative point.
+    Status check_version_continuity_with_cumulative_point(const std::vector<RowsetSharedPtr>& rowsets);
+
     std::string compaction_name() const override { return "cumulative compaction"; }
 
     ReaderType compaction_type() const override { return ReaderType::READER_CUMULATIVE_COMPACTION; }
