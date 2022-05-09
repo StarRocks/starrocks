@@ -911,19 +911,43 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
     return res;
 }
 
-void StorageEngine::start_delete_unused_rowset() {
-    std::lock_guard lock(_gc_mutex);
-    for (auto it = _unused_rowsets.begin(); it != _unused_rowsets.end();) {
-        if (it->second.use_count() != 1) {
-            ++it;
-        } else if (it->second->need_delete_file()) {
-            VLOG(3) << "start to remove rowset:" << it->second->rowset_id()
-                    << ", version:" << it->second->version().first << "-" << it->second->version().second;
-            Status status = it->second->remove();
-            VLOG(3) << "remove rowset:" << it->second->rowset_id() << " finished. status:" << status;
-            it = _unused_rowsets.erase(it);
+double StorageEngine::delete_unused_rowset() {
+    MonotonicStopWatch timer;
+    timer.start();
+    std::vector<RowsetSharedPtr> delete_rowsets;
+    constexpr int64_t batch_size = 4096;
+    double deleted_pct = 1;
+    delete_rowsets.reserve(batch_size);
+    {
+        std::lock_guard lock(_gc_mutex);
+        for (auto it = _unused_rowsets.begin(); it != _unused_rowsets.end();) {
+            if (it->second.use_count() != 1) {
+                ++it;
+            } else if (it->second->need_delete_file()) {
+                delete_rowsets.emplace_back(it->second);
+                it = _unused_rowsets.erase(it);
+            }
+            if (delete_rowsets.size() >= batch_size) {
+                deleted_pct = static_cast<double>(batch_size) / (_unused_rowsets.size() + batch_size);
+                break;
+            }
         }
     }
+
+    if (delete_rowsets.empty()) {
+        return deleted_pct;
+    }
+    auto collect_time = timer.elapsed_time() / (1000 * 1000);
+    for (auto& rowset : delete_rowsets) {
+        VLOG(3) << "start to remove rowset:" << rowset->rowset_id() << ", version:" << rowset->version().first << "-"
+                << rowset->version().second;
+        Status status = rowset->remove();
+        LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
+    }
+    LOG(INFO) << "remove " << delete_rowsets.size() << " rowsets collect cost " << collect_time << "ms total "
+              << timer.elapsed_time() / (1000 * 1000) << "ms";
+
+    return deleted_pct;
 }
 
 void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
