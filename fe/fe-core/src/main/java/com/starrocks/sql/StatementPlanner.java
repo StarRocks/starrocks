@@ -13,6 +13,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropCatalogStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -180,6 +181,7 @@ public class StatementPlanner {
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
                 || statement instanceof DropAnalyzeJobStmt
+                || statement instanceof DropCatalogStmt
                 || statement instanceof DropMaterializedViewStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof GrantRoleStmt
@@ -208,6 +210,7 @@ public class StatementPlanner {
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
                 || statement instanceof DropAnalyzeJobStmt
+                || statement instanceof DropCatalogStmt
                 || statement instanceof DropMaterializedViewStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
