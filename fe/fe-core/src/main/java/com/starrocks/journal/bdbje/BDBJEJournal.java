@@ -280,6 +280,11 @@ public class BDBJEJournal implements Journal {
         List<Long> dbNames = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
+                // sleep for retry
+                if (i > 0) {
+                    Thread.sleep(3000L);
+                }
+
                 dbNames = bdbEnvironment.getDatabaseNames();
 
                 if (dbNames == null) {
@@ -310,12 +315,7 @@ public class BDBJEJournal implements Journal {
                 LOG.warn("catch insufficient log exception. will recover and try again.", insufficientLogEx);
                 bdbEnvironment.refreshAndSetup(insufficientLogEx);
             } catch (Throwable t) {
-                LOG.warn("catch exception, sleep and retry", t);
-                try {
-                    Thread.sleep(5000L);
-                } catch (InterruptedException ie) {
-
-                }
+                LOG.warn("catch exception, retried: {} ", i, t);
             }
         }
     }
