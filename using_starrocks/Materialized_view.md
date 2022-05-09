@@ -328,7 +328,6 @@ GROUP BY advertiser, channel;
 CREATE MATERIALIZED VIEW mv_1 AS
 SELECT k3, k2, k1
 FROM tableA
-ORDER BY k3;
 ~~~
 
 这时候查询就会直接从刚才创建的 mv_1 物化视图中读取数据。物化视图对 k3 是存在前缀索引的，查询效率也会提升。
