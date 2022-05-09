@@ -30,7 +30,7 @@ statement
 
     // Materialized View Statement
     | showMaterializedViewStatement                                                         #showMaterializedView
-    | dropMaterializedViewStatement                                                         #dropMaterialized
+    | dropMaterializedViewStatement                                                         #dropMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -48,7 +48,13 @@ statement
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
 
-    //Other statement
+    // Analyze Statement
+    | analyzeStatement                                                                      #analyze
+    | createAnalyzeStatement                                                                #createAnalyze
+    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | showAnalyzeStatement                                                                  #showAnalyze
+
+    // Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -191,6 +197,26 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Analyze Statement -------------------------------------------------------
+
+analyzeStatement
+    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+createAnalyzeStatement
+    : CREATE ANALYZE FULL? ALL properties?
+    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
+    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+dropAnalyzeJobStatement
+    : DROP ANALYZE INTEGER_VALUE
+    ;
+
+showAnalyzeStatement
+    : SHOW ANALYZE
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

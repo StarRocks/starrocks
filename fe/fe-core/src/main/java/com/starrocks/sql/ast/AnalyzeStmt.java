@@ -1,8 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
 
 import java.util.List;
 import java.util.Map;

@@ -106,8 +106,11 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
@@ -121,6 +124,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -387,9 +391,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AdminSetReplicaStatusStmt(properties);
     }
 
-
-
-
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
         List<String> clusters =
@@ -512,6 +513,68 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return ret;
+    }
+
+    // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() != null);
+    }
+
+    @Override
+    public ParseNode visitCreateAnalyzeStatement(StarRocksParser.CreateAnalyzeStatementContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        if (context.DATABASE() != null) {
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null, properties);
+        } else if (context.TABLE() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+            List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+            List<String> columnNames = null;
+            if (columns != null) {
+                columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+            }
+
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() != null, properties);
+        } else {
+            return new CreateAnalyzeJobStmt(context.FULL() != null, properties);
+        }
+    }
+
+    @Override
+    public ParseNode visitDropAnalyzeJobStatement(StarRocksParser.DropAnalyzeJobStatementContext context) {
+        return new DropAnalyzeJobStmt(Long.parseLong(context.INTEGER_VALUE().getText()));
+    }
+
+    @Override
+    public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
+        return new ShowAnalyzeStmt();
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
