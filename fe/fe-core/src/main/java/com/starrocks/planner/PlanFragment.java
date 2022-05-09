@@ -31,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
@@ -127,6 +128,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int parallelExecNum = 1;
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
+
+    // ChunkSize for each plan fragment, 0 means use default chunk_size
+    protected int chunkSize = 0;
 
     // if ScanNode is followed directly by a global AggregateNode that needs no finalization,
     // then in pipeline engine(dop adaptation enabled), needsLocalShuffle is set to be false to
@@ -272,10 +276,26 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     /**
+     * Decide chunk size of each fragment.
+     * For some fragments outputting large row-size, the chunk size should be reduced to avoid
+     * allocating large chunk.
+     */
+    private void decideFragmentChunkSize() {
+        float avgRowSize = getPlanRoot().avgRowSize;
+        if (avgRowSize > SessionVariable.PIPELINE_SMALL_CHUNK_ROW_SIZE) {
+            chunkSize = SessionVariable.SMALL_PIPELINE_CHUNK_SIZE;
+        } else {
+            chunkSize = SessionVariable.DEFAULT_PIPELINE_CHUNK_SIZE;
+        }
+    }
+
+    /**
      * Finalize plan tree and create stream sink, if needed.
      */
     public void finalize(Analyzer analyzer, boolean validateFileFormats)
             throws UserException {
+        decideFragmentChunkSize();
+
         if (sink != null) {
             return;
         }
@@ -335,6 +355,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public int getParallelExecNum() {
         return parallelExecNum;
+    }
+
+    public int getChunkSize() {
+        return chunkSize;
     }
 
     public TPlanFragment toThrift() {

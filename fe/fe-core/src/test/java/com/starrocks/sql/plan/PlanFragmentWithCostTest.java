@@ -9,6 +9,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
@@ -23,6 +25,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
 
@@ -1004,4 +1007,34 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "  |  join op: INNER JOIN (COLOCATE)");
         assertContains(plan, "k3-->[NaN, NaN, 0.0, 4.0, 1.0] ESTIMATE");
     }
+
+    @Test
+    public void testChunkSize() throws Exception {
+        // normal chunk size
+        {
+            String sql = "select k1 from duplicate_table_with_null";
+            ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<PlanFragment> fragments = plan.getFragments();
+            Assert.assertEquals(2, fragments.size());
+            Assert.assertEquals(SessionVariable.DEFAULT_PIPELINE_CHUNK_SIZE, fragments.get(1).getChunkSize());
+        }
+
+        // small chunk size
+        {
+            StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+            new Expectations(ss) {
+                {
+                    ss.getColumnStatistic((Table) any, "k1");
+                    result = new ColumnStatistic(1, 2, 0, 200, 3);
+                }
+            };
+
+            String sql = "select k1 from duplicate_table_with_null";
+            ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<PlanFragment> fragments = plan.getFragments();
+            Assert.assertEquals(2, fragments.size());
+            Assert.assertEquals(SessionVariable.SMALL_PIPELINE_CHUNK_SIZE, fragments.get(1).getChunkSize());
+        }
+    }
+
 }

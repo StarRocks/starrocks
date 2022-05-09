@@ -2066,8 +2066,11 @@ public class Coordinator {
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
 
+        private final int chunkSize;
+
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
+            this.chunkSize = fragment.getChunkSize();
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
@@ -2159,8 +2162,8 @@ public class Coordinator {
 
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(true);
-                        params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-
+                        int paramChunkSize = chunkSize != 0 ? chunkSize : sessionVariable.getPipelineChunkSize();
+                        params.getQuery_options().setBatch_size(paramChunkSize);
                         params.setPipeline_dop(fragment.getPipelineDop());
 
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
