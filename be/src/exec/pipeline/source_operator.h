@@ -28,10 +28,26 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
+<<<<<<< HEAD
+=======
+    virtual int64_t get_last_scan_rows_num() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
+    virtual int64_t get_last_scan_bytes() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
+>>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841))
 protected:
     MorselQueue* _morsel_queue = nullptr;
 
     int64_t _last_scan_rows_num = 0;
+    int64_t _last_scan_bytes = 0;
 };
 
 class SourceOperatorFactory : public OperatorFactory {
