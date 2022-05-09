@@ -1329,6 +1329,18 @@ public class Config extends ConfigBase {
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_custom_worker_thread = false;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_worker_num_threads = 64;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField

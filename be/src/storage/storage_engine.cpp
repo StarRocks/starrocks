@@ -571,7 +571,7 @@ void StorageEngine::compaction_check() {
         MonotonicStopWatch stop_watch;
         stop_watch.start();
         LOG(INFO) << "start to check compaction";
-        size_t num = compaction_check_one_round();
+        size_t num = _compaction_check_one_round();
         stop_watch.stop();
         LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
                   << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
@@ -583,7 +583,7 @@ void StorageEngine::compaction_check() {
 
 // Base compaction may be started by time(once every day now)
 // Compaction checker will check whether to schedule base compaction for tablets
-size_t StorageEngine::compaction_check_one_round() {
+size_t StorageEngine::_compaction_check_one_round() {
     size_t batch_size = 1000;
     int batch_sleep_time_ms = 1000;
     std::vector<TabletSharedPtr> tablets;
@@ -611,7 +611,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::cumulative_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -652,7 +652,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::base_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -691,7 +691,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::update_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });

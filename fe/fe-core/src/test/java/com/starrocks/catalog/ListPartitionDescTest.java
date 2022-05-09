@@ -8,7 +8,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
-import org.apache.spark.sql.catalyst.plans.logical.Except;
 import org.junit.Assert;
 import org.junit.Test;
 

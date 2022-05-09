@@ -228,9 +228,9 @@ public:
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
     bool pull_chunk(ChunkPtr* chunk) override;
-    DataSegment* get_result_data_segment() override;
-    uint64_t get_partition_rows() const override;
-    Permutation* get_permutation() const override { return nullptr; }
+
+    SortedRuns get_sorted_runs() override;
+    size_t get_output_rows() const override;
 
     void setup_runtime(RuntimeProfile* profile) override;
 

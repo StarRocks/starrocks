@@ -64,7 +64,23 @@ public:
     // assume both |this| and |rhs| are not empty.
     bool less_than_all(const ComparableChunk& rhs) {
         size_t last_row = _chunk->num_rows() - 1;
-        int r = compare_chunk(_key_columns, *_chunk, last_row, *rhs._chunk, rhs._compared_row);
+        return less_than(last_row, rhs);
+    }
+
+    // return the last row whose key value is less than all values in |rhs|
+    size_t last_row_less_than(const ComparableChunk& rhs, size_t limit_num) {
+        // As we previously pop this chunk from the heap top, `_compared_row` in this chunk
+        // must be less than all rows in rhs, thus here we start comparision from _compared_row + 1;
+        size_t last_row = _compared_row + 1;
+        size_t upper_bound = std::min(_compared_row + limit_num, _chunk->num_rows() - 1);
+        while (last_row <= upper_bound && less_than(last_row, rhs)) {
+            last_row++;
+        }
+        return last_row;
+    }
+
+    bool less_than(size_t lhs_row, const ComparableChunk& rhs) {
+        int r = compare_chunk(_key_columns, *_chunk, lhs_row, *rhs._chunk, rhs._compared_row);
         return (r < 0) | ((r == 0) & (_order < rhs._order));
     }
 
@@ -193,27 +209,51 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         DCHECK_GT(min_chunk.remaining_rows(), 0);
 
         size_t offset = min_chunk.compared_row();
-        // check whether |min_chunk| has overlapping with others.
-        if (offset == 0 && (_heap.empty() || min_chunk.less_than_all(_heap.top()))) {
-            if (rows == 0) {
-                chunk->swap_chunk(*min_chunk._chunk);
-                if (source_masks) {
-                    source_masks->insert(source_masks->end(), chunk->num_rows(),
-                                         RowSourceMask{min_chunk._order, false});
+        size_t append_row_num = 0;
+        bool less_than_all = _heap.empty() || min_chunk.less_than_all(_heap.top());
+
+        if (less_than_all) {
+            if (offset == 0) {
+                // all keys in |min_chunk| are less than heap top and |min_chunk|'s current offset is 0,
+                // so here we swap the whole min_chunk out.
+                if (rows == 0) {
+                    chunk->swap_chunk(*min_chunk._chunk);
+                    if (source_masks) {
+                        source_masks->insert(source_masks->end(), chunk->num_rows(),
+                                             RowSourceMask{min_chunk._order, false});
+                    }
+                    return fill(min_chunk._order);
+                } else {
+                    // retrieve |min_chunk| next time to avoid memory copy.
+                    _heap.push(min_chunk);
+                    break;
                 }
-                return fill(min_chunk._order);
             } else {
-                // retrieve |min_chunk| next time to avoid memory copy.
-                _heap.push(min_chunk);
-                break;
+                // all keys in |min_chunk| are less than heap top, but |min_chunk|'s current offset is larger than 0
+                // here we append the remaining rows in |min_chunk| to the chunk.
+                size_t remaing_row_num = min_chunk.remaining_rows();
+                if (rows + remaing_row_num <= _chunk_size) {
+                    append_row_num = remaing_row_num;
+                } else {
+                    append_row_num = _chunk_size - rows;
+                }
             }
+        } else {
+            // find the last row in |min_chunk| whose key is less than all values in _heap.top(),
+            // subtract it with the offset to get the append_row_num
+            append_row_num = min_chunk.last_row_less_than(_heap.top(), _chunk_size - rows) - offset;
         }
 
-        chunk->append(*min_chunk._chunk, offset, 1);
-        min_chunk.advance(1);
-        rows += 1;
+        DCHECK_GT(append_row_num, 0);
+
+        chunk->append(*min_chunk._chunk, offset, append_row_num);
+        min_chunk.advance(append_row_num);
+        rows += append_row_num;
+
+        DCHECK_LE(rows, _chunk_size);
+
         if (source_masks) {
-            source_masks->emplace_back(RowSourceMask{min_chunk._order, false});
+            source_masks->insert(source_masks->end(), append_row_num, RowSourceMask{min_chunk._order, false});
         }
         if (min_chunk.remaining_rows() > 0) {
             _heap.push(min_chunk);

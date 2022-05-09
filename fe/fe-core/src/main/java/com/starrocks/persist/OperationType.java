@@ -206,4 +206,7 @@ public class OperationType {
 
     // external hive table column change
     public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
+
+    // New version of heartbeat
+    public static final short OP_HEARTBEAT_V2 = 10041; // V2 version of heartbeat
 }

@@ -21,6 +21,7 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -31,17 +32,25 @@ import java.io.IOException;
  * Backend heartbeat response contains Backend's be port, http port and brpc port
  */
 public class BackendHbResponse extends HeartbeatResponse implements Writable {
+
+    @SerializedName(value = "beId")
     private long beId;
+    @SerializedName(value = "bePort")
     private int bePort;
+    @SerializedName(value = "httpPort")
     private int httpPort;
+    @SerializedName(value = "brpcPort")
     private int brpcPort;
+    @SerializedName(value = "version")
     private String version = "";
+    @SerializedName(value = "cpuCores")
+    private int cpuCores;
 
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
     }
 
-    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort, long hbTime, String version) {
+    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort, long hbTime, String version, int cpuCores) {
         super(HeartbeatResponse.Type.BACKEND);
         this.beId = beId;
         this.status = HbStatus.OK;
@@ -50,6 +59,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.brpcPort = brpcPort;
         this.hbTime = hbTime;
         this.version = version;
+        this.cpuCores = cpuCores;
     }
 
     public BackendHbResponse(long beId, String errMsg) {
@@ -77,6 +87,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public String getVersion() {
         return version;
+    }
+
+    public int getCpuCores() {
+        return cpuCores;
     }
 
     public static BackendHbResponse read(DataInput in) throws IOException {

@@ -300,4 +300,41 @@ public class MysqlChannelTest {
         Assert.fail("No Exception throws.");
     }
 
+    @Test
+    public void testSendAfterException() throws IOException {
+        // Mock.
+        new Expectations() {
+            {
+                channel.write((ByteBuffer) any);
+                // The first calling `write()` throws IOException.
+                result = new IOException();
+                // The other calling `write()` executes normally.
+                result = new Delegate() {
+                    int fakeRead(ByteBuffer buffer) {
+                        int writeLen = buffer.remaining();
+                        buffer.position(buffer.limit());
+                        return writeLen;
+                    }
+                };
+            }
+        };
+
+        MysqlChannel channel1 = new MysqlChannel(channel);
+
+        // The first calling `realNetSend()` in `flush()` throws IOException.
+        // If `flush()` doesn't consider this exception, `sendBuffer` won't be reset to write mode,
+        // which will cause BufferOverflowException at the next calling `sendOnePacket()`.
+        ByteBuffer buf = ByteBuffer.allocate(10);
+        buf.putInt(1);
+        buf.flip(); // limit=4
+        channel1.sendOnePacket(buf);
+        buf.clear();
+        Assert.assertThrows(IOException.class, channel1::flush);
+
+        buf.putInt(1);
+        buf.putInt(2);
+        buf.flip(); // limit=8
+        channel1.sendOnePacket(buf);
+    }
+
 }

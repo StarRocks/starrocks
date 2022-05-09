@@ -41,6 +41,7 @@ import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -237,6 +238,8 @@ public class DdlExecutor {
             globalStateMgr.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterWorkGroupStmt) {
             globalStateMgr.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateCatalogStmt) {
+            globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
         } else {
             throw new DdlException("Unknown statement.");
         }
