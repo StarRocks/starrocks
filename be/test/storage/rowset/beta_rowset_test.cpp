@@ -65,7 +65,7 @@ protected:
         static int i = 0;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_" + std::to_string(i);
 
-        ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        ASSERT_OK(FileUtils::remove_all(config::storage_root_path));
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
 
         std::vector<StorePath> paths;

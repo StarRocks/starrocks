@@ -34,7 +34,6 @@
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_id.h"
 #include "storage/storage_engine.h"
-#include "util/file_cache.h"
 #include "util/path_util.h"
 #include "util/slice.h"
 
@@ -222,8 +221,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
 // embed a FileBlockLocation, using the simpler BlockId instead.
 class FileReadableBlock : public ReadableBlock {
 public:
-    FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle);
-
     FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file);
 
     ~FileReadableBlock() override;
@@ -242,12 +239,7 @@ private:
     // Back pointer to the owning block manager.
     FileBlockManager* _block_manager;
 
-    // The underlying opened file backing this block.
-    std::shared_ptr<OpenedFileHandle<RandomAccessFile>> _file_handle;
-    std::shared_ptr<RandomAccessFile> _file_ref;
-    // the backing file of OpenedFileHandle, not owned.
-    RandomAccessFile* _file;
-    std::string _path;
+    std::shared_ptr<RandomAccessFile> _file;
 
     // Whether or not this block has been closed. Close() is thread-safe, so
     // this must be an atomic primitive.
@@ -257,31 +249,15 @@ private:
     const FileReadableBlock& operator=(const FileReadableBlock&) = delete;
 };
 
-FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager,
-                                     std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle)
-        : _block_manager(block_manager),
-          _file_handle(std::move(file_handle)),
-          _file(_file_handle->file()),
-          _path(_file->filename()),
-          _closed(false) {}
-
 FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file)
-        : _block_manager(block_manager),
-          _file_ref(std::move(file)),
-          _file(_file_ref.get()),
-          _path(_file->filename()),
-          _closed(false) {}
+        : _block_manager(block_manager), _file(std::move(file)), _closed(false) {}
 
 FileReadableBlock::~FileReadableBlock() {
     WARN_IF_ERROR(close(), strings::Substitute("Failed to close block $0", path()));
 }
 
 Status FileReadableBlock::close() {
-    bool expected = false;
-    if (_closed.compare_exchange_strong(expected, true)) {
-        _file_handle.reset();
-    }
-
+    _closed.store(true);
     return Status::OK();
 }
 
@@ -290,7 +266,7 @@ BlockManager* FileReadableBlock::block_manager() const {
 }
 
 const string& FileReadableBlock::path() const {
-    return _path;
+    return _file->filename();
 }
 
 Status FileReadableBlock::size(uint64_t* sz) {
@@ -310,17 +286,7 @@ Status FileReadableBlock::read(uint64_t offset, Slice result) {
 ////////////////////////////////////////////////////////////
 
 FileBlockManager::FileBlockManager(std::shared_ptr<FileSystem> fs, BlockManagerOptions opts)
-        : _fs(std::move(fs)), _opts(std::move(opts)) {
-    if (_fs->type() == FileSystem::POSIX) {
-#ifdef BE_TEST
-        _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
-                                                                    config::file_descriptor_cache_capacity);
-#else
-        _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
-                                                                    StorageEngine::instance()->file_cache());
-#endif
-    }
-}
+        : _fs(std::move(fs)), _opts(std::move(opts)) {}
 
 FileBlockManager::~FileBlockManager() = default;
 
@@ -343,25 +309,9 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
 
 Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) {
     VLOG(1) << "Opening block with path at " << path;
-    if (_file_cache != nullptr) {
-        std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle(new OpenedFileHandle<RandomAccessFile>());
-        if (!_file_cache->lookup(path, file_handle.get())) {
-            ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
-            _file_cache->insert(path, file.release(), file_handle.get());
-        }
-        *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file_handle));
-    } else {
-        ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
-        *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file));
-    }
+    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
+    *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file));
     return Status::OK();
-}
-
-void FileBlockManager::erase_block_cache(const std::string& path) {
-    if (_file_cache != nullptr) {
-        VLOG(1) << "erasing block cache with path at " << path;
-        _file_cache->erase(path);
-    }
 }
 
 // TODO(lingbin): We should do something to ensure that deletion can only be done
