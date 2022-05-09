@@ -209,4 +209,11 @@ public class OperationType {
 
     // New version of heartbeat
     public static final short OP_HEARTBEAT_V2 = 10041; // V2 version of heartbeat
+
+    // create external catalog
+    public static final short OP_CREATE_EXTERNAL_CATALOG = 10051;
+
+    // drop external catalog
+    public static final short OP_DROP_EXTERNAL_CATALOG = 10061;
+
 }
