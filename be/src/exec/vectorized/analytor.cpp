@@ -326,7 +326,7 @@ void Analytor::reset_window_state() {
     }
 }
 
-void Analytor::get_window_function_result(int32_t start, int32_t end) {
+void Analytor::get_window_function_result(size_t start, size_t end) {
     DCHECK_GT(end, start);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         vectorized::Column* agg_column = _result_window_columns[i].get();
@@ -372,24 +372,6 @@ Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
     _output_chunk_index++;
     _window_result_position = 0;
     return Status::OK();
-}
-
-size_t Analytor::compute_memory_usage() {
-    size_t memory_usage = 0;
-    for (size_t i = 0; i < _partition_columns.size(); ++i) {
-        memory_usage += _partition_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _order_columns.size(); ++i) {
-        memory_usage += _order_columns[i]->memory_usage();
-    }
-
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-            memory_usage += _agg_intput_columns[i][j]->memory_usage();
-        }
-    }
-    return memory_usage;
 }
 
 void Analytor::create_agg_result_columns(int64_t chunk_size) {

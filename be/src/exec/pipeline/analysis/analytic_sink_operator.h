@@ -13,7 +13,7 @@ public:
             : Operator(factory, id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
         _analytor->ref();
     }
-    ~AnalyticSinkOperator() = default;
+    ~AnalyticSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
