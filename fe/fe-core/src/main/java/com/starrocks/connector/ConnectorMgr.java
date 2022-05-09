@@ -47,6 +47,7 @@ public class ConnectorMgr {
         Connector connector = connectorFactory.createConnector(context);
         connectors.put(catalogName, connector);
 
+        // TODO (stephen): to test behavior that failed to create connector when fe starting.
         try {
             registerConnectorInternal(connector, context);
         } catch (Exception e) {
