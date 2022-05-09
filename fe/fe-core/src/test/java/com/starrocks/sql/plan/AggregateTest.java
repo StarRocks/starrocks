@@ -886,4 +886,198 @@ public class AggregateTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
     }
+
+    @Test
+    public void testOnlyFullGroupBy() throws Exception {
+        long sqlmode = connectContext.getSessionVariable().getSqlMode();
+        connectContext.getSessionVariable().setSqlMode(0);
+        String sql = "select v1, v2 from t0 group by v1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1, sum(v2) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: any_value | 4: sum\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select max(v2) from t0 having v1 = 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: max\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 5: any_value = 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1, max(v2) from t0 having v1 = 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: any_value | 4: max\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 5: any_value = 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1 from t0 group by v2 order by v3";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: any_value\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  \n" +
+                "  4:MERGING-EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 5> 5: any_value ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 5> : 5: any_value\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(1: v1), any_value(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n"));
+
+        sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: any_value | 6: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 6> : 6: expr\n" +
+                "  |  \n" +
+                "  4:MERGING-EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 5> 5: any_value ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 5> : 5: any_value\n" +
+                "  |  <slot 6> : abs(4: any_value) + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(1: v1), any_value(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0"));
+
+        connectContext.getSessionVariable().setSqlMode(sqlmode);
+    }
 }
