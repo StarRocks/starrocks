@@ -28,6 +28,9 @@ statement
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
 
+    // Task Statement
+    | submitTaskStatement                                                                   #submitTask
+
     // Materialized View Statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
@@ -114,6 +117,13 @@ alterViewStatement
 
 dropViewStatement
     : DROP VIEW (IF EXISTS)? qualifiedName
+    ;
+
+// ------------------------------------------- Task Statement ----------------------------------------------------------
+
+submitTaskStatement
+    : SUBMIT hint* TASK qualifiedName?
+    AS createTableAsSelectStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -740,8 +750,8 @@ nonReserved
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
-    | SECOND | SESSION | SETS | START | SUM | STATUS
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
+    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | WEEK

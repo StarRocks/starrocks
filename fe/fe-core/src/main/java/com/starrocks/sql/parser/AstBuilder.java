@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -135,6 +136,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -302,6 +304,42 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropTableStmt(ifExists, targetTableName, true, false);
     }
 
+    // ------------------------------------------- Task Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
+        QualifiedName qualifiedName = null;
+        if (context.qualifiedName() != null) {
+            qualifiedName = getQualifiedName(context.qualifiedName());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.hint() != null) {
+            for (StarRocksParser.HintContext hintContext : context.hint()) {
+                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
+                    String key = hintMapContext.k.getText();
+                    String value = hintMapContext.v.getText();
+                    properties.put(key, value);
+                }
+            }
+        }
+        CreateTableAsSelectStmt createTableAsSelectStmt =
+                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+
+        if (qualifiedName == null) {
+            return new SubmitTaskStmt(null, null,
+                    properties, createTableAsSelectStmt);
+        } else if (qualifiedName.getParts().size() == 1) {
+            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
+                    properties, createTableAsSelectStmt);
+        } else if (qualifiedName.getParts().size() == 2) {
+            return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
+                    qualifiedName.getParts().get(1), properties, createTableAsSelectStmt);
+        } else {
+            throw new ParsingException("error task name ");
+        }
+    }
+
+
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
     @Override
@@ -320,7 +358,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
     }
 
-    // ------------------------------------------- Cluster Mangement Statement -----------------------------------------
+    // ------------------------------------------- Cluster Management Statement -----------------------------------------
 
     @Override
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
