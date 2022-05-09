@@ -77,15 +77,18 @@ void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     });
 }
 
-void QueryContext::init_query(workgroup::WorkGroup* wg) {
+bool QueryContext::init_query(workgroup::WorkGroup* wg) {
+    bool res = false;
     if (wg == nullptr) {
-        return;
+        return res;
     }
-    std::call_once(_init_query_once, [=]() {
+    std::call_once(_init_query_once, [this, &res, wg]() {
         this->set_init_wg_cpu_cost(wg->total_cpu_cost());
         this->init_query_begin_time();
         wg->incr_num_queries();
+        res = true;
     });
+    return res;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
