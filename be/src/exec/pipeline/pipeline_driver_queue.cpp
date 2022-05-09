@@ -111,10 +111,6 @@ size_t QuerySharedDriverQueue::size() {
 
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
-    if (SourceOperator* source_operator = driver->source_operator()) {
-        driver->query_ctx()->incr_cur_scan_rows_num(source_operator->get_last_scan_rows_num());
-        driver->query_ctx()->incr_cur_scan_bytes(source_operator->get_last_scan_rows_num());
-    }
 }
 
 int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) const {
@@ -304,12 +300,6 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
 
         wg->incr_total_cpu_cost(sink_operator_last_cpu_time_ns);
         query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
-    }
-
-    // Update scan rows
-    if (auto source = driver->source_operator()) {
-        query_ctx->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
-        query_ctx->incr_cur_scan_bytes(source->get_last_scan_bytes());
     }
 
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
