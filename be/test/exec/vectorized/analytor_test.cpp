@@ -31,6 +31,7 @@ TEST_F(AnalytorTest, find_partition_end) {
     v = 4;
     c2->append_value_multiple_times(&v, 15);
 
+    analytor.update_input_rows(20);
     analytor._partition_columns.emplace_back(c1);
     analytor._partition_columns.emplace_back(c2);
 
@@ -51,11 +52,12 @@ TEST_F(AnalytorTest, find_peer_group_end) {
     v = 2;
     c1->append_value_multiple_times(&v, 10);
 
+    analytor.update_input_rows(20);
     analytor._order_columns.emplace_back(c1);
     analytor._partition_end = 20;
 
     analytor.find_peer_group_end();
-    ASSERT_EQ(analytor.peer_group_end(), 5);
+    ASSERT_EQ(analytor.peer_group_end(), 10);
 }
 
 }
