@@ -446,6 +446,7 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
     _last_scan_rows_num += _reader->stats().raw_rows_read;
+    _last_scan_bytes += _reader->stats().bytes_read;
 
     _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += chunk->num_rows();
@@ -470,6 +471,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
     _last_scan_rows_num += _reader->mutable_stats()->raw_rows_read;
+    _last_scan_bytes += _reader->mutable_stats()->bytes_read;
 
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
