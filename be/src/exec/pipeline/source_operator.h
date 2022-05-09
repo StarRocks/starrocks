@@ -28,8 +28,6 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
-<<<<<<< HEAD
-=======
     virtual int64_t get_last_scan_rows_num() {
         int64_t scan_rows_num = _last_scan_rows_num;
         _last_scan_rows_num = 0;
@@ -42,7 +40,6 @@ public:
         return scan_rows_num;
     }
 
->>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841))
 protected:
     MorselQueue* _morsel_queue = nullptr;
 

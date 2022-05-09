@@ -200,15 +200,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.cpp
-=======
 
-                    // for big query check
-                    COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
-                                   _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
->>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841)):be/src/exec/pipeline/scan/scan_operator.cpp
                 }
 
                 _num_running_io_tasks--;
