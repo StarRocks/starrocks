@@ -201,6 +201,7 @@ import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
+import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -388,6 +389,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private IcebergRepository icebergRepository;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -647,6 +649,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
