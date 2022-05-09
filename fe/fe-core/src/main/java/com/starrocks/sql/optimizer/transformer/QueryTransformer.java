@@ -463,16 +463,16 @@ class QueryTransformer {
                 Lists.newArrayList(subOpt), groupingTranslations);
     }
 
-    private Expr replaceExprBottomUp(Expr root, Expr pattern, Expr rewrite) {
+    private Expr replaceExprBottomUp(Expr root, Expr pattern, Expr replace) {
         if (root.getChildren().size() > 0) {
             for (int i = 0; i < root.getChildren().size(); i++) {
-                Expr result = replaceExprBottomUp(root.getChild(i), pattern, rewrite);
+                Expr result = replaceExprBottomUp(root.getChild(i), pattern, replace);
                 root.setChild(i, result);
             }
         }
 
         if (root.equals(pattern)) {
-            return rewrite;
+            return replace;
         }
         return root;
     }
