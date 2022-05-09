@@ -19,6 +19,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateIndexClause;
@@ -396,6 +397,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
 

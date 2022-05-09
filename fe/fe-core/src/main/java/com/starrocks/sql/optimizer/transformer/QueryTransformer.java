@@ -6,6 +6,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
@@ -288,11 +289,24 @@ class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
-    private OptExprBuilder aggregate(OptExprBuilder subOpt, List<Expr> groupByExpressions,
-                                     List<FunctionCallExpr> aggregates,
+    private OptExprBuilder aggregate(OptExprBuilder subOpt,
+                                     List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
         if (aggregates.size() == 0 && groupByExpressions.size() == 0) {
             return subOpt;
+        }
+
+        // handle aggregate function use grouping set columns, use clone column replace original column
+        // e.g:
+        // before: select sum(a) from xx group by rollup(a);
+        // after: select sum(clone(a)) from xx group by rollup(a);
+        if (groupingSetsList != null) {
+            for (Expr groupBy : groupByExpressions) {
+                aggregates.forEach(f -> f.getParams().exprs()
+                        .replaceAll(root -> replaceExprBottomUp(root, groupBy, new CloneExpr(groupBy))));
+                aggregates.replaceAll(
+                        root -> (FunctionCallExpr) replaceExprBottomUp(root, groupBy, new CloneExpr(groupBy)));
+            }
         }
 
         ImmutableList.Builder<Expr> arguments = ImmutableList.builder();
@@ -447,6 +461,20 @@ class QueryTransformer {
 
         return new OptExprBuilder(new LogicalAggregationOperator(AggType.GLOBAL, groupByColumnRefs, aggregationsMap),
                 Lists.newArrayList(subOpt), groupingTranslations);
+    }
+
+    private Expr replaceExprBottomUp(Expr root, Expr pattern, Expr rewrite) {
+        if (root.getChildren().size() > 0) {
+            for (int i = 0; i < root.getChildren().size(); i++) {
+                Expr result = replaceExprBottomUp(root.getChild(i), pattern, rewrite);
+                root.setChild(i, result);
+            }
+        }
+
+        if (root.equals(pattern)) {
+            return rewrite;
+        }
+        return root;
     }
 
     private OptExprBuilder sort(OptExprBuilder subOpt, List<OrderByElement> orderByExpressions,

@@ -37,6 +37,7 @@
 #include "exprs/vectorized/case_expr.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "exprs/vectorized/clone_expr.h"
 #include "exprs/vectorized/compound_predicate.h"
 #include "exprs/vectorized/condition_expr.h"
 #include "exprs/vectorized/dictmapping_expr.h"
@@ -326,6 +327,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::DICT_EXPR:
         *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
+        break;
+    case TExprNodeType::CLONE_EXPR:
+        *expr = pool->add(new vectorized::VectorizedCloneExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
