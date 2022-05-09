@@ -215,7 +215,9 @@ public:
     }
 
     Operators& operators() { return _operators; }
-    SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+    SourceOperator* source_operator() {
+        return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
+    }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.
@@ -361,12 +363,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
-    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
-        driver_acct().increment_schedule_times();
-        driver_acct().update_last_chunks_moved(total_chunks_moved);
-        driver_acct().update_accumulated_rows_moved(total_rows_moved);
-        driver_acct().update_last_time_spent(time_spent);
-    }
+    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();

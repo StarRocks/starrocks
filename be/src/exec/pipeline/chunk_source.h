@@ -43,11 +43,21 @@ public:
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
     virtual int64_t last_spent_cpu_time_ns() { return 0; }
+<<<<<<< HEAD:be/src/exec/pipeline/chunk_source.h
+=======
+    virtual int64_t last_scan_rows_num() { return 0; }
+    virtual int64_t last_scan_bytes() { return 0; }
+>>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841)):be/src/exec/pipeline/scan/chunk_source.h
 
 protected:
     RuntimeProfile* _runtime_profile;
     // The morsel will own by pipeline driver
     MorselPtr _morsel;
+<<<<<<< HEAD:be/src/exec/pipeline/chunk_source.h
+=======
+    int64_t _last_scan_rows_num = 0;
+    int64_t _last_scan_bytes = 0;
+>>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841)):be/src/exec/pipeline/scan/chunk_source.h
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;
