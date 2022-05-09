@@ -66,7 +66,7 @@ public class CatalogStmtTest {
         Assert.assertEquals("DROP EXTERNAL CATALOG 'catalog_1'", stmt.toSql());
 
         // test drop ddl DROP EXTERNAL CATALOG 'catalog_name'
-        String sql_4 = "DROP EXTERNAL CATALOG `catalog_1`";
+        String sql_4 = "DROP EXTERNAL CATALOG 'catalog_1'";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_4);
         Assert.assertTrue(stmt2 instanceof DropCatalogStmt);
     }
@@ -126,7 +126,7 @@ public class CatalogStmtTest {
         Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));
 
         // test drop ddl DROP EXTERNAL CATALOG 'catalog_name'
-        String dropSql_2 = "DROP EXTERNAL CATALOG hive_catalog";
+        String dropSql_2 = "DROP EXTERNAL CATALOG 'hive_catalog'";
 
         DdlExecutor.execute(GlobalStateMgr.getCurrentState(), createCatalogStmt);
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
