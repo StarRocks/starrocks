@@ -2,10 +2,12 @@
 
 BUILD_DIR = ${CURDIR}/../build/
 SRC_DIR = ${CURDIR}
-JAVAC = ${JAVA_HOME}/bin/javac
+JAVAC = ${JAVA_HOME}/bin/javac -XDignore.symbol.file=true 
 JAR = ${JAVA_HOME}/bin/jar
 
 
+CALLSTUBGEN_SRC = ${SRC_DIR}/com/starrocks/udf/CallStubGenerator.java
+CALLSTUBGEN_CLAZZ = ${SRC_DIR}/com/starrocks/udf/CallStubGenerator.class
 ANALYZER_CLAZZ = ${BUILD_DIR}/gen_java/com/starrocks/udf/UDFClassAnalyzer.class
 ANALYZER_SRC = ${SRC_DIR}/com/starrocks/udf/UDFClassAnalyzer.java
 CLASSLOADER_CLAZZ = ${BUILD_DIR}/gen_java/com/starrocks/udf/UDFClassLoader.class
@@ -19,6 +21,9 @@ all : ${TARGET}
 
 ${BUILD_DIR}/gen_java:
 	mkdir -p $@
+
+${CALLSTUBGEN_CLAZZ} : ${CALLSTUBGEN_SRC} ${CLASSLOADER_CLAZZ} ${BUILD_DIR}/gen_java
+	${JAVAC} -d ${BUILD_DIR}/gen_java ${CALLSTUBGEN_SRC}
 
 ${ANALYZER_CLAZZ} : ${ANALYZER_SRC} ${BUILD_DIR}/gen_java
 	${JAVAC} -d ${BUILD_DIR}/gen_java ${ANALYZER_SRC}

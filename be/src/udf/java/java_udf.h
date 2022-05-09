@@ -54,9 +54,6 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
-    // batch update input: col1 col2
-    void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
-                             int cols);
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
@@ -245,6 +242,18 @@ private:
     JavaGlobalRef _clazz;
 };
 
+class BatchCallStub {
+public:
+    BatchCallStub(JVMClass&& clazz, JavaGlobalRef&& method)
+            : _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+    void batch_update_single(FunctionContext* ctx, int num_rows, jobject caller, jobject state, jobject* input,
+                             int cols);
+
+private:
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
@@ -257,11 +266,15 @@ public:
     ClassLoader(const ClassLoader&) = delete;
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
+    // get batch call stub
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method);
+
     Status init();
 
 private:
     std::string _path;
     jmethodID _get_class = nullptr;
+    jmethodID _get_call_stub = nullptr;
     JavaGlobalRef _handle = nullptr;
     JavaGlobalRef _clazz = nullptr;
 };
@@ -349,6 +362,7 @@ struct JavaUDAFContext {
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
     std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<BatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;

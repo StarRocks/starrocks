@@ -56,7 +56,16 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
 
     RETURN_IF_ERROR(add_method("create", udaf_ctx->udaf_class.clazz(), &udaf_ctx->create));
     RETURN_IF_ERROR(add_method("destroy", udaf_ctx->udaf_class.clazz(), &udaf_ctx->destory));
+
     RETURN_IF_ERROR(add_method("update", udaf_ctx->udaf_class.clazz(), &udaf_ctx->update));
+    const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    const char* batch_update_method = "batchCallV";
+    ASSIGN_OR_RETURN(auto update_stub_clazz, udf_classloader->genCallStub(stub_clazz_name, udaf_ctx->udaf_class.clazz(),
+                                                                          udaf_ctx->update->method.handle()));
+    ASSIGN_OR_RETURN(auto method, analyzer->get_method_object(update_stub_clazz.clazz(), batch_update_method));
+    udaf_ctx->update_batch_call_stub =
+            std::make_unique<BatchCallStub>(std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+
     RETURN_IF_ERROR(add_method("merge", udaf_ctx->udaf_class.clazz(), &udaf_ctx->merge));
     RETURN_IF_ERROR(add_method("finalize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->finalize));
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));

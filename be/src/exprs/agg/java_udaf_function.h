@@ -217,9 +217,10 @@ public:
         ConvertDirectBufferVistor vistor(buffers);
         int num_cols = ctx->get_num_args();
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
-        helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                   ctx->impl()->udaf_ctxs()->update->method.handle(), this->data(state).handle(),
-                                   args.data(), num_cols);
+        ctx->impl()->udaf_ctxs()->update_batch_call_stub->batch_update_single(
+                ctx, batch_size, ctx->impl()->udaf_ctxs()->handle.handle(), this->data(state).handle(), args.data(),
+                num_cols);
+
         for (int i = 0; i < num_cols; ++i) {
             env->DeleteLocalRef(args[i]);
         }
