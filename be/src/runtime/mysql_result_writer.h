@@ -75,7 +75,7 @@ private:
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 
-    const size_t max_row_buffer_size = 1024 * 1024 * 1024;
+    const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
 };
 
 } // namespace starrocks

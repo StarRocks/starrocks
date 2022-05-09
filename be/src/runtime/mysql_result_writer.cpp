@@ -126,13 +126,13 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chun
             }
             size_t len = _row_buffer->length();
 
-            if (UNLIKELY(current_bytes + len >= max_row_buffer_size)) {
+            if (UNLIKELY(current_bytes + len >= _max_row_buffer_size)) {
                 result_rows.resize(current_rows);
                 results.emplace_back(std::move(result));
 
                 result = std::make_unique<TFetchDataResult>();
                 result_rows = result->result_batch.rows;
-                result_rows.resize(num_rows - current_rows);
+                result_rows.resize(num_rows - i);
 
                 current_bytes = 0;
                 current_rows = 0;

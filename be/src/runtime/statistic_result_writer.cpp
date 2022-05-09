@@ -61,6 +61,9 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     int version = down_cast<Int32Column*>(ColumnHelper::get_data_column(result_columns[0].get()))->get_data()[0];
 
     std::unique_ptr<TFetchDataResult> result(new (std::nothrow) TFetchDataResult());
+    if (!result) {
+        return Status::MemoryAllocFailed("memory allocate failed");
+    }
 
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
