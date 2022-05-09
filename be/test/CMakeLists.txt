@@ -43,6 +43,7 @@ set(EXEC_FILES
         ./exec/vectorized/parquet_scanner_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
+        ./exec/vectorized/analytor_test.cpp
         ./exec/es_scan_reader_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
