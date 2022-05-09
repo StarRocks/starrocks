@@ -115,8 +115,7 @@ dropViewStatement
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT TASK qualifiedName?
-    sessionPropertis?
+    : SUBMIT hint* TASK qualifiedName?
     AS createTableAsSelectStatement
     ;
 

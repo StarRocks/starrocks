@@ -105,10 +105,10 @@ public class Analyzer {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
             QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
             Analyzer.analyze(queryStatement, context);
-            String sb = "CREATE TABLE " +
+            String sqlText = "CREATE TABLE " +
                     createTableAsSelectStmt.getCreateTableStmt().getDbTbl().toSql() + " AS " +
                     ViewDefBuilder.build(queryStatement);
-            statement.setSqlText(sb);
+            statement.setSqlText(sqlText);
             TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
             return null;
         }
