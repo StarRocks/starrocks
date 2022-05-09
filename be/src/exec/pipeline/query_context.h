@@ -148,7 +148,7 @@ private:
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
 
-    const char* _metric_name = "pip_query_ctx_cnt";
+    inline static const char* _metric_name = "pip_query_ctx_cnt";
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
