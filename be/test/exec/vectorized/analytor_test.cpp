@@ -84,7 +84,7 @@ TEST_F(AnalytorTest, reset_state_for_next_partition) {
     analytor._partition_start = 10;
     analytor._partition_end = 10;
     analytor._found_partition_end = 20;
-    analytor.reset_state_for_cur_partition();
+    analytor.reset_state_for_next_partition();
     ASSERT_EQ(analytor.partition_start(), 20);
     ASSERT_EQ(analytor.partition_end(), 20);
     ASSERT_EQ(analytor.current_row_position(), 20);
@@ -117,9 +117,13 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
     ASSERT_TRUE(end);
     ASSERT_EQ(analytor1.found_partition_end(), 5);
 
+    analytor1.reset_state_for_cur_partition();
+
     end = analytor1.find_and_check_partition_end();
     ASSERT_TRUE(end);
     ASSERT_EQ(analytor1.found_partition_end(), 10);
+
+    analytor1.reset_state_for_cur_partition();
 
     end = analytor1.find_and_check_partition_end();
     ASSERT_FALSE(end);
@@ -127,7 +131,7 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
 
     // partition columns is empty
     Analytor analytor2(plan_node, row_desc, nullptr);
-    analytor1.update_input_rows(20);
+    analytor2.update_input_rows(20);
 
     end = analytor2.find_and_check_partition_end();
     ASSERT_FALSE(end);
