@@ -14,13 +14,8 @@ namespace starrocks::pipeline {
 
 class MockEmptyOperator final : public SourceOperator {
 public:
-<<<<<<< HEAD
     MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id)
-            : Operator(factory, id, "mock_empty_operator", plan_node_id) {}
-=======
-    MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : SourceOperator(factory, id, "mock_empty_operator", plan_node_id, driver_sequence) {}
->>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841))
+            : SourceOperator(factory, id, "mock_empty_operator", plan_node_id) {}
 
     ~MockEmptyOperator() override = default;
 

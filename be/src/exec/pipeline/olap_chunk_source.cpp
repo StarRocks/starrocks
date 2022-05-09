@@ -478,12 +478,9 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
-<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.cpp
-=======
     _last_scan_rows_num += _reader->stats().raw_rows_read;
     _last_scan_bytes += _reader->stats().bytes_read;
 
->>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841)):be/src/exec/pipeline/scan/olap_chunk_source.cpp
     _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += chunk->num_rows();
 }
@@ -514,12 +511,9 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
-<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.cpp
-=======
     _last_scan_rows_num += _reader->mutable_stats()->raw_rows_read;
     _last_scan_bytes += _reader->mutable_stats()->bytes_read;
 
->>>>>>> 2104d7105 ([BugFix] add scan statistics to auditlog in pipeline-mode (#5841)):be/src/exec/pipeline/scan/olap_chunk_source.cpp
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
