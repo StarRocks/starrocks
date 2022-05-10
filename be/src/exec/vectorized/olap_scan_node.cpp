@@ -609,7 +609,7 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         const auto& scan_range = _scan_ranges[i];
 
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(scan_range));
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(scan_range.get()));
 
         // Capture row sets of this version tablet.
         {

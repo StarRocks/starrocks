@@ -173,7 +173,7 @@ public:
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
 
-    int64_t num_io_threads() const { return num_io_threads; }
+    int64_t num_io_threads() const { return _num_io_threads; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);

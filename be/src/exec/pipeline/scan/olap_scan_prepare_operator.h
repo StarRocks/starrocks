@@ -46,6 +46,8 @@ public:
     OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, OlapScanContextPtr ctx);
     ~OlapScanPrepareOperatorFactory() override = default;
 
+    bool with_morsels() const { return true; }
+
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

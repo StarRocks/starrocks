@@ -52,6 +52,10 @@ bool OlapScanOperator::is_finished() const {
         return true;
     }
 
+    if (!_ctx->is_prepare_finished()) {
+        return false;
+    }
+
     return ScanOperator::is_finished();
 }
 

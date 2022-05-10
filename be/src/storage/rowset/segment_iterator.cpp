@@ -1400,7 +1400,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_rowid_range() {
-    if (!_opts.rowid_range.empty()) {
+    if (_opts.rowid_range.empty()) {
         return Status::OK();
     }
 

@@ -137,16 +137,15 @@ private:
     static rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower);
     static rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end);
 
-    Status _init_tablet_scan_range();
-
     ScanMorsel* _cur_scan_morsel();
     BetaRowset* _cur_rowset();
     Segment* _cur_segment();
-    void _move_forward();
+
+    // False means that there is no more segment to read.
+    bool _next_segment();
+    Status _init_segment();
 
 private:
-    static constexpr int64_t UNINITIALIZED_SEGMENT = -1;
-
     const int64_t _min_scan_rows = config::pipeline_min_scan_rows;
 
     std::mutex _mutex;
@@ -163,14 +162,14 @@ private:
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
+    bool _has_init_segment = false;
     std::atomic<size_t> _tablet_idx = 0;
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
-    // -1 means this segment hasn't been initiated.
-    int64_t _num_segment_rest_rows = UNINITIALIZED_SEGMENT;
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
     vectorized::SparseRange _segment_scan_range;
     vectorized::SparseRangeIterator _segment_range_iter;
+    size_t _num_segment_rest_rows = 0;
 
     MemPool _mempool;
 };

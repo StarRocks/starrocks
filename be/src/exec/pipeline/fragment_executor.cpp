@@ -243,7 +243,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
-                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id()));
+                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
@@ -290,17 +290,19 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
-                auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
+
+                auto* source_operator = driver->source_operator();
                 if (wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    scan_operator->set_workgroup(wg);
+                    source_operator->set_workgroup(wg);
                 } else {
-                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                    if (dynamic_cast<ConnectorScanOperator*>(source_operator) != nullptr) {
+                        source_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
                     } else {
-                        scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        source_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                     }
                 }
+
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }

@@ -6,9 +6,14 @@
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/chunk_source.h"
+#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
+
+class PriorityThreadPool;
+
 namespace pipeline {
+
 class SourceOperator;
 using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
 
@@ -41,11 +46,18 @@ public:
         return scan_rows_num;
     }
 
+    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
+
+    // Some specific source operators need execute i/o tasks in io_threads.
+    virtual void set_io_threads(PriorityThreadPool* io_threads) {}
+
 protected:
     MorselQueue* _morsel_queue = nullptr;
 
     int64_t _last_scan_rows_num = 0;
     int64_t _last_scan_bytes = 0;
+
+    workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
 class SourceOperatorFactory : public OperatorFactory {
@@ -65,5 +77,6 @@ public:
 protected:
     size_t _degree_of_parallelism = 1;
 };
+
 } // namespace pipeline
 } // namespace starrocks

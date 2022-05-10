@@ -32,8 +32,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
-    void set_workgroup(workgroup::WorkGroupPtr wg);
+    void set_io_threads(PriorityThreadPool* io_threads) override { _io_threads = io_threads; }
 
     /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;

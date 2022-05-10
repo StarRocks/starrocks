@@ -98,7 +98,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(_tablet, params.range, params.end_range, params.start_key, params.end_key,
-                                     &rs_opts.ranges, &_mem_ool));
+                                     &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
                                                                      &rs_opts.predicates_for_zone_map));
@@ -393,8 +393,8 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet, const std::
     for (size_t i = 0; i < n; i++) {
         SeekTuple lower;
         SeekTuple upper;
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mem_pool));
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mem_pool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
         ranges->back().set_inclusive_lower(inc_lower);
         ranges->back().set_inclusive_upper(inc_upper);

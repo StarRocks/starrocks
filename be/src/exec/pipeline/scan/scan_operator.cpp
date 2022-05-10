@@ -256,10 +256,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
-    _workgroup = wg;
-}
-
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
     if (_chunk_sources[chunk_source_index] != nullptr) {
