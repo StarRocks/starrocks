@@ -64,8 +64,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 import static com.starrocks.common.util.Util.validateMetastoreUris;
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
+import static com.starrocks.external.hive.HiveRepository.isInternalCatalog;
 
 /**
  * External hive table
@@ -89,10 +90,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
 
-    private static final String HIVE_DB = "database";
-    private static final String HIVE_TABLE = "table";
-    private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    private static final String HIVE_RESOURCE = "resource";
+    public static final String HIVE_DB = "database";
+    public static final String HIVE_TABLE = "table";
+    public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_RESOURCE = "resource";
 
     private String hiveDb;
     private String hiveTable;
@@ -111,8 +112,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public HiveTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
+        this(id, name, schema, properties, null);
+    }
+
+    public HiveTable(long id, String name, List<Column> schema, Map<String, String> properties,
+                     org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
         super(id, name, TableType.HIVE, schema);
-        validate(properties);
+        validate(properties, hiveTable);
         initHmsTableInfo();
     }
 
@@ -194,7 +200,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
-        Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
+        org.apache.hadoop.hive.metastore.api.Table table = GlobalStateMgr.getCurrentState().getHiveRepository()
+                .getTable(resourceName, this.hiveDb, this.hiveTable);
+        Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
         Map<String, Column> preNameToColumn = nameToColumn;
         boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
         if (!needRefreshColumn) {
@@ -211,19 +219,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 partColumnNames, new ArrayList<>(nameToColumn.keySet()), nameToColumn, TableType.HIVE);
         GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableCache(hmsTableInfo);
-    }
-
-    private Map<String, FieldSchema> getAllHiveColumns() throws DdlException {
-        org.apache.hadoop.hive.metastore.api.Table table = GlobalStateMgr.getCurrentState().getHiveRepository()
-                .getTable(resourceName, this.hiveDb, this.hiveTable);
-        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
-        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
-                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
-        for (FieldSchema hiveColumn : partHiveColumns) {
-            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
-        }
-        return allHiveColumns;
     }
 
     public boolean isRefreshColumn(Map<String, Column> preNameToColumn,
@@ -257,10 +252,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             Column column;
             if (srColumn != null) {
                 column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
-                        srColumn.getAggregationType(), srColumn.isAllowNull(), NULL_DEFAULT_VALUE, srColumn.getComment());
+                        srColumn.getAggregationType(), srColumn.isAllowNull(), null, srColumn.getComment());
             } else {
-                column = new Column(fieldSchema.getName(), ScalarType.createType(srType),
-                        true, null, true, NULL_DEFAULT_VALUE, fieldSchema.getComment());
+                column = new Column(fieldSchema.getName(), ScalarType.createType(srType), true);
             }
             fullSchema.add(column);
             nameToColumn.put(column.getName(), column);
@@ -297,7 +291,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
-    private void validate(Map<String, String> properties) throws DdlException {
+    private void validate(Map<String, String> properties, org.apache.hadoop.hive.metastore.api.Table hmsTable)
+            throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hive table, "
                     + "they are: database, table and resource");
@@ -330,25 +325,23 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             LOG.warn("property " + HIVE_METASTORE_URIS + " will be ignored " +
                     "and hive table will be created by using property " + HIVE_RESOURCE + " only.");
         }
-
         copiedProps.remove(HIVE_RESOURCE);
-        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
-        if (resource == null) {
-            throw new DdlException("hive resource [" + resourceName + "] not exists");
+
+        if (isInternalCatalog(resourceName)) {
+            checkResource(resourceName);
         }
-        if (resource.getType() != ResourceType.HIVE) {
-            throw new DdlException("resource [" + resourceName + "] is not hive resource");
-        }
-        HiveResource hiveResource = (HiveResource) resource;
-        hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+
         this.resourceName = resourceName;
 
         // check column
         // 1. check column exists in hive table
         // 2. check column type mapping
         // 3. check hive partition column exists in table column list
-        org.apache.hadoop.hive.metastore.api.Table hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
-                .getTable(resourceName, this.hiveDb, this.hiveTable);
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = hmsTable;
+        if (hiveTable == null) {
+            hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
+                    .getTable(resourceName, this.hiveDb, this.hiveTable);
+        }
         String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
             throw new DdlException("Unknown hive table type.");
@@ -364,8 +357,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
         List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
-                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable);
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
@@ -406,41 +398,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
     }
 
-    private PrimitiveType convertColumnType(String hiveType) throws DdlException {
-        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
-        switch (typeUpperCase) {
-            case "TINYINT":
-                return PrimitiveType.TINYINT;
-            case "SMALLINT":
-                return PrimitiveType.SMALLINT;
-            case "INT":
-            case "INTEGER":
-                return PrimitiveType.INT;
-            case "BIGINT":
-                return PrimitiveType.BIGINT;
-            case "FLOAT":
-                return PrimitiveType.FLOAT;
-            case "DOUBLE":
-            case "DOUBLE PRECISION":
-                return PrimitiveType.DOUBLE;
-            case "DECIMAL":
-            case "NUMERIC":
-                return PrimitiveType.DECIMAL32;
-            case "TIMESTAMP":
-                return PrimitiveType.DATETIME;
-            case "DATE":
-                return PrimitiveType.DATE;
-            case "STRING":
-            case "VARCHAR":
-            case "BINARY":
-                return PrimitiveType.VARCHAR;
-            case "CHAR":
-                return PrimitiveType.CHAR;
-            case "BOOLEAN":
-                return PrimitiveType.BOOLEAN;
-            default:
-                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+    private void checkResource(String resourceName) throws DdlException {
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+        if (resource == null) {
+            throw new DdlException("hive resource [" + resourceName + "] not exists");
         }
+        if (resource.getType() != ResourceType.HIVE) {
+            throw new DdlException("resource [" + resourceName + "] is not hive resource");
+        }
+        HiveResource hiveResource = (HiveResource) resource;
+        hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
     }
 
     private boolean validateColumnType(String hiveType, Type type) {
