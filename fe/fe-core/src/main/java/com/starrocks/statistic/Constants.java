@@ -30,4 +30,22 @@ public class Constants {
         FINISH,
     }
 
+    public enum TaskType {
+        MANUAL,
+        PERIODICAL
+    }
+
+    // PENDING -> RUNNING -> FAILED
+    //                    -> SUCCESS
+    //                    -> CANCELED
+    //         -> CANCELED
+    public enum TaskRunStatus {
+        PENDING,
+        RUNNING,
+        CANCELED,
+        FAILED,
+        SUCCESS,
+    }
+
+
 }
