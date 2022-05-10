@@ -40,7 +40,7 @@ public class HiveRepository {
     Map<String, HiveMetaCache> metaCaches = Maps.newHashMap();
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
 
-    Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_load_threads,
+    Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_refresh_min_threads,
             Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
 
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);

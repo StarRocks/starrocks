@@ -1268,10 +1268,10 @@ public class Config extends ConfigBase {
     public static int max_agent_tasks_send_per_be = 10000;
 
     /**
-     * num of thread to load hive meta
+     * min num of thread to refresh hive meta
      */
     @ConfField
-    public static int hive_meta_cache_load_threads = 50;
+    public static int hive_meta_cache_refresh_min_threads = 50;
 
     /**
      * num of thread to handle hive meta load concurrency.
