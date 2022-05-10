@@ -69,6 +69,18 @@ public:
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
+<<<<<<< HEAD
+=======
+    // type: PrimitiveType
+    // col: result column
+    // jcolumn: Integer[]/String[]
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
+
+    // List methods
+    jobject list_get(jobject obj, int idx);
+    int list_size(jobject obj);
+
+>>>>>>> 621e3d8c5 ([UDF] optimize performance for Java scalar UDF  (#5800))
     DECLARE_NEW_BOX(uint8_t, Boolean)
     DECLARE_NEW_BOX(int8_t, Byte)
     DECLARE_NEW_BOX(int16_t, Short)
@@ -129,6 +141,7 @@ private:
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
+    jmethodID _get_boxed_result;
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 };
