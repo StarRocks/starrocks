@@ -33,7 +33,7 @@ private:
     // 2. fragment context
     // 3. workgroup
     // 4. runtime state
-    // 5. exec pla
+    // 5. exec plan
     // 6. pipeline driver
     Status _prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
     StatusOr<std::unique_ptr<FragmentContext>> _prepare_fragment_ctx(const TExecPlanFragmentParams& request);
