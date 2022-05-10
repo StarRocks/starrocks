@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/vectorized/olap_scan_node.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
 
@@ -56,21 +57,8 @@ Status OlapScanPrepareOperator::_capture_tablet_rowsets() {
     for (int i = 0; i < olap_scan_ranges.size(); ++i) {
         auto* scan_range = olap_scan_ranges[i];
 
-        // Get version.
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, vectorized::OlapScanNode::get_tablet(scan_range));
 
         // Capture row sets of this version tablet.
         {

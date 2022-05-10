@@ -54,8 +54,8 @@ Status ScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-pipeline::MorselQueuePtr ScanNode::convert_scan_range_to_morsel_queue(const std::vector<TScanRangeParams>& scan_ranges,
-                                                                      int node_id) {
+StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams&) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));

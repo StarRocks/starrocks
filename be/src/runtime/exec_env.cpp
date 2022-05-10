@@ -138,14 +138,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
 
-    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                 ? std::thread::hardware_concurrency()
-                                 : config::pipeline_scan_thread_pool_thread_num;
+    _num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0 ? std::thread::hardware_concurrency()
+                                                                        : config::pipeline_scan_thread_pool_thread_num;
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
 
     _pipeline_scan_io_thread_pool =
             new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                   num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+                                   _num_io_threads, config::pipeline_scan_thread_pool_queue_size);
 
     _pipeline_hdfs_scan_io_thread_pool =
             new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
@@ -154,12 +153,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     std::unique_ptr<ThreadPool> scan_worker_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
                             .set_min_threads(0)
-                            .set_max_threads(num_io_threads)
+                            .set_max_threads(_num_io_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool));
     _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
-    _scan_executor->initialize(num_io_threads);
+    _scan_executor->initialize(_num_io_threads);
 
     std::unique_ptr<ThreadPool> hdfs_scan_worker_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("hdfs_scan_executor") // hdfs_scan io task executor

@@ -2166,6 +2166,7 @@ public class Coordinator {
                         params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
 
                         params.setPipeline_dop(fragment.getPipelineDop());
+                        params.setEnable_tablet_internal_parallel(sessionVariable.isEnableTabletCurrency());
 
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);

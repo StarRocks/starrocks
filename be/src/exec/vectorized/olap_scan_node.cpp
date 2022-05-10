@@ -330,6 +330,55 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
+StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
+    pipeline::Morsels morsels;
+    for (const auto& scan_range : scan_ranges) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+    }
+
+    // None tablet to read shouldn't use tablet internal parallel.
+    if (morsels.empty()) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    // Disable by the session variable shouldn't use tablet internal parallel.
+    bool enable_tablet_concurrency =
+            request.__isset.enable_tablet_internal_parallel && request.enable_tablet_internal_parallel;
+    if (!enable_tablet_concurrency) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    // Enough tablet shouldn't use tablet internal parallel.
+    size_t dop = 1;
+    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
+        dop = request.pipeline_dop;
+    } else {
+        dop = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
+    }
+    int64_t num_io_threads = ExecEnv::GetInstance()->num_io_threads();
+    size_t num_expected_scan_tasks = std::min<size_t>(dop * 4, std::max<size_t>(num_io_threads * 2, dop));
+    if (morsels.size() >= num_expected_scan_tasks) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    // Split tablet physically.
+    ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
+    if (_can_physical_split_tablet(first_tablet.get())) {
+        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels));
+    }
+
+    // TODO: use LogicalSplitMorselQueue, when it cannot split tablet physically.
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+}
+
+bool OlapScanNode::_can_physical_split_tablet(Tablet* tablet) {
+    KeysType keys_type = tablet->tablet_schema().keys_type();
+    const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
+
+    return keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr);
+}
+
 Status OlapScanNode::collect_query_statistics(QueryStatistics* statistics) {
     RETURN_IF_ERROR(ExecNode::collect_query_statistics(statistics));
     QueryStatisticsItemPB stats_item;
@@ -538,26 +587,29 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
+StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* scan_range) {
+    TTabletId tablet_id = scan_range->tablet_id;
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
+           << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    return tablet;
+}
+
 Status OlapScanNode::_capture_tablet_rowsets() {
     _tablet_rowsets.resize(_scan_ranges.size());
     for (int i = 0; i < _scan_ranges.size(); ++i) {
         const auto& scan_range = _scan_ranges[i];
 
-        // Get version.
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(scan_range));
 
         // Capture row sets of this version tablet.
         {

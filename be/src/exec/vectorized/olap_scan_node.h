@@ -20,6 +20,8 @@ class TupleDescriptor;
 
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
+class Tablet;
+using TabletSharedPtr = std::shared_ptr<Tablet>;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -50,6 +52,10 @@ public:
     Status close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
+            const TExecPlanFragmentParams& request) override;
+
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
     }
@@ -63,6 +69,8 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
+
+    static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
 
 private:
     friend class TabletScanner;
@@ -99,6 +107,7 @@ private:
         std::vector<T> _items;
     };
 
+private:
     Status _start_scan(RuntimeState* state);
     Status _start_scan_thread(RuntimeState* state);
     void _scanner_thread(TabletScanner* scanner);
@@ -120,6 +129,9 @@ private:
     // scanner concurrency
     size_t _scanner_concurrency();
 
+    bool _can_physical_split_tablet(Tablet* tablet);
+
+private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;

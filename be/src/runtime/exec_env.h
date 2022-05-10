@@ -173,12 +173,15 @@ public:
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
 
+    int64_t num_io_threads() const { return num_io_threads; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
 
     Status _init_storage_page_cache();
 
+private:
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
@@ -233,6 +236,7 @@ private:
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     pipeline::DriverLimiter* _driver_limiter;
+    int64_t _num_io_threads = 0;
 
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;

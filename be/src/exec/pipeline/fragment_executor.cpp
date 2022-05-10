@@ -242,7 +242,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        MorselQueuePtr morsel_queue = scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id());
+        ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
+                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id()));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
