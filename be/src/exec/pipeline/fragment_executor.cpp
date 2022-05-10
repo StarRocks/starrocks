@@ -101,36 +101,34 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<FragmentContext>> FragmentExecutor::_prepare_fragment_ctx(
-        const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_fragment_ctx(const TExecPlanFragmentParams& request) {
     const auto& coord = request.coord;
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
     const auto& query_options = request.query_options;
 
-    auto fragment_ctx = std::make_unique<FragmentContext>();
-    _fragment_ctx = fragment_ctx.get();
+    _fragment_ctx = std::make_shared<FragmentContext>();
 
-    fragment_ctx->set_query_id(query_id);
-    fragment_ctx->set_fragment_instance_id(fragment_instance_id);
-    fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_query_id(query_id);
+    _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
+    _fragment_ctx->set_fe_addr(coord);
 
     if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        fragment_ctx->set_report_profile();
+        _fragment_ctx->set_report_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
-        fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
+        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    return fragment_ctx;
+    return Status::OK();
 }
 
-StatusOr<WorkGroupPtr> FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& request) {
     // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
     // wg is always non-nullable, when request.enable_resource_group is true.
@@ -144,11 +142,11 @@ StatusOr<WorkGroupPtr> FragmentExecutor::_prepare_workgroup(const TExecPlanFragm
         }
         DCHECK(wg != nullptr);
         if (_query_ctx->init_query(wg.get())) {
-            _wg = wg.get();
+            _wg = wg;
         }
     }
 
-    return wg;
+    return Status::OK();
 }
 
 Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
@@ -235,7 +233,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.params;
     const auto& fragment = request.fragment;
-    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
 
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
@@ -267,10 +264,28 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
+    return Status::OK();
+}
+
+Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                  WorkGroupPtr wg) {
+    const auto fragment_instance_id = request.params.fragment_instance_id;
+    const auto degree_of_parallelism = _calc_dop(exec_env, request);
+    const auto& fragment = request.fragment;
+    const auto& params = request.params;
+    ExecNode* plan = _fragment_ctx->plan();
+
+    Drivers drivers;
+    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    const auto& pipelines = _fragment_ctx->pipelines();
+
+    // Build pipelines
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
-    // Set up sink, if required
+
+    // Set up sink if required
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
         RowDescriptor row_desc;
@@ -282,24 +297,10 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         }
         _decompose_data_sink_to_operator(runtime_state, &context, fragment.output_sink, sink.get());
     }
-
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
-    return Status::OK();
-}
-
-Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
-                                                  WorkGroupPtr wg) {
-    const auto& fragment_instance_id = request.params.fragment_instance_id;
-
-    Drivers drivers;
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    const auto& pipelines = _fragment_ctx->pipelines();
-    const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
-
-    for (auto n = 0; n < num_pipelines; ++n) {
+    for (auto n = 0; n < pipelines.size(); ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
@@ -319,8 +320,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
+                                                                    _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
@@ -339,8 +340,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
         } else {
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
+                                                                    _fragment_ctx.get(), driver_id++);
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -350,6 +351,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
 
+    // Acquire driver token to avoid overload
     auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
     if (maybe_driver_token.ok()) {
         _fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
@@ -393,14 +395,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
     RETURN_IF_ERROR(_prepare_fragment_ctx(request));
-    ASSIGN_OR_RETURN(auto fragment_ctx, _prepare_fragment_ctx(request));
-    ASSIGN_OR_RETURN(auto wg, _prepare_workgroup(request));
-    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request, wg));
+    RETURN_IF_ERROR(_prepare_workgroup(request));
+    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request, _wg));
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request, wg));
+    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request, _wg));
 
-    _query_ctx->fragment_mgr()->register_ctx(request.params.fragment_instance_id, std::move(fragment_ctx));
+    _query_ctx->fragment_mgr()->register_ctx(request.params.fragment_instance_id, _fragment_ctx);
     prepare_success = true;
 
     return Status::OK();
@@ -434,7 +435,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 
 void FragmentExecutor::_fail_cleanup() {
     if (_query_ctx) {
-        if (_fragment_ctx != nullptr) {
+        if (_fragment_ctx) {
             _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
         }
         if (_query_ctx->count_down_fragments()) {

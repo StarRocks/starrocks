@@ -36,8 +36,8 @@ private:
     // 5. exec plan
     // 6. pipeline driver
     Status _prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
-    StatusOr<std::unique_ptr<FragmentContext>> _prepare_fragment_ctx(const TExecPlanFragmentParams& request);
-    StatusOr<workgroup::WorkGroupPtr> _prepare_workgroup(const TExecPlanFragmentParams& request);
+    Status _prepare_fragment_ctx(const TExecPlanFragmentParams& request);
+    Status _prepare_workgroup(const TExecPlanFragmentParams& request);
     Status _prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                   workgroup::WorkGroupPtr wg);
     Status _prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
@@ -47,9 +47,10 @@ private:
 
     void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
                                           const TDataSink& t_datasink, DataSink* datasink);
+
     QueryContext* _query_ctx = nullptr;
-    FragmentContext* _fragment_ctx = nullptr;
-    workgroup::WorkGroup* _wg = nullptr;
+    FragmentContextPtr _fragment_ctx = nullptr;
+    workgroup::WorkGroupPtr _wg = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks
