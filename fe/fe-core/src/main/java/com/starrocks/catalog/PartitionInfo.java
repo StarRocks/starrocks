@@ -212,6 +212,14 @@ public class PartitionInfo implements Writable {
         }
     }
 
+    public void preSerialize() throws IOException {
+
+    }
+
+    public void postDeserialized() throws IOException {
+
+    }
+
     @Override
     public String toString() {
         StringBuilder buff = new StringBuilder();

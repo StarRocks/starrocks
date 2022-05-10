@@ -3,7 +3,13 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.PartitionKeyDesc;
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedView;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -29,7 +35,7 @@ public class MaterializedViewTest {
     private static List<Column> columns;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
@@ -43,10 +49,10 @@ public class MaterializedViewTest {
     public void testInit() {
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getClusterId();
+                globalStateMgr.getClusterId();
                 result = 1024;
             }
         };
@@ -200,7 +206,7 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testSerialization() throws Exception {
+    public void testSinglePartitionSerialization() throws Exception {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
@@ -237,6 +243,76 @@ public class MaterializedViewTest {
         Assert.assertTrue(distributionInfo != null);
         Assert.assertTrue(distributionInfo instanceof HashDistributionInfo);
         Assert.assertEquals(10, ((HashDistributionInfo) distributionInfo).getBucketNum());
+        Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
+
+        // 3. delete files
+        dis.close();
+        file.delete();
+    }
+
+    public RangePartitionInfo generateRangePartitionInfo() throws DdlException, AnalysisException {
+        //add columns
+        List<Column> partitionColumns = Lists.newArrayList();
+        List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
+        int columns = 2;
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
+        Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
+        partitionColumns.add(k1);
+        partitionColumns.add(k2);
+
+        //add RangePartitionDescs
+        PartitionKeyDesc p1 = new PartitionKeyDesc(
+                Lists.newArrayList(new PartitionValue("20180101"), new PartitionValue("10")),
+                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
+
+        RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionColumns);
+
+        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
+            singleRangePartitionDesc.analyze(columns, null);
+            partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
+        }
+
+        return partitionInfo;
+    }
+
+    @Test
+    public void testRangePartitionSerialization() throws Exception {
+        RangePartitionInfo partitionInfo = generateRangePartitionInfo();
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(10, Lists.newArrayList(columns.get(0)));
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
+                partitionInfo, hashDistributionInfo, refreshScheme);
+        mv.setBaseIndexId(1);
+        mv.setIndexMeta(1L, "mv_name", columns, 0,
+                111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
+        MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
+        Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
+        mv.addPartition(partition);
+        File file = new File("./index");
+        file.createNewFile();
+        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
+
+        mv.write(dos);
+
+        dos.flush();
+        dos.close();
+
+        // 2. Read objects from file
+        DataInputStream dis = new DataInputStream(new FileInputStream(file));
+        MaterializedView materializedView = MaterializedView.read(dis);
+        Assert.assertTrue(mv.equals(materializedView));
+        Assert.assertEquals(mv.getName(), materializedView.getName());
+        PartitionInfo partitionInfo1 = materializedView.getPartitionInfo();
+        Assert.assertTrue(partitionInfo1 != null);
+        Assert.assertEquals(PartitionType.RANGE, partitionInfo1.getType());
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo1;
+        Assert.assertTrue(partitionInfo.getRange(20000L).equals(rangePartitionInfo.getRange(20000L)));
+        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+        Assert.assertTrue(distributionInfo != null);
+        Assert.assertTrue(distributionInfo instanceof HashDistributionInfo);
+        Assert.assertEquals(10, distributionInfo.getBucketNum());
         Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
 
         // 3. delete files

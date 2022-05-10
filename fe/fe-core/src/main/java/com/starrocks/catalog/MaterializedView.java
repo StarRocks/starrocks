@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedView;
@@ -24,7 +25,7 @@ import java.util.Set;
 /**
  * meta structure for materialized view
  */
-public class MaterializedView extends OlapTable {
+public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
     public enum RefreshType {
@@ -190,18 +191,24 @@ public class MaterializedView extends OlapTable {
     }
 
     @Override
+    public void gsonPostProcess() throws IOException {
+        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
+        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
+        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
+        rebuildFullSchema();
+        partitionInfo.postDeserialized();
+    }
+
+    @Override
     public void write(DataOutput out) throws IOException {
+        partitionInfo.preSerialize();
+        String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
-
-        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
-        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
-        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
-        mv.rebuildFullSchema();
         return mv;
     }
 }
