@@ -49,7 +49,6 @@ public class CallStubGenerator {
         }
         desc.append(")V");
 
-        System.out.println(desc);
         final MethodVisitor batchCall =
                 writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "batchCallV", desc.toString(), null,
                         new String[] {"java/lang/Exception"});
