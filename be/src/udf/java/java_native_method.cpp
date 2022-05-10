@@ -2,6 +2,8 @@
 
 #include "udf/java/java_native_method.h"
 
+#include <new>
+
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
@@ -52,7 +54,15 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
     } else {
         binary_column = down_cast<BinaryColumn*>(column);
     }
-    binary_column->get_bytes().resize(byteSize);
+
+    try {
+        binary_column->get_bytes().resize(byteSize);
+    } catch (std::bad_alloc&) {
+        binary_column->reset_column();
+        env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),
+                      fmt::format("OOM try to allocate {} in java native function", byteSize).c_str());
+        return 0;
+    }
     return reinterpret_cast<jlong>(binary_column->get_bytes().data());
 }
 
