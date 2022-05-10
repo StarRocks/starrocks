@@ -96,22 +96,25 @@ Status MySQLDataSource::open(RuntimeState* state) {
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
         ExprContext* ctx = _conjunct_ctxs[i];
         const Expr* root_expr = ctx->root();
-        if (root_expr != nullptr) {
-            std::vector<SlotId> slot_ids;
+        if (root_expr == nullptr) {
+            continue;
+        }
 
-            // In Filter must has only one slot_id.
-            if (root_expr->get_slot_ids(&slot_ids) != 1) {
-                continue;
-            }
+        std::vector<SlotId> slot_ids;
 
-            SlotId slot_id = slot_ids[0];
-            auto iter = slot_by_id.find(slot_id);
-            if (iter != slot_by_id.end()) {
-                PrimitiveType type = iter->second->type().type;
-                // dipatch to process,
-                // we support numerical type, char type and date type.
-                switch (type) {
-                    // In Filter is must handle by VectorizedInConstPredicate type.
+        // In Filter must has only one slot_id.
+        if (root_expr->get_slot_ids(&slot_ids) != 1) {
+            continue;
+        }
+
+        SlotId slot_id = slot_ids[0];
+        auto iter = slot_by_id.find(slot_id);
+        if (iter != slot_by_id.end()) {
+            PrimitiveType type = iter->second->type().type;
+            // dipatch to process,
+            // we support numerical type, char type and date type.
+            switch (type) {
+                // In Filter is must handle by VectorizedInConstPredicate type.
 #define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                             \
     case TYPE: {                                                                              \
         if (typeid(*root_expr) == typeid(VectorizedInConstPredicate<TYPE>)) {                 \
@@ -133,7 +136,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
     }
 
 #define DIRECT_APPEND_TO_SQL vector_values.emplace_back(std::to_string(value));
-                    APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
+                APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
 #undef APPLY_FOR_NUMERICAL_TYPE
 #undef DIRECT_APPEND_TO_SQL
 
@@ -146,7 +149,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
         ss << c;                       \
     }                                  \
     vector_values.emplace_back(fmt::format("'{}'", ss.str()));
-                    APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
+                APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
@@ -170,7 +173,6 @@ Status MySQLDataSource::open(RuntimeState* state) {
                 case TYPE_FLOAT:
                 case TYPE_JSON:
                     break;
-                }
             }
         }
     }
@@ -295,7 +297,7 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
         Slice value(data, len);
-        dynamic_cast<BinaryColumn*>(data_column)->append(value);
+        reinterpret_cast<BinaryColumn*>(data_column)->append(value);
         break;
     }
     case TYPE_BOOLEAN: {
