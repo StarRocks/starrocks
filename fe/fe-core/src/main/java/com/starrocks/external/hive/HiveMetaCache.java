@@ -40,7 +40,7 @@ public class HiveMetaCache {
 
     // Pulling the value of the latest state every time when getting databaseNames or tableNames
     private static final long MAX_NAMES_CACHE_SIZE = 0L;
-
+    private static final long REFRESH_TABLE_SCHEMA_SECONDS = 60;
     private final HiveMetaClient client;
     private String resourceName;
 
@@ -133,7 +133,7 @@ public class HiveMetaCache {
                     }
                 }, executor));
 
-        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
+        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE, REFRESH_TABLE_SCHEMA_SECONDS)
                 .build(asyncReloading(new CacheLoader<HiveTableName, Table>() {
                     @Override
                     public Table load(HiveTableName key) throws Exception {
@@ -151,6 +151,17 @@ public class HiveMetaCache {
         if (!Config.enable_hms_events_incremental_sync &&
                 Config.hive_meta_cache_ttl_s > Config.hive_meta_cache_refresh_interval_s) {
             cacheBuilder.refreshAfterWrite(Config.hive_meta_cache_refresh_interval_s, SECONDS);
+        }
+        cacheBuilder.maximumSize(maximumSize);
+        return cacheBuilder;
+    }
+
+    private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize, long refreshIntervalSec) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+        cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);
+        if (!Config.enable_hms_events_incremental_sync &&
+                Config.hive_meta_cache_ttl_s > refreshIntervalSec) {
+            cacheBuilder.refreshAfterWrite(refreshIntervalSec, SECONDS);
         }
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
