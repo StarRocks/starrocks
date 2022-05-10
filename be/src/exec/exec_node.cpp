@@ -475,7 +475,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
     }
         return Status::OK();
-    case TPlanNodeType::MYSQL_SCAN_NODE:{
+    case TPlanNodeType::MYSQL_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::MYSQL;

@@ -11,7 +11,7 @@
 namespace starrocks {
 
 namespace connector {
-class MySQLConnector final : public Connector  {
+class MySQLConnector final : public Connector {
 public:
     ~MySQLConnector() override = default;
 
@@ -80,12 +80,11 @@ private:
 
     Status fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length);
 
-    Status
-    append_text_to_column(const char *data, const int &len, const SlotDescriptor *slot_desc,
-                          vectorized::Column *column);
+    Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
+                                 vectorized::Column* column);
 
     template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
-    void append_value_to_column(vectorized::Column *column, CppType &value);
+    void append_value_to_column(vectorized::Column* column, CppType& value);
 };
 
 } // namespace connector

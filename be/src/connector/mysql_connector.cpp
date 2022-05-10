@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "connector/mysql_connector.h"
+
 #include "exprs/expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "storage/chunk_helper.h"
@@ -32,7 +33,7 @@ DataSourceProviderPtr MySQLConnector::create_data_source_provider(vectorized::Co
 // ================================
 
 MySQLDataSourceProvider::MySQLDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-    : _scan_node(scan_node), _mysql_scan_node(plan_node.mysql_scan_node) {}
+        : _scan_node(scan_node), _mysql_scan_node(plan_node.mysql_scan_node) {}
 
 DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<MySQLDataSource>(this, scan_range);
@@ -41,9 +42,9 @@ DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan
 // ================================
 
 MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range)
-    : _provider(provider) {}
+        : _provider(provider) {}
 
-Status MySQLDataSource::_init_params(RuntimeState *state) {
+Status MySQLDataSource::_init_params(RuntimeState* state) {
     VLOG(1) << "MySQLDataSource::init mysql scan params";
 
     DCHECK(state != nullptr);
@@ -149,32 +150,33 @@ Status MySQLDataSource::open(RuntimeState* state) {
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
-                    case INVALID_TYPE:
-                    case TYPE_NULL:
-                    case TYPE_BINARY:
-                    case TYPE_DECIMAL:
-                    case TYPE_STRUCT:
-                    case TYPE_ARRAY:
-                    case TYPE_MAP:
-                    case TYPE_HLL:
-                    case TYPE_TIME:
-                    case TYPE_OBJECT:
-                    case TYPE_PERCENTILE:
-                    case TYPE_LARGEINT:
-                    case TYPE_DECIMAL128:
-                    case TYPE_DECIMALV2:
-                    case TYPE_DECIMAL32:
-                    case TYPE_DECIMAL64:
-                    case TYPE_DOUBLE:
-                    case TYPE_FLOAT:
-                    case TYPE_JSON:
-                        break;
+                case INVALID_TYPE:
+                case TYPE_NULL:
+                case TYPE_BINARY:
+                case TYPE_DECIMAL:
+                case TYPE_STRUCT:
+                case TYPE_ARRAY:
+                case TYPE_MAP:
+                case TYPE_HLL:
+                case TYPE_TIME:
+                case TYPE_OBJECT:
+                case TYPE_PERCENTILE:
+                case TYPE_LARGEINT:
+                case TYPE_DECIMAL128:
+                case TYPE_DECIMALV2:
+                case TYPE_DECIMAL32:
+                case TYPE_DECIMAL64:
+                case TYPE_DOUBLE:
+                case TYPE_FLOAT:
+                case TYPE_JSON:
+                    break;
                 }
             }
         }
     }
 
-    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
+    RETURN_IF_ERROR(
+            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
     // check materialize slot num
     int materialize_num = 0;
 
@@ -263,8 +265,8 @@ Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, siz
                 return Status::InternalError(ss.str());
             }
         } else {
-            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx],
-                                                  slot_desc, column.get()));
+            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx], slot_desc,
+                                                  column.get()));
         }
     }
     return Status::OK();
@@ -290,139 +292,139 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
 
     // Parse the raw-text data. Translate the text string to internal format.
     switch (slot_desc->type().type) {
-        case TYPE_VARCHAR:
-        case TYPE_CHAR: {
-            Slice value(data, len);
-            dynamic_cast<BinaryColumn*>(data_column)->append(value);
-            break;
-        }
-        case TYPE_BOOLEAN: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_bool(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_BOOLEAN>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_TINYINT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_int<int8_t>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_TINYINT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_SMALLINT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_int<int16_t>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_SMALLINT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_INT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_int<int32_t>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_INT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_BIGINT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_int<int64_t>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_BIGINT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_LARGEINT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_int<__int128>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_LARGEINT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_FLOAT: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_float<float>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_FLOAT>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DOUBLE: {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto value = StringParser::string_to_float<double>(data, len, &parse_result);
-            if (parse_result == StringParser::PARSE_SUCCESS)
-                append_value_to_column<TYPE_DOUBLE>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DATE: {
-            DateValue value{};
-            if (value.from_string(data, len))
-                append_value_to_column<TYPE_DATE>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DATETIME: {
-            TimestampValue value{};
-            if (value.from_string(data, len))
-                append_value_to_column<TYPE_DATETIME>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DECIMALV2: {
-            DecimalV2Value value;
-            if (value.parse_from_str(data, len) == DecimalError::E_DEC_OK)
-                append_value_to_column<TYPE_DECIMALV2>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DECIMAL32: {
-            int32_t value;
-            if (!DecimalV3Cast::from_string<int32_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
-                                                     len))
-                append_value_to_column<TYPE_DECIMAL32>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DECIMAL64: {
-            int64_t value;
-            if (!DecimalV3Cast::from_string<int64_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
-                                                     len))
-                append_value_to_column<TYPE_DECIMAL64>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        case TYPE_DECIMAL128: {
-            int128_t value;
-            if (!DecimalV3Cast::from_string<int128_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
-                                                      len))
-                append_value_to_column<TYPE_DECIMAL128>(data_column, value);
-            else
-                parse_success = false;
-            break;
-        }
-        default:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+        Slice value(data, len);
+        dynamic_cast<BinaryColumn*>(data_column)->append(value);
+        break;
+    }
+    case TYPE_BOOLEAN: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_bool(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_BOOLEAN>(data_column, value);
+        else
             parse_success = false;
-            DCHECK(false) << "bad column type: " << slot_desc->type();
-            break;
+        break;
+    }
+    case TYPE_TINYINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_int<int8_t>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_TINYINT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_SMALLINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_int<int16_t>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_SMALLINT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_INT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_int<int32_t>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_INT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_BIGINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_int<int64_t>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_BIGINT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_LARGEINT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_int<__int128>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_LARGEINT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_FLOAT: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_float<float>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_FLOAT>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DOUBLE: {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto value = StringParser::string_to_float<double>(data, len, &parse_result);
+        if (parse_result == StringParser::PARSE_SUCCESS)
+            append_value_to_column<TYPE_DOUBLE>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DATE: {
+        DateValue value{};
+        if (value.from_string(data, len))
+            append_value_to_column<TYPE_DATE>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DATETIME: {
+        TimestampValue value{};
+        if (value.from_string(data, len))
+            append_value_to_column<TYPE_DATETIME>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DECIMALV2: {
+        DecimalV2Value value;
+        if (value.parse_from_str(data, len) == DecimalError::E_DEC_OK)
+            append_value_to_column<TYPE_DECIMALV2>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DECIMAL32: {
+        int32_t value;
+        if (!DecimalV3Cast::from_string<int32_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
+                                                 len))
+            append_value_to_column<TYPE_DECIMAL32>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DECIMAL64: {
+        int64_t value;
+        if (!DecimalV3Cast::from_string<int64_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
+                                                 len))
+            append_value_to_column<TYPE_DECIMAL64>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_DECIMAL128: {
+        int128_t value;
+        if (!DecimalV3Cast::from_string<int128_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
+                                                  len))
+            append_value_to_column<TYPE_DECIMAL128>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    default:
+        parse_success = false;
+        DCHECK(false) << "bad column type: " << slot_desc->type();
+        break;
     }
 
     if (column->is_nullable()) {
