@@ -32,7 +32,7 @@ public:
     // when yielding the driver in the executor thread.
     virtual void update_statistics(const DriverRawPtr driver) = 0;
 
-    virtual size_t size() = 0;
+    virtual size_t size() const = 0;
     bool empty() { return size() == 0; }
 
 protected:
@@ -158,7 +158,7 @@ public:
 
     void cancel(DriverRawPtr driver) override;
 
-    size_t size() override;
+    size_t size() const override;
 
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
@@ -214,7 +214,7 @@ public:
 
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override { return _size; }
+    size_t size() const override { return _size; }
 
 private:
     void _put_back(const DriverRawPtr driver);
@@ -260,7 +260,7 @@ public:
 
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override;
+    size_t size() const override;
 
 private:
     // The schedule period is equal to SCHEDULE_PERIOD_PER_WG_NS * num_workgroups.
