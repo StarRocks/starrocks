@@ -7,10 +7,12 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -142,6 +144,15 @@ public class CTEUtils {
             if (collectCosts && !expression.getInputs().isEmpty()) {
                 context.getCteContext().addCTEConsumeInlineCost(consume.getCteId(),
                         calculateStatistics(expression.getInputs().get(0), context).getComputeSize());
+            } else if (collectCosts && expression.getInputs().isEmpty()) {
+                Map<ColumnRefOperator, ColumnStatistic> map = new HashMap<>();
+                for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : consume.getCteOutputColumnRefMap().entrySet()) {
+                    ColumnStatistic columnStatistic = new ColumnStatistic(
+                            0, 0, 0, 0, 0);
+                    map.put(entry.getValue(), columnStatistic);
+                }
+                Statistics.Builder builder = Statistics.builder().addColumnStatistics(map);
+                context.getCteContext().addCTEConsumeInlineCost(consume.getCteId(), builder.build().getComputeSize());
             }
 
             // not ask children

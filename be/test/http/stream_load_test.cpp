@@ -41,7 +41,7 @@ class mg_connection;
 
 namespace starrocks {
 
-static std::string k_response_str;
+extern std::string k_response_str;
 
 // Send Unauthorized status with basic challenge
 void HttpChannel::send_basic_challenge(HttpRequest* req, const std::string& realm) {}

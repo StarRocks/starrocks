@@ -23,6 +23,88 @@
 
 namespace starrocks {
 
+std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
+    rapidjson::StringBuffer s;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(s);
+
+    writer.StartObject();
+
+    writer.Key("Status");
+    writer.String(to_string(st.code()).c_str());
+    switch (st.code()) {
+    case TStatusCode::LABEL_ALREADY_EXISTS:
+        writer.Key("ExistingJobStatus");
+        writer.String(existing_job_status.c_str());
+        break;
+    case TStatusCode::TXN_IN_PROCESSING:
+        writer.Key("Label");
+        writer.String(label.c_str());
+        break;
+    default:
+        break;
+    }
+    // msg
+    writer.Key("Message");
+    writer.String(st.get_error_msg().c_str());
+
+    if (st.ok()) {
+        // label
+        writer.Key("Label");
+        writer.String(label.c_str());
+        if (boost::iequals(txn_op, TXN_BEGIN)) {
+            // txn id
+            writer.Key("TxnId");
+            writer.Int64(txn_id);
+            writer.Key("BeginTxnTimeMs");
+            writer.Int64(begin_txn_cost_nanos / 1000000);
+        } else if (boost::iequals(txn_op, TXN_COMMIT)) {
+            // txn id
+            writer.Key("TxnId");
+            writer.Int64(txn_id);
+            // number_load_rows
+            writer.Key("NumberTotalRows");
+            writer.Int64(number_total_rows);
+            writer.Key("NumberLoadedRows");
+            writer.Int64(number_loaded_rows);
+            writer.Key("NumberFilteredRows");
+            writer.Int64(number_filtered_rows);
+            writer.Key("NumberUnselectedRows");
+            writer.Int64(number_unselected_rows);
+            writer.Key("LoadBytes");
+            writer.Int64(receive_bytes);
+            writer.Key("LoadTimeMs");
+            writer.Int64(load_cost_nanos / 1000000);
+            writer.Key("StreamLoadPutTimeMs");
+            writer.Int64(stream_load_put_cost_nanos / 1000000);
+            writer.Key("ReceivedDataTimeMs");
+            writer.Int64(total_received_data_cost_nanos / 1000000);
+            writer.Key("WriteDataTimeMs");
+            writer.Int(write_data_cost_nanos / 1000000);
+            writer.Key("CommitAndPublishTimeMs");
+            writer.Int64(commit_and_publish_txn_cost_nanos / 1000000);
+        } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
+        } else if (boost::iequals(txn_op, TXN_LOAD)) {
+            // txn id
+            writer.Key("TxnId");
+            writer.Int64(txn_id);
+            // number_load_rows
+            writer.Key("LoadBytes");
+            writer.Int64(receive_bytes);
+            writer.Key("StreamLoadPutTimeMs");
+            writer.Int64(stream_load_put_cost_nanos / 1000000);
+            writer.Key("ReceivedDataTimeMs");
+            writer.Int64(received_data_cost_nanos / 1000000);
+        }
+    }
+
+    if (!error_url.empty()) {
+        writer.Key("ErrorURL");
+        writer.String(error_url.c_str());
+    }
+    writer.EndObject();
+    return s.GetString();
+}
+
 std::string StreamLoadContext::to_json() const {
     rapidjson::StringBuffer s;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(s);
@@ -79,7 +161,7 @@ std::string StreamLoadContext::to_json() const {
     writer.Key("StreamLoadPutTimeMs");
     writer.Int64(stream_load_put_cost_nanos / 1000000);
     writer.Key("ReadDataTimeMs");
-    writer.Int64(read_data_cost_nanos / 1000000);
+    writer.Int64(total_received_data_cost_nanos / 1000000);
     writer.Key("WriteDataTimeMs");
     writer.Int(write_data_cost_nanos / 1000000);
     writer.Key("CommitAndPublishTimeMs");
@@ -95,7 +177,7 @@ std::string StreamLoadContext::to_json() const {
 
 std::string StreamLoadContext::brief(bool detail) const {
     std::stringstream ss;
-    ss << "id=" << id << ", job_id=" << job_id << ", txn_id=" << txn_id << ", label=" << label;
+    ss << "id=" << id << ", job_id=" << job_id << ", txn_id=" << txn_id << ", label=" << label << ", db=" << db;
     if (detail) {
         switch (load_src_type) {
         case TLoadSourceType::KAFKA:

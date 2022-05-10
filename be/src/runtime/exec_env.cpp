@@ -53,6 +53,7 @@
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -210,6 +211,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
     _stream_load_executor = new StreamLoadExecutor(this);
+    _stream_context_mgr = new StreamContextMgr();
+    _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _plugin_mgr = new PluginMgr();
@@ -340,6 +343,14 @@ void ExecEnv::_destroy() {
     if (_small_file_mgr) {
         delete _small_file_mgr;
         _small_file_mgr = nullptr;
+    }
+    if (_transaction_mgr) {
+        delete _transaction_mgr;
+        _transaction_mgr = nullptr;
+    }
+    if (_stream_context_mgr) {
+        delete _stream_context_mgr;
+        _stream_context_mgr = nullptr;
     }
     if (_routine_load_task_executor) {
         delete _routine_load_task_executor;
