@@ -21,7 +21,6 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -36,14 +35,16 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 public abstract class PrivTable implements Writable {
     private static final Logger LOG = LogManager.getLogger(PrivTable.class);
 
-    protected List<PrivEntry> entries = Lists.newArrayList();
+    protected Map<UserIdentity, List<PrivEntry>> map = new HashMap<>();
 
     // see PrivEntry for more detail
     protected boolean isClassNameWrote = false;
@@ -60,8 +61,13 @@ public abstract class PrivTable implements Writable {
             if (errOnNonExist) {
                 throw new DdlException("User " + newEntry.getUserIdent() + " does not exist");
             }
-            entries.add(newEntry);
-            Collections.sort(entries);
+            UserIdentity newUser = newEntry.getUserIdent();
+            if (! map.containsKey(newUser)) {
+                map.put(newEntry.getUserIdent(), new ArrayList<>());
+            }
+            map.get(newUser).add(newEntry);
+            // entries.add(newEntry);
+            // Collections.sort(entries);
             LOG.debug("add priv entry: {}", newEntry);
             return newEntry;
         } else {
@@ -86,7 +92,12 @@ public abstract class PrivTable implements Writable {
     }
 
     public void dropEntry(PrivEntry entry) {
-        Iterator<PrivEntry> iter = entries.iterator();
+        UserIdentity userIdentity = entry.getUserIdent();
+        List<PrivEntry> userPrivEntryList = map.get(entry.getUserIdent());
+        if (userPrivEntryList == null) {
+            return;
+        }
+        Iterator<PrivEntry> iter = userPrivEntryList.iterator();
         while (iter.hasNext()) {
             PrivEntry privEntry = iter.next();
             if (privEntry.keyMatch(entry)) {
@@ -95,29 +106,32 @@ public abstract class PrivTable implements Writable {
                 break;
             }
         }
+        if (userPrivEntryList.isEmpty()) {
+            map.remove(userIdentity);
+        }
     }
 
     public void clearEntriesSetByResolver() {
-        Iterator<PrivEntry> iter = entries.iterator();
-        while (iter.hasNext()) {
-            PrivEntry privEntry = iter.next();
-            if (privEntry.isSetByDomainResolver()) {
-                iter.remove();
-                LOG.info("drop priv entry set by resolver: {}", privEntry);
+        Iterator<Map.Entry<UserIdentity, List<PrivEntry>>> mapIter = map.entrySet().iterator();
+        while (mapIter.hasNext()) {
+            Map.Entry<UserIdentity, List<PrivEntry>> entry = mapIter.next();
+            Iterator<PrivEntry> iter = entry.getValue().iterator();
+            while (iter.hasNext()) {
+                PrivEntry privEntry = iter.next();
+                if (privEntry.isSetByDomainResolver()) {
+                    iter.remove();
+                    LOG.info("drop priv entry set by resolver: {}", privEntry);
+                }
+            }
+            if (entry.getValue().isEmpty()) {
+                mapIter.remove();
             }
         }
     }
 
     // drop all entries which user name are matched, and is not set by resolver
     public void dropUser(UserIdentity userIdentity) {
-        Iterator<PrivEntry> iter = entries.iterator();
-        while (iter.hasNext()) {
-            PrivEntry privEntry = iter.next();
-            if (privEntry.match(userIdentity, true /* exact match */) && !privEntry.isSetByDomainResolver()) {
-                iter.remove();
-                LOG.info("drop entry: {}", privEntry);
-            }
-        }
+        map.remove(userIdentity);
     }
 
     public void revoke(PrivEntry entry, boolean errOnNonExist, boolean deleteEntryWhenEmpty) throws DdlException {
@@ -173,7 +187,11 @@ public abstract class PrivTable implements Writable {
 
     // Get existing entry which is the keys match the given entry
     protected PrivEntry getExistingEntry(PrivEntry entry) {
-        for (PrivEntry existingEntry : entries) {
+        List<PrivEntry> userPrivEntryList = map.get(entry.getUserIdent());
+        if (userPrivEntryList == null) {
+            return null;
+        }
+        for (PrivEntry existingEntry : userPrivEntryList) {
             if (existingEntry.keyMatch(entry)) {
                 return existingEntry;
             }
@@ -187,8 +205,8 @@ public abstract class PrivTable implements Writable {
     }
 
     public boolean doesUsernameExist(String qualifiedUsername) {
-        for (PrivEntry entry : entries) {
-            if (entry.getOrigUser().equals(qualifiedUsername)) {
+        for (UserIdentity userIdentity : map.keySet()) {
+            if (userIdentity.getQualifiedUser().equals(qualifiedUsername)) {
                 return true;
             }
         }
@@ -197,11 +215,11 @@ public abstract class PrivTable implements Writable {
 
     // for test only
     public void clear() {
-        entries.clear();
+        map.clear();
     }
 
     public boolean isEmpty() {
-        return entries.isEmpty();
+        return map.isEmpty();
     }
 
     public static PrivTable read(DataInput in) throws IOException {
@@ -225,11 +243,48 @@ public abstract class PrivTable implements Writable {
         }
     }
 
+    public int size() {
+        int sum = 0;
+        for (Map.Entry<UserIdentity, List<PrivEntry>> entry : map.entrySet()) {
+            sum += entry.getValue().size();
+        }
+        return sum;
+    }
+
+    /**
+     * return a iterator used for a complete loop in the whole table
+     */
+    public Iterator<PrivEntry> getFullIterator() {
+        final Iterator<Map.Entry<UserIdentity, List<PrivEntry>>> mapIterator = map.entrySet().iterator();
+
+        return new Iterator<PrivEntry>() {
+            private Iterator<PrivEntry> privEntryIterator = null;
+
+            @Override
+            public boolean hasNext() {
+                return mapIterator.hasNext() || privEntryIterator != null && privEntryIterator.hasNext();
+            }
+
+            @Override
+            public PrivEntry next() {
+                if (privEntryIterator == null || ! privEntryIterator.hasNext()) {
+                    if (! mapIterator.hasNext()) {
+                        return null;
+                    }
+                    Map.Entry<UserIdentity, List<PrivEntry>> next = mapIterator.next();
+                    privEntryIterator = next.getValue().iterator();
+                }
+                return privEntryIterator.next();
+            }
+        };
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("\n");
-        for (PrivEntry privEntry : entries) {
-            sb.append(privEntry).append("\n");
+        Iterator<PrivEntry> iter = this.getFullIterator();
+        while (iter.hasNext()) {
+            sb.append(iter.next()).append("\n");
         }
         return sb.toString();
     }
@@ -241,9 +296,10 @@ public abstract class PrivTable implements Writable {
             Text.writeString(out, className);
             isClassNameWrote = true;
         }
-        out.writeInt(entries.size());
-        for (PrivEntry privEntry : entries) {
-            privEntry.write(out);
+        out.writeInt(this.size());
+        Iterator<PrivEntry> iter = this.getFullIterator();
+        while (iter.hasNext()) {
+            iter.next().write(out);
         }
         isClassNameWrote = false;
     }
@@ -252,9 +308,12 @@ public abstract class PrivTable implements Writable {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             PrivEntry entry = PrivEntry.read(in);
-            entries.add(entry);
+            UserIdentity newUser = entry.getUserIdent();
+            if (! map.containsKey(newUser)) {
+                map.put(entry.getUserIdent(), new ArrayList<>());
+            }
+            map.get(newUser).add(entry);
         }
-        Collections.sort(entries);
     }
 
 }

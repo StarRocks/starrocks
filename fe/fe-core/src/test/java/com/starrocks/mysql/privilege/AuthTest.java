@@ -52,8 +52,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
@@ -1855,5 +1858,64 @@ public class AuthTest {
         // 2. check reuse
         Config.enable_password_reuse = false;
         auth.checkPasswordReuse(user, password);
+    }
+
+    private static final Logger LOG = LogManager.getLogger(AuthTest.class);
+    @Test
+    @Ignore
+    public void testManyUsersAndTables() throws Exception {
+        int BIG_NUMBER = 500;
+        int BIG_NUMBER2 = BIG_NUMBER / 2;
+        int LOG_INTERVAL = BIG_NUMBER / 50;
+        String DB = SystemInfoService.DEFAULT_CLUSTER  + ":db1";
+        LOG.info("before add privilege: table {} entries, user {} entries",
+                auth.getTablePrivTable().size(), auth.getUserPrivTable().size());
+
+        // 1. create N user with select privilege to N/2 table
+        // 1.1 create user
+        for (int i = 0; i != BIG_NUMBER; i++) {
+            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
+            UserIdentity userIdentity = new UserIdentity(userName, "%");
+            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+        }
+
+        // 1.2 grant N/2 table privilege
+        long start = System.currentTimeMillis();
+        for (int i = 0; i != BIG_NUMBER; i++) {
+            if (i % LOG_INTERVAL == 0) {
+                LOG.info("added {} user..", i);
+            }
+            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
+            UserIdentity userIdentity = new UserIdentity(userName, "%");
+            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            for (int j = 0; j != BIG_NUMBER2; j++) {
+                String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
+                TablePattern tablePattern = new TablePattern("db1", tableName);
+                tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+                PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
+                auth.grantPrivs(userIdentity, tablePattern, privileges, false);
+            }
+        }
+        long end = System.currentTimeMillis();
+        LOG.info("add privilege: {} entries, total {} ms",  auth.getTablePrivTable().size(), end - start);
+
+        start = System.currentTimeMillis();
+        for (int i = 0; i != BIG_NUMBER; i++) {
+            // 1.1 create user
+            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
+            UserIdentity userIdentity = new UserIdentity(userName, "%");
+            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            for (int j = 0; j != BIG_NUMBER2; j++) {
+                String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
+                Assert.assertTrue(auth.checkTblPriv(
+                        userIdentity, DB, tableName, PrivPredicate.SELECT));
+            }
+        }
+        end = System.currentTimeMillis();
+        LOG.info("check privilege: total {} ms", end - start);
     }
  }
