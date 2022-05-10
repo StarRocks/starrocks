@@ -153,26 +153,26 @@ Status MySQLDataSource::open(RuntimeState* state) {
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
-                case INVALID_TYPE:
-                case TYPE_NULL:
-                case TYPE_BINARY:
-                case TYPE_DECIMAL:
-                case TYPE_STRUCT:
-                case TYPE_ARRAY:
-                case TYPE_MAP:
-                case TYPE_HLL:
-                case TYPE_TIME:
-                case TYPE_OBJECT:
-                case TYPE_PERCENTILE:
-                case TYPE_LARGEINT:
-                case TYPE_DECIMAL128:
-                case TYPE_DECIMALV2:
-                case TYPE_DECIMAL32:
-                case TYPE_DECIMAL64:
-                case TYPE_DOUBLE:
-                case TYPE_FLOAT:
-                case TYPE_JSON:
-                    break;
+            case INVALID_TYPE:
+            case TYPE_NULL:
+            case TYPE_BINARY:
+            case TYPE_DECIMAL:
+            case TYPE_STRUCT:
+            case TYPE_ARRAY:
+            case TYPE_MAP:
+            case TYPE_HLL:
+            case TYPE_TIME:
+            case TYPE_OBJECT:
+            case TYPE_PERCENTILE:
+            case TYPE_LARGEINT:
+            case TYPE_DECIMAL128:
+            case TYPE_DECIMALV2:
+            case TYPE_DECIMAL32:
+            case TYPE_DECIMAL64:
+            case TYPE_DOUBLE:
+            case TYPE_FLOAT:
+            case TYPE_JSON:
+                break;
             }
         }
     }
