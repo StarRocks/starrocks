@@ -7,13 +7,11 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.DropCatalogStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -38,7 +36,9 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -178,6 +178,7 @@ public class StatementPlanner {
                 || statement instanceof AlterViewStmt
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt
+                || statement instanceof CreateCatalogStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -193,7 +194,6 @@ public class StatementPlanner {
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt
-                || statement instanceof CreateCatalogStmt
                 || statement instanceof SubmitTaskStmt;
     }
 

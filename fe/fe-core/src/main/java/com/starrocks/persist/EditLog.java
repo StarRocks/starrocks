@@ -812,6 +812,16 @@ public class EditLog {
                     globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
+                case OperationType.OP_CREATE_CATALOG: {
+                    CreateCatalogLog createCatalogLog =
+                            (CreateCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayCreateCatalog(createCatalogLog);
+                }
+                case OperationType.OP_DROP_CATALOG: {
+                    DropCatalogLog dropCatalogLog =
+                            (DropCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
