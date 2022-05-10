@@ -118,6 +118,12 @@ public:
 
     const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
+    Status abort();
+
+    void close();
+
+    const std::string& write_path();
+
 private:
     Status _write_short_key_index();
     Status _write_footer();

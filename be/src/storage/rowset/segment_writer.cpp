@@ -52,6 +52,18 @@ SegmentWriter::SegmentWriter(std::unique_ptr<fs::WritableBlock> wblock, uint32_t
 
 SegmentWriter::~SegmentWriter() {}
 
+Status SegmentWriter::abort() {
+    return _wblock->abort();
+}
+
+void SegmentWriter::close() {
+    _wblock->close();
+}
+
+const std::string& SegmentWriter::write_path() {
+    return _wblock->path();
+}
+
 void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column) {
     meta->set_column_id(column_id);
     meta->set_unique_id(column.unique_id());

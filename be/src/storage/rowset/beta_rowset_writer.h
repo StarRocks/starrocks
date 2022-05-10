@@ -81,6 +81,7 @@ protected:
 
     bool _is_pending = false;
     bool _already_built = false;
+    bool _already_sync_dir = false;
 
     FlushChunkState _flush_chunk_state = FlushChunkState::UNKNOWN;
 };
@@ -115,6 +116,10 @@ private:
     Status _flush_chunk(const vectorized::Chunk& chunk);
 
     std::unique_ptr<SegmentWriter> _segment_writer;
+
+    // used for only primary key, if this flag is set, it means _final_merge
+    // has already prepared the iterators from the temp file and started writing to the new file
+    bool _final_merge_start_write = false;
 };
 
 // Chunk contains partial columns data corresponding to column_indexes.

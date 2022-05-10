@@ -54,7 +54,8 @@ BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
           _num_rows_written(0),
           _total_row_size(0),
           _total_data_size(0),
-          _total_index_size(0) {}
+          _total_index_size(0),
+          _already_sync_dir(false) {}
 
 Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
@@ -110,6 +111,7 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
+    _already_sync_dir = true;
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
     _rowset_meta->set_total_disk_size(_total_data_size);
@@ -166,12 +168,20 @@ Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
 }
 
 HorizontalBetaRowsetWriter::HorizontalBetaRowsetWriter(const RowsetWriterContext& context)
-        : BetaRowsetWriter(context), _segment_writer(nullptr) {}
+        : BetaRowsetWriter(context), _segment_writer(nullptr), _final_merge_start_write(false) {}
 
 HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
     // TODO(lingbin): Should wrapper exception logic, no need to know file ops directly.
-    if (!_already_built) {       // abnormal exit, remove all files generated
-        _segment_writer.reset(); // ensure all files are closed
+    if (!_already_built) { // abnormal exit, remove all files generated
+        if (_segment_writer != nullptr) {
+            // close the latest write file
+            _segment_writer->close();
+            _segment_writer.reset();
+        }
+        // sync the dir
+        if (_num_rows_written > 0 && !_already_sync_dir) {
+            _fs->sync_dir(_context.rowset_path_prefix);
+        }
         if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             for (const auto& tmp_segment_file : _tmp_segment_files) {
                 // Even if an error is encountered, these files that have not been cleaned up
@@ -181,13 +191,18 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
             }
             _tmp_segment_files.clear();
-            for (auto i = 0; i < _num_segment; ++i) {
-                auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-                // Even if an error is encountered, these files that have not been cleaned up
-                // will be cleaned up by the GC background. So here we only print the error
-                // message when we encounter an error.
-                auto st = _fs->delete_file(path);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+
+            // if final merge hasn't started writing to the new file, the _num_segment
+            // is the number of temp segment file, and we should skip this delete.
+            if (_final_merge_start_write) {
+                for (auto i = 0; i < _num_segment; ++i) {
+                    auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
+                    // Even if an error is encountered, these files that have not been cleaned up
+                    // will be cleaned up by the GC background. So here we only print the error
+                    // message when we encounter an error.
+                    auto st = _fs->delete_file(path);
+                    LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+                }
             }
             for (auto i = 0; i < _segment_has_deletes.size(); ++i) {
                 if (!_segment_has_deletes[i]) {
@@ -514,6 +529,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     if (_rowset_txn_meta_pb) {
         _rowset_txn_meta_pb->clear_partial_rowset_footers();
     }
+    _final_merge_start_write = true;
 
     // since the segment already NONOVERLAPPING here, make the _create_segment_writer
     // method to create segment data files, rather than temporary segment files.
@@ -600,19 +616,19 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
 VerticalBetaRowsetWriter::VerticalBetaRowsetWriter(const RowsetWriterContext& context) : BetaRowsetWriter(context) {}
 
 VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
-    if (!_already_built) {
-        for (auto& segment_writer : _segment_writers) {
-            segment_writer.reset();
+    if (!_already_built && _num_rows_written > 0 && !_already_sync_dir) {
+        _fs->sync_dir(_context.rowset_path_prefix);
+    }
+    for (auto& segment_writer : _segment_writers) {
+        if (!_already_built) {
+            auto st = segment_writer->abort();
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << segment_writer->write_path() << ", "
+                                      << st.to_string();
         }
+        segment_writer.reset();
+    }
 
-        for (int i = 0; i < _num_segment; ++i) {
-            auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-            // Even if an error is encountered, these files that have not been cleaned up
-            // will be cleaned up by the GC background. So here we only print the error
-            // message when we encounter an error.
-            auto st = _fs->delete_file(path);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
-        }
+    if (!_already_built) {
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
     }
@@ -738,8 +754,6 @@ Status VerticalBetaRowsetWriter::final_flush() {
                 }
             }
         }
-
-        segment_writer.reset();
     }
     return Status::OK();
 }
