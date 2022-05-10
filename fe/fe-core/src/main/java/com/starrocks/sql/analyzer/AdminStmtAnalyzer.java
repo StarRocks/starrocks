@@ -2,7 +2,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
 import com.starrocks.cluster.ClusterNamespace;
@@ -12,7 +19,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
-import java.util.List;
 import java.util.Map;
 
 public class AdminStmtAnalyzer {
@@ -88,7 +94,7 @@ public class AdminStmtAnalyzer {
 
         @Override
         public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt,
-                                                        ConnectContext session) {
+                                                         ConnectContext session) {
             String dbName = adminShowReplicaStatusStmt.getDbName();
             String tblName = adminShowReplicaStatusStmt.getTblName();
             if (Strings.isNullOrEmpty(dbName)) {
