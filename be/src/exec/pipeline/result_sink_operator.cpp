@@ -93,7 +93,7 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
     DCHECK(_fetch_data_result.empty());
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->process_chunk(chunk.get());
+    auto status = mysql_writer->process_chunk_for_pipeline(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
         return mysql_writer->try_add_batch(_fetch_data_result).status();

@@ -50,9 +50,12 @@ public:
     // decompose append_chunk into two functions: process_chunk and try_add_batch,
     // the former transform input chunk into TFetchDataResult, the latter add TFetchDataResult
     // to queue whose consumers are rpc threads that invoke fetch_data rpc.
+    StatusOr<TFetchDataResultPtr> process_chunk(vectorized::Chunk* chunk);
     // because the mem buffer used by thrift serialization is limited, we should control the size of single TFetchDataResult,
     // we may split a chunk into multiple TFetchDataResults
-    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk);
+    // In order not to affect the current implementation of the non-pipeline engine,
+    // we only implement it for the pipeline engine
+    StatusOr<TFetchDataResultPtrs> process_chunk_for_pipeline(vectorized::Chunk* chunk);
 
     // try to add result into _sinker if ResultQueue is not full and this operation is
     // non-blocking. return true on success, false in case of that ResultQueue is full.

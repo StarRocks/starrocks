@@ -88,7 +88,7 @@ Status BufferControlBlock::init() {
     return Status::OK();
 }
 
-Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) {
+Status BufferControlBlock::add_batch(TFetchDataResult* result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -105,33 +105,35 @@ Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) 
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
 
-    _process_batch_without_lock(result);
+    if (_waiting_rpc.empty()) {
+        _buffer_rows += num_rows;
+        _batch_queue.push_back(result);
+        _data_arriaval.notify_one();
+    } else {
+        auto* ctx = _waiting_rpc.front();
+        _waiting_rpc.pop_front();
+        ctx->on_data(result, _packet_num);
+        delete result;
+        _packet_num++;
+    }
     return Status::OK();
 }
 
-Status BufferControlBlock::add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results) {
+Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
-
-    size_t total_rows = 0;
-    for (auto& result : results) {
-        total_rows += result->result_batch.rows.size();
-    }
-
-    while ((!_batch_queue.empty() && (total_rows + _buffer_rows) > _buffer_limit) && !_is_cancelled) {
+    int num_rows = result->result_batch.rows.size();
+    while ((!_batch_queue.empty() && (num_rows + _buffer_rows) > _buffer_limit) && !_is_cancelled) {
         _data_removal.wait(l);
     }
-
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
 
-    for (auto& result : results) {
-        _process_batch_without_lock(result);
-    }
+    _process_batch_without_lock(result);
     return Status::OK();
 }
 
@@ -161,16 +163,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResul
         return false;
     }
 
-    if (_waiting_rpc.empty()) {
-        _buffer_rows += num_rows;
-        _batch_queue.push_back(result.release());
-        _data_arriaval.notify_one();
-    } else {
-        auto* ctx = _waiting_rpc.front();
-        _waiting_rpc.pop_front();
-        ctx->on_data(result.get(), _packet_num);
-        _packet_num++;
-    }
+    _process_batch_without_lock(result);
     return true;
 }
 
@@ -190,16 +183,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         return false;
     }
     for (auto& result : results) {
-        if (_waiting_rpc.empty()) {
-            _buffer_rows += result->result_batch.rows.size();
-            _batch_queue.push_back(result.release());
-            _data_arriaval.notify_one();
-        } else {
-            auto* ctx = _waiting_rpc.front();
-            _waiting_rpc.pop_front();
-            ctx->on_data(result.get(), _packet_num);
-            _packet_num++;
-        }
+        _process_batch_without_lock(result);
     }
     return true;
 }

@@ -72,16 +72,21 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
     if (!status.ok()) {
         return status.status();
     }
-    TFetchDataResultPtrs result = std::move(status.value());
-    SCOPED_TIMER(_result_send_timer);
 
-    auto add_status = _sinker->add_batch(result);
+    TFetchDataResultPtr result = std::move(status.value());
+    auto* fetch_data = result.release();
+    SCOPED_TIMER(_result_send_timer);
+    // Note: this method will delete result pointer if status is OK
+    // TODO(kks): use std::unique_ptr instead of raw pointer
+    auto add_status = _sinker->add_batch(fetch_data);
     if (status.ok()) {
         _written_rows += num_rows;
         return add_status;
     } else {
         LOG(WARNING) << "append result batch to sink failed.";
     }
+
+    delete fetch_data;
     return add_status;
 }
 
@@ -90,7 +95,44 @@ Status MysqlResultWriter::close() {
     return Status::OK();
 }
 
-StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
+    SCOPED_TIMER(_append_chunk_timer);
+    int num_rows = chunk->num_rows();
+    auto result = std::make_unique<TFetchDataResult>();
+    auto& result_rows = result->result_batch.rows;
+    result_rows.resize(num_rows);
+
+    vectorized::Columns result_columns;
+    // Step 1: compute expr
+    int num_columns = _output_expr_ctxs.size();
+    result_columns.reserve(num_columns);
+
+    for (int i = 0; i < num_columns; ++i) {
+        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
+        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
+                         ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
+                         : column;
+        result_columns.emplace_back(std::move(column));
+    }
+
+    // Step 2: convert chunk to mysql row format row by row
+    {
+        _row_buffer->reserve(128);
+        SCOPED_TIMER(_convert_tuple_timer);
+        for (int i = 0; i < num_rows; ++i) {
+            DCHECK_EQ(0, _row_buffer->length());
+            for (auto& result_column : result_columns) {
+                result_column->put_mysql_row_buffer(_row_buffer, i);
+            }
+            size_t len = _row_buffer->length();
+            _row_buffer->move_content(&result_rows[i]);
+            _row_buffer->reserve(len * 1.1);
+        }
+    }
+    return result;
+}
+
+StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk_for_pipeline(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     std::vector<TFetchDataResultPtr> results;

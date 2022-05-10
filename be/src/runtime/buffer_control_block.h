@@ -67,8 +67,10 @@ public:
     ~BufferControlBlock();
 
     Status init();
+    // In order not to affect the current implementation of the non-pipeline engine,
+    // this method is reserved and is only used in the non-pipeline engine
+    Status add_batch(TFetchDataResult* result);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
-    Status add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
 
     // non-blocking version of add_batch
     StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
