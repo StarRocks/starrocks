@@ -27,7 +27,6 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -98,8 +97,8 @@ public class TaskManager {
                     if (future.isDone()) {
                         runningIterator.remove();
                         taskHistory.addFirst(taskRun);
-                        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun,
-                                Constants.TaskRunStatus.RUNNING, taskRun.getStatus());
+                        // TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun,
+                        //        Constants.TaskRunStatus.RUNNING, taskRun.getStatus());
                         // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
                     }
                 }
@@ -118,9 +117,9 @@ public class TaskManager {
                             pendingTaskRun.setStatus(Constants.TaskRunStatus.RUNNING);
                             runningTaskRunMap.put(mvTableId, pendingTaskRun);
                             taskRunExecutor.executeTaskRun(pendingTaskRun);
-                            TaskRunStatusChange statusChange =
-                                    new TaskRunStatusChange(pendingTaskRun, Constants.TaskRunStatus.PENDING,
-                                            Constants.TaskRunStatus.RUNNING);
+                            // TaskRunStatusChange statusChange =
+                            //        new TaskRunStatusChange(pendingTaskRun, Constants.TaskRunStatus.PENDING,
+                            //                Constants.TaskRunStatus.RUNNING);
                             // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
                         }
                     }
@@ -254,67 +253,6 @@ public class TaskManager {
 
     private void unlock() {
         this.lock.unlock();
-    }
-
-    public void replayCreateTask(Task task) {
-        createTask(task);
-    }
-
-    public void replayDropTask(String taskName) {
-        dropTask(taskName);
-    }
-
-    public void replayAddTaskRun(TaskRun taskRun) {
-        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskRun.getTaskId());
-        if (taskRunQueue == null) {
-            taskRunQueue = Queues.newConcurrentLinkedQueue();
-            taskRunQueue.offer(taskRun);
-            pendingTaskRunMap.put(taskRun.getTaskId(), taskRunQueue);
-        } else {
-            taskRunQueue.offer(taskRun);
-        }
-    }
-
-    public void replayTaskRunStatusChange(TaskRunStatusChange statusChange) {
-        Constants.TaskRunStatus fromStatus = statusChange.getFromStatus();
-        Constants.TaskRunStatus toStatus = statusChange.getToStatus();
-        long taskId = statusChange.getTaskId();
-        if (fromStatus == Constants.TaskRunStatus.PENDING) {
-            if (toStatus == Constants.TaskRunStatus.RUNNING) {
-                Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
-                if (taskRunQueue != null && taskRunQueue.size() != 0) {
-                    TaskRun pendingTaskRun = taskRunQueue.poll();
-                    pendingTaskRun.setStatus(Constants.TaskRunStatus.RUNNING);
-                    runningTaskRunMap.put(taskId, pendingTaskRun);
-                    taskRunExecutor.executeTaskRun(pendingTaskRun);
-                }
-            } else if (toStatus == Constants.TaskRunStatus.CANCELED) {
-                Queue<TaskRun> pendingTaskRunQueue = pendingTaskRunMap.get(taskId);
-                if (pendingTaskRunQueue != null) {
-                    Iterator<TaskRun> queueIter = pendingTaskRunQueue.iterator();
-                    while (queueIter.hasNext()) {
-                        TaskRun pendingTaskRun = queueIter.next();
-                        if (Objects.equals(pendingTaskRun.getQueryId(), statusChange.getQueryId())) {
-                            pendingTaskRun.setStatus(toStatus);
-                            taskHistory.addFirst(pendingTaskRun);
-                            queueIter.remove();
-                        }
-                    }
-                }
-            }
-        } else if (fromStatus == Constants.TaskRunStatus.RUNNING) {
-            if (toStatus == Constants.TaskRunStatus.SUCCESS ||
-                    toStatus == Constants.TaskRunStatus.CANCELED ||
-                    toStatus == Constants.TaskRunStatus.FAILED) {
-                TaskRun taskRun = runningTaskRunMap.remove(taskId);
-                if (toStatus == Constants.TaskRunStatus.FAILED) {
-                    taskRun.setErrorMsg(statusChange.getErrorMsg());
-                    taskRun.setErrorCode(statusChange.getErrorCode());
-                }
-                taskRun.setStatus(toStatus);
-                taskHistory.addFirst(taskRun);
-            }
-        }
     }
 
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
