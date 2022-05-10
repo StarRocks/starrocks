@@ -21,11 +21,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -38,7 +34,8 @@ public class HiveRepository {
     Map<String, HiveMetaCache> metaCaches = Maps.newHashMap();
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
 
-    Executor executor = Executors.newCachedThreadPool();
+    Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_load_threads, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
+
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
     private final ExecutorService partitionDaemonExecutor =
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
