@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
@@ -243,6 +244,8 @@ public class DdlExecutor {
             globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
         } else if (ddlStmt instanceof DropCatalogStmt) {
             globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getName());
+        } else if (ddlStmt instanceof SubmitTaskStmt) {
+            throw new DdlException("SubmitTaskStmt is unsupported.");
         } else {
             throw new DdlException("Unknown statement.");
         }

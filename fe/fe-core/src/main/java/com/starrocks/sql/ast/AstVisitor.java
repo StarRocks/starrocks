@@ -131,6 +131,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSubmitTaskStmt(SubmitTaskStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
