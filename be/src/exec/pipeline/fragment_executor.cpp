@@ -52,21 +52,6 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
-                                            int node_id) {
-    Morsels morsels;
-
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
-        }
-    }
-    return morsels;
-}
-
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     DCHECK(request.__isset.desc_tbl);
     DCHECK(request.__isset.fragment);

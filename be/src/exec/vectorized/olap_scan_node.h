@@ -52,9 +52,6 @@ public:
     Status close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
-            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
-            const TExecPlanFragmentParams& request) override;
 
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
@@ -67,6 +64,9 @@ public:
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
+            const TExecPlanFragmentParams& request) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
