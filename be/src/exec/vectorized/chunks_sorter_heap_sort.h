@@ -209,13 +209,14 @@ private:
 };
 } // namespace detail
 
-class HeapChunkSorter final : public ChunksSorter {
+class ChunksSorterHeapSort final : public ChunksSorter {
 public:
     using DataSegmentPtr = std::shared_ptr<DataSegment>;
-    HeapChunkSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                    const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset, size_t limit)
+    ChunksSorterHeapSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                         const std::string& sort_keys, size_t offset, size_t limit)
             : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true), _offset(offset), _limit(limit) {}
-    ~HeapChunkSorter() = default;
+    ~ChunksSorterHeapSort() = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;

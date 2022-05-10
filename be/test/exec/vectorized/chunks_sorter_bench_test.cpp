@@ -12,9 +12,9 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config.h"
-#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
+#include "exec/vectorized/chunks_sorter_heap_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -212,8 +212,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
             break;
         }
         case HeapSort: {
-            sorter.reset(new HeapChunkSorter(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                             limit_rows));
+            sorter.reset(new ChunksSorterHeapSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
+                                                  limit_rows));
             expected_rows = limit_rows;
             break;
         }
