@@ -825,7 +825,8 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     struct VersionCmp {
         bool operator()(const std::unique_ptr<TAgentTaskRequest>& lhs,
                         const std::unique_ptr<TAgentTaskRequest>& rhs) const {
-            if (lhs->publish_version_req.__isset.commit_timestamp && rhs->publish_version_req.__isset.commit_timestamp) {
+            if (lhs->publish_version_req.__isset.commit_timestamp &&
+                rhs->publish_version_req.__isset.commit_timestamp) {
                 if (lhs->publish_version_req.commit_timestamp > rhs->publish_version_req.commit_timestamp) {
                     return true;
                 }
