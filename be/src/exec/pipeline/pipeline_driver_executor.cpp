@@ -2,14 +2,22 @@
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 
+<<<<<<< HEAD
+=======
+#include <memory>
+
+#include "exec/workgroup/work_group.h"
+>>>>>>> de31d7264 ([Feature] add some metrics for pipeline (#5847))
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
-GlobalDriverExecutor::GlobalDriverExecutor(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group)
-        : _enable_resource_group(enable_resource_group),
+GlobalDriverExecutor::GlobalDriverExecutor(std::string name, std::unique_ptr<ThreadPool> thread_pool,
+                                           bool enable_resource_group)
+        : Base(name),
+          _enable_resource_group(enable_resource_group),
           _driver_queue(enable_resource_group
                                 ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
                                 : std::make_unique<QuerySharedDriverQueue>()),
@@ -18,10 +26,33 @@ GlobalDriverExecutor::GlobalDriverExecutor(std::unique_ptr<ThreadPool> thread_po
           _exec_state_reporter(new ExecStateReporter()) {}
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
+    {
+        // unregist hook
+        auto metrics = StarRocksMetrics::instance()->metrics();
+        metrics->deregister_hook("driver_queue_len");
+        metrics->deregister_hook("poller_block_queue_len");
+        _driver_queue_len.reset();
+        _driver_poller_block_queue_len.reset();
+    }
     _driver_queue->close();
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
+    {
+        // regist pipeline metrics
+        auto metrics = StarRocksMetrics::instance()->metrics();
+        auto regist_metric = [this, metrics](const std::string& metric_name, std::unique_ptr<UIntGauge>& metric,
+                                             const std::function<unsigned long()> provider) {
+            std::string full_name = _name + "_" + metric_name;
+            metric = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+            metrics->register_metric(full_name, metric.get());
+            metrics->register_hook(full_name, [&metric, provider]() { metric->set_value(provider()); });
+        };
+        regist_metric("driver_queue_len", _driver_queue_len, [this]() { return _driver_queue->size(); });
+        regist_metric("poller_block_queue_len", _driver_poller_block_queue_len,
+                      [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
+    }
+
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
