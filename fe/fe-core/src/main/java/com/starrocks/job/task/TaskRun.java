@@ -168,8 +168,15 @@ public class TaskRun implements Writable {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(definition);
-        ctx.getState().reset();
-        ctx.setQueryId(UUID.fromString(queryId));
+        // copy a ConnectContext to avoid concurrency leading to abnormal results.
+        ConnectContext newCtx = new ConnectContext();
+        newCtx.setCluster(ctx.getClusterName());
+        newCtx.setCatalog(ctx.getGlobalStateMgr());
+        newCtx.setDatabase(ctx.getDatabase());
+        newCtx.setQualifiedUser(ctx.getQualifiedUser());
+        newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
+        newCtx.getState().reset();
+        newCtx.setQueryId(UUID.fromString(queryId));
         SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
         if (properties != null) {
             for (String key : properties.keySet()) {
@@ -177,11 +184,11 @@ public class TaskRun implements Writable {
                         true);
             }
         }
-        ctx.setSessionVariable(sessionVariable);
-        taskRunContext.setCtx(ctx);
+        newCtx.setSessionVariable(sessionVariable);
+        taskRunContext.setCtx(newCtx);
         processor.processTaskRun(taskRunContext);
-        QueryState queryState = ctx.getState();
-        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+        QueryState queryState = newCtx.getState();
+        if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             errorMsg = queryState.getErrorMessage();
             if (queryState.getErrorCode() != null) {
                 errorCode = queryState.getErrorCode().getCode();
