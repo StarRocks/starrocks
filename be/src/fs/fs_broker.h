@@ -13,12 +13,15 @@ class TBrokerFileStatus;
 class TFileBrokerServiceClient;
 class TNetworkAddress;
 
+// TODO: Remove BrokerFileSystem
 class BrokerFileSystem : public FileSystem {
 public:
     // FIXME: |timeout_ms| is unused now.
     BrokerFileSystem(const TNetworkAddress& broker_addr, std::map<std::string, std::string> properties,
                      int timeout_ms = DEFAULT_TIMEOUT_MS)
             : _broker_addr(broker_addr), _properties(std::move(properties)), _timeout_ms(timeout_ms) {}
+
+    Type type() const override { return BROKER; }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
 

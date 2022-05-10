@@ -191,6 +191,8 @@ public:
     S3FileSystem(S3FileSystem&&) = delete;
     void operator=(S3FileSystem&&) = delete;
 
+    Type type() const override { return S3; }
+
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
