@@ -55,10 +55,10 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vecto
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
-#define HASH_MAP_METHOD(NAME)                                                                                         \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+#define HASH_MAP_METHOD(NAME)                                                                   \
+    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
+            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
         else {
             DCHECK(false);
@@ -69,10 +69,10 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vecto
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME)                      \
+    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME)                   \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
                     *_aggregator->hash_set_variant().NAME, state->chunk_size(), chunk);
-    APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {
         DCHECK(false);

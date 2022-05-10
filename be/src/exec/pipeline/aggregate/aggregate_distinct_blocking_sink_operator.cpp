@@ -29,10 +29,10 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
 
     if (false) {
     }
-#define HASH_SET_METHOD(NAME)                                                                                         \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+#define HASH_SET_METHOD(NAME)                                                                   \
+    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
+            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
@@ -56,11 +56,11 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
         if (false) {
         }
 #define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME) {                         \
+    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) {                      \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
                 *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
     }
-        APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
         _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +

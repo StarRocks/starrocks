@@ -61,11 +61,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 if (false) {
                 }
 #define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {                                  \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
     }
-                APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
                 _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
@@ -103,10 +103,10 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
         if (false) {
         }
-#define HASH_MAP_METHOD(NAME)                                                                             \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) _aggregator->it_hash() = \
+#define HASH_MAP_METHOD(NAME)                                                                                \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) _aggregator->it_hash() = \
             _aggregator->hash_map_variant().NAME->hash_map.begin();
-        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
@@ -144,10 +144,10 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         if (false) {
         }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                                  \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                     *_aggregator->hash_map_variant().NAME, chunk_size, chunk);
-        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     }
 
