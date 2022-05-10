@@ -44,6 +44,11 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        boolean hasNoGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
+        // check cbo is enabled and hasNoGroup is true
+        if (context.getSessionVariable().isCboCteReuse() && hasNoGroup) {
+            return false;
+        }
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
