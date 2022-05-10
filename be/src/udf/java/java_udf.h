@@ -69,6 +69,11 @@ public:
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
+    // type: PrimitiveType
+    // col: result column
+    // jcolumn: Integer[]/String[]
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
+
     DECLARE_NEW_BOX(uint8_t, Boolean)
     DECLARE_NEW_BOX(int8_t, Byte)
     DECLARE_NEW_BOX(int16_t, Short)
@@ -129,6 +134,7 @@ private:
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
+    jmethodID _get_boxed_result;
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 };

@@ -17,6 +17,7 @@
 #include "fmt/core.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
+#include "udf/java/java_native_method.h"
 #include "udf/udf.h"
 #include "util/defer_op.h"
 
@@ -43,6 +44,14 @@
 namespace starrocks::vectorized {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wwrite-strings"
+static JNINativeMethod java_native_methods[] = {
+        {"resizeStringData", "(JI)J", (void*)&JavaNativeMethods::resizeStringData},
+        {"getAddrs", "(J)[J", (void*)&JavaNativeMethods::getAddrs},
+};
+#pragma GCC diagnostic pop
 
 // local object reference guard.
 // The objects inside are automatically call DeleteLocalRef in the life object.
@@ -97,6 +106,10 @@ void JVMFunctionHelper::_init() {
 
     std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_UDF_HELPER_NAME);
     _udf_helper_class = _env->FindClass(name.c_str());
+    DCHECK(_udf_helper_class != nullptr);
+    int res = _env->RegisterNatives(_udf_helper_class, java_native_methods,
+                                    sizeof(java_native_methods) / sizeof(java_native_methods[0]));
+    DCHECK_EQ(res, 0);
     _create_boxed_array = _env->GetStaticMethodID(_udf_helper_class, "createBoxedArray",
                                                   "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
 
@@ -112,10 +125,13 @@ void JVMFunctionHelper::_init() {
                                                   "(Ljava/lang/Object;Ljava/lang/reflect/Method;I)[Ljava/lang/Object;");
     _int_batch_call = _env->GetStaticMethodID(_udf_helper_class, "batchCall",
                                               "([Ljava/lang/Object;Ljava/lang/reflect/Method;I)[I");
+    _get_boxed_result =
+            _env->GetStaticMethodID(_udf_helper_class, "getResultFromBoxedArray", "(IILjava/lang/Object;J)V");
     _direct_buffer_class = _env->FindClass("java/nio/ByteBuffer");
     _direct_buffer_clear = _env->GetMethodID(_direct_buffer_class, "clear", "()Ljava/nio/Buffer;");
     DCHECK(_batch_call);
     DCHECK(_batch_call_no_args);
+    DCHECK(_get_boxed_result);
     DCHECK(_direct_buffer_clear);
 }
 
@@ -177,6 +193,7 @@ void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) 
     }
 
 std::string JVMFunctionHelper::array_to_string(jobject object) {
+    _env->ExceptionClear();
     std::string value;
     jmethodID arrayToStringMethod =
             _env->GetStaticMethodID(_jarrays_class, "toString", "([Ljava/lang/Object;)Ljava/lang/String;");
@@ -189,6 +206,7 @@ std::string JVMFunctionHelper::array_to_string(jobject object) {
 }
 
 std::string JVMFunctionHelper::to_string(jobject obj) {
+    _env->ExceptionClear();
     std::string value;
     auto method = getToStringMethod(_object_class);
     auto res = _env->CallObjectMethod(obj, method);
@@ -297,6 +315,14 @@ jobject JVMFunctionHelper::int_batch_call(FunctionContext* ctx, jobject callers,
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _int_batch_call, callers, method, rows);
     check_call_exception(_env, ctx);
     return res;
+}
+
+void JVMFunctionHelper::get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn,
+                                                    int rows) {
+    col->resize(rows);
+    _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
+                               reinterpret_cast<int64_t>(col));
+    check_call_exception(_env, ctx);
 }
 
 DEFINE_NEW_BOX(boolean, uint8_t, Boolean, Boolean);
