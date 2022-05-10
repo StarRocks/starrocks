@@ -1252,7 +1252,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         LOG(INFO) << "tablet's state=" << new_tablet->tablet_state()
                   << " the convert job already finished, check its version"
                   << " res=" << st.to_string();
-        return Status::InternalError("new tablet's meta is invalid");
+        return st;
     }
 
     LOG(INFO) << "finish to validate alter tablet request. begin to convert data from base tablet to new tablet"
