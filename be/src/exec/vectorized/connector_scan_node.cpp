@@ -143,21 +143,6 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     return operators;
 }
 
-StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams&) {
-    Morsels morsels;
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
-        }
-    }
-
-    return morsels;
-}
-
 // ==============================================================
 
 Status ConnectorScanNode::prepare(RuntimeState* state) {

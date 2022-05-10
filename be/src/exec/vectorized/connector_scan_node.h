@@ -32,9 +32,6 @@ public:
     // for pipline APIs
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
-            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
-            const TExecPlanFragmentParams& request) override;
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
 
