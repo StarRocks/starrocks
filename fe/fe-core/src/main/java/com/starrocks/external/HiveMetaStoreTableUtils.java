@@ -142,6 +142,9 @@ public class HiveMetaStoreTableUtils {
         }
     }
 
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog in the future.
     public static HiveTable convertToSRTable(Table hiveTable, String resoureName) throws DdlException {
         if (hiveTable.getTableType().equals("VIRTUAL_VIEW")) {
             throw new DdlException("Hive view table is not supported.");
@@ -156,13 +159,14 @@ public class HiveMetaStoreTableUtils {
             fullSchema.add(column);
         }
 
+        // Adding some necessary properties to adapt initialization of HiveTable.
         Map<String, String> properties = Maps.newHashMap();
         properties.put(HiveTable.HIVE_DB, hiveTable.getDbName());
         properties.put(HiveTable.HIVE_TABLE, hiveTable.getTableName());
         properties.put(HiveTable.HIVE_METASTORE_URIS, resoureName);
         properties.put(HiveTable.HIVE_RESOURCE, resoureName);
 
-        return new HiveTable(connectorTableIdIdGenerator.getMaxId().asInt(), hiveTable.getTableName(),
+        return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
                 fullSchema, properties, hiveTable);
     }
 
@@ -204,5 +208,12 @@ public class HiveMetaStoreTableUtils {
             }
         }
         return numRows;
+    }
+
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog
+    public static boolean isInternalCatalog(String resourceName) {
+        return !resourceName.startsWith("thrift://");
     }
 }

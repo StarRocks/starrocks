@@ -66,7 +66,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
 import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
-import static com.starrocks.external.hive.HiveRepository.isInternalCatalog;
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
  * External hive table
@@ -99,11 +99,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private String hiveTable;
     private String resourceName;
     private String hdfsPath;
-    private List<String> partColumnNames = Lists.newArrayList();
+    private final List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
-    private List<String> dataColumnNames = Lists.newArrayList();
-    private Map<String, String> hiveProperties = Maps.newHashMap();
+    private final List<String> dataColumnNames = Lists.newArrayList();
+    private final Map<String, String> hiveProperties = Maps.newHashMap();
 
     private HiveMetaStoreTableInfo hmsTableInfo;
 
