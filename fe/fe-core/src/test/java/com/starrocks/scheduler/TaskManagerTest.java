@@ -1,13 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.job;
+package com.starrocks.scheduler;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRun;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
