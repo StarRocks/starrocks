@@ -1,11 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.DdlStmt;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 
 // ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
