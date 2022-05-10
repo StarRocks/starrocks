@@ -101,7 +101,7 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
     _cv.notify_one();
 }
 
-size_t QuerySharedDriverQueue::size() {
+size_t QuerySharedDriverQueue::size() const {
     size_t size = 0;
     for (const auto& sub_queue : _queues) {
         size += sub_queue.size();
@@ -305,9 +305,7 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 
-size_t DriverQueueWithWorkGroup::size() {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
+size_t DriverQueueWithWorkGroup::size() const {
     size_t size = 0;
     for (auto wg : _ready_wgs) {
         size += wg->driver_queue()->size();
