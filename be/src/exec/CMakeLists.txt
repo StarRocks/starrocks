@@ -68,7 +68,7 @@ set(EXEC_FILES
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
     vectorized/chunks_sorter.cpp
-    vectorized/chunk_sorter_heapsorter.cpp
+    vectorized/chunks_sorter_heap_sort.cpp
     vectorized/chunks_sorter_topn.cpp
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp

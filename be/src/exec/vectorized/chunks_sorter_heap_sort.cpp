@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/vectorized//chunk_sorter_heapsorter.h"
+#include "exec/vectorized/chunks_sorter_heap_sort.h"
 
 #include <functional>
 #include <memory>
@@ -16,7 +16,7 @@
 
 namespace starrocks::vectorized {
 
-Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
+Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
 
     if (chunk->is_empty()) {
@@ -51,11 +51,11 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
         // Special optimization for single columns
         if (_sort_exprs->size() == 1) {
             switch ((*_sort_exprs)[0]->root()->type().type) {
-#define M(NAME)                                                                                            \
-    case PrimitiveType::NAME: {                                                                            \
-        _do_filter_data = std::bind(&HeapChunkSorter::_do_filter_data_for_type<PrimitiveType::NAME>, this, \
-                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);  \
-        break;                                                                                             \
+#define M(NAME)                                                                                                 \
+    case PrimitiveType::NAME: {                                                                                 \
+        _do_filter_data = std::bind(&ChunksSorterHeapSort::_do_filter_data_for_type<PrimitiveType::NAME>, this, \
+                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);       \
+        break;                                                                                                  \
     }
                 APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
@@ -97,15 +97,15 @@ Status HeapChunkSorter::update(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-SortedRuns HeapChunkSorter::get_sorted_runs() {
+SortedRuns ChunksSorterHeapSort::get_sorted_runs() {
     return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
 }
 
-size_t HeapChunkSorter::get_output_rows() const {
+size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 
-Status HeapChunkSorter::done(RuntimeState* state) {
+Status ChunksSorterHeapSort::done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
@@ -122,7 +122,7 @@ Status HeapChunkSorter::done(RuntimeState* state) {
     return Status::OK();
 }
 
-void HeapChunkSorter::get_next(ChunkPtr* chunk, bool* eos) {
+void ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     ScopedTimer<MonotonicStopWatch> timer(_output_timer);
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
@@ -136,7 +136,7 @@ void HeapChunkSorter::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
-bool HeapChunkSorter::pull_chunk(ChunkPtr* chunk) {
+bool ChunksSorterHeapSort::pull_chunk(ChunkPtr* chunk) {
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
         return true;
@@ -153,7 +153,8 @@ bool HeapChunkSorter::pull_chunk(ChunkPtr* chunk) {
 }
 
 template <PrimitiveType TYPE>
-void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter, int row_sz) {
+void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter,
+                                                    int row_sz) {
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
 
@@ -214,7 +215,7 @@ void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder
     }
 }
 
-int HeapChunkSorter::_filter_data(detail::ChunkHolder* chunk_holder, int row_sz) {
+int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int row_sz) {
     ScopedTimer<MonotonicStopWatch> timer(_sort_filter_costs);
     // Filter greater or equal top_cursor columns
     const auto& top_cursor = _sort_heap->top();
@@ -241,7 +242,7 @@ int HeapChunkSorter::_filter_data(detail::ChunkHolder* chunk_holder, int row_sz)
     return chunk_holder->value()->chunk->filter(filter);
 }
 
-void HeapChunkSorter::setup_runtime(RuntimeProfile* profile) {
+void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile) {
     ChunksSorter::setup_runtime(profile);
     _sort_filter_costs = ADD_TIMER(profile, "SortFilterCost");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
