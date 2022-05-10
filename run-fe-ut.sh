@@ -107,7 +107,8 @@ else
         # eg:
         # sh run-fe-ut.sh --run com.starrocks.utframe.Demo
         # sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2
-        ${MVN_CMD} test -DfailIfNoTests=false -D test=$1
+        # set trimStackTrace to false to show full stack when debugging specified class or case
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$1
     else    
         echo "Run Frontend UT"
         ${MVN_CMD} test -DfailIfNoTests=false 
