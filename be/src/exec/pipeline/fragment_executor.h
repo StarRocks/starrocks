@@ -3,6 +3,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -22,10 +23,12 @@ public:
     Status execute(ExecEnv* exec_env);
 
 private:
+    void _fail_cleanup();
     void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
                                           const TDataSink& t_datasink, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
+    workgroup::WorkGroup* _wg = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

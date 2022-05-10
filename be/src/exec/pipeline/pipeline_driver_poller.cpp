@@ -27,7 +27,7 @@ void PipelineDriverPoller::shutdown() {
 
 void PipelineDriverPoller::run_internal() {
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
-    typeof(this->_blocked_drivers) local_blocked_drivers;
+    DriverList local_blocked_drivers;
     int spin_count = 0;
     std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
