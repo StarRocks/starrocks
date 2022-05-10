@@ -125,7 +125,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         _rowset_meta->set_num_delete_files(_segment_has_deletes.size());
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
-        if (_context.partial_update_tablet_schema) {
+        // if load only has delete, we can skip the partial update logic
+        if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
