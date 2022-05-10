@@ -13,7 +13,7 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
     private IntervalLiteral intervalLiteral;
 
     public AsyncRefreshSchemeDesc(LocalDateTime startTime, IntervalLiteral intervalLiteral) {
-        this.type = RefreshType.ASYNC;
+        super(RefreshType.ASYNC);
         this.startTime = startTime;
         this.intervalLiteral = intervalLiteral;
     }

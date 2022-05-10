@@ -444,11 +444,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             if (context.primaryExpression() != null) {
                 throw new IllegalArgumentException(
-                        "Refresh type sync no support manual partition");
+                        "Partition by is not supported by SYNC refresh type int materialized view");
             }
             if (context.distributionDesc() != null) {
                 throw new IllegalArgumentException(
-                        "Refresh type sync no support manual distribution");
+                        "Distribution by is not supported by SYNC refresh type in materialized view");
             }
             String sql = AST2SQL.toString(queryStatement);
             StatementBase statement = SqlParser.parseWithOldParser(sql, sqlMode, 0);

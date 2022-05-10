@@ -9,6 +9,10 @@ public class RefreshSchemeDesc implements ParseNode {
 
     protected RefreshType type;
 
+    public RefreshSchemeDesc(RefreshType type) {
+        this.type = type;
+    }
+
     public RefreshType getType() {
         return type;
     }

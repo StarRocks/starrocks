@@ -400,7 +400,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view partition exp column can't find in query statement");
+            assertEquals(e.getMessage(), "Materialized view partition exp column is not found in query statement");
         }
     }
 
@@ -610,7 +610,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Refresh type sync no support manual partition");
+            assertEquals(e.getMessage(), "Partition by is not supported by SYNC refresh type int materialized view");
         }
     }
 
@@ -623,7 +623,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Refresh type sync no support manual distribution");
+            assertEquals(e.getMessage(), "Distribution by is not supported by SYNC refresh type in materialized view");
         }
     }
 
@@ -681,7 +681,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view do not support table which is in other database");
+            assertEquals(e.getMessage(), "Materialized view do not support table which is in other database:default_cluster:test2");
         }
     }
 
@@ -698,7 +698,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view only support olap tables");
+            assertEquals(e.getMessage(), "Materialized view only support olap table:mysql_external_table type:MYSQL");
         }
 
     }
@@ -717,7 +717,43 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(),
-                    "Materialized view query statement select item date_trunc('month', `tbl1`.`k1`) must has alias except base select item");
+                    "Materialized view query statement select item date_trunc('month', `tbl1`.`k1`) must has an alias");
+        }
+    }
+
+    @Test
+    public void testSelectItemHasNonDeterministicFunction1(){
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select rand() s1, date_trunc('month',tbl1.k1) ss, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Materialized view query statement select item rand() not supported nondeterministic function");
+        }
+    }
+
+    @Test
+    public void testSelectItemHasNonDeterministicFunction2(){
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select k2, rand()+rand() s1, date_trunc('month',tbl1.k1) ss from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Materialized view query statement select item rand() not supported nondeterministic function");
         }
     }
 

@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -68,8 +69,10 @@ public class MaterializedViewAnalyzer {
                 } else if (!(selectListItem.getExpr() instanceof SlotRef)
                         && selectListItem.getAlias() == null) {
                     throw new SemanticException("Materialized view query statement select item " +
-                            selectListItem.getExpr().toSql() + " must has alias except base select item");
+                            selectListItem.getExpr().toSql() + " must has an alias");
                 }
+                // check select item has nondeterministic function
+                checkNondeterministicFunction(selectListItem.getExpr());
             }
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
@@ -77,25 +80,28 @@ public class MaterializedViewAnalyzer {
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
             tableNameTableMap.forEach((tableName, table) -> {
                 if (!tableName.getDb().equals(statement.getTableName().getDb())) {
-                    throw new SemanticException("Materialized view do not support table which is in other database");
+                    throw new SemanticException(
+                            "Materialized view do not support table which is in other database:" + tableName.getDb());
                 }
                 if (!(table instanceof OlapTable)) {
-                    throw new SemanticException("Materialized view only support olap tables");
+                    throw new SemanticException(
+                            "Materialized view only support olap table:" + tableName.getTbl() + " type:" +
+                                    table.getType().name());
                 }
             });
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             // get outputExpressions and convert it to columns which in selectRelation
-            // write the columns into createMaterializedViewStatement
+            // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
-            setColumn(statement, selectRelation, columnExprMap);
+            genColumnAndSetIntoStmt(statement, selectRelation, columnExprMap);
             // some check if partition exp exists
             if (expressionPartitionDesc != null) {
                 // check partition expression all in column list which in createMaterializedViewStatement
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(expressionPartitionDesc, statement, columnExprMap);
-                // check partition expression functions is in allow list if it exists
+                // check whether partition expression functions are allowed if it exists
                 checkPartitionExpParams(expressionPartitionDesc);
-                // check partition key must be base table partition key
+                // check partition key must be base table's partition key
                 checkPartitionKeyWithBaseTable(expressionPartitionDesc, tableNameTableMap);
             }
             // check and analyze distribution
@@ -105,8 +111,21 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
-        private void setColumn(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
-                               Map<Column, Expr> columnExprMap) {
+        private void checkNondeterministicFunction(Expr expr) {
+            if (expr instanceof FunctionCallExpr) {
+                if (((FunctionCallExpr) expr).isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function");
+                }
+            }
+            ArrayList<Expr> children = expr.getChildren();
+            for (Expr child : children) {
+                checkNondeterministicFunction(child);
+            }
+        }
+
+        private void genColumnAndSetIntoStmt(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
+                                             Map<Column, Expr> columnExprMap) {
             List<Column> mvColumns = Lists.newArrayList();
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
@@ -118,7 +137,8 @@ public class MaterializedViewAnalyzer {
             statement.setMvColumnItems(mvColumns);
         }
 
-        private void checkExpInColumn(ExpressionPartitionDesc expressionPartitionDesc, CreateMaterializedViewStatement statement,
+        private void checkExpInColumn(ExpressionPartitionDesc expressionPartitionDesc,
+                                      CreateMaterializedViewStatement statement,
                                       Map<Column, Expr> columnExprMap) {
             List<Column> mvColumnItems = statement.getMvColumnItems();
             SlotRef slotRef = expressionPartitionDesc.getSlotRef();
@@ -129,7 +149,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
             if (expressionPartitionDesc.getExpr() == null) {
-                throw new SemanticException("Materialized view partition exp column can't find in query statement");
+                throw new SemanticException("Materialized view partition exp column is not found in query statement");
             }
         }
 

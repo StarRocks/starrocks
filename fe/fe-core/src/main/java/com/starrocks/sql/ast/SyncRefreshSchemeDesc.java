@@ -7,7 +7,7 @@ import com.starrocks.catalog.RefreshType;
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public SyncRefreshSchemeDesc() {
-        this.type = RefreshType.SYNC;
+        super(RefreshType.SYNC);
     }
 
 }

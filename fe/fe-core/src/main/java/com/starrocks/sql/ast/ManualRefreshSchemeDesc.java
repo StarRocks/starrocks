@@ -7,7 +7,7 @@ import com.starrocks.catalog.RefreshType;
 public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public ManualRefreshSchemeDesc() {
-        this.type = RefreshType.MANUAL;
+        super(RefreshType.MANUAL);
     }
 
 }
