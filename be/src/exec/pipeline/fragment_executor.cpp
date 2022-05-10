@@ -4,6 +4,7 @@
 
 #include <unordered_map>
 
+#include "common/config.h"
 #include "exec/exchange_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -165,7 +166,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     const auto& query_globals = request.query_globals;
     const auto& query_options = request.query_options;
     const auto& t_desc_tbl = request.desc_tbl;
-    const int32_t degree_of_parallelism = _calc_dop(request);
+    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
 
     fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
@@ -224,24 +225,24 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     return Status::OK();
 }
 
-int32_t FragmentExecutor::_calc_dop(const TExecPlanFragmentParams& request) const {
+int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
         degree_of_parallelism = request.pipeline_dop;
     } else {
         // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
+        degree_of_parallelism = std::max<int32_t>(1, exec_env->max_executor_threads() / 2);
     }
     return degree_of_parallelism;
 }
 
-Status FragmentExecutor::_prepare_exec_plan(const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.params;
     const auto& fragment = request.fragment;
-    const int32_t degree_of_parallelism = _calc_dop(request);
+    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
 
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
@@ -396,7 +397,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     ASSIGN_OR_RETURN(auto fragment_ctx, _prepare_fragment_ctx(request));
     ASSIGN_OR_RETURN(auto wg, _prepare_workgroup(request));
     RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request, wg));
-    RETURN_IF_ERROR(_prepare_exec_plan(request));
+    RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request, wg));
 

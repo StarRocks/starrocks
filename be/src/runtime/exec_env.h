@@ -172,6 +172,7 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+    int64_t max_executor_threads() { return _max_executor_threads; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -233,6 +234,7 @@ private:
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     pipeline::DriverLimiter* _driver_limiter;
+    int64_t _max_executor_threads; // Max thread number of executor
 
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;

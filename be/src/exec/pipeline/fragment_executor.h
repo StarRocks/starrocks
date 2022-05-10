@@ -26,7 +26,7 @@ public:
 
 private:
     void _fail_cleanup();
-    int32_t _calc_dop(const TExecPlanFragmentParams& request) const;
+    int32_t _calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const;
 
     // Several steps of prepare a fragment
     // 1. query context
@@ -40,7 +40,7 @@ private:
     StatusOr<workgroup::WorkGroupPtr> _prepare_workgroup(const TExecPlanFragmentParams& request);
     Status _prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                   workgroup::WorkGroupPtr wg);
-    Status _prepare_exec_plan(const TExecPlanFragmentParams& request);
+    Status _prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
     Status _prepare_global_dict(const TExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                     workgroup::WorkGroupPtr wg);

@@ -177,32 +177,34 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    auto max_thread_num = std::thread::hardware_concurrency();
+    _max_executor_threads = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
-        max_thread_num = config::pipeline_exec_thread_pool_thread_num;
+        _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
-    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
+    _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
+    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_executor") // pipeline executor
                             .set_min_threads(0)
-                            .set_max_threads(max_thread_num)
+                            .set_max_threads(_max_executor_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&driver_executor_thread_pool));
     _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
-    _driver_executor->initialize(max_thread_num);
+    _driver_executor->initialize(_max_executor_threads);
 
-    _driver_limiter = new pipeline::DriverLimiter(max_thread_num * config::pipeline_max_num_drivers_per_exec_thread);
+    _driver_limiter =
+            new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
                             .set_min_threads(0)
-                            .set_max_threads(max_thread_num)
+                            .set_max_threads(_max_executor_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&wg_driver_executor_thread_pool));
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
-    _wg_driver_executor->initialize(max_thread_num);
+    _wg_driver_executor->initialize(_max_executor_threads);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
