@@ -67,9 +67,11 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
 
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
-        _fill_statistic_data_v1(version, result_columns, chunk, result.get());
+        RETURN_IF_ERROR_WITH_WARN(_fill_statistic_data_v1(version, result_columns, chunk, result.get()),
+                                  "Fill statistic data failed");
     } else if (version == DICT_STATISTIC_DATA_VERSION) {
-        _fill_dict_statistic_data(version, result_columns, chunk, result.get());
+        RETURN_IF_ERROR_WITH_WARN(_fill_dict_statistic_data(version, result_columns, chunk, result.get()),
+                                  "Fill dict statistic data failed");
     }
 
     // Step 4: send
@@ -85,8 +87,8 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
-void StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
-                                                      const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
+                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
     auto versioncolumn = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1]);
@@ -109,12 +111,13 @@ void StatisticResultWriter::_fill_dict_statistic_data(int version, const vectori
 
     ThriftSerializer serializer(true, chunk->memory_usage());
     for (int i = 0; i < num_rows; ++i) {
-        serializer.serialize(&data_list[i], &result->result_batch.rows[i]);
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
     }
+    return Status::OK();
 }
 
-void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorized::Columns& columns,
-                                                    const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorized::Columns& columns,
+                                                      const vectorized::Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
@@ -155,8 +158,9 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
 
     ThriftSerializer serializer(true, chunk->memory_usage());
     for (int i = 0; i < num_rows; ++i) {
-        serializer.serialize(&data_list[i], &result->result_batch.rows[i]);
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
     }
+    return Status::OK();
 }
 
 Status StatisticResultWriter::close() {

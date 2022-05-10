@@ -101,6 +101,8 @@ public:
     }
 
 private:
+    void _process_batch_without_lock(std::unique_ptr<TFetchDataResult>& result);
+
     typedef std::list<TFetchDataResult*> ResultQueue;
 
     // result's query id
