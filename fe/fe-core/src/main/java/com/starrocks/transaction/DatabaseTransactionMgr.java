@@ -388,7 +388,8 @@ public class DatabaseTransactionMgr {
             return;
         }
 
-        if (tabletCommitInfos == null || tabletCommitInfos.isEmpty()) {
+        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
 
@@ -467,10 +468,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-        if (tableToPartition.isEmpty()) {
-            // table or all partitions are being dropped
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-        }
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
