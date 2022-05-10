@@ -802,6 +802,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(*) from supplier";
         plan = getCostExplain(sql);
         assertContains(plan, "count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE");
+        sql = "SELECT count(*) AS b FROM ( SELECT max(S_ADDRESS) AS a FROM supplier ) t1 WHERE a = '123' UNION SELECT 1 FROM supplier;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "count-->[0.0, Infinity, NaN, NaN, NaN] ESTIMATE");
+        sql = "SELECT count(1) AS b FROM ( SELECT max(S_ADDRESS) AS a FROM supplier ) t1 WHERE a = '123' UNION SELECT 1 FROM supplier;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "count-->[0.0, Infinity, NaN, NaN, NaN] ESTIMATE");
     }
 
     @Test

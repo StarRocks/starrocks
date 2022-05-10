@@ -158,8 +158,10 @@ public class ExpressionStatisticCalculator {
         private ColumnStatistic nullaryExpressionCalculate(CallOperator callOperator) {
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.COUNT:
-                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
+                    return new ColumnStatistic(0,
+                            Double.isNaN(inputStatistics.getOutputRowCount()) ? Double.POSITIVE_INFINITY :
+                                    inputStatistics.getOutputRowCount(), 0, callOperator.getType().getTypeSize(),
+                            rowCount);
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -207,8 +209,10 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getTypeSize(),
                             Math.min(columnStatistic.getDistinctValuesCount(), 60));
                 case FunctionSet.COUNT:
-                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
+                    // work around maxValue is NaN
+                    value = Double.isNaN(inputStatistics.getOutputRowCount()) ? Double.POSITIVE_INFINITY :
+                            inputStatistics.getOutputRowCount();
+                    return new ColumnStatistic(0, value, 0, callOperator.getType().getTypeSize(), rowCount);
                 case FunctionSet.MULTI_DISTINCT_COUNT:
                     // use child column averageRowSize instead call operator type size
                     return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
