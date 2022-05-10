@@ -30,7 +30,7 @@ set(EXEC_FILES
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
+        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/json_parser_test.cpp
