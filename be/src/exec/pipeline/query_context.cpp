@@ -7,6 +7,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
 namespace starrocks::pipeline {

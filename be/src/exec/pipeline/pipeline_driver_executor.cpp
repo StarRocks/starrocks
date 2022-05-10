@@ -2,15 +2,13 @@
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 
-<<<<<<< HEAD
-=======
 #include <memory>
 
 #include "exec/workgroup/work_group.h"
->>>>>>> de31d7264 ([Feature] add some metrics for pipeline (#5847))
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
