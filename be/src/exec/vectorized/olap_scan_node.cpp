@@ -342,12 +342,12 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
-    // Disable by the session variable shouldn't use tablet internal parallel.
-    bool enable_tablet_concurrency =
-            request.__isset.enable_tablet_internal_parallel && request.enable_tablet_internal_parallel;
-    if (!enable_tablet_concurrency) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
-    }
+//    // Disable by the session variable shouldn't use tablet internal parallel.
+//    bool enable_tablet_concurrency =
+//            request.__isset.enable_tablet_internal_parallel && request.enable_tablet_internal_parallel;
+//    if (!enable_tablet_concurrency) {
+//        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+//    }
 
     // Enough tablet shouldn't use tablet internal parallel.
     size_t dop = 1;
