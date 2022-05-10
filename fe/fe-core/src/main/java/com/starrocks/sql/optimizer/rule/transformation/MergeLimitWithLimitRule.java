@@ -43,21 +43,21 @@ public class MergeLimitWithLimitRule extends TransformationRule {
 
     // eg.1, child limit is smaller than parent, child must gather
     // before:
-    //   Limit 1, 5 (hit line range: [1, 6), output line range: [6, 7))
+    //   Limit 5 (hit line range: [0, 5), output line range: [0, 2))
     //      |
-    // Global-Limit 5, 2 (hit line range: [5, 7), output line range: [5, 7))
+    // Global-Limit 2 (hit line range: [0, 2), output line range: [0, 2))
     //
     // after:
-    // Init-Limit 6, 2 (hit line range: [6, 7), output line range: [6, 7))
+    // Init-Limit 0, 2 (hit line range: [0, 2), output line range: [0, 2))
     //
     // eg.2, child limit is larger than parent, child don't gather
     // before:
-    //   Limit 1, 2 (hit line range: [1, 3), output line range: [6, 8))
+    //   Limit 2 (hit line range: [0, 2), output line range: [0, 2))
     //      |
-    // Global-Limit 5, 5 (hit line range: [5, 10), output line range: [5, 10))
+    // Global-Limit 5 (hit line range: [0, 5), output line range: [0, 5))
     //
     // after:
-    // Local-Limit 6, 2 (hit line range: [6, 8), output line range: [6, 8))
+    // Local-Limit 2 (hit line range: [0, 2), output line range: [0, 2))
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();

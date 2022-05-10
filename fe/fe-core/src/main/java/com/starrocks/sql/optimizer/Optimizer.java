@@ -210,8 +210,6 @@ public class Optimizer {
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
-        //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another MergeTwoProjectRule
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectLimitRule());
 
