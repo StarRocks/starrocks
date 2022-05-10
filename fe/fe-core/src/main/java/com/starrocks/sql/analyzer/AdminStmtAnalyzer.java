@@ -2,15 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
 import com.starrocks.cluster.ClusterNamespace;
@@ -24,45 +16,13 @@ import java.util.List;
 import java.util.Map;
 
 public class AdminStmtAnalyzer {
-    public static void analyze(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().analyze(adminSetConfigStmt, session);
-    }
-
-    public static void analyze(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().analyze(adminSetReplicaStatusStmt, session);
-    }
-
-    public static void analyze(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().analyze(adminShowConfigStmt, session);
-    }
-
-    public static void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().analyze(adminShowReplicaDistributionStmt, session);
-    }
-
-    public static void analyze(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt, ConnectContext session) {
-        new AdminStmtAnalyzerVisitor().analyze(adminShowReplicaStatusStmt, session);
+    public static void analyze(StatementBase statementBase, ConnectContext session) {
+        new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
     static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        public void analyze(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
-            visit(adminSetConfigStmt, session);
-        }
-
-        public void analyze(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
-            visit(adminSetReplicaStatusStmt, session);
-        }
-
-        public void analyze(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
-            visit(adminShowConfigStmt, session);
-        }
-
-        public void analyze(AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt, ConnectContext session) {
-            visit(adminShowReplicaDistributionStmt, session);
-        }
-
-        public void analyze(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt, ConnectContext session) {
-            visit(adminShowReplicaStatusStmt, session);
+        public void analyze(StatementBase statementBase, ConnectContext session) {
+            visit(statementBase, session);
         }
 
         @Override
@@ -145,8 +105,6 @@ public class AdminStmtAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-
-            List<String> partitions = adminShowReplicaStatusStmt.getPartitions();
 
             if (!analyzeWhere(adminShowReplicaStatusStmt)) {
                 throw new SemanticException(
