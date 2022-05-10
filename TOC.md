@@ -97,6 +97,7 @@
       + [CREATE MATERIALIZED VIEW](/sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
       + [CREATE REPOSITORY](/sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md)
       + [CREATE RESOURCE](/sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)
+      + [CREATE TABLE AS SELECT](/sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md)
       + [CREATE TABLE LIKE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md)
       + [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
       + [CREATE VIEW](/sql-reference/sql-statements/data-definition/CREATE%20VIEW.md)
