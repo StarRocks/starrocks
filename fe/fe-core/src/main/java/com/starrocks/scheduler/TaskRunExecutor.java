@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.job.task;
+package com.starrocks.scheduler;
 
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;

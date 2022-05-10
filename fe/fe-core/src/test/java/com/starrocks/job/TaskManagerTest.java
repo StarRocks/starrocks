@@ -4,10 +4,10 @@ package com.starrocks.job;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.job.task.Task;
-import com.starrocks.job.task.TaskBuilder;
-import com.starrocks.job.task.TaskManager;
-import com.starrocks.job.task.TaskRun;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
