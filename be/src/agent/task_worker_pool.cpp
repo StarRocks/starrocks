@@ -901,7 +901,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         priority_tasks.pop();
 
         if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
-            batch_publish_latency > 100) {
+            batch_publish_latency > config::max_batch_publish_latency_ms) {
             // persist all related meta once in a group.
             tablets.reserve(tablet_ids.size());
             for (const auto tablet_id : tablet_ids) {

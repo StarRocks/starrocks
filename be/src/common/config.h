@@ -713,6 +713,8 @@ CONF_Bool(enable_schema_change_v2, "true");
 // default: true
 CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
+CONF_Int32(max_batch_publish_latency_ms, "100");
+
 } // namespace config
 
 } // namespace starrocks
