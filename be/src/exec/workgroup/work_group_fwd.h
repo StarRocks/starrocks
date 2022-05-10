@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <memory>
+
 namespace starrocks::workgroup {
 
 class WorkGroup;
