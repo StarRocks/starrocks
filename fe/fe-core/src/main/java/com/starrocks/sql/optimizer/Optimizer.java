@@ -172,8 +172,9 @@ public class Optimizer {
     }
 
     void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
-        CTEContext cteContext = context.getCteContext();
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
 
+        CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
         if (cteContext.hasInlineCTE()) {
@@ -182,18 +183,11 @@ public class Optimizer {
 
         cleanUpMemoGroup(memo);
 
-
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
-        if (context.getCteContext().isForcedCTE()) {
-            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
-        }
-
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

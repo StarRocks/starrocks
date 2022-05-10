@@ -76,7 +76,7 @@ public class OperatorBuilderFactory {
         } else if (operator instanceof LogicalCTEConsumeOperator) {
             return new LogicalCTEConsumeOperator.Builder();
         } else {
-            throw new StarRocksPlannerException("not implement builder", ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException("not implement builder :" + operator, ErrorType.INTERNAL_ERROR);
         }
     }
 }
