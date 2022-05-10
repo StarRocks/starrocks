@@ -52,10 +52,6 @@ class Block {
 public:
     virtual ~Block() = default;
 
-    // Returns the identifier for this block.
-    // TODO: should we assign a block an identifier?
-    virtual const BlockId& id() const = 0;
-
     // Currently, each block in StarRocks will correspond to a file, but it may not be
     // in the future (that is, a block may correspond to multiple files, or multiple
     // blocks correspond to a file).
@@ -226,15 +222,6 @@ public:
     virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
 
     virtual void erase_block_cache(const std::string& path) = 0;
-
-    // Retrieves the IDs of all blocks under management by this block manager.
-    // These include ReadableBlocks as well as WritableBlocks.
-    //
-    // Returned block IDs are not guaranteed to be in any particular order,
-    // nor is the order guaranteed to be deterministic. Furthermore, if
-    // concurrent operations are ongoing, some of the blocks themselves may not
-    // even exist after the call.
-    virtual Status get_all_block_ids(std::vector<BlockId>* block_ids) = 0;
 
     static const std::string block_manager_preflush_control;
 };

@@ -76,11 +76,6 @@ public:
 
     void erase_block_cache(const std::string& path) override;
 
-    Status get_all_block_ids(std::vector<BlockId>* block_ids) override {
-        // TODO(lingbin): to be implemented after we assign each block an id
-        return Status::OK();
-    };
-
 private:
     friend class internal::FileReadableBlock;
     friend class internal::FileWritableBlock;
@@ -92,9 +87,6 @@ private:
     // the actual deletion will take place after the last open reader or
     // writer is closed.
     Status _delete_block(const std::string& path);
-
-    // Synchronizes the metadata for a block with the given location.
-    Status _sync_metadata(const std::string& path);
 
     FileSystem* fs() const { return _fs.get(); }
 
