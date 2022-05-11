@@ -37,8 +37,12 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
-    bool count_down_fragments() { return _num_active_fragments.fetch_sub(1) == 1; }
-
+    bool count_down_fragments() {
+        size_t old = _num_active_fragments.fetch_sub(1);
+        DCHECK_GE(old, 1);
+        return old == 1;
+    }
+    int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
     void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }

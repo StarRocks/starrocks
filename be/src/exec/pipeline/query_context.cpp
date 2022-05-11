@@ -260,7 +260,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
         ctx->extend_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
-        return true;
+        return false;
     }
     return false;
 }
