@@ -149,6 +149,8 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
         auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
         //mem concurrent
         auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        // num queries
+        auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
 
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio",
                                                                  MetricLabels().add("name", wg->name()),
@@ -162,11 +164,15 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes",
                                                                  MetricLabels().add("name", wg->name()),
                                                                  resource_group_mem_allocated_bytes.get());
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_running_queries",
+                                                                MetricLabels().add("name", wg->name()),
+                                                                resource_group_running_queries.get());
 
         _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
         _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
         _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
         _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
+        _wg_running_queries.emplace(wg->name(), std::move(resource_group_running_queries));
     }
     _wg_metrics.emplace(wg->name(), wg->unique_id());
 }
@@ -174,16 +180,19 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
 void WorkGroupManager::update_metrics_unlocked() {
     for (auto& wg_metric : _wg_metrics) {
         auto wg = _workgroups.find(wg_metric.second);
+        auto& name = wg_metric.first;
         if (wg != _workgroups.end()) {
             _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_expected_use_ratio());
             _wg_cpu_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_actual_use_ratio());
             _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_limit());
             _wg_mem_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_tracker()->consumption());
+            _wg_running_queries[name]->set_value(wg->second->num_running_queries());
         } else {
-            _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_cpu_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_mem_metrics.find(wg_metric.first)->second->set_value(0);
+            _wg_cpu_limit_metrics[name]->set_value(0);
+            _wg_cpu_metrics[name]->set_value(0);
+            _wg_mem_limit_metrics[name]->set_value(0);
+            _wg_mem_metrics[name]->set_value(0);
+            _wg_running_queries[name]->set_value(0);
         }
     }
 }
@@ -281,13 +290,12 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
                                              query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
     }
 
+    // TODO: check concurrency before query execution
     // Check concurrency limit
     DCHECK_GE(_num_queries, 0);
     if (_concurrency_limit > 0 && _num_queries > _concurrency_limit) {
-        return Status::Cancelled(fmt::format("Exceed concurrency limit: current is {} but limit is ",
+        return Status::Cancelled(fmt::format("Exceed concurrency limit: current is {} but limit is {}",
                                              _num_queries.load(), _concurrency_limit));
-    } else {
-        DLOG(INFO) << "concurrency not exceed, current is " << _num_queries.load();
     }
 
     return Status::OK();

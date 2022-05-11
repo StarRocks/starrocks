@@ -100,7 +100,10 @@ public:
         ++_acc_num_drivers;
     }
     // decrease num_driver when the driver is detached from the workgroup
-    void decrease_num_drivers() { --_num_drivers; }
+    void decrease_num_drivers() {
+        int64_t old = _num_drivers.fetch_sub(1);
+        DCHECK_GT(old, 0);
+    }
 
     int num_drivers() const { return _num_drivers; }
 
@@ -128,8 +131,11 @@ public:
 
     Status check_big_query(const QueryContext& query_context);
     void incr_num_queries() { _num_queries++; }
-    void decr_num_queries() { _num_queries--; }
-    int64_t num_queries() const { return _num_queries; }
+    void decr_num_queries() {
+        int64_t old = _num_queries.fetch_sub(1);
+        DCHECK_GT(old, 0);
+    }
+    int64_t num_running_queries() const { return _num_queries; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     bool use_big_query_mem_limit() const {
@@ -288,6 +294,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
 
     void add_metrics(const WorkGroupPtr& wg);
     void update_metrics_unlocked();
