@@ -52,10 +52,15 @@ public:
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (int64_t key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            if (cols[2]->is_binary()) {
+                string v = fmt::to_string(key % 1000 + 2);
+                cols[2]->append_datum(vectorized::Datum(Slice(v)));
+            } else {
+                cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            }
         }
         if (one_delete == nullptr && !keys.empty()) {
             EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
@@ -151,7 +156,7 @@ public:
         TColumn k1;
         k1.column_name = "pk";
         k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::INT;
+        k1.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k1);
 
         TColumn k2;
@@ -166,12 +171,6 @@ public:
         k3.column_type.type = TPrimitiveType::VARCHAR;
         request.tablet_schema.columns.push_back(k3);
 
-        TColumn k4;
-        k4.column_name = "v3";
-        k4.__set_is_key(false);
-        k4.column_type.type = TPrimitiveType::INT;
-        k4.__set_default_value("1");
-        request.tablet_schema.columns.push_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
