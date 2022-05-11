@@ -208,7 +208,7 @@ private:
     void _update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                        int64_t frame_end);
 
-    int64_t _find_first_not_equal(vectorized::Column* column, int64_t start, int64_t end);
+    static int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.
