@@ -391,7 +391,7 @@ ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
