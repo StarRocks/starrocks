@@ -199,8 +199,8 @@ env.execute("StarRocks flink source");
 | Parameter                   | Required | Data type | Description                                                  |
 | --------------------------- | -------- | --------- | ------------------------------------------------------------ |
 | connector                   | Yes      | String    | The connector. Set the value to starrocks.                   |
-| scan-url                    | Yes      | String    | The scan URL of the FE node. The URL is used to access the FE node through the web server. The format is <FE IP address>: <FE HTTP port>. The port number defaults to 8030. Separate multiple addresses with commas, for example, 192.168.xxx.xxx:8030, 192.168.xxx.xxx:8030. |
-| jdbc-url                    | Yes      | String    | The JDBC URL of the FE node. This URL is used to access the MySQL client on the FE node. The format is jdbc:mysql://<FE IP address>:<FE query port>. The port number defaults to 9030. |
+| scan-url                    | Yes      | String    | The scan URL of the FE node. The URL is used to access the FE node through the web server. The format is < FE IP address >: < FE HTTP port >. The port number defaults to 8030. Separate multiple addresses with commas, for example, 192.168.xxx.xxx:8030, 192.168.xxx.xxx:8030. |
+| jdbc-url                    | Yes      | String    | The JDBC URL of the FE node. This URL is used to access the MySQL client on the FE node. The format is jdbc:mysql://< FE IP address >:< FE query port >. The port number defaults to 9030. |
 | username                    | Yes      | String    | The username in StarRocks. The username must have read permissions to the target database and table. For more information, see [User permissions](../administration/User_privilege.md). |
 | password                    | Yes      | String    | The password of the username.                                |
 | database-name               | Yes      | String    | The name of the StarRocks database.                          |
