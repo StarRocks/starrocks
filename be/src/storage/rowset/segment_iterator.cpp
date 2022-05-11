@@ -310,8 +310,14 @@ Status SegmentIterator::_init() {
         }
     }
 
-    _selection.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
-    _selected_idx.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
+    if (config::enable_segment_overflow_read_chunk) {
+        _selection.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
+        _selected_idx.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
+    } else {
+        _selection.resize(_opts.chunk_size);
+        _selected_idx.resize(_opts.chunk_size);
+    }
+
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
     RETURN_IF_ERROR(_opts.block_mgr->open_block(_segment->file_name(), &_rblock));
@@ -688,7 +694,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     Chunk* chunk = _context->_read_chunk.get();
 
     while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
-        RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
+        if (config::enable_segment_overflow_read_chunk) {
+            RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
+        } else {
+            RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
+        }
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
 
@@ -808,7 +818,11 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size + _opts.chunk_size / 4 + 1);
+        if (config::enable_segment_overflow_read_chunk) {
+            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size + _opts.chunk_size / 4 + 1);
+        } else {
+            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size);
+        }
     }
 
     if (to->_has_dict_column) {
