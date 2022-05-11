@@ -6812,14 +6812,17 @@ public class GlobalStateMgr {
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
             request.setTable_name(tableName);
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
+                        timeout,
+                        Config.thrift_rpc_retry_times,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -7261,7 +7264,8 @@ public class GlobalStateMgr {
         setFrontendConfig(configs);
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
@@ -7273,11 +7277,10 @@ public class GlobalStateMgr {
             request.setValues(new ArrayList<>(configs.values()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(),
-                                        fe.getRpcPort()),
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 timeout,
-                                client -> client.setConfig(request)
-                        );
+                                Config.thrift_rpc_retry_times,
+                                client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
