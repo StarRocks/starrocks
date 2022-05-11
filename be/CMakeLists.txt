@@ -226,7 +226,7 @@ set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
 
-add_library(arrow STATIC IMPORTED)
+add_library(arrow STATIC IMPORTED src/formats/parquet/rle_encoding_wrapper.h)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
 add_library(parquet STATIC IMPORTED)

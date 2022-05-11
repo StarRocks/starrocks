@@ -9,6 +9,7 @@
 #include "formats/parquet/types.h"
 #include "gutil/strings/substitute.h"
 #include "util/rle_encoding.h"
+#include "util/rle_encoding_wrapper.h"
 
 namespace starrocks::parquet {
 
@@ -48,11 +49,11 @@ struct TypeEncodingTraits<type, tparquet::Encoding::RLE_DICTIONARY> {
 template <tparquet::Type::type type>
 struct TypeEncodingTraits<type, tparquet::Encoding::RLE> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
-        decoder->reset(new RleDecoder<typename PhysicalTypeTraits<type>::CppType>());
+        decoder->reset(new RleDecoderWrapper<typename PhysicalTypeTraits<type>::CppType>());
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
-        encoder->reset(new RleEncoder<typename PhysicalTypeTraits<type>::CppType>());
+        encoder->reset(new RleEncoderWrapper<typename PhysicalTypeTraits<type>::CppType>());
         return Status::OK();
     }
 };
