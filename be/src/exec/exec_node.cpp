@@ -47,7 +47,6 @@
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/intersect_node.h"
-#include "exec/vectorized/mysql_scan_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
