@@ -29,8 +29,9 @@ public class CreateCatalogTest {
         HashMap<String, String> properties = new HashMap<>();
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+        String comment = "external catalog for hive";
         CreateCatalogLog createCatalogLog =
-                new CreateCatalogLog("catalog_name", properties);
+                new CreateCatalogLog("catalog_name", comment, properties);
         createCatalogLog.write(out);
         out.flush();
         out.close();
@@ -40,6 +41,7 @@ public class CreateCatalogTest {
         CreateCatalogLog readCreateCatalogInfo = CreateCatalogLog.read(in);
         Assert.assertEquals(readCreateCatalogInfo.getCatalogName(), "catalog_name");
         Assert.assertEquals(readCreateCatalogInfo.getCatalogType(), "hive");
+        Assert.assertEquals(readCreateCatalogInfo.getComment(), "external catalog for hive");
         Assert.assertEquals(readCreateCatalogInfo.getProperties(), properties);
         in.close();
     }
