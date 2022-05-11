@@ -52,9 +52,9 @@ import java.util.stream.Collectors;
  *                     /               \
  *                CTEConsume        CTEConsume
  */
-public class RewriteMultiDistinctWithNoneGroupRule extends TransformationRule {
-    public RewriteMultiDistinctWithNoneGroupRule() {
-        super(RuleType.TF_REWRITE_MULTI_DISTINCT_WITH_NONE_GROUP,
+public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
+    public RewriteMultiDistinctWithoutGroupByRule() {
+        super(RuleType.TF_REWRITE_MULTI_DISTINCT_WITHOUT_GROUP_BY,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
                         OperatorType.PATTERN_LEAF)));
     }
