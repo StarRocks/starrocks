@@ -296,6 +296,10 @@ jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     return res_arr;
 }
 
+void JVMFunctionHelper::batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows) {
+    stub->batch_update_single(rows, state, input, cols);
+}
+
 void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
@@ -741,18 +745,17 @@ jvalue UDAFFunction::finalize(jobject state) {
     return res;
 }
 
-void BatchCallStub::batch_update_single(FunctionContext* ctx, int num_rows, jobject caller, jobject state,
-                                        jobject* input, int cols) {
+void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject* input, int cols) {
     jvalue jni_inputs[3 + cols];
     jni_inputs[0].i = num_rows;
-    jni_inputs[1].l = caller;
+    jni_inputs[1].l = _caller;
     jni_inputs[2].l = state;
     for (int i = 0; i < cols; ++i) {
         jni_inputs[3 + i].l = input[i];
     }
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     env->CallStaticVoidMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()), jni_inputs);
-    JVMFunctionHelper::check_call_exception(env, ctx);
+    JVMFunctionHelper::check_call_exception(env, this->_ctx);
 }
 
 void UDAFFunction::update(jvalue* val) {

@@ -29,6 +29,7 @@ extern "C" JNIEnv* getJNIEnv(void);
 
 namespace starrocks::vectorized {
 class DirectByteBuffer;
+class AggBatchCallStub;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -54,6 +55,10 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
+
+    // batch update single
+    void batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows);
+
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
@@ -242,14 +247,19 @@ private:
     JavaGlobalRef _clazz;
 };
 
-class BatchCallStub {
+class AggBatchCallStub {
 public:
-    BatchCallStub(JVMClass&& clazz, JavaGlobalRef&& method)
-            : _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
-    void batch_update_single(FunctionContext* ctx, int num_rows, jobject caller, jobject state, jobject* input,
-                             int cols);
+    AggBatchCallStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+
+    void batch_update_single(int num_rows, jobject state, jobject* input, int cols);
 
 private:
+    FunctionContext* _ctx;
+    // UDAF object handle, owned by FunctionContext
+    jobject _caller;
     JVMClass _stub_clazz;
     JavaGlobalRef _stub_method;
 };
@@ -362,7 +372,7 @@ struct JavaUDAFContext {
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
     std::unique_ptr<JavaMethodDescriptor> update;
-    std::unique_ptr<BatchCallStub> update_batch_call_stub;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;

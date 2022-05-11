@@ -494,26 +494,6 @@ public class UDFHelper {
         return strings;
     }
 
-    // use batch reflect batch call method to reduce JNI call costs
-    // TODO: we need to find a more efficient way of calling
-    public static void batchUpdateSingle(Object o, Method method, Object state, Object[] column)
-            throws Throwable {
-        Object[][] inputs = (Object[][]) column;
-        Object[] parameter = new Object[inputs.length + 1];
-        int numRows = inputs[0].length;
-        parameter[0] = state;
-        try {
-            for (int i = 0; i < numRows; ++i) {
-                for (int j = 0; j < column.length; ++j) {
-                    parameter[j + 1] = inputs[j][i];
-                }
-                method.invoke(o, parameter);
-            }
-        } catch (InvocationTargetException e) {
-            throw e.getTargetException();
-        }
-    }
-
     // batch call void(Object...)
     public static void batchUpdate(Object o, Method method, Object[] column)
             throws Throwable {
