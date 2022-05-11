@@ -167,6 +167,8 @@ public:
 
     static Status delete_pending_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id, int64_t version);
 
+    static Status delete_pending_rowset(DataDir* store, TTabletId tablet_id, int64_t version);
+
     // Unlike `rowset_delete`, this method will NOT clear delete vectors.
     static Status clear_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 

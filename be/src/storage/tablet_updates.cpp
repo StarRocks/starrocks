@@ -133,6 +133,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
     DCHECK_LE(updates.next_log_id(), _next_log_id) << " tabletid:" << _tablet.tablet_id();
 
     // Load pending rowsets
+    _pending_commits.clear();
     auto pending_rowset_iter_func = [&](int64_t version, const std::string_view& rowset_meta_data) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
@@ -556,6 +557,10 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                 LOG(WARNING) << "ignore pending rowset tablet: " << _tablet.tablet_id() << " version:" << version
                              << " #pending:" << _pending_commits.size();
                 _ignore_rowset_commit(version, itr->second);
+                auto st = TabletMetaManager::delete_pending_rowset(_tablet.data_dir(), _tablet.tablet_id(), version);
+                LOG_IF(WARNING, !st.ok())
+                        << "Failed to delete_pending_rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                        << " txn:" << itr->second->txn_id() << " rowset: " << itr->second->rowset_id().to_string();
                 itr = _pending_commits.erase(itr);
             } else if (version == current_version + 1) {
                 // commit
@@ -1425,7 +1430,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                     total_score += stat.compaction_score;
                     total_rows += stat.num_rows;
                     total_bytes += stat.byte_size;
-                    LOG(INFO) << "estimate add:" << stat.byte_size << "=" << total_bytes;
                     continue;
                 }
                 candidates.emplace_back();
@@ -1713,9 +1717,10 @@ struct RowsetLoadInfo {
 
 Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* base_tablet) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << "load_from_base_tablet is only allowed in schema change process";
-    LOG(INFO) << "load_from_base_tablet start tablet:" << _tablet.tablet_id() << " request_version:" << request_version
-              << " #pending:" << _pending_commits.size();
+            << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
+            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    LOG(INFO) << "link_from start tablet:" << _tablet.tablet_id() << " #pending:" << _pending_commits.size()
+              << " base_tablet:" << base_tablet->tablet_id() << " request_version:" << request_version;
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
         LOG(WARNING) << "load_from_base_tablet base_tablet's max_version:" << max_version
@@ -1740,6 +1745,9 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     uint32_t next_rowset_id = 0;
+    size_t total_bytes = 0;
+    size_t total_rows = 0;
+    size_t total_files = 0;
     vector<RowsetLoadInfo> new_rowsets(rowsets.size());
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
@@ -1771,6 +1779,9 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
             }
         }
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_info.num_segments);
+        total_bytes += rowset_meta_pb.total_disk_size();
+        total_rows += rowset_meta_pb.num_rows();
+        total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
     }
     // 2. construct new meta
     TabletMetaPB meta_pb;
@@ -1798,8 +1809,8 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     rocksdb::WriteBatch wb;
     RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
     for (auto& info : new_rowsets) {
         RETURN_IF_ERROR(TabletMetaManager::put_rowset_meta(data_dir, &wb, tablet_id, info.rowset_meta_pb));
@@ -1816,20 +1827,22 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
         return Status::InternalError("Fail to delete old meta and write new meta");
     }
 
+    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    index.unload();
+    update_manager->index_cache().release(index_entry);
     // 4. load from new meta
     st = _load_from_pb(*updates_pb);
     if (!st.ok()) {
         LOG(WARNING) << "_load_from_pb failed tablet_id:" << tablet_id << " " << st;
         return st;
     }
-    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
-    auto& index = index_entry->value();
-    index.unload();
-    update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "load_from_base_tablet finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
-              << " #pending:" << _pending_commits.size();
+    LOG(INFO) << "link_from finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " base tablet:" << base_tablet->tablet_id() << " #pending:" << _pending_commits.size()
+              << " #rowset:" << rowsets.size() << " #file:" << total_files << " #row:" << total_rows
+              << " bytes:" << total_bytes;
     return Status::OK();
 }
 
