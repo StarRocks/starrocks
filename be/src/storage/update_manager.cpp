@@ -229,6 +229,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
         _update_state_cache.remove(state_entry);
     }
+    if (tablet->tablet_state() == TABLET_NOTREADY) {
+        // tablet in initial schema change phase, this rowset will not be applied until schemachange finishes
+        // so don't load primary index
+        return Status::OK();
+    }
     if (st.ok()) {
         auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
         st = index_entry->value().load(tablet);
