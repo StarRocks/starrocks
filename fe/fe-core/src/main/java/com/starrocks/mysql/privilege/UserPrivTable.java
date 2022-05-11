@@ -85,7 +85,7 @@ public class UserPrivTable extends PrivTable {
     }
 
     /*
-     * Check if user@host has specified privilege
+     * Check if current user has specified privilege
      */
     public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
         List<PrivEntry> userPrivEntryList = map.get(currentUser);

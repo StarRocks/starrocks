@@ -66,8 +66,6 @@ public abstract class PrivTable implements Writable {
                 map.put(newEntry.getUserIdent(), new ArrayList<>());
             }
             map.get(newUser).add(newEntry);
-            // entries.add(newEntry);
-            // Collections.sort(entries);
             LOG.debug("add priv entry: {}", newEntry);
             return newEntry;
         } else {

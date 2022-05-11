@@ -56,7 +56,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
@@ -1862,14 +1861,15 @@ public class AuthTest {
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
     @Test
-    @Ignore
     public void testManyUsersAndTables() throws Exception {
+        Config.enable_validate_password = false;  // skip password validation
         int BIG_NUMBER = 500;
         int BIG_NUMBER2 = BIG_NUMBER / 2;
         int LOG_INTERVAL = BIG_NUMBER / 50;
         String DB = SystemInfoService.DEFAULT_CLUSTER  + ":db1";
         LOG.info("before add privilege: table {} entries, user {} entries",
                 auth.getTablePrivTable().size(), auth.getUserPrivTable().size());
+        Assert.assertEquals(1, auth.getAuthInfo(null).size());
 
         // 1. create N user with select privilege to N/2 table
         // 1.1 create user
@@ -1882,6 +1882,16 @@ public class AuthTest {
             createUserStmt.analyze(analyzer);
             auth.createUser(createUserStmt);
         }
+        Assert.assertEquals(1 + BIG_NUMBER, auth.getAuthInfo(null).size());
+
+        // check the last user
+        String lastUserName = String.format("user_%d_of_%d", BIG_NUMBER - 1, BIG_NUMBER);
+        UserIdentity lastUserIdentity = new UserIdentity(lastUserName, "%");
+        lastUserIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        // information_schema
+        Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
+        int infomationSchemaTableCnt = auth.getTablePrivEntries(lastUserIdentity).size();
+        Assert.assertEquals(1, auth.getAuthInfo(lastUserIdentity).size());
 
         // 1.2 grant N/2 table privilege
         long start = System.currentTimeMillis();
@@ -1917,5 +1927,46 @@ public class AuthTest {
         }
         end = System.currentTimeMillis();
         LOG.info("check privilege: total {} ms", end - start);
+
+        // check the last user
+        // infomation_schema
+        Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
+        Assert.assertEquals(BIG_NUMBER / 2 + infomationSchemaTableCnt, auth.getTablePrivEntries(lastUserIdentity).size());
+        Assert.assertEquals(1, auth.getAuthInfo(lastUserIdentity).size());
+    }
+
+    @Test
+    public void checkDefaultRootPrivilege() throws Exception {
+        Assert.assertTrue(auth.checkHasPriv(ctx, PrivPredicate.ADMIN, Auth.PrivLevel.GLOBAL));
+        Assert.assertTrue(auth.checkHasPriv(ctx, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL));
+        Assert.assertFalse(auth.checkHasPriv(ctx, PrivPredicate.ADMIN, Auth.PrivLevel.DATABASE));
+        Assert.assertFalse(auth.checkHasPriv(ctx, PrivPredicate.ADMIN, Auth.PrivLevel.TABLE));
+    }
+
+    @Test
+    public void testCanEnterCluster() throws Exception {
+        Config.enable_validate_password = false;  // skip password validation
+        UserIdentity userIdentity = new UserIdentity("test_user", "%");
+        userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        new Expectations(ctx) {
+            {
+                ctx.getCurrentUserIdentity();
+                minTimes = 0;
+                result = userIdentity;
+            }
+        };
+        String newCluster = "another_cluster";
+        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
+
+        TablePattern tablePattern = new TablePattern("db1", "test_table");
+        tablePattern.analyze(newCluster);
+        PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
+        auth.grantPrivs(userIdentity, tablePattern, privileges, false);
+        Assert.assertTrue(auth.checkCanEnterCluster(ctx, newCluster));
     }
  }
