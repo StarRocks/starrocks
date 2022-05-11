@@ -125,7 +125,7 @@ public class ResultReceiver {
             LOG.warn("fetch result execution exception, finstId={}", finstId, e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
-                status.setStatus(new Status(TStatusCode.TIMEOUT, e.getMessage()));
+                status.setStatus(new Status(TStatusCode.TIMEOUT, "query timeout"));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlacklist(backendId);

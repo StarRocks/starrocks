@@ -62,6 +62,7 @@ void PipelineDriverPoller::run_internal() {
                 // The state of driver shouldn't be changed.
                 LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                driver->fragment_ctx()->cancel(Status::TimedOut("query timeout"));
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
