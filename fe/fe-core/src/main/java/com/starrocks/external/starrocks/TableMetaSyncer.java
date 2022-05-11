@@ -3,6 +3,7 @@
 package com.starrocks.external.starrocks;
 
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TGetTableMetaRequest;
@@ -29,7 +30,9 @@ public class TableMetaSyncer {
         authInfo.setPasswd(table.getSourceTablePassword());
         request.setAuth_info(authInfo);
         try {
-            TGetTableMetaResponse response = FrontendServiceProxy.call(addr, 10000,
+            TGetTableMetaResponse response = FrontendServiceProxy.call(addr,
+                    Config.thrift_rpc_timeout_ms,
+                    Config.thrift_rpc_retry_times,
                     client -> client.getTableMeta(request));
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 String errMsg;
