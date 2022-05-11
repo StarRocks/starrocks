@@ -58,7 +58,12 @@ public:
         for (int64_t key : keys) {
             cols[0]->append_datum(vectorized::Datum(key));
             cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            if (cols[2]->is_binary()) {
+                string v = fmt::to_string(key % 1000 + 2);
+                cols[2]->append_datum(vectorized::Datum(Slice(v)));
+            } else {
+                cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            }
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -185,7 +190,7 @@ public:
         TColumn k1;
         k1.column_name = "pk";
         k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::INT;
+        k1.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k1);
 
         TColumn k2;
@@ -200,12 +205,6 @@ public:
         k3.column_type.type = TPrimitiveType::VARCHAR;
         request.tablet_schema.columns.push_back(k3);
 
-        TColumn k4;
-        k4.column_name = "v3";
-        k4.__set_is_key(false);
-        k4.column_type.type = TPrimitiveType::INT;
-        k4.__set_default_value("1");
-        request.tablet_schema.columns.push_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -437,10 +436,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum((int32_t)keys[i]));
+        cols[0]->append_datum(vectorized::Datum((int64_t)keys[i]));
         cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum(Slice{std::to_string((int64_t)(keys[i] % 1000 + 2))}));
-        cols[3]->append_datum(vectorized::Datum(1));
+        auto v = std::to_string((int64_t)(keys[i] % 1000 + 2));
+        cols[2]->append_datum(vectorized::Datum(Slice{v}));
     }
     auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -935,6 +934,55 @@ TEST_F(TabletUpdatesTest, convert_from) {
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, keys));
+}
+
+TEST_F(TabletUpdatesTest, convert_from_with_pending) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
+    int N = 100;
+    std::vector<int64_t> keys2;   // [0, 100)
+    std::vector<int64_t> keys3;   // [50, 150)
+    std::vector<int64_t> keys4;   // [100, 200)
+    std::vector<int64_t> allkeys; // [0, 200)
+    for (int i = 0; i < N; i++) {
+        keys2.push_back(i);
+        keys3.push_back(N / 2 + i);
+        keys4.push_back(N + i);
+        allkeys.push_back(i * 2);
+        allkeys.push_back(i * 2 + 1);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys2)).ok());
+
+    tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
+    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+        } else {
+            column_mapping->default_value = WrapperField::create(new_column);
+
+            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
+
+            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
+                column_mapping->default_value->set_null();
+            } else {
+                column_mapping->default_value->from_string(new_column.default_value());
+            }
+        }
+    }
+    ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());
+    ASSERT_TRUE(tablet_to_schema_change->rowset_commit(4, create_rowset(tablet_to_schema_change, keys4)).ok());
+
+    ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 2, chunk_changer.get()).ok());
+
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys3)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys4)).ok());
+
+    ASSERT_EQ(2 * N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, allkeys));
 }
 
 // NOLINTNEXTLINE
