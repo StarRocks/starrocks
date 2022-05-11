@@ -88,6 +88,7 @@ public:
     static const std::string HIVE;
     static const std::string ES;
     static const std::string JDBC;
+    static const std::string MYSQL;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
