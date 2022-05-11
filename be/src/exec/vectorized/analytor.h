@@ -79,6 +79,7 @@ public:
     void update_current_row_position(int64_t increment) { _current_row_position += increment; }
     int64_t partition_start() { return _partition_start; }
     int64_t partition_end() { return _partition_end; }
+    int64_t found_partition_end() { return _found_partition_end; }
     int64_t peer_group_start() { return _peer_group_start; }
     int64_t peer_group_end() { return _peer_group_end; }
 
@@ -100,17 +101,17 @@ public:
     void reset_window_state();
     void get_window_function_result(int32_t start, int32_t end);
 
-    bool is_partition_finished(int64_t found_partition_end);
+    bool is_partition_finished();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
     void append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
 
-    bool is_new_partition(int64_t found_partition_end);
+    bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
-    int64_t find_partition_end();
+    void find_partition_end();
     void find_peer_group_end();
-    void reset_state_for_new_partition(int64_t found_partition_end);
+    void reset_state_for_new_partition();
 
     void remove_unused_buffer_values(RuntimeState* state);
 
@@ -156,8 +157,16 @@ private:
     bool _input_eos = false;
 
     int64_t _current_row_position = 0;
+
+    // Record the start pos of current partition
     int64_t _partition_start = 0;
+    // Record the end pos of current partition.
+    // If the end position has not been found during the iteration, _partition_end = _partition_start.
     int64_t _partition_end = 0;
+    // Used to record the first position of the latest Chunk that is not equal to the PartitionKey.
+    // If not found, it points to the last position + 1.
+    int64_t _found_partition_end = 0;
+
     // A peer group is all of the rows that are peers within the specified ordering.
     // Rows are peers if they compare equal to each other using the specified ordering expression.
     int64_t _peer_group_start = 0;
