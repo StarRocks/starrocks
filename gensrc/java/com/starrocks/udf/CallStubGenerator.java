@@ -17,10 +17,14 @@ public class CallStubGenerator {
     public static final String CLAZZ_NAME = "com/starrocks/udf/gen/CallStub";
     public static final String GEN_KEYWORD = "com.starrocks.udf.gen";
 
-    //  generate batch update
-    //  for(int i = 0; i < rows; ++i) {
-    //    obj.update(var2, ...);
-    //  }
+    // generate batch update
+    // public class CallStub {
+    //     public static void batchCallV(int rows, UDAFSum obj, State var0, Integer[] var1, ...) throws Exception {
+    //         for(int i = 0; i < rows; ++i) {
+    //             obj.update(var0, var1[i], ...);
+    //         }
+    //     }
+    // }
     private static class AggBatchCallGenerator {
         AggBatchCallGenerator(Class<?> clazz, Method update) {
             this.UDAFClazz = clazz;
@@ -32,12 +36,12 @@ public class CallStubGenerator {
 
         private final ClassWriter writer = new ClassWriter(0);
 
-        void declareCallStubClazz() {
+        private void declareCallStubClazz() {
             writer.visit(V1_8, ACC_PUBLIC, CLAZZ_NAME, null, "java/lang/Object", null);
         }
 
         // int numRows, FunctionCallClz obj, FunctionCall.State state, Integer[] a
-        void genBatchUpdateSingle() {
+        private void genBatchUpdateSingle() {
             final Parameter[] parameters = UDAFUpdate.getParameters();
             StringBuilder desc = new StringBuilder("(");
             desc.append("I");
@@ -123,15 +127,15 @@ public class CallStubGenerator {
             batchCall.visitEnd();
         }
 
-        void finish() {
+        private void finish() {
             writer.visitEnd();
         }
 
-        byte[] getByteCode() {
+        private byte[] getByteCode() {
             return writer.toByteArray();
         }
     }
-    
+
     public static byte[] generateCallStubV(Class<?> clazz, Method method) {
         final AggBatchCallGenerator generator = new AggBatchCallGenerator(clazz, method);
         generator.declareCallStubClazz();
