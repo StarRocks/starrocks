@@ -17,10 +17,10 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
         : _name(name),
           _id(id),
           _version(version),
+          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency),
-          _type(type) {}
+          _concurrency_limit(concurrency) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_core_limit) {
@@ -35,9 +35,9 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     }
 
     if (twg.__isset.concurrency_limit) {
-        _concurrency = twg.concurrency_limit;
+        _concurrency_limit = twg.concurrency_limit;
     } else {
-        _concurrency = -1;
+        _concurrency_limit = -1;
     }
     if (twg.__isset.workgroup_type) {
         _type = twg.workgroup_type;
@@ -76,7 +76,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_state(state);
     twg.__set_cpu_core_limit(_cpu_limit);
     twg.__set_mem_limit(_memory_limit);
-    twg.__set_concurrency_limit(_concurrency);
+    twg.__set_concurrency_limit(_concurrency_limit);
     twg.__set_num_drivers(_acc_num_drivers);
     twg.__set_big_query_mem_limit(_big_query_mem_limit);
     twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
@@ -265,21 +265,32 @@ void WorkGroup::estimate_trend_factor_period() {
     _period_ask_chunk_num = 1;
 }
 
-bool WorkGroup::is_big_query(const QueryContext& query_context) {
+Status WorkGroup::check_big_query(const QueryContext& query_context) {
     // Check big query run time
     if (_big_query_cpu_core_second_limit) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
         if (wg_growth_cpu_use_cost > _big_query_cpu_core_second_limit) {
-            return true;
+            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {] but limit is {}",
+                                                 wg_growth_cpu_use_cost, _big_query_cpu_core_second_limit));
         }
     }
 
     // Check scan rows number
     if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
-        return true;
+        return Status::Cancelled(fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
+                                             query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
     }
 
-    return false;
+    // Check concurrency limit
+    DCHECK_GE(_num_queries, 0);
+    if (_concurrency_limit && _num_queries > _concurrency_limit) {
+        return Status::Cancelled(fmt::format("Exceed concurrency limit: current is {} but limit is ",
+                                             _num_queries.load(), _concurrency_limit));
+    } else {
+        DLOG(INFO) << "concurrency not exceed, current is " << _num_queries.load();
+    }
+
+    return Status::OK();
 }
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {

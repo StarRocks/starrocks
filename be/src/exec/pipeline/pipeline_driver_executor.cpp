@@ -114,21 +114,19 @@ void GlobalDriverExecutor::_worker_thread() {
             auto status = driver->process(runtime_state, worker_id);
             this->_driver_queue->update_statistics(driver);
 
-            // check If large query, if true, cancel it
-            bool is_big_query = false;
-            if (driver->fragment_ctx()->enable_resource_group()) {
-                auto wg = driver->workgroup();
-                if (wg) {
-                    is_big_query = wg->is_big_query(*query_ctx);
-                }
+            // Check big query
+            Status bigquery_status = Status::OK();
+            if (auto wg = driver->workgroup()) {
+                bigquery_status = wg->check_big_query(*query_ctx);
             }
 
-            if (!status.ok() || is_big_query) {
-                if (is_big_query) {
+            if (!status.ok() || !bigquery_status.ok()) {
+                if (!bigquery_status.ok()) {
                     LOG(WARNING) << "[Driver] Process exceed limit, query_id="
                                  << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                    query_ctx->cancel(Status::Cancelled("exceed big query limit"));
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                                 << ", status=" << bigquery_status;
+                    query_ctx->cancel(bigquery_status);
                 } else {
                     LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                                  << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
