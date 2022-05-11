@@ -61,6 +61,7 @@ class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
+class CompactionManager;
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
@@ -104,7 +105,7 @@ public:
     Status set_cluster_id(int32_t cluster_id);
     int32_t effective_cluster_id() const { return _effective_cluster_id; }
 
-    void start_delete_unused_rowset();
+    double delete_unused_rowset();
     void add_unused_rowset(const RowsetSharedPtr& rowset);
 
     // Obtain shard path for new tablet.
@@ -187,9 +188,6 @@ public:
 
     void compaction_check();
 
-    // public for ut
-    size_t compaction_check_one_round();
-
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -250,6 +248,8 @@ private:
     Status _perform_update_compaction(DataDir* data_dir);
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
+
+    size_t _compaction_check_one_round();
 
 private:
     struct CompactionCandidate {

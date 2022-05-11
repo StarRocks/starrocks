@@ -235,9 +235,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PROFILING)
     private boolean openProfile = false;
 
-    // Set sqlMode to empty string
+    // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE)
-    private long sqlMode = 0L;
+    private long sqlMode = 32L;
 
     @VariableMgr.VarAttr(name = RESOURCE_VARIABLE)
     private String resourceGroup = "normal";

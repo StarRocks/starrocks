@@ -117,6 +117,9 @@ Status StorageEngine::start_bg_threads() {
         LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
     } else {
         // new compaction framework
+
+        // compaction_manager must init_max_task_num() before any comapction_scheduler starts
+        _compaction_manager->init_max_task_num();
         _compaction_scheduler = std::thread([] {
             CompactionScheduler compaction_scheduler;
             compaction_scheduler.schedule();
@@ -372,11 +375,10 @@ void* StorageEngine::_unused_rowset_monitor_thread_callback(void* arg) {
     ProfilerRegisterThread();
 #endif
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        start_delete_unused_rowset();
-
-        int32_t interval = config::unused_rowset_monitor_interval;
+        double deleted_pct = delete_unused_rowset();
+        // delete 20% means we nead speedup 5x which make interval 1/5 before
+        int32_t interval = config::unused_rowset_monitor_interval * deleted_pct;
         if (interval <= 0) {
-            LOG(WARNING) << "unused_rowset_monitor_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);

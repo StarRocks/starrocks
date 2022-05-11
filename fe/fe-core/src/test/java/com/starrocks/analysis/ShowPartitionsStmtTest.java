@@ -22,9 +22,14 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.FakeGlobalStateMgr;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.catalog.ListPartitionInfo;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -47,6 +52,38 @@ public class ShowPartitionsStmtTest {
     public void setUp() {
         globalStateMgr = AccessTestUtil.fetchAdminCatalog();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        Auth auth = AccessTestUtil.fetchAdminAccess();
+
+        ListPartitionInfo partitionInfo = new ListPartitionInfo();
+        new Expectations(partitionInfo) {
+            {
+                partitionInfo.getType();
+                minTimes = 0;
+                result = PartitionType.LIST;
+            }
+        };
+
+        OlapTable table = new OlapTable();
+        new Expectations(table) {
+            {
+                table.getPartitionInfo();
+                minTimes = 0;
+                result = partitionInfo;
+            }
+        };
+
+        Database db = new Database();
+        new Expectations(db) {
+            {
+                db.getTable(anyString);
+                minTimes = 0;
+                result = table;
+
+                db.getTable(0);
+                minTimes = 0;
+                result = table;
+            }
+        };
 
         new Expectations() {
             {
@@ -61,6 +98,18 @@ public class ShowPartitionsStmtTest {
                 analyzer.getClusterName();
                 minTimes = 0;
                 result = "testCluster";
+
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
+
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getDb(0);
+                minTimes = 0;
+                result = db;
             }
         };
 
@@ -107,7 +156,7 @@ public class ShowPartitionsStmtTest {
         ShowPartitionsStmt stmt =
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, Arrays.asList(orderByElement),
                         limitElement, false);
-        stmt.analyzeImpl(analyzer);
+        stmt.analyze(analyzer);
         Assert.assertEquals("SHOW PARTITIONS FROM `testCluster:testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
                 stmt.toString());
     }

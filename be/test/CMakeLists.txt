@@ -30,7 +30,7 @@ set(EXEC_FILES
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
+        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/json_parser_test.cpp
@@ -43,6 +43,7 @@ set(EXEC_FILES
         ./exec/vectorized/parquet_scanner_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
+        ./exec/vectorized/analytor_test.cpp
         ./exec/es_scan_reader_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -125,6 +126,7 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
+        ./http/transaction_stream_load_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
@@ -252,7 +254,6 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
-        ./util/lru_cache_util_test.cpp
         ./util/md5_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp

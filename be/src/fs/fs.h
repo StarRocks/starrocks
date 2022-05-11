@@ -37,6 +37,8 @@ struct SpaceInfo {
 
 class FileSystem {
 public:
+    enum Type { POSIX, S3, HDFS, BROKER, MEMORY };
+
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -58,6 +60,8 @@ public:
     // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.
     static FileSystem* Default();
+
+    virtual Type type() const = 0;
 
     // Create a brand new sequentially-readable file with the specified name.
     //  If the file does not exist, returns a non-OK status.

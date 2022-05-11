@@ -31,7 +31,6 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -109,8 +108,13 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
@@ -124,6 +128,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -134,6 +140,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -301,6 +308,42 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropTableStmt(ifExists, targetTableName, true, false);
     }
 
+    // ------------------------------------------- Task Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
+        QualifiedName qualifiedName = null;
+        if (context.qualifiedName() != null) {
+            qualifiedName = getQualifiedName(context.qualifiedName());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.hint() != null) {
+            for (StarRocksParser.HintContext hintContext : context.hint()) {
+                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
+                    String key = hintMapContext.k.getText();
+                    String value = hintMapContext.v.getText();
+                    properties.put(key, value);
+                }
+            }
+        }
+        CreateTableAsSelectStmt createTableAsSelectStmt =
+                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+
+        if (qualifiedName == null) {
+            return new SubmitTaskStmt(null, null,
+                    properties, createTableAsSelectStmt);
+        } else if (qualifiedName.getParts().size() == 1) {
+            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
+                    properties, createTableAsSelectStmt);
+        } else if (qualifiedName.getParts().size() == 2) {
+            return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
+                    qualifiedName.getParts().get(1), properties, createTableAsSelectStmt);
+        } else {
+            throw new ParsingException("error task name ");
+        }
+    }
+
+
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
     @Override
@@ -319,14 +362,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
     }
 
-    // ------------------------------------------- Cluster Mangement Statement -----------------------------------------
+    // ------------------------------------------- Cluster Management Statement -----------------------------------------
 
     @Override
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
 
-    // ------------------------------------------- Catalog Statement -------------------------------------------------------
+    // ------------------------------------------- Catalog Statement ---------------------------------------------------
 
     @Override
     public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
@@ -340,6 +383,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new CreateCatalogStmt(catalogName, properties);
+    }
+
+    @Override
+    public ParseNode visitDropExternalCatalogStatement(StarRocksParser.DropExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.catalogName);
+        String catalogName = identifier.getValue();
+        return new DropCatalogStmt(catalogName);
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------
@@ -382,8 +432,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new AdminSetReplicaStatusStmt(properties);
     }
-
-
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
@@ -507,6 +555,68 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return ret;
+    }
+
+    // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() != null);
+    }
+
+    @Override
+    public ParseNode visitCreateAnalyzeStatement(StarRocksParser.CreateAnalyzeStatementContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        if (context.DATABASE() != null) {
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null, properties);
+        } else if (context.TABLE() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+            List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+            List<String> columnNames = null;
+            if (columns != null) {
+                columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+            }
+
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() != null, properties);
+        } else {
+            return new CreateAnalyzeJobStmt(context.FULL() != null, properties);
+        }
+    }
+
+    @Override
+    public ParseNode visitDropAnalyzeJobStatement(StarRocksParser.DropAnalyzeJobStatementContext context) {
+        return new DropAnalyzeJobStmt(Long.parseLong(context.INTEGER_VALUE().getText()));
+    }
+
+    @Override
+    public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
+        return new ShowAnalyzeStmt();
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------

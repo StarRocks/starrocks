@@ -2,6 +2,10 @@
 
 package com.starrocks.udf;
 
+import sun.misc.Unsafe;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -22,6 +26,235 @@ public class UDFHelper {
     public static final int TYPE_VARCHAR = 10;
     public static final int TYPE_DATETIME = 12;
     public static final int TYPE_ARRAY = 15;
+
+    // return byteAddr
+    public static native long resizeStringData(long columnAddr, int byteSize);
+
+    // [nullAddr, dataAddr]
+    public static native long[] getAddrs(long columnAddr);
+
+    private static Unsafe unsafe;
+    private static long byteArrayBaseOffset;
+    private static long intArrayBaseOffset;
+    private static long shortArrayBaseOffset;
+    private static long longArrayBaseOffset;
+    private static long floatArrayBaseOffset;
+    private static long doubleArrayBaseOffset;
+    private static final byte[] emptyBytes = new byte[0];
+
+    static {
+        Field f = null;
+        try {
+            f = Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            unsafe = (Unsafe) f.get(null);
+            byteArrayBaseOffset = (long) unsafe.arrayBaseOffset(byte[].class);
+            intArrayBaseOffset = (long) unsafe.arrayBaseOffset(int[].class);
+            shortArrayBaseOffset = (long) unsafe.arrayBaseOffset(short[].class);
+            longArrayBaseOffset = (long) unsafe.arrayBaseOffset(long[].class);
+            floatArrayBaseOffset = (long) unsafe.arrayBaseOffset(float[].class);
+            doubleArrayBaseOffset = (long) unsafe.arrayBaseOffset(double[].class);
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+        }
+    }
+
+    private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        byte[] dataArr = new byte[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = (byte) (boxedArr[i] ? 1 : 0);
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
+    }
+
+    private static void getByteBoxedResult(int numRows, Byte[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        byte[] dataArr = new byte[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
+    }
+
+    private static void getShortBoxedResult(int numRows, Short[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        short[] dataArr = new short[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, shortArrayBaseOffset, null, addrs[1], numRows * 2L);
+    }
+
+    // getIntBoxedResult
+    private static void getIntBoxedResult(int numRows, Integer[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] dataArr = new int[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 4L);
+    }
+
+    // getIntBoxedResult
+    private static void getBigIntBoxedResult(int numRows, Long[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        long[] dataArr = new long[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, longArrayBaseOffset, null, addrs[1], numRows * 8L);
+    }
+
+    private static void getFloatBoxedResult(int numRows, Float[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        float[] dataArr = new float[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, floatArrayBaseOffset, null, addrs[1], numRows * 4L);
+    }
+
+    private static void getDoubleBoxedResult(int numRows, Double[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        double[] dataArr = new double[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                dataArr[i] = boxedArr[i];
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        // memcpy to int array
+        unsafe.copyMemory(dataArr, doubleArrayBaseOffset, null, addrs[1], numRows * 8L);
+    }
+
+    private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
+        for (int i = 0; i < column.length; i++) {
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                byteRes[i] = column[i].getBytes(StandardCharsets.UTF_8);
+            }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
+        }
+        byte[] bytes = new byte[offsets[numRows - 1]];
+        int dst = 0;
+        for (int i = 0; i < numRows; i++) {
+            for (int j = 0; j < byteRes[i].length; j++) {
+                bytes[dst++] = byteRes[i][j];
+            }
+        }
+        final long bytesAddr = resizeStringData(columnAddr, offsets[numRows - 1]);
+        final long[] addrs = getAddrs(columnAddr);
+        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+
+        unsafe.copyMemory(offsets, intArrayBaseOffset, null, addrs[1] + 4, numRows * 4L);
+
+        unsafe.copyMemory(bytes, byteArrayBaseOffset, null, bytesAddr, offsets[numRows - 1]);
+    }
+
+    public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
+        switch (type) {
+            case TYPE_BOOLEAN: {
+                getBooleanBoxedResult(numRows, (Boolean[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_TINYINT: {
+                getByteBoxedResult(numRows, (Byte[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_SMALLINT: {
+                getShortBoxedResult(numRows, (Short[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_INT: {
+                getIntBoxedResult(numRows, (Integer[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_FLOAT: {
+                getFloatBoxedResult(numRows, (Float[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_DOUBLE: {
+                getDoubleBoxedResult(numRows, (Double[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_BIGINT: {
+                getBigIntBoxedResult(numRows, (Long[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_VARCHAR: {
+                getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                break;
+            }
+            default:
+                throw new UnsupportedOperationException("unsupported type:" + type);
+        }
+    }
 
     // create boxed array
     //
@@ -305,7 +538,8 @@ public class UDFHelper {
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
         Object[] parameter = new Object[inputs.length];
-        Object[] res = new Object[batchSize];
+        Object[] res = (Object[]) Array.newInstance(method.getReturnType(), batchSize);
+
         try {
             for (int i = 0; i < batchSize; ++i) {
                 for (int j = 0; j < column.length; ++j) {

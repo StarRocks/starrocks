@@ -62,26 +62,27 @@ public:
     vectorized::ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
 
-    bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+    bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
     std::vector<vectorized::ChunkPtr>& input_chunks() { return _input_chunks; }
     std::vector<int64_t>& input_chunk_first_row_positions() { return _input_chunk_first_row_positions; }
-    int64_t input_rows() { return _input_rows; }
+    int64_t input_rows() const { return _input_rows; }
     void update_input_rows(int64_t increment) { _input_rows += increment; }
-    int64_t output_chunk_index() { return _output_chunk_index; }
+    int64_t output_chunk_index() const { return _output_chunk_index; }
     bool has_output() { return _output_chunk_index < _input_chunks.size(); }
-    int64_t window_result_position() { return _window_result_position; }
+    int64_t window_result_position() const { return _window_result_position; }
     void set_window_result_position(int64_t window_result_position) {
         _window_result_position = window_result_position;
     }
     void update_window_result_position(int64_t increment) { _window_result_position += increment; }
     bool& input_eos() { return _input_eos; }
 
-    int64_t current_row_position() { return _current_row_position; }
+    int64_t current_row_position() const { return _current_row_position; }
     void update_current_row_position(int64_t increment) { _current_row_position += increment; }
-    int64_t partition_start() { return _partition_start; }
-    int64_t partition_end() { return _partition_end; }
-    int64_t peer_group_start() { return _peer_group_start; }
-    int64_t peer_group_end() { return _peer_group_end; }
+    int64_t partition_start() const { return _partition_start; }
+    int64_t partition_end() const { return _partition_end; }
+    int64_t found_partition_end() const { return _found_partition_end; }
+    int64_t peer_group_start() const { return _peer_group_start; }
+    int64_t peer_group_end() const { return _peer_group_end; }
 
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -99,19 +100,20 @@ public:
 
     void update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start, int64_t frame_end);
     void reset_window_state();
-    void get_window_function_result(int32_t start, int32_t end);
+    void get_window_function_result(size_t start, size_t end);
 
-    bool is_partition_finished(int64_t found_partition_end);
+    bool is_partition_finished();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
-    size_t compute_memory_usage();
     void create_agg_result_columns(int64_t chunk_size);
     void append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
 
-    bool is_new_partition(int64_t found_partition_end);
+    bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
-    int64_t find_partition_end();
+    void find_partition_end();
+    bool find_and_check_partition_end();
     void find_peer_group_end();
-    void reset_state_for_new_partition(int64_t found_partition_end);
+    void reset_state_for_cur_partition();
+    void reset_state_for_next_partition();
 
     void remove_unused_buffer_values(RuntimeState* state);
 
@@ -159,8 +161,16 @@ private:
     bool _input_eos = false;
 
     int64_t _current_row_position = 0;
+
+    // Record the start pos of current partition
     int64_t _partition_start = 0;
+    // Record the end pos of current partition.
+    // If the end position has not been found during the iteration, _partition_end = _partition_start.
     int64_t _partition_end = 0;
+    // Used to record the first position of the latest Chunk that is not equal to the PartitionKey.
+    // If not found, it points to the last position + 1.
+    int64_t _found_partition_end = 0;
+
     // A peer group is all of the rows that are peers within the specified ordering.
     // Rows are peers if they compare equal to each other using the specified ordering expression.
     int64_t _peer_group_start = 0;
@@ -205,7 +215,7 @@ private:
     void _update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                        int64_t frame_end);
 
-    int64_t _find_first_not_equal(vectorized::Column* column, int64_t start, int64_t end);
+    static int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.

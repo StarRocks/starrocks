@@ -206,6 +206,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
                                    _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
                 _num_running_io_tasks--;
@@ -225,6 +226,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
                 _num_running_io_tasks--;

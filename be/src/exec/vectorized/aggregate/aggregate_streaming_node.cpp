@@ -72,11 +72,11 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 if (false) {
                 }
 #define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {                                  \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, input_chunk_size));                                             \
     }
-                APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                 else {
                     DCHECK(false);
@@ -120,11 +120,11 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     if (false) {
                     }
 #define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {                                     \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {                                  \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, input_chunk_size));                                             \
     }
-                    APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                     else {
                         DCHECK(false);
@@ -148,12 +148,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         if (false) {
                         }
 #define HASH_MAP_METHOD(NAME)                                                             \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) {        \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {     \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype( \
                                     _aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, input_chunk_size));                \
     }
-                        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
                         else {
                             DCHECK(false);
@@ -224,10 +224,10 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
-#define HASH_MAP_METHOD(NAME)                                                                             \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME) _aggregator->it_hash() = \
+#define HASH_MAP_METHOD(NAME)                                                                                \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) _aggregator->it_hash() = \
             _aggregator->hash_map_variant().NAME->hash_map.begin();
-        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
         else {
             DCHECK(false);
@@ -238,10 +238,10 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                                  \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                     *_aggregator->hash_map_variant().NAME, runtime_state()->chunk_size(), chunk);
-    APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {
         DCHECK(false);

@@ -47,8 +47,6 @@
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/intersect_node.h"
-#include "exec/vectorized/jdbc_scan_node.h"
-#include "exec/vectorized/mysql_scan_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
@@ -476,8 +474,13 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
     }
         return Status::OK();
-    case TPlanNodeType::MYSQL_SCAN_NODE:
-        *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
+    case TPlanNodeType::MYSQL_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::MYSQL;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+    }
         return Status::OK();
     case TPlanNodeType::ES_HTTP_SCAN_NODE: {
         TPlanNode new_node = tnode;
@@ -493,8 +496,13 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::DECODE_NODE:
         *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::JDBC_SCAN_NODE:
-        *node = pool->add(new vectorized::JDBCScanNode(pool, tnode, descs));
+    case TPlanNodeType::JDBC_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::JDBC;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+    }
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
@@ -732,6 +740,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

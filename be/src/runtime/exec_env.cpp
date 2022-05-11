@@ -53,6 +53,7 @@
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -187,7 +188,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&driver_executor_thread_pool));
-    _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
+    _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(max_thread_num);
 
     _driver_limiter = new pipeline::DriverLimiter(max_thread_num * config::pipeline_max_num_drivers_per_exec_thread);
@@ -199,7 +200,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&wg_driver_executor_thread_pool));
-    _wg_driver_executor = new pipeline::GlobalDriverExecutor(std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor =
+            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(max_thread_num);
 
     _master_info = new TMasterInfo();
@@ -210,6 +212,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
     _stream_load_executor = new StreamLoadExecutor(this);
+    _stream_context_mgr = new StreamContextMgr();
+    _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _plugin_mgr = new PluginMgr();
@@ -340,6 +344,14 @@ void ExecEnv::_destroy() {
     if (_small_file_mgr) {
         delete _small_file_mgr;
         _small_file_mgr = nullptr;
+    }
+    if (_transaction_mgr) {
+        delete _transaction_mgr;
+        _transaction_mgr = nullptr;
+    }
+    if (_stream_context_mgr) {
+        delete _stream_context_mgr;
+        _stream_context_mgr = nullptr;
     }
     if (_routine_load_task_executor) {
         delete _routine_load_task_executor;

@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 
@@ -100,7 +101,7 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
     _cv.notify_one();
 }
 
-size_t QuerySharedDriverQueue::size() {
+size_t QuerySharedDriverQueue::size() const {
     size_t size = 0;
     for (const auto& sub_queue : _queues) {
         size += sub_queue.size();
@@ -301,17 +302,10 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
         query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
     }
 
-    // Update scan rows
-    if (wg->big_query_scan_rows_limit()) {
-        query_ctx->incr_cur_scan_rows_num(driver->source_operator()->get_last_scan_rows_num());
-    }
-
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 
-size_t DriverQueueWithWorkGroup::size() {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
+size_t DriverQueueWithWorkGroup::size() const {
     size_t size = 0;
     for (auto wg : _ready_wgs) {
         size += wg->driver_queue()->size();

@@ -36,6 +36,11 @@ public:
     void add_blocked_driver(const DriverRawPtr driver);
     // remove blocked driver from poller
     void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
+    // only used for collect metrics
+    size_t blocked_driver_queue_len() const {
+        std::unique_lock<std::mutex> guard(_mutex);
+        return _blocked_drivers.size();
+    }
 
 private:
     void run_internal();
@@ -43,7 +48,7 @@ private:
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
 
 private:
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
     DriverQueue* _driver_queue;

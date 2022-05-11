@@ -7,6 +7,7 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/exec_env.h"
 #include "runtime/mysql_result_writer.h"
+#include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
@@ -44,6 +45,12 @@ void ResultSinkOperator::close(RuntimeState* state) {
             // Incrementing and reading _num_written_rows needn't memory barrier, because
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
+
+            auto query_statistic = std::make_shared<QueryStatistics>();
+            QueryContext* query_ctx = state->query_ctx();
+            query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
+            query_statistic->set_returned_rows(_num_written_rows);
+            _sender->set_query_statistics(query_statistic);
 
             Status final_status = _fragment_ctx->final_status();
             if (!st.ok() && final_status.ok()) {

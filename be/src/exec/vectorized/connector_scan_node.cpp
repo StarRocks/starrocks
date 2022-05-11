@@ -66,7 +66,6 @@ public:
     void close(RuntimeState* state) { _data_source->close(state); }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
-        // VLOG_FILE << "scanner get chunk size = " << (*chunk)->num_rows();
         return Status::OK();
     }
 
@@ -134,7 +133,13 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
-    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+    auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
+
+    if (!_data_source_provider->insert_local_exchange_operator()) {
+        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
+                                                                          operators, context->degree_of_parallelism());
+    }
+    return operators;
 }
 
 // ==============================================================
@@ -503,8 +508,19 @@ Status ConnectorScanNode::close(RuntimeState* state) {
 
 Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     _scan_ranges = scan_ranges;
+    if (!accept_empty_scan_ranges() && scan_ranges.size() == 0) {
+        // If scan ranges size is zero,
+        // it means data source provider does not support reading by scan ranges.
+        // So here we insert a single placeholder, to force data source provider
+        // to create at least one data source
+        _scan_ranges.emplace_back(TScanRangeParams());
+    }
     COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
+}
+
+bool ConnectorScanNode::accept_empty_scan_ranges() const {
+    return _data_source_provider->accept_empty_scan_ranges();
 }
 
 void ConnectorScanNode::_init_counter() {

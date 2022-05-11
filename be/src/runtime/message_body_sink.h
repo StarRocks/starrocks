@@ -37,6 +37,8 @@ public:
     virtual Status finish() { return Status::OK(); }
     // called when read HTTP failed
     virtual void cancel(const Status& status) {}
+    // check if all data has consume
+    virtual bool exhausted() { return false; }
 };
 
 // write message to a local file

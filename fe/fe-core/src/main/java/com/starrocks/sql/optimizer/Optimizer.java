@@ -182,6 +182,12 @@ public class Optimizer {
 
         cleanUpMemoGroup(memo);
 
+
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        if (context.getCteContext().isForcedCTE()) {
+            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        }
+
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();

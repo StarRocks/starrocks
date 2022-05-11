@@ -28,12 +28,16 @@ statement
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
 
+    // Task Statement
+    | submitTaskStatement                                                                   #submitTask
+
     // Materialized View Statement
     | showMaterializedViewStatement                                                         #showMaterializedView
-    | dropMaterializedViewStatement                                                         #dropMaterialized
+    | dropMaterializedViewStatement                                                         #dropMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
+    | dropExternalCatalogStatement                                                          #dropCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -51,7 +55,13 @@ statement
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
 
-    //Other statement
+    // Analyze Statement
+    | analyzeStatement                                                                      #analyze
+    | createAnalyzeStatement                                                                #createAnalyze
+    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | showAnalyzeStatement                                                                  #showAnalyze
+
+    // Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -113,6 +123,13 @@ dropViewStatement
     : DROP VIEW (IF EXISTS)? qualifiedName
     ;
 
+// ------------------------------------------- Task Statement ----------------------------------------------------------
+
+submitTaskStatement
+    : SUBMIT hint* TASK qualifiedName?
+    AS createTableAsSelectStatement
+    ;
+
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 showMaterializedViewStatement
@@ -133,6 +150,10 @@ alterSystemStatement
 
 createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    ;
+
+dropExternalCatalogStatement
+    : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -190,6 +211,26 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Analyze Statement -------------------------------------------------------
+
+analyzeStatement
+    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+createAnalyzeStatement
+    : CREATE ANALYZE FULL? ALL properties?
+    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
+    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+dropAnalyzeJobStatement
+    : DROP ANALYZE INTEGER_VALUE
+    ;
+
+showAnalyzeStatement
+    : SHOW ANALYZE
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -699,9 +740,9 @@ number
 nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
+    | CAST | CATALOG | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY | DISTRIBUTION
-    | END | EXTRACT | EVERY
+    | END | EXTERNAL | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
@@ -713,8 +754,8 @@ nonReserved
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
     | ROLLUP | ROLLBACK | REPLICA
-    | SECOND | SESSION | SETS | START | SUM | STATUS
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
+    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | WEEK

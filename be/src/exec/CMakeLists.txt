@@ -68,7 +68,7 @@ set(EXEC_FILES
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
     vectorized/chunks_sorter.cpp
-    vectorized/chunk_sorter_heapsorter.cpp
+    vectorized/chunks_sorter_heap_sort.cpp
     vectorized/chunks_sorter_topn.cpp
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp
@@ -98,7 +98,6 @@ set(EXEC_FILES
     vectorized/table_function_node.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
-    vectorized/mysql_scan_node.cpp
     vectorized/schema_scanner/schema_tables_scanner.cpp
     vectorized/schema_scanner/schema_dummy_scanner.cpp
     vectorized/schema_scanner/schema_schemata_scanner.cpp
@@ -114,7 +113,6 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
-    vectorized/jdbc_scan_node.cpp
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp
     vectorized/sorting/merge_column.cpp
@@ -143,7 +141,6 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
-    pipeline/scan/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

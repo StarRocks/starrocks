@@ -7,4 +7,6 @@ add_library(Connector STATIC
     connector.cpp
     hive_connector.cpp
     es_connector.cpp
+    jdbc_connector.cpp
+    mysql_connector.cpp
 )

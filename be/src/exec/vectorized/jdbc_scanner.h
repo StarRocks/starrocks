@@ -33,11 +33,11 @@ struct JDBCScannerProfile {
 
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, pipeline::ScanOperator* op)
+    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
             : _scan_ctx(context),
               _tuple_desc(tuple_desc),
               _slot_descs(tuple_desc->slots()),
-              _runtime_profile(op->unique_metrics()) {}
+              _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner();
 
@@ -46,6 +46,10 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     Status close(RuntimeState* state);
+
+    // if execution threads has been changed, we have to reset jni env
+    // because jni env can not be used across threads.
+    Status reset_jni_env();
 
 private:
     void _init_profile();
