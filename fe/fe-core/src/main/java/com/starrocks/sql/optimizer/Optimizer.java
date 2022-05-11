@@ -179,9 +179,8 @@ public class Optimizer {
         // inline CTE if consume use once
         if (cteContext.hasInlineCTE()) {
             ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
+            cleanUpMemoGroup(memo);
         }
-
-        cleanUpMemoGroup(memo);
 
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
