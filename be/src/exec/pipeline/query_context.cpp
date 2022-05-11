@@ -234,7 +234,7 @@ size_t QueryContextManager::size() {
     return sz;
 }
 
-void QueryContextManager::remove(const TUniqueId& query_id) {
+bool QueryContextManager::remove(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -245,12 +245,13 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
-        return;
+        return false;
     }
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
+        return true;
     } else if (it->second->has_no_active_instances()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
@@ -259,7 +260,9 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
         ctx->extend_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
+        return true;
     }
+    return false;
 }
 
 void QueryContextManager::clear() {

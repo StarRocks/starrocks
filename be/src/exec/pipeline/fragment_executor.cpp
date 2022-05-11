@@ -435,10 +435,11 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (_wg) {
-                _wg->decr_num_queries();
+            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
+                if (_wg) {
+                    _wg->decr_num_queries();
+                }
             }
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

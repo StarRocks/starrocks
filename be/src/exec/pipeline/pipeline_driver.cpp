@@ -317,12 +317,12 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            if (_fragment_ctx->enable_resource_group()) {
+            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (_workgroup) {
+                    DCHECK(_fragment_ctx->enable_resource_group());
                     _workgroup->decr_num_queries();
                 }
             }
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

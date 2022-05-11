@@ -129,7 +129,7 @@ public:
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
     size_t size();
-    void remove(const TUniqueId& query_id);
+    bool remove(const TUniqueId& query_id);
     // used for graceful exit
     void clear();
 
