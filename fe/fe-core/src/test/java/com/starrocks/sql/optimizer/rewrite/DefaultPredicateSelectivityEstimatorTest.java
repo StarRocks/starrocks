@@ -593,7 +593,6 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
     @Test
     public void testExpressionBinaryPredicate() {
-
         DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
                 new DefaultPredicateSelectivityEstimator();
         CallOperator callOperator = new CallOperator("max", Type.INT, Lists.newArrayList(v1));
@@ -624,20 +623,20 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt0, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt1, statistics), 0.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt2, statistics), 0.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt3, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt2, statistics), 0.15, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt3, statistics), 0.02, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt4, statistics), 1.0, 0.0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt0, statistics), 1.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt1, statistics), 1.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt2, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt1, statistics), 0.98, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt2, statistics), 0.85, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt3, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt4, statistics), 0.0, 0.0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe0, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe1, statistics), 1.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe2, statistics), 1.0, 0.0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe3, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe2, statistics), 0.85, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe3, statistics), 0.02, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGe4, statistics), 0.0, 0.0);
     }
 
