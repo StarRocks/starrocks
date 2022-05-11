@@ -378,7 +378,7 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
                                                          _single_agg_state + _agg_states_offsets[i]);
         } else {
-            DCHECK_EQ(_agg_intput_columns[i].size(), 1);
+            DCHECK_GE(_agg_intput_columns[i].size(), 1);
             _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_intput_columns[i][0].get(),
                                                         _single_agg_state + _agg_states_offsets[i]);
         }
