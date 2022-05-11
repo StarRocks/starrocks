@@ -142,4 +142,18 @@ public class SubqueryTest extends PlanTestBase {
         expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
         getFragmentPlan(sql);
     }
+
+    @Test
+    public void testConstScalarSubQuery() throws Exception {
+        String sql = "select * from t0 where 2 = (select v4 from t1)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 4: v4 = 2\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS");
+        assertContains(plan, "  1:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 = 2");
+    }
 }

@@ -272,7 +272,12 @@ public class Group {
 
     @Override
     public String toString() {
-        return "->  " + "Group: " + id;
+        StringBuilder sb = new StringBuilder();
+        sb.append("->  ").append("Group: ").append(id).append("\n");
+        for (GroupExpression expr : logicalExpressions) {
+            sb.append(expr.toString());
+        }
+        return sb.toString();
     }
 
     public String toPrettyString(String headlineIndent, String detailIndent) {

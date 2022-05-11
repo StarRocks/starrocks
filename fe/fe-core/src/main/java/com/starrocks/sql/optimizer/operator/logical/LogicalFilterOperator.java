@@ -48,6 +48,11 @@ public class LogicalFilterOperator extends LogicalOperator {
         return visitor.visitLogicalFilter(optExpression, context);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        return this == o;
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
         @Override
