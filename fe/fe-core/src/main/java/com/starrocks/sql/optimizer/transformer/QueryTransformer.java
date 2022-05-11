@@ -86,7 +86,8 @@ class QueryTransformer {
 
         // Add project operator to prune order by columns
         if (!orderByColumns.isEmpty() && !outputColumns.containsAll(orderByColumns)) {
-            builder = project(builder, queryBlock.getOutputExpr());
+            long limit = queryBlock.hasLimit() ? queryBlock.getLimit().getLimit() : -1;
+            builder = project(builder, queryBlock.getOutputExpr(), limit);
         }
 
         return new LogicalPlan(builder, outputColumns, correlation);
@@ -148,6 +149,10 @@ class QueryTransformer {
     }
 
     private OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions) {
+        return project(subOpt, expressions, -1);
+    }
+
+    private OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions, long limit) {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
@@ -161,6 +166,7 @@ class QueryTransformer {
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
+        projectOperator.setLimit(limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
 
