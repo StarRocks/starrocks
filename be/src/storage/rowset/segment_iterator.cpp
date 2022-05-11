@@ -710,6 +710,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         DCHECK(_context->_overflow_read_chunk->is_empty());
         _context->_overflow_read_chunk->append(*chunk, chunk_capacity, chunk_start - chunk_capacity);
+        _context->_overflow_read_chunk->set_delete_state(chunk->delete_state());
         if (rowid != nullptr) {
             DCHECK(_context->_overflow_read_chunk_rowids.empty());
             _context->_overflow_read_chunk_rowids.insert(_context->_overflow_read_chunk_rowids.end(),
