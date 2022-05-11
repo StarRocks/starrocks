@@ -8,7 +8,6 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
@@ -98,7 +97,7 @@ public class MaterializedViewAnalyzer {
             if (expressionPartitionDesc != null) {
                 // check partition expression all in column list which in createMaterializedViewStatement
                 // write the expr into partitionExpDesc if partition expression exists
-                checkExpInColumn(expressionPartitionDesc, statement, columnExprMap);
+                checkExpInColumn(expressionPartitionDesc, statement.getMvColumnItems(), columnExprMap);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpParams(expressionPartitionDesc);
                 // check partition key must be base table's partition key
@@ -138,18 +137,62 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkExpInColumn(ExpressionPartitionDesc expressionPartitionDesc,
-                                      CreateMaterializedViewStatement statement,
+                                      List<Column> columns,
                                       Map<Column, Expr> columnExprMap) {
-            List<Column> mvColumnItems = statement.getMvColumnItems();
             SlotRef slotRef = expressionPartitionDesc.getSlotRef();
-            for (Column mvColumnItem : mvColumnItems) {
-                if (slotRef.getColumnName().equals(mvColumnItem.getName())) {
-                    expressionPartitionDesc.setExpr(columnExprMap.get(mvColumnItem));
+            boolean hasColumn = false;
+            for (Column column : columns) {
+                if (slotRef.getColumnName().equals(column.getName())) {
+                    hasColumn = true;
+                    Expr refExpr = columnExprMap.get(column);
+                    // check exp with ref expr which in columnExprMap
+                    checkExpWithRefExpr(expressionPartitionDesc, refExpr);
                     break;
                 }
             }
-            if (expressionPartitionDesc.getExpr() == null) {
+            if (!hasColumn) {
                 throw new SemanticException("Materialized view partition exp column is not found in query statement");
+            }
+        }
+
+        private void checkExpWithRefExpr(ExpressionPartitionDesc expressionPartitionDesc, Expr refExpr) {
+            if (expressionPartitionDesc.isFunction()) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
+                if (!(refExpr instanceof SlotRef)) {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionCallExpr.getFnName().getFunction() +
+                            " must related with column");
+                }
+                //replace with analyzed SlotRef
+                expressionPartitionDesc.setSlotRef((SlotRef) refExpr);
+                ArrayList<Expr> children = functionCallExpr.getChildren();
+                for (int i = 0; i < children.size(); i++) {
+                    if (children.get(i) instanceof SlotRef) {
+                        functionCallExpr.setChild(i, refExpr);
+                        break;
+                    }
+                }
+                // analyze function, must after update child
+                FunctionAnalyzer.analyze(functionCallExpr);
+            } else {
+                if (refExpr instanceof FunctionCallExpr) {
+                    expressionPartitionDesc.setFunction(true);
+                    // expr has alias
+                    ArrayList<Expr> children = refExpr.getChildren();
+                    for (int i = 0; i < children.size(); i++) {
+                        if (children.get(i) instanceof SlotRef) {
+                            expressionPartitionDesc.setSlotRef(((SlotRef) children.get(i)));
+                            break;
+                        }
+                    }
+                    expressionPartitionDesc.setExpr(refExpr);
+                } else if (refExpr instanceof SlotRef) {
+                    expressionPartitionDesc.setSlotRef((SlotRef) refExpr);
+                    expressionPartitionDesc.setExpr(refExpr);
+                } else {
+                    throw new SemanticException(
+                            "Materialized view partition function must related with column");
+                }
             }
         }
 
@@ -172,14 +215,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionKeyWithBaseTable(ExpressionPartitionDesc expressionPartitionDesc,
                                                     Map<TableName, Table> tableNameTableMap) {
-            SlotRef slotRef = null;
-            Expr expr = expressionPartitionDesc.getExpr();
-            if (expr instanceof FunctionCallExpr) {
-                // get column from expression
-                slotRef = getColumnFromFunctionCallExpr(((FunctionCallExpr) expr));
-            } else {
-                slotRef = ((SlotRef) expr);
-            }
+            SlotRef slotRef = expressionPartitionDesc.getSlotRef();
             // must have table
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
             PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
@@ -199,14 +235,6 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition key");
                 }
             }
-        }
-
-        private SlotRef getColumnFromFunctionCallExpr(FunctionCallExpr expr) {
-            FunctionName fnName = expr.getFnName();
-            if (fnName.getFunction().equals("date_trunc")) {
-                return (SlotRef) expr.getChild(1);
-            }
-            return (SlotRef) expr.getChild(0);
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {

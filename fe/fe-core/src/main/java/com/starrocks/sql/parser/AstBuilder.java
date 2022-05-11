@@ -409,7 +409,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
     @Override
@@ -462,10 +461,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         ExpressionPartitionDesc expressionPartitionDesc = null;
         if (context.primaryExpression() != null) {
             Expr expr = (Expr) visit(context.primaryExpression());
-            if (!(expr instanceof SlotRef)) {
-                throw new IllegalArgumentException("Partition exp " + expr.toSql() + " must be alias of select item");
+            if (expr instanceof SlotRef) {
+                expressionPartitionDesc = new ExpressionPartitionDesc(((SlotRef) expr), null, false);
+            } else if (expr instanceof FunctionCallExpr) {
+                for (Expr child : expr.getChildren()) {
+                    if (child instanceof SlotRef) {
+                        expressionPartitionDesc = new ExpressionPartitionDesc((SlotRef) child, expr, true);
+                        break;
+                    }
+                }
+                if (expressionPartitionDesc == null) {
+                    throw new IllegalArgumentException(
+                            "Partition exp not supports:" + expr.toSql());
+                }
+            } else {
+                throw new IllegalArgumentException(
+                        "Partition exp not supports:" + expr.toSql());
             }
-            expressionPartitionDesc = new ExpressionPartitionDesc(((SlotRef) expr));
         }
         // process distribution
         DistributionDesc distributionDesc =
@@ -500,7 +512,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Catalog Statement ---------------------------------------------------
 
     @Override
-    public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
+    public ParseNode visitCreateExternalCatalogStatement(
+            StarRocksParser.CreateExternalCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
         String comment = null;
@@ -729,7 +742,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.DATABASE() != null) {
-            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null, properties);
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null,
+                    properties);
         } else if (context.TABLE() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             TableName tableName = qualifiedNameToTableName(qualifiedName);
