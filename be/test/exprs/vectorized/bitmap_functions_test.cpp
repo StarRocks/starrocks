@@ -1878,45 +1878,5 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
     free(src);
 }
 
-TEST_F(VecBitmapFunctionsTest, arrayToBitmapTest) {
-    // []
-    // [0]
-    {
-        Columns columns;
-
-        auto s = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
-
-        s->append_datum(Datum(DatumArray{}));
-
-        auto result = ArrayFunctions::array_contains(nullptr, {s});
-
-        columns.push_back(result);
-
-        auto column = BitmapFunctions::array_to_bitmap(ctx, columns);
-
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
-
-        ASSERT_TRUE(p->is_null(0)));
-    }
-
-    {
-        Columns columns;
-
-        auto s = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
-
-        s->append_datum(Datum(DatumArray{Datum((int32_t)0)});
-
-        auto result = ArrayFunctions::array_contains(nullptr, {s});
-
-        columns.push_back(result);
-
-        auto column = BitmapFunctions::array_to_bitmap(ctx, columns);
-
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
-
-        ASSERT_EQ(5, p->get_object(0)->serialize_size());
-    }
-}
-
 } // namespace vectorized
 } // namespace starrocks
