@@ -8,6 +8,23 @@
 
 namespace starrocks::pipeline {
 
+QuerySharedDriverQueue::QuerySharedDriverQueue() {
+    double factor = 1;
+    for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
+        // initialize factor for every sub queue,
+        // Higher priority queues have more execution time,
+        // so they have a larger factor.
+        _queues[i].factor_for_normal = factor;
+        factor *= RATIO_OF_ADJACENT_QUEUE;
+    }
+
+    int64_t time_slice = 0;
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+        _level_time_slices[i] = time_slice;
+    }
+}
+
 void QuerySharedDriverQueue::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _is_closed = true;
@@ -124,6 +141,23 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
     return QUEUE_SIZE - 1;
 }
 
+QuerySharedDriverQueueWithoutLock::QuerySharedDriverQueueWithoutLock() {
+    double factor = 1;
+    for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
+        // initialize factor for every sub queue,
+        // Higher priority queues have more execution time,
+        // so they have a larger factor.
+        _queues[i].factor_for_normal = factor;
+        factor *= RATIO_OF_ADJACENT_QUEUE;
+    }
+
+    int64_t time_slice = 0;
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+        _level_time_slices[i] = time_slice;
+    }
+}
+
 void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
     _put_back(driver);
 }
@@ -200,6 +234,44 @@ int QuerySharedDriverQueueWithoutLock::_compute_driver_level(const DriverRawPtr 
     }
 
     return QUEUE_SIZE - 1;
+}
+
+void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
+    if (driver->driver_state() == DriverState::CANCELED) {
+        queue.emplace_front(driver);
+    } else {
+        queue.emplace_back(driver);
+    }
+    driver_number++;
+}
+
+void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
+    DCHECK(driver->is_in_ready_queue());
+    pending_cancel_queue.emplace(driver);
+}
+
+DriverRawPtr SubQuerySharedDriverQueue::take() {
+    DCHECK(!empty());
+    if (!pending_cancel_queue.empty()) {
+        DriverRawPtr driver = pending_cancel_queue.front();
+        pending_cancel_queue.pop();
+        cancelled_set.insert(driver);
+        --driver_number;
+        return driver;
+    }
+
+    while (!queue.empty()) {
+        DriverRawPtr driver = queue.front();
+        queue.pop_front();
+        auto iter = cancelled_set.find(driver);
+        if (iter != cancelled_set.end()) {
+            cancelled_set.erase(iter);
+        } else {
+            --driver_number;
+            return driver;
+        }
+    }
+    return nullptr;
 }
 
 void DriverQueueWithWorkGroup::close() {
