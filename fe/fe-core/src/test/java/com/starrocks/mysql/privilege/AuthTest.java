@@ -1318,6 +1318,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
+        Assert.assertEquals(1, auth.getAuthInfo(userIdentity).size());
         Assert.assertTrue(auth.checkResourcePriv(userIdentity, resourceName, PrivPredicate.USAGE));
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
@@ -1968,5 +1969,26 @@ public class AuthTest {
         PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
         auth.grantPrivs(userIdentity, tablePattern, privileges, false);
         Assert.assertTrue(auth.checkCanEnterCluster(ctx, newCluster));
+
+        auth.revokePrivs(userIdentity, tablePattern, privileges, false);
+        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
+    }
+
+    @Test
+    public void testGetPasswordByApproximate() throws Exception {
+        Config.enable_validate_password = false;  // skip password validation
+        UserIdentity userIdentity = new UserIdentity("test_user", "%");
+        userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        Assert.assertNull(auth.getUserPrivTable().getPasswordByApproximate(
+                SystemInfoService.DEFAULT_CLUSTER + ":unknown_user", "10.1.1.1"));
+        Assert.assertNotNull(auth.getUserPrivTable().getPasswordByApproximate(
+                SystemInfoService.DEFAULT_CLUSTER + ":test_user", "10.1.1.1"));
+        Assert.assertNotNull(auth.getUserPrivTable().getPasswordByApproximate(
+                SystemInfoService.DEFAULT_CLUSTER + ":test_user", "localhost"));
     }
  }
