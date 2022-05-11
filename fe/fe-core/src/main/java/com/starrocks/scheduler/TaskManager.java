@@ -7,12 +7,10 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Queues;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.QueryableReentrantLock;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -22,12 +20,9 @@ import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -45,16 +40,8 @@ public class TaskManager {
     // taskName -> Task, include Manual Task, Periodical Task
     private final Map<String, Task> nameToTaskMap;
 
-    // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
-    // so the map value is FIFO queue
-    private final Map<Long, Queue<TaskRun>> pendingTaskRunMap;
-
-    // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
-    // so the map value is not queue
-    private final Map<Long, TaskRun> runningTaskRunMap;
-
-    // include SUCCESS/FAILED taskRun
-    private final TaskRunHistory taskHistory;
+    // include PENDING/RUNNING taskRun;
+    private final TaskRunManager taskRunManager;
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
@@ -65,16 +52,11 @@ public class TaskManager {
     // Use to concurrency control
     private final QueryableReentrantLock lock;
 
-    // Use to execute actual TaskRun
-    private final TaskRunExecutor taskRunExecutor;
-
     public TaskManager() {
-        pendingTaskRunMap = Maps.newConcurrentMap();
-        runningTaskRunMap = Maps.newConcurrentMap();
+
         manualTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
-        taskRunExecutor = new TaskRunExecutor();
-        taskHistory = new TaskRunHistory();
+        taskRunManager = new TaskRunManager();
         lock = new QueryableReentrantLock(true);
 
         dispatchScheduler.scheduleAtFixedRate(() -> {
@@ -82,42 +64,8 @@ public class TaskManager {
                 return;
             }
             try {
-                // check if a running TaskRun is complete and remove it from running TaskRun map
-                Iterator<Long> runningIterator = runningTaskRunMap.keySet().iterator();
-                while (runningIterator.hasNext()) {
-                    Long mvTableId = runningIterator.next();
-                    TaskRun taskRun = runningTaskRunMap.get(mvTableId);
-                    Future<?> future = taskRun.getFuture();
-                    if (future.isDone()) {
-                        runningIterator.remove();
-                        taskHistory.addHistory(taskRun);
-                        // TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun,
-                        //        Constants.TaskRunStatus.RUNNING, taskRun.getStatus());
-                        // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
-                    }
-                }
-
-                // schedule the pending TaskRun that can be run into running TaskRun map
-                Iterator<Long> pendingIterator = pendingTaskRunMap.keySet().iterator();
-                while (pendingIterator.hasNext()) {
-                    Long mvTableId = pendingIterator.next();
-                    TaskRun runningTaskRun = runningTaskRunMap.get(mvTableId);
-                    if (runningTaskRun == null) {
-                        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(mvTableId);
-                        if (taskRunQueue.size() == 0) {
-                            pendingIterator.remove();
-                        } else {
-                            TaskRun pendingTaskRun = taskRunQueue.poll();
-                            pendingTaskRun.setStatus(Constants.TaskRunState.RUNNING);
-                            runningTaskRunMap.put(mvTableId, pendingTaskRun);
-                            taskRunExecutor.executeTaskRun(pendingTaskRun);
-                            // TaskRunStatusChange statusChange =
-                            //        new TaskRunStatusChange(pendingTaskRun, Constants.TaskRunStatus.PENDING,
-                            //                Constants.TaskRunStatus.RUNNING);
-                            // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
-                        }
-                    }
-                }
+                taskRunManager.checkRunningTaskRun();
+                taskRunManager.scheduledPendingTaskRun();
             } catch (Exception ex) {
                 LOG.warn("failed to dispatch job.", ex);
             } finally {
@@ -151,7 +99,7 @@ public class TaskManager {
         if (task == null) {
             return null;
         }
-        return addTaskRun(TaskRunBuilder.newBuilder(task).build());
+        return taskRunManager.addTaskRun(TaskRunBuilder.newBuilder(task).build());
     }
 
     public void dropTask(String taskName) {
@@ -169,40 +117,10 @@ public class TaskManager {
         // GlobalStateMgr.getCurrentState().getEditLog().logDropTask(taskName);
     }
 
-    public String addTaskRun(TaskRun taskRun) {
-        String oldQueryId = taskRun.getQueryId();
-        if (oldQueryId != null) {
-            return null;
-        }
-        String newQueryId = UUIDUtil.genUUID().toString();
-        taskRun.setQueryId(newQueryId);
-        long taskId = taskRun.getTaskId();
-        Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
-        if (taskRunQueue == null) {
-            taskRunQueue = Queues.newConcurrentLinkedQueue();
-            taskRunQueue.offer(taskRun);
-            pendingTaskRunMap.put(taskId, taskRunQueue);
-        } else {
-            taskRunQueue.offer(taskRun);
-        }
-        // GlobalStateMgr.getCurrentState().getEditLog().logAddTaskRun(taskRun);
-        return newQueryId;
-    }
-
     public List<Task> showTask() {
         List<Task> taskList = Lists.newArrayList();
         taskList.addAll(manualTaskMap.values());
         return taskList;
-    }
-
-    public List<TaskRun> showTaskRun() {
-        List<TaskRun> taskRunList = Lists.newArrayList();
-        for (Queue<TaskRun> pJobs : pendingTaskRunMap.values()) {
-            taskRunList.addAll(pJobs);
-        }
-        taskRunList.addAll(runningTaskRunMap.values());
-        taskRunList.addAll(taskHistory.getAllHistory());
-        return taskRunList;
     }
 
     private boolean tryLock() {
@@ -227,6 +145,18 @@ public class TaskManager {
         this.lock.unlock();
     }
 
+    public void replayCreateTask(Task task) {
+        createTask(task);
+    }
+
+    public void replayDropTask(String taskName) {
+        dropTask(taskName);
+    }
+
+    public TaskRunManager getTaskRunManager() {
+        return taskRunManager;
+    }
+
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ConnectContext.get());
         Long createResult = this.createTask(task);
@@ -247,4 +177,5 @@ public class TaskManager {
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
     }
+
 }

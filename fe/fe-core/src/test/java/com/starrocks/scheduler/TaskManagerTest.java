@@ -89,7 +89,7 @@ public class TaskManagerTest {
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
-        List<TaskRun> taskRuns = taskManager.showTaskRun();
+        List<TaskRun> taskRuns = taskManager.getTaskRunManager().showTaskRun();
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getStatus());
 
     }
