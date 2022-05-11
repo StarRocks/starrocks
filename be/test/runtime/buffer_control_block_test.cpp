@@ -48,7 +48,7 @@ TEST_F(BufferControlBlockTest, add_one_get_one) {
     BufferControlBlock control_block(TUniqueId(), 1024);
     ASSERT_TRUE(control_block.init().ok());
 
-    TFetchDataResult* add_result = new TFetchDataResult();
+    std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.push_back("hello test");
     ASSERT_TRUE(control_block.add_batch(add_result).ok());
 
@@ -74,10 +74,9 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     ASSERT_TRUE(control_block.init().ok());
 
     ASSERT_TRUE(control_block.cancel().ok());
-    TFetchDataResult* add_result = new TFetchDataResult();
+    std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.push_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());
-    delete add_result;
 
     TFetchDataResult get_result;
     ASSERT_FALSE(control_block.get_batch(&get_result).ok());
@@ -99,17 +98,16 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     pthread_create(&id, NULL, cancel_thread, &control_block);
 
     {
-        TFetchDataResult* add_result = new TFetchDataResult();
+        std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
         ASSERT_TRUE(control_block.add_batch(add_result).ok());
     }
     {
-        TFetchDataResult* add_result = new TFetchDataResult();
+        std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
         ASSERT_FALSE(control_block.add_batch(add_result).ok());
-        delete add_result;
     }
 
     TFetchDataResult get_result;
@@ -136,7 +134,7 @@ void* add_thread(void* param) {
     BufferControlBlock* control_block = static_cast<BufferControlBlock*>(param);
     sleep(1);
     {
-        TFetchDataResult* add_result = new TFetchDataResult();
+        std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
         control_block->add_batch(add_result);
