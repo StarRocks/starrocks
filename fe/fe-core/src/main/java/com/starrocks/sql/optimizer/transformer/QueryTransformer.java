@@ -92,7 +92,8 @@ class QueryTransformer {
 
         // Add project operator to prune order by columns
         if (!orderByColumns.isEmpty() && !outputColumns.containsAll(orderByColumns)) {
-            builder = project(builder, queryBlock.getOutputExpr(), queryBlock.getLimit().getLimit());
+            long limit = queryBlock.hasLimit() ? queryBlock.getLimit().getLimit() : -1;
+            builder = project(builder, queryBlock.getOutputExpr(), limit);
         }
 
         return new LogicalPlan(builder, outputColumns, correlation);

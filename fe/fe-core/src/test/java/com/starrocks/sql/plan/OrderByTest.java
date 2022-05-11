@@ -119,8 +119,18 @@ public class OrderByTest extends PlanTestBase {
     public void testSqlSelectLimit() throws Exception {
         connectContext.getSessionVariable().setSqlSelectLimit(200);
         // test order by with project
-        String sql = "select L_QUANTITY from lineitem order by L_QUANTITY, L_PARTKEY limit 10";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+
+        sql = "select L_QUANTITY from lineitem order by L_QUANTITY, L_PARTKEY";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: <slot 5> 5: L_QUANTITY ASC, <slot 2> 2: L_PARTKEY ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+
+        sql = sql + " limit 10";
+        plan = getFragmentPlan(sql);
         assertContains(plan, "  1:TOP-N\n" +
                 "  |  order by: <slot 5> 5: L_QUANTITY ASC, <slot 2> 2: L_PARTKEY ASC\n" +
                 "  |  offset: 0\n" +
