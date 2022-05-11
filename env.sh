@@ -100,11 +100,11 @@ if ! ${CMAKE_CMD} --version; then
 fi
 export CMAKE_CMD
 
-GENERATOR="Unix Makefiles"
+CMAKE_GENERATOR="Unix Makefiles"
 BUILD_SYSTEM="make"
 if ninja --version 2>/dev/null; then
-    GENERATOR="Ninja"
     BUILD_SYSTEM="ninja"
+    CMAKE_GENERATOR="Ninja"
 fi
-export GENERATOR
+export CMAKE_GENERATOR
 export BUILD_SYSTEM

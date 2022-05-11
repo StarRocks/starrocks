@@ -188,14 +188,14 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
-    ${CMAKE_CMD} -G "${GENERATOR}" \
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
                     -DSTARROCKS_HOME=${STARROCKS_HOME} \
                     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. 
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
     time ${BUILD_SYSTEM} -j${PARALLEL}
     ${BUILD_SYSTEM} install
 
