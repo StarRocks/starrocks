@@ -20,6 +20,12 @@ import java.util.List;
  *   Limit(Global)   =>            Project
  *        |                           |
  *       ...                         ...
+ *
+ * Execute Project first VS Execute Limit first:
+ * 1. Execute Project first to prune columns to reduce network cost, but may add expressions compute cost.
+ * 2. Execute Limit first may add network cost because it's will send more columns, but the number of rows
+ *    where the expressions compute is small
+ *
  */
 public class PushDownProjectLimitRule extends TransformationRule {
     public PushDownProjectLimitRule() {
