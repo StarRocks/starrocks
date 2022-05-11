@@ -26,8 +26,7 @@ public class TaskBuilder {
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setTaskType(Constants.TaskType.MANUAL);
-        task.setProcessor(new SqlTaskRunProcessor());
-        task.initTaskBuilder();
+        task.setProcessorType(Constants.TaskProcessorType.SQL);
         return task;
     }
 

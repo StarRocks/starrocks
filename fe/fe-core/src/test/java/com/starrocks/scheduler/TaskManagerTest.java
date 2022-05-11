@@ -2,6 +2,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -78,10 +79,9 @@ public class TaskManagerTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskManager.processorMap = ImmutableMap.of(Constants.TaskProcessorType.SQL, new MockTaskRunProcessor());
 
-        task.initTaskBuilder();
-        task.setProcessor(context -> LOG.info("running a task."));
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         taskManager.createTask(task);
         List<Task> taskList = taskManager.showTask();

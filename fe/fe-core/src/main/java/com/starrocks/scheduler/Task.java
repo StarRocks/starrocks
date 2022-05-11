@@ -13,7 +13,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.concurrent.ScheduledFuture;
 
 public class Task implements Writable {
 
@@ -35,18 +34,11 @@ public class Task implements Writable {
     @SerializedName("definition")
     private String definition;
 
-    @SerializedName("taskRunBuilder")
-    private TaskRunBuilder taskRunBuilder;
-
     @SerializedName("properties")
     private Map<String, String> properties;
 
-    private Schedule schedule;
-
-    private ScheduledFuture<?> future;
-
-    private TaskRunProcessor processor;
-
+    @SerializedName("processorType")
+    private Constants.TaskProcessorType processorType = Constants.TaskProcessorType.SQL;
 
     public Long getId() {
         return id;
@@ -104,36 +96,12 @@ public class Task implements Writable {
         this.properties = properties;
     }
 
-    public TaskRunBuilder getTaskRunBuilder() {
-        return taskRunBuilder;
+    public Constants.TaskProcessorType getProcessorType() {
+        return processorType;
     }
 
-    public void initTaskBuilder() {
-        this.taskRunBuilder = TaskRunBuilder.newBuilder(this);
-    }
-
-    public Schedule getSchedule() {
-        return schedule;
-    }
-
-    public void setSchedule(Schedule schedule) {
-        this.schedule = schedule;
-    }
-
-    public ScheduledFuture<?> getFuture() {
-        return future;
-    }
-
-    public void setFuture(ScheduledFuture<?> future) {
-        this.future = future;
-    }
-
-    public TaskRunProcessor getProcessor() {
-        return processor;
-    }
-
-    public void setProcessor(TaskRunProcessor processor) {
-        this.processor = processor;
+    public void setProcessorType(Constants.TaskProcessorType processorType) {
+        this.processorType = processorType;
     }
 
     public static Task read(DataInput in) throws IOException {
