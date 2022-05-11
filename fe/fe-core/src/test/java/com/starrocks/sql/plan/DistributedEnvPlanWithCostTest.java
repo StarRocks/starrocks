@@ -1168,4 +1168,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testStringMinMaxPredicate() throws Exception {
+        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having min > '123'";
+        String costPlan = getCostExplain(sql);
+        assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 16.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 16.0, 7500000.0] ESTIMATE");
+
+        sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, " * min-->[-Infinity, Infinity, 0.0, 16.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 16.0, 7500000.0] ESTIMATE");
+
+        sql = "select Min(C_NAME) as min, Max(C_NAME) as max from customer having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, "* min-->[-Infinity, -Infinity, 0.0, 16.0, 1.0] ESTIMATE\n" +
+                "  |  * max-->[Infinity, Infinity, 0.0, 16.0, 1.0] ESTIMATE");
+        assertContains(costPlan, "having: [11: max, VARCHAR, true] < '1234'\n" +
+                "  |  cardinality: 1");
+    }
 }

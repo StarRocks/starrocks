@@ -135,7 +135,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=3.0
 numNodes=0
@@ -173,7 +172,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=2.0
 numNodes=0
@@ -254,7 +252,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=4.0
 numNodes=0
@@ -297,7 +294,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=5.0
 numNodes=0

@@ -1278,21 +1278,11 @@ public class PlanTestBase {
     }
 
     private void checkWithIgnoreTabletList(String expect, String actual) {
-        int expectStart = expect.indexOf("tabletList=");
-        int actualStart = actual.indexOf("tabletList=");
+        expect = Stream.of(expect.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
 
-        while (expectStart > 0) {
-            int expectEnd = expect.indexOf("\n", expectStart);
-            expect = expect.substring(0, expectStart) + expect.substring(expectEnd);
-            expectStart = expect.indexOf("tabletList=");
-        }
-
-        while (actualStart > 0) {
-            int actualEnd = actual.indexOf("\n", actualStart);
-            actual = actual.substring(0, actualStart) + actual.substring(actualEnd);
-            actualStart = actual.indexOf("tabletList=");
-        }
-
+        actual = Stream.of(actual.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
 

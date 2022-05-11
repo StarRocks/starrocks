@@ -42,7 +42,7 @@ public class ExpressionStatisticCalculator {
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
             this.inputStatistics = statistics;
-            this.rowCount = rowCount;
+            this.rowCount = Math.max(1.0, rowCount);
         }
 
         @Override
@@ -166,29 +166,36 @@ public class ExpressionStatisticCalculator {
         }
 
         private ColumnStatistic unaryExpressionCalculate(CallOperator callOperator, ColumnStatistic columnStatistic) {
-            double value;
+            double aggFunDistinctValue = Math.max(1.0, Math.min(rowCount, columnStatistic.getDistinctValuesCount()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.MAX:
-                    value = columnStatistic.getMaxValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.MIN:
-                    value = columnStatistic.getMinValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.ANY_VALUE:
-                    value = (columnStatistic.getMaxValue() - columnStatistic.getMinValue()) / 2;
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
+                case FunctionSet.AVG:
+                    double maxValue = columnStatistic.getMaxValue();
+                    double minValue = columnStatistic.getMinValue();
+                    return new ColumnStatistic(minValue, maxValue, 0, columnStatistic.getAverageRowSize(),
+                            aggFunDistinctValue);
+                case FunctionSet.SUM:
+                    double sumFunMinValue = columnStatistic.getMinValue() > 0 ? columnStatistic.getMinValue() :
+                            columnStatistic.getMinValue() * rowCount / aggFunDistinctValue;
+                    double sumFunMaxValue = columnStatistic.getMaxValue() < 0 ? columnStatistic.getMaxValue() :
+                            columnStatistic.getMaxValue() * rowCount / aggFunDistinctValue;
+                    sumFunMaxValue = Math.max(sumFunMaxValue, sumFunMinValue);
+                    return new ColumnStatistic(sumFunMinValue, sumFunMaxValue, 0,
+                            columnStatistic.getAverageRowSize(), aggFunDistinctValue);
                 case FunctionSet.YEAR:
-                    int minValue = 1700;
-                    int maxValue = 2100;
+                    int minYearValue = 1700;
+                    int maxYearValue = 2100;
                     try {
-                        minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
-                        maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
+                        minYearValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
+                        maxYearValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
                     } catch (DateTimeException e) {
                         LOG.debug("get date type column statistics min/max failed. " + e);
                     }
-                    return new ColumnStatistic(minValue, maxValue, 0,
+                    return new ColumnStatistic(minYearValue, maxYearValue, 0,
                             callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1)));
+                            Math.min(columnStatistic.getDistinctValuesCount(), (maxYearValue - minYearValue + 1)));
                 case FunctionSet.MONTH:
                     return new ColumnStatistic(1, 12, 0,
                             callOperator.getType().getTypeSize(),
@@ -213,10 +220,6 @@ public class ExpressionStatisticCalculator {
                     // use child column averageRowSize instead call operator type size
                     return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
                             columnStatistic.getAverageRowSize(), rowCount);
-                // use child column statistics for now
-                case FunctionSet.SUM:
-                case FunctionSet.AVG:
-                    return columnStatistic;
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -250,14 +253,14 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getTypeSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
-                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     double divideMaxValue = Math.max(Math.max(
-                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
                             callOperator.getType().getTypeSize(),

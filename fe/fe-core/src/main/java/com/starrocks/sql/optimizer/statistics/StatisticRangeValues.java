@@ -107,8 +107,8 @@ public class StatisticRangeValues {
         if (lengthOfIntersect > 0) {
             return lengthOfIntersect / length;
         }
-
-        return NaN;
+        // length of intersect may be NAN, because min/max may be -infinite/infinite at same time
+        return StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
     }
 
     public StatisticRangeValues intersect(StatisticRangeValues other) {
