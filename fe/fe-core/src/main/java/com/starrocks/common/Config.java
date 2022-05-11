@@ -465,6 +465,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
+    /**
+     * the timeout for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_timeout_ms = 10000;
+
+    /**
+     * the retry times for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_retry_times = 3;
+
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
     // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
