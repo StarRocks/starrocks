@@ -209,10 +209,12 @@ void DriverQueueWithWorkGroup::close() {
 }
 
 void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
     _put_back<false>(driver);
 }
 
 void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
     for (const auto driver : drivers) {
         _put_back<false>(driver);
     }
