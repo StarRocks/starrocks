@@ -57,14 +57,14 @@ When array elements have different types, StarRocks will automatically derive th
 
 ~~~SQL
 select [1, 1.2] as floats;
-select [12, "100"]; -- The results are ["12", "100"]
+select [12, "100"]; -- The result is ["12", "100"].
 ~~~
 
 You can use pointed brackets (`<>`) to show the declared array type.
 
 ~~~SQL
 select `ARRAY<float>`[1, 2];
-select `ARRAY<INT>`["12", "100"]; -- 结果是 [12, 100]
+select `ARRAY<INT>`["12", "100"]; -- The result is [12, 100].
 ~~~
 
 NULL can be included in the element
