@@ -26,7 +26,7 @@
 #include <roaring/roaring.hh>
 #include <utility>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
@@ -40,14 +40,76 @@ namespace starrocks {
 
 namespace {
 
+class BitmapUpdateContext {
+    static const size_t estimate_size_threshold = 1024;
+
+public:
+    explicit BitmapUpdateContext(rowid_t rid)
+            : _roaring(Roaring::bitmapOf(1, rid)), _previous_size(0), _element_count(1), _size_changed(false){};
+
+    Roaring* roaring() { return &_roaring; }
+
+    static uint64_t estimate_size(int element_count) {
+        // When _element_count is less than estimate_size_threshold, we use
+        // (1 + _element_count + 1) * (sizeof(uint32_t)) to approximately estimate true size of roaring bitmap:
+        // one bit pre    4 bytes         4 bytes *  _element_count
+        // [ 1            cardinality      data ]
+        return (1 + sizeof(uint32_t) * (element_count + 1));
+    }
+
+    static void init_estimate_size(uint64_t* reverted_index_size) {
+        *reverted_index_size += BitmapUpdateContext::estimate_size(1);
+    }
+
+    // When _element_count is less than estimate_size_threshold, update the estimate size
+    // When _element_count equals to estimate_size_threshold, clear previous estimate size, disable estimation.
+    // When _element_count is larger than estimate_size_threshold, use `getSizeInBytes(false)` to get
+    // the exact size of roaring bitmap. For efficiency, we will not update the roaring's size each time when size changed.
+    // We will save the sized changed roaring bitmap in _late_update_context_vector, and delay calculation of update size
+    // each time when `size()` of bitmap is called.
+    // Return value in this function indicates whether this BitmapUpdateContext needs to be added to the _late_update_context_vector
+    bool update_estimate_size(uint64_t* reverted_index_size) {
+        bool need_add = false;
+        _element_count++;
+        if (_element_count < estimate_size_threshold) {
+            *reverted_index_size += sizeof(uint32_t);
+        } else if (_element_count == estimate_size_threshold) {
+            *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
+            _size_changed = true;
+            need_add = true;
+        } else {
+            // Add BitmapUpdateContext to _late_update_context_vector iff
+            // it hash not been added to _late_update_context_vector before.
+            if (!_size_changed) {
+                need_add = true;
+            }
+            _size_changed = true;
+        }
+        return need_add;
+    }
+
+    void late_update_size(uint64_t* reverted_index_size) {
+        uint64_t current_size = _roaring.getSizeInBytes(false);
+        *reverted_index_size += (current_size - _previous_size);
+        _previous_size = current_size;
+        _size_changed = false;
+    }
+
+private:
+    Roaring _roaring;
+    uint64_t _previous_size;
+    uint32_t _element_count;
+    bool _size_changed;
+};
+
 template <typename CppType>
 struct BitmapIndexTraits {
-    using MemoryIndexType = std::map<CppType, Roaring>;
+    using MemoryIndexType = std::map<CppType, std::unique_ptr<BitmapUpdateContext>>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using MemoryIndexType = std::map<Slice, Roaring, Slice::Comparator>;
+    using MemoryIndexType = std::map<Slice, std::unique_ptr<BitmapUpdateContext>, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -76,27 +138,23 @@ public:
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);
         for (size_t i = 0; i < count; ++i) {
-            add_value(unaligned_load<CppType>(p));
+            const CppType& value = unaligned_load<CppType>(p);
+            auto it = _mem_index.find(value);
+            if (it != _mem_index.end()) {
+                it->second->roaring()->add(_rid);
+                if (it->second->update_estimate_size(&_reverted_index_size)) {
+                    _late_update_context_vector.push_back(it->second.get());
+                }
+            } else {
+                // new value, copy value and insert new key->bitmap pair
+                CppType new_value;
+                _typeinfo->deep_copy(&new_value, &value, &_pool);
+                _mem_index.emplace(new_value, std::make_unique<BitmapUpdateContext>(_rid));
+                BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
+            }
+            _rid++;
             p++;
         }
-    }
-
-    void add_value(const CppType& value) {
-        auto it = _mem_index.find(value);
-        uint64_t old_size = 0;
-        if (it != _mem_index.end()) {
-            // exiting value, update bitmap
-            old_size = it->second.getSizeInBytes(false);
-            it->second.add(_rid);
-        } else {
-            // new value, copy value and insert new key->bitmap pair
-            CppType new_value;
-            _typeinfo->deep_copy(&new_value, &value, &_pool);
-            _mem_index.insert({new_value, Roaring::bitmapOf(1, _rid)});
-            it = _mem_index.find(new_value);
-        }
-        _reverted_index_size += it->second.getSizeInBytes(false) - old_size;
-        _rid++;
     }
 
     void add_nulls(uint32_t count) override {
@@ -128,7 +186,7 @@ public:
         { // write bitmaps
             std::vector<Roaring*> bitmaps;
             for (auto& it : _mem_index) {
-                bitmaps.push_back(&(it.second));
+                bitmaps.push_back(it.second->roaring());
             }
             if (!_null_bitmap.isEmpty()) {
                 bitmaps.push_back(&_null_bitmap);
@@ -173,6 +231,10 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
+        for (BitmapUpdateContext* update_context : _late_update_context_vector) {
+            update_context->late_update_size(&_reverted_index_size);
+        }
+        _late_update_context_vector.clear();
         size += _reverted_index_size;
         size += _mem_index.size() * sizeof(CppType);
         size += _pool.total_allocated_bytes();
@@ -181,13 +243,17 @@ public:
 
 private:
     TypeInfoPtr _typeinfo;
-    uint64_t _reverted_index_size;
     rowid_t _rid = 0;
+
     // row id list for null value
     Roaring _null_bitmap;
     // unique value to its row id list
     MemoryIndexType _mem_index;
     MemPool _pool;
+
+    // roaring bitmap size
+    mutable uint64_t _reverted_index_size = 0;
+    mutable vector<BitmapUpdateContext*> _late_update_context_vector;
 };
 
 } // namespace

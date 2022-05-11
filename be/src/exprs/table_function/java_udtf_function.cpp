@@ -30,11 +30,7 @@ class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)
             : _libpath(std::move(libpath)), _symbol(std::move(symbol)), _ret_type(TypeDescriptor::from_thrift(desc)) {}
-    ~JavaUDTFState() {
-        if (_udtf_handle) {
-            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(_udtf_handle);
-        }
-    }
+    ~JavaUDTFState() {}
 
     Status open();
     void close();
@@ -42,7 +38,7 @@ public:
     const TypeDescriptor& type_desc() { return _ret_type; }
     JavaMethodDescriptor* method_process() { return _process.get(); }
     jclass get_udtf_clazz() { return _udtf_class.clazz(); }
-    jobject handle() { return _udtf_handle; }
+    jobject handle() { return _udtf_handle.handle(); }
 
 private:
     std::string _libpath;
@@ -51,7 +47,7 @@ private:
     std::unique_ptr<ClassLoader> _class_loader;
     std::unique_ptr<ClassAnalyzer> _analyzer;
     JVMClass _udtf_class = nullptr;
-    jobject _udtf_handle = nullptr;
+    JavaGlobalRef _udtf_handle = nullptr;
     std::unique_ptr<JavaMethodDescriptor> _process;
     TypeDescriptor _ret_type;
 };
@@ -61,12 +57,8 @@ Status JavaUDTFState::open() {
     RETURN_IF_ERROR(_class_loader->init());
     _analyzer = std::make_unique<ClassAnalyzer>();
 
-    _udtf_class = _class_loader->getClass(_symbol);
-    if (_udtf_class.clazz() == nullptr) {
-        return Status::InternalError(fmt::format("Not found symbol:{}", _symbol));
-    }
-
-    RETURN_IF_ERROR(_udtf_class.newInstance(&_udtf_handle));
+    ASSIGN_OR_RETURN(_udtf_class, _class_loader->getClass(_symbol));
+    ASSIGN_OR_RETURN(_udtf_handle, _udtf_class.newInstance());
 
     auto* analyzer = _analyzer.get();
     auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {

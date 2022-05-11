@@ -63,7 +63,7 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
     auto* scan_range = _pool.add(new THdfsScanRange());
-    ASSIGN_OR_ABORT(uint64_t file_size, Env::Default()->get_file_size(file));
+    ASSIGN_OR_ABORT(uint64_t file_size, FileSystem::Default()->get_file_size(file));
     scan_range->relative_path = file;
     scan_range->offset = offset;
     scan_range->length = length == 0 ? file_size : length;
@@ -75,7 +75,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
                                                   TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
-    param->env = Env::Default();
+    param->fs = FileSystem::Default();
     param->path = file;
     param->scan_ranges.emplace_back(range);
     param->tuple_desc = tuple_desc;

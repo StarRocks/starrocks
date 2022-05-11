@@ -24,11 +24,12 @@ using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 
 class DriverExecutor {
 public:
-    DriverExecutor() = default;
+    DriverExecutor(std::string name) : _name(std::move(name)) {}
     virtual ~DriverExecutor() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
-    virtual void submit(DriverRawPtr driver){};
+    virtual void submit(DriverRawPtr driver) = 0;
+    virtual void cancel(DriverRawPtr driver) = 0;
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
@@ -36,18 +37,23 @@ public:
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
     // to objects owned by FragmentContext.
     virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
+
+protected:
+    std::string _name;
 };
 
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
-    GlobalDriverExecutor(std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
+    GlobalDriverExecutor(std::string name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
     ~GlobalDriverExecutor() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
+    void cancel(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
+    using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void _update_profile_by_level(FragmentContext* fragment_ctx, bool done);
@@ -64,6 +70,10 @@ private:
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
 
     std::atomic<int> _next_id = 0;
+
+    // metrics
+    std::unique_ptr<UIntGauge> _driver_queue_len;
+    std::unique_ptr<UIntGauge> _driver_poller_block_queue_len;
 };
 
 } // namespace pipeline

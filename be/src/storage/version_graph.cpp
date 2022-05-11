@@ -223,13 +223,7 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
     // Create edges for version graph according to TabletMeta's versions.
     for (const auto& rs_meta : rs_metas) {
         // Versions in header are unique.
-        // We ensure _vertex_index_map has its start_version.
-        int64_t start_vertex_index = _add_vertex_to_graph(rs_meta->start_version());
-        int64_t end_vertex_index = _add_vertex_to_graph(rs_meta->end_version() + 1);
-        // Add one edge from start_version to end_version.
-        _version_graph[start_vertex_index].edges.emplace(end_vertex_index);
-        // Add reverse edge from end_version to start_version.
-        _version_graph[end_vertex_index].edges.emplace(start_vertex_index);
+        add_version_to_graph(rs_meta->version());
 
         if (max_version != nullptr && *max_version < rs_meta->end_version()) {
             *max_version = rs_meta->end_version();
@@ -239,66 +233,91 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
 
 void VersionGraph::reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
     _version_graph.clear();
-    _vertex_index_map.clear();
 
     construct_version_graph(rs_metas, max_version);
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
     // Add version.first as new vertex of version graph if not exist.
-    int64_t start_vertex_index = _add_vertex_to_graph(version.first);
-    int64_t end_vertex_index = _add_vertex_to_graph(version.second + 1);
+    auto& start_vertex = _add_vertex_to_graph(version.first);
+    // Add version.second + 1 as new vertex of version graph if not exist.
+    auto& end_vertex = _add_vertex_to_graph(version.second + 1);
 
-    // We assume this version is new version, so we just add two edges
-    // into version graph. add one edge from start_version to end_version
-    _version_graph[start_vertex_index].edges.emplace(end_vertex_index);
+    // sorted by version, we assume one vertex has few edge so that we use O(n) algorithm
+    auto end_vertex_it = start_vertex->edges.begin();
+    while (end_vertex_it != start_vertex->edges.end()) {
+        if ((*end_vertex_it)->value < end_vertex->value) {
+            break;
+        }
+        end_vertex_it++;
+    }
+    start_vertex->edges.insert(end_vertex_it, end_vertex.get());
 
     // We add reverse edge(from end_version to start_version) to graph
-    _version_graph[end_vertex_index].edges.emplace(start_vertex_index);
+    auto start_vertex_it = end_vertex->edges.begin();
+    while (start_vertex_it != end_vertex->edges.end()) {
+        if ((*start_vertex_it)->value < start_vertex->value) {
+            break;
+        }
+        start_vertex_it++;
+    }
+    end_vertex->edges.insert(start_vertex_it, start_vertex.get());
 }
 
 Status VersionGraph::delete_version_from_graph(const Version& version) {
     int64_t start_vertex_value = version.first;
     int64_t end_vertex_value = version.second + 1;
-    auto start_iter = _vertex_index_map.find(start_vertex_value);
-    auto end_iter = _vertex_index_map.find(end_vertex_value);
+    auto start_iter = _version_graph.find(start_vertex_value);
+    auto end_iter = _version_graph.find(end_vertex_value);
 
-    if (start_iter == _vertex_index_map.end() || end_iter == _vertex_index_map.end()) {
+    if (start_iter == _version_graph.end() || end_iter == _version_graph.end()) {
         LOG(WARNING) << "vertex for version does not exists. "
                      << "version=" << version.first << "-" << version.second;
         return Status::NotFound("Not found version");
     }
 
-    int64_t start_vertex_index = start_iter->second;
-    int64_t end_vertex_index = end_iter->second;
     // Remove edge and its reverse edge.
     // When there are same versions in edges, just remove the frist version.
-    auto start_edges_iter = _version_graph[start_vertex_index].edges.find(end_vertex_value);
-    if (start_edges_iter != _version_graph[start_vertex_index].edges.end()) {
-        _version_graph[start_vertex_index].edges.erase(start_edges_iter);
+    auto start_edges_iter = start_iter->second->edges.begin();
+    while (start_edges_iter != start_iter->second->edges.end()) {
+        if ((*start_edges_iter)->value == end_vertex_value) {
+            start_iter->second->edges.erase(start_edges_iter);
+            break;
+        }
+        start_edges_iter++;
     }
 
-    auto end_edges_iter = _version_graph[end_vertex_index].edges.find(start_vertex_value);
-    if (end_edges_iter != _version_graph[end_vertex_index].edges.end()) {
-        _version_graph[end_vertex_index].edges.erase(end_edges_iter);
+    auto end_edges_iter = end_iter->second->edges.begin();
+    while (end_edges_iter != end_iter->second->edges.end()) {
+        if ((*end_edges_iter)->value == start_vertex_value) {
+            end_iter->second->edges.erase(end_edges_iter);
+            break;
+        }
+        end_edges_iter++;
+    }
+
+    if (start_iter->second->edges.empty()) {
+        _version_graph.erase(start_iter);
+    }
+
+    if (end_iter->second->edges.empty()) {
+        _version_graph.erase(end_iter);
     }
 
     return Status::OK();
 }
 
-int64_t VersionGraph::_add_vertex_to_graph(int64_t vertex_value) {
+std::unique_ptr<Vertex>& VersionGraph::_add_vertex_to_graph(int64_t vertex_value) {
     // Vertex with vertex_value already exists.
-    auto iter = _vertex_index_map.find(vertex_value);
-    if (iter != _vertex_index_map.end()) {
+    auto iter = _version_graph.find(vertex_value);
+    if (iter != _version_graph.end()) {
         VLOG(3) << "vertex with vertex value already exists. value=" << vertex_value;
         return iter->second;
     }
 
-    _version_graph.emplace_back(Vertex(vertex_value));
+    _version_graph[vertex_value] = std::make_unique<Vertex>(vertex_value);
 
-    _vertex_index_map[vertex_value] = _version_graph.size() - 1;
-
-    return _vertex_index_map[vertex_value];
+    return _version_graph[vertex_value];
 }
 
 Status VersionGraph::capture_consistent_versions(const Version& spec_version,
@@ -309,39 +328,39 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
         return Status::InternalError("Invalid specified version");
     }
 
-    auto start_vertex_iter = _vertex_index_map.find(spec_version.first);
-    auto end_vertex_iter = _vertex_index_map.find(spec_version.second + 1);
+    auto start_vertex_iter = _version_graph.find(spec_version.first);
+    auto end_vertex_iter = _version_graph.find(spec_version.second + 1);
 
-    if (start_vertex_iter == _vertex_index_map.end() || end_vertex_iter == _vertex_index_map.end()) {
+    if (start_vertex_iter == _version_graph.end() || end_vertex_iter == _version_graph.end()) {
         LOG(WARNING) << "fail to find path in version_graph. "
                      << "spec_version: " << spec_version.first << "-" << spec_version.second;
         return Status::NotFound("Version not found");
     }
 
     int64_t end_value = spec_version.second + 1;
-    auto cur_idx = start_vertex_iter->second;
-    while (_version_graph[cur_idx].value != end_value) {
-        int64_t next_idx = -1;
-        for (const auto& it : _version_graph[cur_idx].edges) {
+    auto cur_vertex = start_vertex_iter->second.get();
+    while (cur_vertex->value != end_value) {
+        Vertex* next_vertex = nullptr;
+        for (const auto edge : cur_vertex->edges) {
             // reverse edge
-            if (_version_graph[it].value < _version_graph[cur_idx].value) {
+            if (edge->value < cur_vertex->value) {
                 break;
             }
 
             // cross edge
-            if (_version_graph[it].value > end_value) {
+            if (edge->value > end_value) {
                 continue;
             }
 
-            next_idx = it;
+            next_vertex = edge;
             break;
         }
 
-        if (next_idx > -1) {
+        if (next_vertex != nullptr) {
             if (version_path != nullptr) {
-                version_path->emplace_back(_version_graph[cur_idx].value, _version_graph[next_idx].value - 1);
+                version_path->emplace_back(cur_vertex->value, next_vertex->value - 1);
             }
-            cur_idx = next_idx;
+            cur_vertex = next_vertex;
         } else {
             LOG(WARNING) << "fail to find path in version_graph. "
                          << "spec_version: " << spec_version.first << "-" << spec_version.second;

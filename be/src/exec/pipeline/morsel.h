@@ -36,8 +36,6 @@ public:
 
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
-    THdfsScanRange* get_hdfs_scan_range() { return &(_scan_range->hdfs_scan_range); }
-
 private:
     std::unique_ptr<TScanRange> _scan_range;
 };

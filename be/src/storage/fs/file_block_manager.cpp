@@ -30,8 +30,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "env/env.h"
-#include "env/env_util.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_id.h"
 #include "storage/storage_engine.h"
@@ -62,7 +61,7 @@ namespace internal {
 // FileWritableBlock instances is expected to be low.
 class FileWritableBlock : public WritableBlock {
 public:
-    FileWritableBlock(FileBlockManager* block_manager, string path, shared_ptr<WritableFile> writer);
+    FileWritableBlock(FileBlockManager* block_manager, shared_ptr<WritableFile> writer);
 
     ~FileWritableBlock() override;
 
@@ -72,7 +71,6 @@ public:
 
     BlockManager* block_manager() const override;
 
-    const BlockId& id() const override;
     const std::string& path() const override;
 
     Status append(const Slice& data) override;
@@ -86,8 +84,6 @@ public:
     void set_bytes_appended(size_t bytes_appended) override { _bytes_appended = bytes_appended; }
 
     State state() const override;
-
-    void handle_error(const Status& s) const;
 
     // Starts an asynchronous flush of dirty block data to disk.
     Status flush_data_async();
@@ -106,11 +102,9 @@ private:
     // Should remain alive for the lifetime of this block.
     FileBlockManager* _block_manager;
 
-    const BlockId _block_id;
-    const string _path;
-
     // The underlying opened file backing this block.
     shared_ptr<WritableFile> _writer;
+    std::string _path;
 
     State _state;
 
@@ -118,16 +112,16 @@ private:
     size_t _bytes_appended;
 };
 
-FileWritableBlock::FileWritableBlock(FileBlockManager* block_manager, string path, shared_ptr<WritableFile> writer)
+FileWritableBlock::FileWritableBlock(FileBlockManager* block_manager, shared_ptr<WritableFile> writer)
         : _block_manager(block_manager),
-          _path(std::move(path)),
           _writer(std::move(writer)),
+          _path(_writer->filename()),
           _state(CLEAN),
           _bytes_appended(0) {}
 
 FileWritableBlock::~FileWritableBlock() {
     if (_state != CLOSED) {
-        WARN_IF_ERROR(abort(), strings::Substitute("Failed to close block $0", _path));
+        WARN_IF_ERROR(abort(), strings::Substitute("Failed to close block $0", path()));
     }
 }
 
@@ -137,16 +131,11 @@ Status FileWritableBlock::close() {
 
 Status FileWritableBlock::abort() {
     RETURN_IF_ERROR(_close(NO_SYNC));
-    return _block_manager->_delete_block(_path);
+    return _block_manager->_delete_block(path());
 }
 
 BlockManager* FileWritableBlock::block_manager() const {
     return _block_manager;
-}
-
-const BlockId& FileWritableBlock::id() const {
-    CHECK(false) << "Not support Block.id(). (TODO)";
-    return _block_id;
 }
 
 const string& FileWritableBlock::path() const {
@@ -158,7 +147,7 @@ Status FileWritableBlock::append(const Slice& data) {
 }
 
 Status FileWritableBlock::appendv(const Slice* data, size_t data_cnt) {
-    DCHECK(_state == CLEAN || _state == DIRTY) << "path=" << _path << " invalid state=" << _state;
+    DCHECK(_state == CLEAN || _state == DIRTY) << "path=" << path() << " invalid state=" << _state;
     RETURN_IF_ERROR(_writer->appendv(data, data_cnt));
     _state = DIRTY;
 
@@ -170,19 +159,19 @@ Status FileWritableBlock::appendv(const Slice* data, size_t data_cnt) {
 }
 
 Status FileWritableBlock::flush_data_async() {
-    VLOG(3) << "Flushing block " << _path;
+    VLOG(3) << "Flushing block " << path();
     RETURN_IF_ERROR(_writer->flush(WritableFile::FLUSH_ASYNC));
     return Status::OK();
 }
 
 Status FileWritableBlock::finalize() {
     DCHECK(_state == CLEAN || _state == DIRTY || _state == FINALIZED)
-            << "path=" << _path << "Invalid state: " << _state;
+            << "path=" << path() << "Invalid state: " << _state;
 
     if (_state == FINALIZED) {
         return Status::OK();
     }
-    VLOG(3) << "Finalizing block " << _path;
+    VLOG(3) << "Finalizing block " << path();
     if (_state == DIRTY && BlockManager::block_manager_preflush_control == "finalize") {
         flush_data_async();
     }
@@ -206,9 +195,9 @@ Status FileWritableBlock::_close(SyncMode mode) {
     Status sync;
     if (mode == SYNC && (_state == CLEAN || _state == DIRTY || _state == FINALIZED)) {
         // Safer to synchronize data first, then metadata.
-        VLOG(3) << "Syncing block " << _path;
+        VLOG(3) << "Syncing block " << path();
         sync = _writer->sync();
-        WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", _path));
+        WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", path()));
     }
     Status close = _writer->close();
 
@@ -233,8 +222,9 @@ Status FileWritableBlock::_close(SyncMode mode) {
 // embed a FileBlockLocation, using the simpler BlockId instead.
 class FileReadableBlock : public ReadableBlock {
 public:
-    FileReadableBlock(FileBlockManager* block_manager, string path,
-                      std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle);
+    FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle);
+
+    FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file);
 
     ~FileReadableBlock() override;
 
@@ -242,27 +232,22 @@ public:
 
     BlockManager* block_manager() const override;
 
-    const BlockId& id() const override;
     const std::string& path() const override;
 
     Status size(uint64_t* sz) override;
 
     Status read(uint64_t offset, Slice result) override;
 
-    void handle_error(const Status& s) const;
-
 private:
     // Back pointer to the owning block manager.
     FileBlockManager* _block_manager;
 
-    // The block's identifier.
-    const BlockId _block_id;
-    const string _path;
-
     // The underlying opened file backing this block.
     std::shared_ptr<OpenedFileHandle<RandomAccessFile>> _file_handle;
+    std::shared_ptr<RandomAccessFile> _file_ref;
     // the backing file of OpenedFileHandle, not owned.
     RandomAccessFile* _file;
+    std::string _path;
 
     // Whether or not this block has been closed. Close() is thread-safe, so
     // this must be an atomic primitive.
@@ -272,14 +257,23 @@ private:
     const FileReadableBlock& operator=(const FileReadableBlock&) = delete;
 };
 
-FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, string path,
+FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager,
                                      std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle)
-        : _block_manager(block_manager), _path(std::move(path)), _file_handle(std::move(file_handle)), _closed(false) {
-    _file = _file_handle->file();
-}
+        : _block_manager(block_manager),
+          _file_handle(std::move(file_handle)),
+          _file(_file_handle->file()),
+          _path(_file->filename()),
+          _closed(false) {}
+
+FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file)
+        : _block_manager(block_manager),
+          _file_ref(std::move(file)),
+          _file(_file_ref.get()),
+          _path(_file->filename()),
+          _closed(false) {}
 
 FileReadableBlock::~FileReadableBlock() {
-    WARN_IF_ERROR(close(), strings::Substitute("Failed to close block $0", _path));
+    WARN_IF_ERROR(close(), strings::Substitute("Failed to close block $0", path()));
 }
 
 Status FileReadableBlock::close() {
@@ -293,11 +287,6 @@ Status FileReadableBlock::close() {
 
 BlockManager* FileReadableBlock::block_manager() const {
     return _block_manager;
-}
-
-const BlockId& FileReadableBlock::id() const {
-    CHECK(false) << "Not support Block.id(). (TODO)";
-    return _block_id;
 }
 
 const string& FileReadableBlock::path() const {
@@ -320,15 +309,17 @@ Status FileReadableBlock::read(uint64_t offset, Slice result) {
 // FileBlockManager
 ////////////////////////////////////////////////////////////
 
-FileBlockManager::FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts)
-        : _env(std::move(env)), _opts(std::move(opts)) {
+FileBlockManager::FileBlockManager(std::shared_ptr<FileSystem> fs, BlockManagerOptions opts)
+        : _fs(std::move(fs)), _opts(std::move(opts)) {
+    if (_fs->type() == FileSystem::POSIX) {
 #ifdef BE_TEST
-    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
-                                                                config::file_descriptor_cache_capacity);
+        _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                    config::file_descriptor_cache_capacity);
 #else
-    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
-                                                                StorageEngine::instance()->file_cache());
+        _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                    StorageEngine::instance()->file_cache());
 #endif
+    }
 }
 
 FileBlockManager::~FileBlockManager() = default;
@@ -344,29 +335,33 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     shared_ptr<WritableFile> writer;
     WritableFileOptions wr_opts;
     wr_opts.mode = opts.mode;
-    RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env.get(), opts.path, &writer));
-
+    ASSIGN_OR_RETURN(writer, _fs->new_writable_file(wr_opts, opts.path));
     VLOG(1) << "Creating new block at " << opts.path;
-    *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
+    *block = std::make_unique<internal::FileWritableBlock>(this, std::move(writer));
     return Status::OK();
 }
 
 Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) {
     VLOG(1) << "Opening block with path at " << path;
-    std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle(new OpenedFileHandle<RandomAccessFile>());
-    bool found = _file_cache->lookup(path, file_handle.get());
-    if (!found) {
-        ASSIGN_OR_RETURN(auto file, _env->new_random_access_file(path));
-        _file_cache->insert(path, file.release(), file_handle.get());
+    if (_file_cache != nullptr) {
+        std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle(new OpenedFileHandle<RandomAccessFile>());
+        if (!_file_cache->lookup(path, file_handle.get())) {
+            ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
+            _file_cache->insert(path, file.release(), file_handle.get());
+        }
+        *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file_handle));
+    } else {
+        ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
+        *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file));
     }
-
-    *block = std::make_unique<internal::FileReadableBlock>(this, path, file_handle);
     return Status::OK();
 }
 
 void FileBlockManager::erase_block_cache(const std::string& path) {
-    VLOG(1) << "erasing block cache with path at " << path;
-    _file_cache->erase(path);
+    if (_file_cache != nullptr) {
+        VLOG(1) << "erasing block cache with path at " << path;
+        _file_cache->erase(path);
+    }
 }
 
 // TODO(lingbin): We should do something to ensure that deletion can only be done
@@ -374,7 +369,7 @@ void FileBlockManager::erase_block_cache(const std::string& path) {
 Status FileBlockManager::_delete_block(const string& path) {
     CHECK(!_opts.read_only);
 
-    RETURN_IF_ERROR(_env->delete_file(path));
+    RETURN_IF_ERROR(_fs->delete_file(path));
 
     // We don't bother fsyncing the parent directory as there's nothing to be
     // gained by ensuring that the deletion is made durable. Even if we did
@@ -385,13 +380,6 @@ Status FileBlockManager::_delete_block(const string& path) {
     // The block's directory hierarchy is left behind. We could prune it if
     // it's empty, but that's racy and leaving it isn't much overhead.
 
-    return Status::OK();
-}
-
-// TODO(lingbin): only one level is enough?
-Status FileBlockManager::_sync_metadata(const string& path) {
-    string dir = path_util::dir_name(path);
-    RETURN_IF_ERROR(_env->sync_dir(dir));
     return Status::OK();
 }
 

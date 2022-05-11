@@ -37,6 +37,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
@@ -45,6 +46,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -127,6 +130,10 @@ public class AuthTest {
                 minTimes = 0;
                 result = ctx;
 
+                ctx.getClusterName();
+                minTimes = 0;
+                result = SystemInfoService.DEFAULT_CLUSTER;
+
                 ctx.getQualifiedUser();
                 minTimes = 0;
                 result = "root";
@@ -151,6 +158,7 @@ public class AuthTest {
     @Test
     public void test() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         // 1. create cmy@%
+        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1192,7 +1200,93 @@ public class AuthTest {
     }
 
     @Test
+    public void testGrantRevokeRole() throws Exception {
+        // 1. create user with no role specified
+        UserIdentity userIdentity = new UserIdentity("test_user", "%");
+        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // check if select & load & spark resource usage privilege all not granted
+        String dbName = "default_cluster:db1";
+        String resouceName = "test_spark";
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(0, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 2. add a role with select privilege
+        String selectRoleName = new String("select_role");
+        CreateRoleStmt createRoleStmt = new CreateRoleStmt(selectRoleName);
+        createRoleStmt.analyze(analyzer);
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        auth.createRole(createRoleStmt);
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+
+        // 3. grant select privilege to role
+        TablePattern tablePattern = new TablePattern("db1", "*");
+        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
+        GrantStmt grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 4. grant role to user
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 5. add a new role with load privilege & spark resource usage
+        String loadRoleName = "load_role";
+        createRoleStmt = new CreateRoleStmt(loadRoleName);
+        createRoleStmt.analyze(analyzer);
+        auth.createRole(createRoleStmt);
+
+        // 6. grant load privilege to role
+        privileges = Lists.newArrayList(AccessPrivilege.LOAD_PRIV);
+        grantStmt = new GrantStmt(null, loadRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 8. grant resource to role
+        privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+        ResourcePattern resourcePattern = new ResourcePattern(resouceName);
+        grantStmt = new GrantStmt(null, loadRoleName, resourcePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 7. grant role to user
+        grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select & load privilege & spark resource usage all granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(true, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 8. revoke load & spark resource usage from user
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
+        com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
+        auth.revokeRole(revokeRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+     }
+
+    @Test
     public void testResource() {
+        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("testUser", "%");
         String role = "role0";
         String resourceName = "spark0";
@@ -1696,4 +1790,70 @@ public class AuthTest {
                 auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", new byte[0], seed,
                         currentUser));
     }
-}
+
+    @Test
+    public void testPasswordReuseNormal() throws Exception {
+        String password = "123456AAbb";
+        UserIdentity user = new UserIdentity("test_user", "%");
+        user.analyze("test_cluster");
+        UserDesc userDesc = new UserDesc(user, password, true);
+        // 1. create user with no role
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // enable_password_reuse is false allow same password
+        Config.enable_password_reuse = true;
+        auth.checkPasswordReuse(user, password);
+
+        // enable_password_reuse is false, check different password
+        Config.enable_password_reuse = false;
+        auth.checkPasswordReuse(user, password + "ss");
+    }
+
+    @Test
+    public void testPasswordValidationNormal() throws Exception {
+        String badPassword = "123456";
+        String goodPassword = "1234Star";
+
+        Config.enable_validate_password = false;
+        // enable_auth_check is false, allow bad password
+        auth.validatePassword(badPassword);
+
+       // enable_password_reuse is true for a good password
+        Config.enable_validate_password = true;
+        auth.validatePassword(goodPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationShortPasssword() throws Exception {
+        // length 5 < 8
+        String badPassword = "Aa123";
+        Config.enable_validate_password = true;
+        auth.validatePassword(badPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationAllNumberPasssword() throws Exception {
+        // no lowercase letter or uppercase letter
+        String badPassword = "123456789";
+        Config.enable_validate_password = true;
+        auth.validatePassword(badPassword);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testPasswordValidationPasswordReuse() throws Exception {
+        String password = "123456AAbb";
+        UserIdentity user = new UserIdentity("test_user", "%");
+        user.analyze("test_cluster");
+        UserDesc userDesc = new UserDesc(user, password, true);
+        // 1. create user with no role
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // 2. check reuse
+        Config.enable_password_reuse = false;
+        auth.checkPasswordReuse(user, password);
+    }
+ }

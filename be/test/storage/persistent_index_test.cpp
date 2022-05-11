@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "storage/chunk_helper.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
@@ -102,11 +102,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
-    Env* env = Env::Default();
+    FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./persistent_index_test";
     const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
     bool created;
-    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;
@@ -343,10 +343,10 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
 }
 
 void build_persistent_index_from_tablet(size_t N) {
-    Env* env = Env::Default();
+    FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./persistent_index_test";
     bool created;
-    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
@@ -448,11 +448,11 @@ PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_replace) {
-    Env* env = Env::Default();
+    FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./persistent_index_test";
     const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
     bool created;
-    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;

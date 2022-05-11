@@ -6,13 +6,13 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "env/env.h"
-#include "env/env_broker.h"
 #include "exec/vectorized/csv_scanner.h"
 #include "exec/vectorized/json_scanner.h"
 #include "exec/vectorized/orc_scanner.h"
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
+#include "fs/fs.h"
+#include "fs/fs_broker.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"

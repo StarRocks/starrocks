@@ -1,7 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <numeric>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
@@ -206,10 +209,11 @@ public:
                 (*output)[i].index_in_chunk = i + left_run.range.first;
             }
         } else {
-            int intersect = run_intersect(sort_desc, left_run, right_run);
+            int intersect = left_run.intersect(sort_desc, right_run);
             if (intersect != 0) {
                 size_t left_rows = left_run.num_rows();
                 size_t right_rows = right_run.num_rows();
+                DCHECK_LT(left_rows + right_rows, Column::MAX_CAPACITY_LIMIT);
                 output->resize(0);
                 output->reserve(left_rows + right_rows);
 
@@ -233,6 +237,7 @@ public:
                 std::vector<EqualRange> equal_ranges;
                 equal_ranges.emplace_back(left_run.range, right_run.range);
                 size_t count = left_run.range.second + right_run.range.second;
+                DCHECK_LT(count, Column::MAX_CAPACITY_LIMIT);
                 output->resize(count);
                 equal_ranges.reserve(std::max((size_t)1, count / 4));
 
@@ -251,36 +256,173 @@ public:
 
         return Status::OK();
     }
-
-private:
-    // Check if two run has intersect, if not we don't need to merge them row by row
-    // @return 0 if two run has intersect, -1 if left is less than right, 1 if left is greater than right
-    static int run_intersect(const SortDescs& sort_desc, const SortedRun& left_run, const SortedRun& right_run) {
-        // Compare left tail with right head
-        int left_tail_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.second - 1,
-                                              right_run.range.first);
-        if (left_tail_cmp < 0) {
-            return -1;
-        }
-
-        // Compare left head with right tail
-        int left_head_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.first,
-                                              right_run.range.second - 1);
-        if (left_head_cmp > 0) {
-            return 1;
-        }
-        return 0;
-    }
 };
 
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,
-                                   Permutation* output) {
-    DCHECK_LE(sort_desc.num_columns(), left->num_columns());
-    DCHECK_LE(sort_desc.num_columns(), right->num_columns());
+SortedRun::SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs)
+        : chunk(ichunk), range(0, ichunk->num_rows()) {
+    DCHECK(ichunk);
+    if (!ichunk->is_empty()) {
+        for (auto& expr : *exprs) {
+            auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), ichunk.get());
+            orderby.push_back(column);
+        }
+    }
+}
 
-    SortedRun left_run(left, 0, left->num_rows());
-    SortedRun right_run(right, 0, right->num_rows());
-    return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
+void SortedRun::reset() {
+    chunk->reset();
+    orderby.clear();
+    range = {};
+}
+
+void SortedRun::resize(size_t size) {
+    if (num_rows() <= size) {
+        return;
+    }
+    // Only resize the range but not clone chunk
+    range.second = range.first + (uint32_t)size;
+}
+
+int SortedRun::intersect(const SortDescs& sort_desc, const SortedRun& right_run) const {
+    if (empty()) {
+        return 1;
+    }
+    if (right_run.empty()) {
+        return -1;
+    }
+    // Compare left tail with right head
+    int left_tail_cmp = compare_row(sort_desc, right_run, end_index() - 1, right_run.start_index());
+    if (left_tail_cmp < 0) {
+        return -1;
+    }
+
+    // Compare left head with right tail
+    int left_head_cmp = compare_row(sort_desc, right_run, start_index(), right_run.end_index() - 1);
+    if (left_head_cmp > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+ChunkUniquePtr SortedRun::clone_slice() const {
+    if (range.first == 0 && range.second == chunk->num_rows()) {
+        return chunk->clone_unique();
+    } else {
+        size_t slice_rows = num_rows();
+        DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
+        ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
+        cloned->append(*chunk, range.first, slice_rows);
+        return cloned;
+    }
+}
+
+ChunkPtr SortedRun::steal_chunk(size_t size) {
+    if (empty()) {
+        return {};
+    }
+    if (size >= num_rows()) {
+        ChunkPtr res;
+        if (range.first == 0 && range.second == chunk->num_rows()) {
+            // No others reference this chunk
+            res = chunk;
+        } else {
+            res = chunk->clone_empty(num_rows());
+            res->append(*chunk, range.first, num_rows());
+        }
+        range.first = range.second = 0;
+        chunk.reset();
+        return res;
+    } else {
+        size_t required_rows = std::min(size, num_rows());
+        ChunkPtr res = chunk->clone_empty(required_rows);
+        res->append(*chunk, range.first, required_rows);
+        range.first += required_rows;
+        return res;
+    }
+}
+
+int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
+    DCHECK_LT(lhs_row, range.second);
+    DCHECK_LT(rhs_row, rhs.range.second);
+    for (int i = 0; i < desc.num_columns(); i++) {
+        int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
+        if (x != 0) {
+            return x * desc.get_column_desc(i).sort_order;
+        }
+    }
+    return 0;
+}
+
+int SortedRun::debug_dump() const {
+    for (int i = start_index(); i < end_index(); i++) {
+        LOG(INFO) << fmt::format("row {}: {}", i, chunk->debug_row(i));
+    }
+    return 0;
+}
+
+size_t SortedRuns::num_rows() const {
+    size_t res = 0;
+    for (auto& run : chunks) {
+        res += run.num_rows();
+    }
+    return res;
+}
+
+void SortedRuns::resize(size_t size) {
+    // Do not expand if prodive a larger size
+    if (num_rows() <= size) {
+        return;
+    }
+    size_t accumulate = 0;
+    for (int i = 0; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        if (accumulate + run.num_rows() >= size) {
+            run.resize(size - accumulate);
+            chunks.resize(i + 1);
+            break;
+        }
+        accumulate += run.num_rows();
+    }
+}
+
+bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
+    for (int i = 0; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        if (i > 0) {
+            auto& prev = chunks[i - 1];
+            int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
+            if (x > 0) {
+                return false;
+            }
+        }
+        for (int row = run.start_index() + 1; row < run.end_index(); row++) {
+            int x = run.compare_row(sort_desc, run, row - 1, row);
+            if (x > 0) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+int SortedRuns::debug_dump() const {
+    for (int k = 0; k < num_chunks(); k++) {
+        chunks[k].debug_dump();
+    }
+    return 0;
+}
+
+ChunkPtr SortedRuns::assemble() const {
+    if (chunks.empty()) {
+        return {};
+    }
+    ChunkPtr result(chunks.front().clone_slice().release());
+    for (int i = 1; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        result->append(*run.chunk, run.range.first, run.num_rows());
+    }
+    return result;
 }
 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
@@ -293,11 +435,11 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
     int left_index = -1;
     int right_index = -1;
     auto left_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++left_index < left.num_chunks()) {
                         // TODO: avoid copy
-                        *output = left.get_chunk(left_index)->clone_unique().release();
+                        *output = left.get_chunk(left_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;
@@ -308,10 +450,10 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             },
             sort_exprs);
     auto right_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++right_index < right.num_chunks()) {
-                        *output = right.get_chunk(right_index)->clone_unique().release();
+                        *output = right.get_chunk(right_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;
@@ -323,31 +465,56 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             sort_exprs);
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release())));
+        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release()), sort_exprs));
         return Status::OK();
     };
     return merger.consume_all(consumer);
 }
 
-// Merge multiple chunks in two-way merge
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
-    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
+                           const std::vector<SortedRuns>& runs_batch, SortedRuns* output, size_t limit) {
+    std::deque<SortedRuns> queue;
+    for (auto& runs : runs_batch) {
+        if (runs.num_chunks() > 0) {
+            queue.push_back(runs);
+        }
+    }
+    if (queue.empty()) {
+        return Status::OK();
+    }
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();
         SortedRuns right = queue.front();
         queue.pop_front();
 
+        // TODO: push down the limit to merge procedure
         SortedRuns merged;
         RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, sort_exprs, left, right, &merged));
 
+        DCHECK(left.is_sorted(descs)) << left.debug_dump();
+        DCHECK(right.is_sorted(descs)) << right.debug_dump();
+        DCHECK(merged.is_sorted(descs)) << merged.debug_dump();
+
+        if (limit > 0) {
+            merged.resize(limit);
+        }
         queue.push_back(merged);
     }
-
-    *output = queue.front().assemble();
+    *output = queue.front();
 
     return Status::OK();
+}
+
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
+    std::vector<SortedRuns> runs;
+    for (auto& chunk : chunks) {
+        if (!chunk->is_empty()) {
+            runs.push_back(SortedRun(chunk, sort_exprs));
+        }
+    }
+    return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,

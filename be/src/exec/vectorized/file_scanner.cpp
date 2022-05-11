@@ -6,11 +6,9 @@
 
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "env/env.h"
-#include "env/env_broker.h"
-#include "env/env_stream_pipe.h"
-#include "env/env_util.h"
 #include "exec/decompressor.h"
+#include "fs/fs.h"
+#include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -242,7 +240,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     std::shared_ptr<SequentialFile> src_file;
     switch (range_desc.file_type) {
     case TFileType::FILE_LOCAL: {
-        RETURN_IF_ERROR(env_util::open_file_for_sequential(Env::Default(), range_desc.path, &src_file));
+        ASSIGN_OR_RETURN(src_file, FileSystem::Default()->new_sequential_file(range_desc.path));
         break;
     }
     case TFileType::FILE_STREAM: {
@@ -257,8 +255,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         break;
     }
     case TFileType::FILE_BROKER: {
-        EnvBroker env_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, env_broker.new_sequential_file(range_desc.path));
+        BrokerFileSystem fs_broker(address, params.properties);
+        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
         src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
         break;
     }
@@ -282,12 +280,12 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     std::shared_ptr<RandomAccessFile> src_file;
     switch (range_desc.file_type) {
     case TFileType::FILE_LOCAL: {
-        RETURN_IF_ERROR(env_util::open_file_for_random(Env::Default(), range_desc.path, &src_file));
+        ASSIGN_OR_RETURN(src_file, FileSystem::Default()->new_random_access_file(range_desc.path));
         break;
     }
     case TFileType::FILE_BROKER: {
-        EnvBroker env_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, env_broker.new_random_access_file(range_desc.path));
+        BrokerFileSystem fs_broker(address, params.properties);
+        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
         src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
         break;
     }

@@ -115,10 +115,10 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         }
         dest = std::move(col);
     }
-    for (const auto& upsert : upserts()) {
+    for (const auto& upsert : _upserts) {
         _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
     }
-    for (const auto& one_delete : deletes()) {
+    for (const auto& one_delete : _deletes) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
@@ -377,7 +377,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     vector<std::pair<string, string>> rewrite_files;
     DeferOp clean_temp_files([&] {
         for (auto& e : rewrite_files) {
-            Env::Default()->delete_file(e.second);
+            FileSystem::Default()->delete_file(e.second);
         }
     });
     bool is_rewrite = config::rewrite_partial_segment;
@@ -409,7 +409,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     if (is_rewrite) {
         for (size_t i = 0; i < num_segments; i++) {
-            RETURN_IF_ERROR(Env::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
         }
     }
     // clean this to prevent DeferOp clean files
@@ -427,7 +427,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 }
 
 Status RowsetUpdateState::_update_rowset_meta(Tablet* tablet, Rowset* rowset) {
-    rowset->rowset_meta()->release_txn_meta();
+    rowset->rowset_meta()->clear_txn_meta();
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     return TabletMetaManager::write_rowset_meta(tablet->data_dir(), tablet->tablet_id(), rowset_meta_pb, string());
 }

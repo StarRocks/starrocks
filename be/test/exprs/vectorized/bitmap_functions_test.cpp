@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "column/array_column.h"
+#include "exprs/base64.h"
 #include "util/bitmap_value.h"
 
 namespace starrocks {
@@ -1847,6 +1848,34 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
         ASSERT_TRUE(v->is_null(2));
         ASSERT_EQ(23074, p->get_data()[3]);
     }
+}
+
+TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
+    // init bitmap
+    BitmapValue bitmap_src({1, 100, 256});
+
+    // init and malloc space
+    int size = 1024;
+    int len = (size_t)(4.0 * ceil((double)size / 3.0)) + 1;
+    char p[len];
+    uint8_t* src;
+    src = (uint8_t*)malloc(sizeof(uint8_t) * size);
+
+    // serialize and encode bitmap, return char*
+    bitmap_src.serialize(src);
+    base64_encode2((unsigned char*)src, size, (unsigned char*)p);
+
+    std::unique_ptr<char[]> p1;
+    p1.reset(new char[len + 3]);
+
+    // decode and deserialize
+    base64_decode2(p, len, p1.get());
+    BitmapValue bitmap_decode;
+    bitmap_decode.deserialize(p1.get());
+
+    // judge encode and decode bitmap data
+    ASSERT_EQ(bitmap_src.to_string(), bitmap_decode.to_string());
+    free(src);
 }
 
 } // namespace vectorized

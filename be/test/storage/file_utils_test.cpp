@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "common/configbase.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "storage/olap_define.h"
@@ -64,7 +64,7 @@ void save_string_file(const std::filesystem::path& p, const std::string& str) {
 
 TEST_F(FileUtilsTest, TestCopyFile) {
     std::string src_file_name = _s_test_data_path + "/abcd12345.txt";
-    std::unique_ptr<WritableFile> src_file = *Env::Default()->new_writable_file(src_file_name);
+    std::unique_ptr<WritableFile> src_file = *FileSystem::Default()->new_writable_file(src_file_name);
 
     char large_bytes2[(1 << 12)];
     memset(large_bytes2, 0, sizeof(char) * ((1 << 12)));
@@ -186,7 +186,7 @@ TEST_F(FileUtilsTest, TestCreateDir) {
 
     // absolute path;
     std::string real_path;
-    Env::Default()->canonicalize(".", &real_path);
+    FileSystem::Default()->canonicalize(".", &real_path);
     ASSERT_TRUE(FileUtils::create_dir(real_path + "/file_test/absolute/path/123/asdf").ok());
     ASSERT_TRUE(FileUtils::is_dir("./file_test/absolute/path/123/asdf"));
     FileUtils::remove_all("./file_test");

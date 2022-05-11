@@ -29,7 +29,7 @@ public interface IcebergCatalog {
     /**
      * Loads a native Iceberg table based on 'tableId' or 'tableLocation'.
      *
-     * @param tableId       is the Iceberg table identifier to load the table via the globalStateMgr
+     * @param tableId       is the Iceberg table identifier to load the table via the catalog
      *                      interface, e.g. HiveCatalog.
      * @param tableLocation is the filesystem path to load the table via the HadoopTables
      *                      interface.

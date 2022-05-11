@@ -31,7 +31,7 @@
 #include <iostream>
 #include <string>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/util.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
@@ -52,7 +52,7 @@ TEST(ZipUtilTest, basic) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_normal_data"));
     ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_normal_data"));
 
-    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
+    auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
 
     char f[11];
     Slice slice(f, 11);
@@ -80,7 +80,7 @@ TEST(ZipUtilTest, dir) {
     ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/two"));
     ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/two"));
 
-    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
+    auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
 
     char f[4];
     Slice slice(f, 4);

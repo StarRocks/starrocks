@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/vectorized/hdfs_scan_node.h"
-
+// #include "exec/vectorized/hdfs_scan_node.h"
 #include <gtest/gtest.h>
 
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/vectorized/connector_scan_node.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -149,6 +149,10 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
     tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::HIVE;
+    tnode->__set_connector_scan_node(connector_scan_node);
+
     return tnode;
 }
 
@@ -206,6 +210,10 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
     t_expr.nodes = nodes;
 
     tnode->hdfs_scan_node.__set_partition_conjuncts({t_expr});
+
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::HIVE;
+    tnode->__set_connector_scan_node(connector_scan_node);
 
     return tnode;
 }
@@ -348,7 +356,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         auto tnode = _create_tplan_node();
         auto* descs = _create_table_desc();
         _runtime_state->set_desc_tbl(descs);
-        auto hdfs_scan_node = std::make_shared<HdfsScanNode>(_pool, *tnode, *descs);
+        auto hdfs_scan_node = std::make_shared<ConnectorScanNode>(_pool, *tnode, *descs);
 
         Status status = hdfs_scan_node->init(*tnode, _runtime_state.get());
         ASSERT_TRUE(status.ok());
@@ -380,7 +388,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         auto tnode = _create_tplan_node_for_filter_partition();
         auto* descs = _create_table_desc_for_filter_partition();
         _runtime_state->set_desc_tbl(descs);
-        auto hdfs_scan_node = std::make_shared<HdfsScanNode>(_pool, *tnode, *descs);
+        auto hdfs_scan_node = std::make_shared<ConnectorScanNode>(_pool, *tnode, *descs);
 
         Status status = hdfs_scan_node->init(*tnode, _runtime_state.get());
         ASSERT_TRUE(status.ok());

@@ -39,7 +39,12 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void forbidGlobalDict(long tableId) {
+    public void disableGlobalDict(long tableId) {
+    }
+
+    @Override
+    public void enableGlobalDict(long tableId) {
+
     }
 
     @Override

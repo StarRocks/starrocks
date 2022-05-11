@@ -25,7 +25,7 @@
 
 #include <string>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "util/file_utils.h"
 #include "util/slice.h"
 
@@ -54,7 +54,7 @@ protected:
 TEST_F(FileBlockManagerTest, NormalTest) {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
-    auto env = Env::CreateSharedFromString("posix://").value();
+    auto env = FileSystem::CreateSharedFromString("posix://").value();
     std::unique_ptr<fs::FileBlockManager> fbm(new fs::FileBlockManager(env, std::move(bm_opts)));
 
     std::unique_ptr<fs::WritableBlock> wblock;

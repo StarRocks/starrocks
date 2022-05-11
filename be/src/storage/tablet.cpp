@@ -340,11 +340,9 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
-    if (_contains_rowset(rowset->rowset_id())) {
-        return Status::OK();
-    }
     RETURN_IF_ERROR(_contains_version(rowset->version()));
     RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
+    RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
     _rs_version_map[rowset->version()] = rowset;
     _inc_rs_version_map[rowset->version()] = rowset;
 
@@ -353,8 +351,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(
                 std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
-
-    RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
 
     // warm-up this rowset
     auto st = rowset->load();
@@ -378,10 +374,6 @@ void Tablet::_delete_inc_rowset_by_version(const Version& version) {
 }
 
 void Tablet::_delete_stale_rowset_by_version(const Version& version) {
-    RowsetMetaSharedPtr rowset_meta = _tablet_meta->acquire_stale_rs_meta_by_version(version);
-    if (rowset_meta == nullptr) {
-        return;
-    }
     _tablet_meta->delete_stale_rs_meta_by_version(version);
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
@@ -421,55 +413,68 @@ void Tablet::delete_expired_stale_rowset() {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
         return;
     }
-    std::unique_lock wrlock(_meta_lock);
 
-    std::vector<int64_t> path_id_vec;
-    // capture the path version to delete
-    _timestamped_version_tracker.capture_expired_paths(static_cast<int64_t>(expired_stale_sweep_endtime), &path_id_vec);
+    std::vector<RowsetSharedPtr> stale_rowsets;
+    int64_t delete_rowset_time = 0;
+    int64_t old_stale_rs_size = 0;
+    MonotonicStopWatch timer;
+    timer.start();
 
-    if (path_id_vec.empty()) {
-        return;
-    }
+    {
+        std::unique_lock wrlock(_meta_lock);
 
-    RowsetSharedPtr lastest_delta = rowset_with_max_version();
-    if (lastest_delta == nullptr) {
-        LOG(WARNING) << "lastest_delta is null " << tablet_id();
-        return;
-    }
+        std::vector<int64_t> path_id_vec;
+        // capture the path version to delete
+        _timestamped_version_tracker.capture_expired_paths(static_cast<int64_t>(expired_stale_sweep_endtime),
+                                                           &path_id_vec);
 
-    std::vector<PathVersionListSharedPtr> stale_version_paths;
-    stale_version_paths.reserve(path_id_vec.size());
-    for (int64_t path_id : path_id_vec) {
-        PathVersionListSharedPtr version_path = _timestamped_version_tracker.fetch_and_delete_path_by_id(path_id);
-        stale_version_paths.emplace_back(std::move(version_path));
-    }
-
-    auto old_size = _stale_rs_version_map.size();
-    auto old_meta_size = _tablet_meta->all_stale_rs_metas().size();
-
-    // do delete operation
-    for (const auto& version_path : stale_version_paths) {
-        for (const auto& timestamped_version : version_path->timestamped_versions()) {
-            auto it = _stale_rs_version_map.find(timestamped_version->version());
-            if (it != _stale_rs_version_map.end()) {
-                // delete rowset
-                StorageEngine::instance()->add_unused_rowset(it->second);
-                _stale_rs_version_map.erase(it);
-                LOG(INFO) << "delete stale rowset tablet=" << full_name() << " version["
-                          << timestamped_version->version().first << "," << timestamped_version->version().second
-                          << "] move to unused_rowset success " << expired_stale_sweep_endtime;
-            } else {
-                LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
-                             << timestamped_version->version().first << "," << timestamped_version->version().second
-                             << "] not find in stale rs version map";
-            }
-            _delete_stale_rowset_by_version(timestamped_version->version());
+        if (path_id_vec.empty()) {
+            return;
         }
+
+        RowsetSharedPtr lastest_delta = rowset_with_max_version();
+        if (lastest_delta == nullptr) {
+            LOG(WARNING) << "lastest_delta is null " << tablet_id();
+            return;
+        }
+
+        std::vector<PathVersionListSharedPtr> stale_version_paths;
+        stale_version_paths.reserve(path_id_vec.size());
+        for (int64_t path_id : path_id_vec) {
+            PathVersionListSharedPtr version_path = _timestamped_version_tracker.fetch_and_delete_path_by_id(path_id);
+            stale_version_paths.emplace_back(std::move(version_path));
+        }
+
+        old_stale_rs_size = _stale_rs_version_map.size();
+        stale_rowsets.reserve(old_stale_rs_size);
+
+        // do delete operation
+        for (const auto& version_path : stale_version_paths) {
+            for (const auto& timestamped_version : version_path->timestamped_versions()) {
+                auto it = _stale_rs_version_map.find(timestamped_version->version());
+                if (it != _stale_rs_version_map.end()) {
+                    // delete rowset
+                    stale_rowsets.emplace_back(it->second);
+                    _stale_rs_version_map.erase(it);
+                } else {
+                    LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
+                                 << timestamped_version->version().first << "," << timestamped_version->version().second
+                                 << "] not find in stale rs version map";
+                }
+                _delete_stale_rowset_by_version(timestamped_version->version());
+            }
+        }
+        delete_rowset_time = timer.elapsed_time() / MICROS_PER_SEC;
     }
+
+    for (auto& rowset : stale_rowsets) {
+        StorageEngine::instance()->add_unused_rowset(rowset);
+    }
+
     LOG(INFO) << "delete stale rowset _stale_rs_version_map tablet=" << full_name()
-              << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_size
-              << " current_meta_size=" << _tablet_meta->all_stale_rs_metas().size()
-              << " old_meta_size=" << old_meta_size << " sweep endtime " << expired_stale_sweep_endtime;
+              << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_stale_rs_size
+              << " sweep endtime " << expired_stale_sweep_endtime << " delete_rowset_time=" << delete_rowset_time
+              << " total_time=" << timer.elapsed_time() / MICROS_PER_SEC;
 
 #ifndef BE_TEST
     save_meta();
@@ -846,15 +851,9 @@ void Tablet::_print_missed_versions(const std::vector<Version>& missed_versions)
 
 Status Tablet::_contains_version(const Version& version) {
     // check if there exist a rowset contains the added rowset
-    for (auto& it : _rs_version_map) {
-        if (it.first.contains(version)) {
-            // TODO(lingbin): Is this check unnecessary?
-            // because the value type is std::shared_ptr, when will it be nullptr?
-            // In addition, in this class, there are many places that do not make this judgment
-            // when access _rs_version_map's value.
-            CHECK(it.second != nullptr) << "there exist a version=" << it.first
-                                        << " contains the input rs with version=" << version
-                                        << ", but the related rs is null";
+    const auto& lower = _rs_version_map.lower_bound(version);
+    for (auto it = lower; it != _rs_version_map.end(); it++) {
+        if (it->first.contains(version)) {
             return Status::AlreadyExist("push version already exist");
         }
     }

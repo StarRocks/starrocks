@@ -23,6 +23,7 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DateLiteral;
@@ -617,6 +618,33 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
+
+    @Test
+    public void testAddBackend() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String addBackendSql = "ALTER SYSTEM ADD BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt addBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addBackendSql, ctx);
+
+        String dropBackendSql = "ALTER SYSTEM DROP BACKEND \"192.168.1.1:8080\",\"192.168.1.2:8080\"";
+        AlterSystemStmt dropBackendStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropBackendSql, ctx);
+
+        String addObserverSql = "ALTER SYSTEM ADD OBSERVER \"192.168.1.1:8080\"";
+        AlterSystemStmt addObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addObserverSql, ctx);
+
+        String dropObserverSql = "ALTER SYSTEM DROP OBSERVER \"192.168.1.1:8080\"";
+        AlterSystemStmt dropObserverStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropObserverSql, ctx);
+
+        String addFollowerSql = "ALTER SYSTEM ADD FOLLOWER \"192.168.1.1:8080\"";
+        AlterSystemStmt addFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(addFollowerSql, ctx);
+
+        String dropFollowerSql = "ALTER SYSTEM DROP FOLLOWER \"192.168.1.1:8080\"";
+        AlterSystemStmt dropFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropFollowerSql, ctx);
+
+
+    }
+
+
 
     @Test
     public void testCatalogAddPartitions5Day() throws Exception {

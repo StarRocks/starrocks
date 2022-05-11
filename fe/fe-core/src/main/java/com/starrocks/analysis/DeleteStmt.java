@@ -111,15 +111,6 @@ public class DeleteStmt extends DmlStmt {
 
         // analyze predicate
         analyzePredicate(wherePredicate);
-
-        // check access
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkTblPriv(ConnectContext.get(), tblName.getDb(), tblName.getTbl(),
-                        PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(), tblName.getTbl());
-        }
     }
 
     private void analyzePredicate(Expr predicate) throws AnalysisException {

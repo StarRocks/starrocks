@@ -26,7 +26,7 @@
 
 #include "column/column.h"
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_manager.h"
 #include "storage/page_cache.h"

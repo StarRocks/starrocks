@@ -77,8 +77,8 @@ Status EnginePublishVersionTask::finish() {
             return st;
         }
     }
-    VLOG(1) << "Publish version successfully on tablet. tablet=" << tablet->full_name()
-            << ", transaction_id=" << _transaction_id << ", version=" << _version << ", res=" << st.to_string();
+    LOG(INFO) << "Publish version successfully on tablet. tablet=" << tablet->full_name()
+              << ", transaction_id=" << _transaction_id << ", version=" << _version << ", res=" << st.to_string();
     return Status::OK();
 }
 

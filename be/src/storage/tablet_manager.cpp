@@ -31,7 +31,7 @@ DIAGNOSTIC_POP
 #include <ctime>
 #include <memory>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -728,7 +728,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     // For case 2, If a tablet has just been copied to local BE,
     // it may be cleared by gc-thread(see perform_path_gc_by_tablet) because the tablet meta may not be loaded to memory.
     // So clone task should check path and then failed and retry in this case.
-    if (check_path && !Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
+    if (check_path && !FileSystem::Default()->path_exists(tablet->schema_hash_path()).ok()) {
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->schema_hash_path();
         return Status::NotFound("tablet path not exists");
     }
@@ -778,7 +778,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
         return Status::InternalError("reset tablet uid failed");
     }
 
-    if (!Env::Default()->path_exists(meta_path).ok()) {
+    if (!FileSystem::Default()->path_exists(meta_path).ok()) {
         LOG(WARNING) << "Fail to find header file. meta_path=" << meta_path;
         return Status::NotFound("header file not exist");
     }
@@ -1374,7 +1374,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     // NOTE: do NOT touch snapshot_meta->tablet_meta since here, it has been modified by
     // `Tablet::create_tablet_from_meta`.
 
-    if (!Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
+    if (!FileSystem::Default()->path_exists(tablet->schema_hash_path()).ok()) {
         return Status::NotFound("tablet path not exists");
     }
 

@@ -21,8 +21,8 @@ using HashJoiner = starrocks::vectorized::HashJoiner;
 class HashJoinBuildOperator final : public Operator {
 public:
     HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
-                          HashJoinerPtr join_builder, const std::vector<HashJoinerPtr>& only_probers,
-                          size_t driver_sequence, PartialRuntimeFilterMerger* partial_rf_merger,
+                          int32_t driver_sequence, HashJoinerPtr join_builder,
+                          const std::vector<HashJoinerPtr>& only_probers, PartialRuntimeFilterMerger* partial_rf_merger,
                           TJoinDistributionMode::type distribution_mode);
     ~HashJoinBuildOperator() override = default;
 
@@ -50,7 +50,6 @@ private:
     // Assign the readable hash table from _join_builder to each only probe hash_joiner,
     // when _join_builder finish building the hash tbale.
     const std::vector<HashJoinerPtr>& _read_only_join_probers;
-    size_t _driver_sequence;
     PartialRuntimeFilterMerger* _partial_rf_merger;
     bool _is_finished = false;
 

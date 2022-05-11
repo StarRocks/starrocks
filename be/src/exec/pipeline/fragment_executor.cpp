@@ -9,12 +9,12 @@
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan_operator.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -52,10 +52,17 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
+static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
+                                            int node_id) {
     Morsels morsels;
-    for (const auto& scan_range : scan_ranges) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
+
+    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
+    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
+        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
+    } else {
+        for (const auto& scan_range : scan_ranges) {
+            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
+        }
     }
     return morsels;
 }
@@ -79,11 +86,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // duplicate invocations of rpc exec_plan_fragment.
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
-        auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
-        if (existing_fragment_ctx) {
+        auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
+        if (existingfragment_ctx) {
             return Status::DuplicateRpcInvocation("Duplicate invocations of exec_plan_fragment");
         }
     }
+
+    bool prepare_success = false;
+    DeferOp defer([this, &prepare_success]() {
+        if (!prepare_success) {
+            _fail_cleanup();
+        }
+    });
 
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
@@ -100,26 +114,25 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _query_ctx->extend_lifetime();
 
     auto fragment_ctx = std::make_unique<FragmentContext>();
-    _fragment_ctx = fragment_ctx.get();
 
-    _fragment_ctx->set_query_id(query_id);
-    _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
-    _fragment_ctx->set_fe_addr(coord);
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_instance_id);
+    fragment_ctx->set_fe_addr(coord);
 
     if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        _fragment_ctx->set_report_profile();
+        fragment_ctx->set_report_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
-        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
+        fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
 
-    // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
+    // wg is always non-nullable, when request.enable_resource_group is true.
     if (request.__isset.enable_resource_group && request.enable_resource_group) {
-        _fragment_ctx->set_enable_resource_group();
+        fragment_ctx->set_enable_resource_group();
         if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
             wg = std::make_shared<WorkGroup>(request.workgroup);
             wg = WorkGroupManager::instance()->add_workgroup(wg);
@@ -129,7 +142,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         DCHECK(wg != nullptr);
     }
 
-    _query_ctx->init_query(wg.get());
+    if (_query_ctx->init_query(wg.get())) {
+        _wg = wg.get();
+    }
 
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
@@ -139,7 +154,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
-    _fragment_ctx->set_runtime_state(
+    fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
 
     if (wg != nullptr && wg->use_big_query_mem_limit()) {
@@ -155,7 +170,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* runtime_state = fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
     // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
@@ -172,7 +187,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
                                                       true);
     }
-    _fragment_ctx->prepare_pass_through_chunk_buffer();
+    fragment_ctx->prepare_pass_through_chunk_buffer();
 
     auto* obj_pool = runtime_state->obj_pool();
     // Set up desc tbl
@@ -193,8 +208,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &_fragment_ctx->plan()));
-    ExecNode* plan = _fragment_ctx->plan();
+    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &fragment_ctx->plan()));
+    ExecNode* plan = fragment_ctx->plan();
     plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
@@ -203,6 +218,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // Set up global dict
     if (request.fragment.__isset.query_global_dicts) {
         RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+    }
+
+    if (request.fragment.__isset.load_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
     }
 
     // Set senders of exchange nodes before pipeline build
@@ -218,18 +237,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    MorselQueueMap& morsel_queues = fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
+        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
+    PipelineBuilderContext context(fragment_ctx.get(), degree_of_parallelism);
     PipelineBuilder builder(context);
-    _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
+    fragment_ctx->set_pipelines(builder.build(*fragment_ctx, plan));
     // Set up sink, if required
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
@@ -243,10 +262,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _decompose_data_sink_to_operator(runtime_state, &context, fragment.output_sink, sink.get());
     }
 
-    RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
+    RETURN_IF_ERROR(fragment_ctx->prepare_all_pipelines());
 
     Drivers drivers;
-    const auto& pipelines = _fragment_ctx->pipelines();
+    const auto& pipelines = fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
     for (auto n = 0; n < num_pipelines; ++n) {
@@ -269,15 +288,15 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
+                                                                    fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                     scan_operator->set_workgroup(wg);
                 } else {
-                    if (dynamic_cast<HdfsScanOperator*>(scan_operator) != nullptr) {
+                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
                     } else {
                         scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
@@ -289,8 +308,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         } else {
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
+                                                                    fragment_ctx.get(), driver_id++);
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -298,30 +317,39 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
-    _fragment_ctx->set_drivers(std::move(drivers));
+    fragment_ctx->set_drivers(std::move(drivers));
 
-    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
+    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(fragment_ctx->drivers().size());
     if (maybe_driver_token.ok()) {
-        _fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
+        fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
     } else {
         return maybe_driver_token.status();
     }
 
     if (wg != nullptr) {
-        for (auto& driver : _fragment_ctx->drivers()) {
+        for (auto& driver : fragment_ctx->drivers()) {
             driver->set_workgroup(wg);
         }
     }
 
+    _fragment_ctx = fragment_ctx.get();
     _query_ctx->fragment_mgr()->register_ctx(fragment_instance_id, std::move(fragment_ctx));
-
+    prepare_success = true;
     return Status::OK();
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
+    bool prepare_success = false;
+    DeferOp defer([this, &prepare_success]() {
+        if (!prepare_success) {
+            _fail_cleanup();
+        }
+    });
+
     for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
+    prepare_success = true;
 
     if (_fragment_ctx->enable_resource_group()) {
         for (const auto& driver : _fragment_ctx->drivers()) {
@@ -336,19 +364,35 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
+void FragmentExecutor::_fail_cleanup() {
+    if (_query_ctx) {
+        if (_fragment_ctx != nullptr) {
+            _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+        }
+        if (_query_ctx->count_down_fragments()) {
+            auto query_id = _query_ctx->query_id();
+            if (_wg) {
+                _wg->decr_num_queries();
+            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
+        }
+    }
+}
+
 void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                         const TDataSink& t_datasink, DataSink* datasink) {
+    auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink);
         // Result sink doesn't have plan node id;
         OpFactoryPtr op =
                 std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
-                                                            result_sink->get_output_exprs(), _fragment_ctx);
+                                                            result_sink->get_output_exprs(), fragment_ctx);
         // Add result sink operator to last pipeline
-        _fragment_ctx->pipelines().back()->add_op_factory(op);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
-        auto dop = _fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto& t_stream_sink = t_datasink.stream_sink;
         bool is_dest_merge = false;
         if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
@@ -369,14 +413,14 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         }
 
         std::shared_ptr<SinkBuffer> sink_buffer =
-                std::make_shared<SinkBuffer>(_fragment_ctx, sender->destinations(), is_dest_merge, dop);
+                std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
                 sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
                 sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
-                _fragment_ctx, sender->output_columns());
-        _fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
+                fragment_ctx, sender->output_columns());
+        fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
         // note(yan): steps are:
@@ -402,7 +446,7 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         {
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
-            _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
+            fragment_ctx->pipelines().back()->add_op_factory(sink_op);
         }
 
         // ==== create source/sink pipelines ====
@@ -426,17 +470,17 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
-            auto sink_buffer = std::make_shared<SinkBuffer>(_fragment_ctx, sender->destinations(), is_dest_merge, dop);
+            auto sink_buffer = std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
                     sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
                     sender->get_dest_node_id(), sender->get_partition_exprs(),
-                    sender->get_enable_exchange_pass_through(), _fragment_ctx, sender->output_columns());
+                    sender->get_enable_exchange_pass_through(), fragment_ctx, sender->output_columns());
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);
             auto pp = std::make_shared<Pipeline>(context->next_pipe_id(), ops);
-            _fragment_ctx->pipelines().emplace_back(pp);
+            fragment_ctx->pipelines().emplace_back(pp);
         }
     }
 }

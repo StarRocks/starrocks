@@ -6,10 +6,11 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "env/env.h"
-#include "env/env_hdfs.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "fs/fs_hdfs.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
@@ -17,7 +18,6 @@ class FileReader;
 }
 namespace starrocks::vectorized {
 
-class HdfsScanNode;
 class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
@@ -83,8 +83,8 @@ struct HdfsScannerParams {
     // excluded from conjunct_ctxs.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
-    // The Env used to open the file to be scanned
-    Env* env = nullptr;
+    // The FileSystem used to open the file to be scanned
+    FileSystem* fs = nullptr;
     // The file to scan
     std::string path;
 
@@ -116,7 +116,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* open_limit;
 };
 
-struct HdfsFileReaderParam {
+struct HdfsScannerContext {
     struct ColumnInfo {
         int col_idx;
         TypeDescriptor col_type;
@@ -230,14 +230,14 @@ private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
-    Status _build_file_read_param();
+    Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
     std::atomic_bool _pending_token = false;
 
-    HdfsFileReaderParam _file_read_param;
+    HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;

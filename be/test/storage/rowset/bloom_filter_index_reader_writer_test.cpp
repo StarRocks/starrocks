@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/key_coder.h"
@@ -42,9 +42,9 @@ protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kTestDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
+        ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
@@ -155,7 +155,7 @@ protected:
     }
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
 };
 

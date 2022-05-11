@@ -57,10 +57,14 @@ public class AuditEvent {
     public String clientIp = "";
     @AuditField(value = "User")
     public String user = "";
+    @AuditField(value = "ResourceGroup")
+    public String resourceGroup = "default_wg";
     @AuditField(value = "Db")
     public String db = "";
     @AuditField(value = "State")
     public String state = "";
+    @AuditField(value = "ErrorCode")
+    public String errorCode = "";
     @AuditField(value = "Time")
     public long queryTime = -1;
     @AuditField(value = "ScanBytes")
@@ -113,6 +117,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setResourceGroup(String resourceGroup) {
+            auditEvent.resourceGroup = resourceGroup;
+            return this;
+        }
+
         public AuditEventBuilder setDb(String db) {
             auditEvent.db = db;
             return this;
@@ -120,6 +129,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setState(String state) {
             auditEvent.state = state;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorCode(String errorCode) {
+            auditEvent.errorCode = errorCode;
             return this;
         }
 

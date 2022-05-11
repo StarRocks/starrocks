@@ -24,7 +24,9 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -72,11 +74,18 @@ public class ConnectContext {
 
     // id for this connection
     protected int connectionId;
+    // Time when the connection is make
+    protected long connectionStartTime;
+
     // mysql net
     protected MysqlChannel mysqlChannel;
     // state
     protected QueryState state;
     protected long returnRows;
+
+    // error code
+    protected String errorCode = "";
+
     // the protocol capability which server say it can support
     protected MysqlCapability serverCapability;
     // the protocol capability after server and client negotiate
@@ -137,6 +146,8 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+
+    protected WorkGroup workGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -322,6 +333,14 @@ public class ConnectContext {
         this.connectionId = connectionId;
     }
 
+    public void resetConnectionStartTime() {
+        this.connectionStartTime = System.currentTimeMillis();
+    }
+
+    public long getConnectionStartTime() {
+        return connectionStartTime;
+    }
+
     public MysqlChannel getMysqlChannel() {
         return mysqlChannel;
     }
@@ -332,6 +351,14 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public MysqlCapability getCapability() {
@@ -449,6 +476,14 @@ public class ConnectContext {
         return plannerProfile;
     }
 
+    public WorkGroup getWorkGroup() {
+        return workGroup;
+    }
+
+    public void setWorkGroup(WorkGroup workGroup) {
+        this.workGroup = workGroup;
+    }
+
     // kill operation with no protect.
     public void kill(boolean killConnection) {
         LOG.warn("kill timeout query, {}, kill connection: {}",
@@ -515,6 +550,8 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
+            // connection start Time
+            row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State

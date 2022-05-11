@@ -28,12 +28,12 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
                                    const std::vector<int>& null_firsts, SmallPermutation* permutation);
 
 // Sort multiple columns in vertical
-Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                              bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                              bool build_tie, size_t limit = 0, size_t* limited = nullptr);
 
 // Sort multiple chunks in column-wise style
-Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vertical_chunks,
+Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
                             size_t limit);
 
@@ -69,6 +69,15 @@ struct SortDescs {
 
     SortDescs() = default;
     ~SortDescs() = default;
+
+    SortDescs(const std::vector<bool>& orders, const std::vector<bool>& null_firsts) {
+        descs.resize(orders.size());
+        for (size_t i = 0; i < orders.size(); ++i) {
+            descs[i].sort_order = orders.at(i) ? 1 : -1;
+            descs[i].null_first = (null_firsts.at(i) ? -1 : 1) * descs[i].sort_order;
+        }
+    }
+
     SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls) {
         DCHECK_EQ(orders.size(), nulls.size());
         descs.reserve(orders.size());
@@ -79,10 +88,7 @@ struct SortDescs {
 
     size_t num_columns() const { return descs.size(); }
 
-    SortDesc get_column_desc(int col) const {
-        DCHECK_LT(col, descs.size());
-        return descs[col];
-    }
+    SortDesc get_column_desc(int col) const { return descs[col]; }
 };
 
 } // namespace starrocks::vectorized

@@ -258,14 +258,12 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
-CONF_mInt32(base_compaction_write_mbytes_per_sec, "5");
 
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
-CONF_mInt64(cumulative_compaction_budgeted_bytes, "104857600");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 // cumulative compaction skips recently published deltas in order to prevent
 // compacting a version that might be queried (in case the query planning phase took some time).
@@ -288,21 +286,14 @@ CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 CONF_Int32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
-CONF_mInt32(base_compaction_trace_threshold, "120");
-CONF_mInt32(cumulative_compaction_trace_threshold, "60");
-CONF_mInt32(update_compaction_trace_threshold, "20");
+CONF_mInt32(compaction_trace_threshold, "60");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_mBool(enable_compaction, "true");
 CONF_Bool(enable_event_based_compaction_framework, "false");
-CONF_mInt32(max_compaction_task_num, "4");
-// < 0 means no limit
-CONF_mInt32(max_cumulative_compaction_task, "-1");
-CONF_mInt32(max_base_compaction_task, "1");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -377,8 +368,7 @@ CONF_Int32(num_threads_per_disk, "0");
 // There is a trade off of latency and throughout, trying to keep disks busy but
 // not introduce seeks.  The literature seems to agree that with 8 MB reads, random
 // io and sequential io perform similarly.
-CONF_Int32(read_size, "8388608");    // 8 * 1024 * 1024, Read Size (in bytes)
-CONF_Int32(min_buffer_size, "1024"); // 1024, The minimum read buffer size (in bytes)
+CONF_Int32(read_size, "8388608"); // 8 * 1024 * 1024, Read Size (in bytes)
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.

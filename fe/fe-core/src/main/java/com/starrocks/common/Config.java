@@ -803,7 +803,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
@@ -1268,6 +1268,12 @@ public class Config extends ConfigBase {
     public static int max_agent_tasks_send_per_be = 10000;
 
     /**
+     * min num of thread to refresh hive meta
+     */
+    @ConfField
+    public static int hive_meta_cache_refresh_min_threads = 50;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField
@@ -1327,6 +1333,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_custom_worker_thread = false;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_worker_num_threads = 64;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1402,4 +1420,33 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_bucket_num = 10;
+
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_mv = false;
+  
+    @ConfField
+    public static boolean enable_dict_optimize_routine_load = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_dict_optimize_stream_load = true;
+
+    /**
+     * If set to true, the following rules will apply to see if the password is secure upon the creation of a user.
+     * 1. The length of the password should be no less than 8.
+     * 2. The password should contain at least one digit, one lowercase letter, one uppercase letter
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_validate_password = false;
+
+    /**
+     * If set to false, changing the password to the previous one is not allowed.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_password_reuse = true;
+    /**
+     * If set to false, when the load is empty, success is returned.
+     * Otherwise, `all partitions have no load data` is returned.
+     */
+    @ConfField(mutable = true)
+    public static boolean empty_load_as_error = true;
 }

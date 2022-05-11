@@ -22,8 +22,7 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
     // Compute the required properties of shuffle join for children, adjust shuffle columns orders for
     // respect the required properties from parent.
     protected static List<PhysicalPropertySet> computeShuffleJoinRequiredProperties(
-            PhysicalPropertySet requiredFromParent,
-            List<Integer> leftShuffleColumns,
+            PhysicalPropertySet requiredFromParent, List<Integer> leftShuffleColumns,
             List<Integer> rightShuffleColumns) {
         Optional<HashDistributionDesc> requiredShuffleDescOptional =
                 getShuffleJoinHashDistributionDesc(requiredFromParent);
@@ -33,21 +32,20 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
         } else {
             // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
             // order required by parent
-            HashDistributionDesc requiredShuffleDesc = requiredShuffleDescOptional.get();
-            boolean adjustBasedOnLeft = leftShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
-                    leftShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
-                    requiredShuffleDesc.getColumns().containsAll(leftShuffleColumns);
-            boolean adjustBasedOnRight = rightShuffleColumns.size() == requiredShuffleDesc.getColumns().size() &&
-                    rightShuffleColumns.containsAll(requiredShuffleDesc.getColumns()) &&
-                    requiredShuffleDesc.getColumns().containsAll(rightShuffleColumns);
+            List<Integer> requiredColumns = requiredShuffleDescOptional.get().getColumns();
+            boolean adjustBasedOnLeft = leftShuffleColumns.size() == requiredColumns.size()
+                    && leftShuffleColumns.containsAll(requiredColumns)
+                    && requiredColumns.containsAll(leftShuffleColumns);
+            boolean adjustBasedOnRight = rightShuffleColumns.size() == requiredColumns.size()
+                    && rightShuffleColumns.containsAll(requiredColumns)
+                    && requiredColumns.containsAll(rightShuffleColumns);
 
             if (adjustBasedOnLeft || adjustBasedOnRight) {
                 List<Integer> requiredLeft = Lists.newArrayList();
                 List<Integer> requiredRight = Lists.newArrayList();
 
-                for (Integer cid : requiredShuffleDesc.getColumns()) {
-                    int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) :
-                            rightShuffleColumns.indexOf(cid);
+                for (Integer cid : requiredColumns) {
+                    int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) : rightShuffleColumns.indexOf(cid);
                     requiredLeft.add(leftShuffleColumns.get(idx));
                     requiredRight.add(rightShuffleColumns.get(idx));
                 }
@@ -58,14 +56,33 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
         }
     }
 
+    protected List<PhysicalPropertySet> computeAggRequiredShuffleProperties(PhysicalPropertySet requiredProperty,
+                                                                            List<Integer> shuffleColumns) {
+        Optional<HashDistributionDesc> requiredShuffleDescOptional =
+                getShuffleJoinHashDistributionDesc(requiredProperty);
+        if (!requiredShuffleDescOptional.isPresent()) {
+            // required property is not SHUFFLE_AGG
+            return Lists.newArrayList(createShuffleAggPropertySet(shuffleColumns));
+        }
+
+        List<Integer> requiredColumns = requiredShuffleDescOptional.get().getColumns();
+        if (shuffleColumns.size() == requiredColumns.size() && shuffleColumns.containsAll(requiredColumns)
+                && requiredColumns.containsAll(shuffleColumns)) {
+            // keep order with parent
+            return Lists.newArrayList(createShuffleAggPropertySet(requiredColumns));
+        } else {
+            return Lists.newArrayList(createShuffleAggPropertySet(shuffleColumns));
+        }
+    }
+
     protected static Optional<HashDistributionDesc> getShuffleJoinHashDistributionDesc(
             PhysicalPropertySet requiredPropertySet) {
         if (!requiredPropertySet.getDistributionProperty().isShuffle()) {
             return Optional.empty();
         }
         HashDistributionDesc requireDistributionDesc =
-                ((HashDistributionSpec) requiredPropertySet.getDistributionProperty().getSpec())
-                        .getHashDistributionDesc();
+                ((HashDistributionSpec) requiredPropertySet.getDistributionProperty()
+                        .getSpec()).getHashDistributionDesc();
         if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
             return Optional.empty();
         }

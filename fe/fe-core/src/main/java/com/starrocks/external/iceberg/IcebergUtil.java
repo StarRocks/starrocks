@@ -38,7 +38,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding globalStateMgr implementation.
+     * Returns the corresponding catalog implementation.
      */
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
@@ -50,12 +50,12 @@ public class IcebergUtil {
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
                 throw new StarRocksIcebergException(
-                        "Unexpected globalStateMgr type: " + catalogType.toString());
+                        "Unexpected catalog type: " + catalogType.toString());
         }
     }
 
     /**
-     * Returns the corresponding hive globalStateMgr implementation.
+     * Returns the corresponding hive catalog implementation.
      */
     public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
             throws StarRocksIcebergException {
@@ -63,7 +63,7 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding custom globalStateMgr implementation.
+     * Returns the corresponding custom catalog implementation.
      */
     public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
             throws StarRocksIcebergException {
@@ -96,10 +96,7 @@ public class IcebergUtil {
      * @param table
      * @return Optional<Snapshot>
      */
-    public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
+    public static Optional<Snapshot> getCurrentTableSnapshot(Table table) {
         return Optional.ofNullable(table.currentSnapshot());
     }
 
@@ -110,17 +107,13 @@ public class IcebergUtil {
      * @param table
      * @param snapshot
      * @param icebergPredicates
-     * @param refresh
      * @return
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates,
-                                         boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
-
+                                         List<Expression> icebergPredicates) {
+        // TODO: use planWith(executorService) after
+        // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
         Expression filterExpressions = Expressions.alwaysTrue();
         if (!icebergPredicates.isEmpty()) {
@@ -130,7 +123,7 @@ public class IcebergUtil {
         return tableScan.filter(filterExpressions);
     }
 
-    private static void refreshTable(Table table) {
+    public static void refreshTable(Table table) {
         try {
             if (table instanceof BaseTable) {
                 BaseTable baseTable = (BaseTable) table;

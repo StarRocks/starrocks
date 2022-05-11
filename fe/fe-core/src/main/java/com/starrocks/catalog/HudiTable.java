@@ -69,7 +69,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String HUDI_TABLE_TYPE = "hudi.table.type";
     private static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
     private static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
-    private static final String HUDI_METASTORE_URIS = "hive.metastore.uris";
     private static final String HUDI_BASE_PATH = "hudi.table.base.path";
     private static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
     private static final String HUDI_DB = "database";
@@ -138,12 +137,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
-    public HiveMetaStoreTableInfo initHmsTableInfo() {
+    public void initHmsTableInfo() {
         if (hmsTableInfo == null) {
             hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, db, table,
                     partColumnNames, dataColumnNames, nameToColumn, type);
         }
-        return hmsTableInfo;
     }
 
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
@@ -166,7 +164,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
         GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
     }
 
@@ -216,7 +214,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         if (hudiResource.getType() != Resource.ResourceType.HUDI) {
             throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
         }
-        hudiProperties.put(HUDI_METASTORE_URIS, hudiResource.getHiveMetastoreURIs());
 
         org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getTable(resourceName, this.db, this.table);

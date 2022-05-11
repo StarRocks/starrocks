@@ -26,9 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
@@ -93,7 +91,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -111,7 +112,6 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -302,6 +302,7 @@ public class StmtExecutor {
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                         if (parsedStmt instanceof ShowStmt) {
                             com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                            PrivilegeChecker.check(parsedStmt, context);
 
                             QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                             if (selectStmt != null) {
@@ -589,7 +590,6 @@ public class StmtExecutor {
             Preconditions.checkState(false, "Shouldn't reach here");
         } else {
             try {
-                LOG.info("try analyze xxxx");
                 parsedStmt.analyze(new Analyzer(context.getGlobalStateMgr(), context));
             } catch (AnalysisException e) {
                 throw e;
@@ -968,7 +968,9 @@ public class StmtExecutor {
                 QueryDetail.QueryMemState.RUNNING,
                 context.getDatabase(),
                 sql,
-                context.getQualifiedUser());
+                context.getQualifiedUser(),
+                context.getWorkGroup() != null ?
+                    context.getWorkGroup().getName() : "");
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
@@ -1098,8 +1100,19 @@ public class StmtExecutor {
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
-                coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                /*
+                 * In this case, There are two factors that lead query cancelled:
+                 * 1: TIMEOUT
+                 * 2: BE EXCEPTION
+                 * So we should distinguish these two factors.
+                 */
+                if (!coord.checkBackendState()) {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
+                } else {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                }
             }
 
             if (!coord.getExecStatus().ok()) {
@@ -1124,25 +1137,6 @@ public class StmtExecutor {
                             + coord.getTrackingUrl());
                     return;
                 }
-            }
-
-            if (loadedRows == 0 && filteredRows == 0) {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(),
-                            transactionId,
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                    );
-                }
-                context.getState().setOk();
-                return;
             }
 
             if (targetTable instanceof ExternalOlapTable) {

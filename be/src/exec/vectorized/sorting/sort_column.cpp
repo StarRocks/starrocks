@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <algorithm>
+
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -121,9 +123,9 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
-                                  bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                                  bool build_tie, size_t limit)
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+                                  bool is_asc_order, bool is_null_first, Permutation& permutation, Tie& tie,
+                                  std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _is_asc_order(is_asc_order),
@@ -330,7 +332,7 @@ private:
     }
 
 private:
-    const bool& _cancel;
+    const std::atomic<bool>& _cancel;
     const bool _is_asc_order;
     const bool _is_null_first;
 
@@ -405,7 +407,7 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
     return Status::OK();
 }
 
-Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                              bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                              bool build_tie, size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
@@ -419,7 +421,7 @@ Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& c
     return Status::OK();
 }
 
-Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vertical_chunks,
+Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
                             size_t limit) {
     if (vertical_chunks.empty() || perm.empty()) {
@@ -463,6 +465,10 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
     for (auto& chunk : chunks) {
         src.push_back(chunk.get());
     }
+    DCHECK_LT(std::max_element(perm.begin(), perm.end(),
+                               [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
+                      ->chunk_index,
+              chunks.size());
     append_by_permutation(dst, src, perm);
 }
 

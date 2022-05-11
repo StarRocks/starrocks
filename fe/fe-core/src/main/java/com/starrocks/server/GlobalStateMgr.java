@@ -196,10 +196,12 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
+import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -241,6 +243,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
@@ -264,6 +267,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
@@ -385,6 +389,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private IcebergRepository icebergRepository;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -498,6 +503,10 @@ public class GlobalStateMgr {
     private WorkGroupMgr workGroupMgr;
 
     private StarOSAgent starOSAgent;
+
+    private MetadataMgr metadataMgr;
+    private CatalogMgr catalogMgr;
+    private ConnectorMgr connectorMgr;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -640,6 +649,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
@@ -676,6 +686,9 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
+        this.metadataMgr = new MetadataMgr();
+        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
     }
 
     public static void destroyCheckpoint() {
@@ -810,6 +823,18 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public CatalogMgr getCatalogMgr() {
+        return catalogMgr;
+    }
+
+    public ConnectorMgr getConnectorMgr() {
+        return connectorMgr;
+    }
+
+    public MetadataMgr getMetadataMgr() {
+        return metadataMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -6331,25 +6356,51 @@ public class GlobalStateMgr {
         Map<String, String> property = new HashMap<>();
         Database db = getDb(dbName);
         if (db == null) {
-            throw new DdlException("the DB " + dbName + "isn't  exist");
+            throw new DdlException("the DB " + dbName + " is not exist");
         }
-
-        Table table = db.getTable(tableName);
-        if (table == null) {
-            throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
-        }
-
-        if (table instanceof OlapTable) {
-            OlapTable olapTable = (OlapTable) table;
-            olapTable.setHasForbitGlobalDict(isForbit);
-            if (isForbit) {
-                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
-            } else {
-                property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
             }
-            ModifyTablePropertyOperationLog info =
-                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-            editLog.logSetHasForbitGlobalDict(info);
+
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                olapTable.setHasForbitGlobalDict(isForbit);
+                if (isForbit) {
+                    property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.DISABLE_LOW_CARD_DICT);
+                    IDictManager.getInstance().disableGlobalDict(olapTable.getId());
+                } else {
+                    property.put(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE, PropertyAnalyzer.ABLE_LOW_CARD_DICT);
+                    IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                }
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
+                editLog.logSetHasForbitGlobalDict(info);
+            }
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
+        if (info.getDbName() == null) {
+            return;
+        }
+        String hiveExternalDb = info.getDbName();
+        String hiveExternalTable = info.getTableName();
+        LOG.info("replayModifyTableColumn hiveDb:{},hiveTable:{}", hiveExternalDb, hiveExternalTable);
+        List<Column> columns = info.getColumns();
+        Database db = getDb(hiveExternalDb);
+        HiveTable table;
+        db.readLock();
+        try {
+            Table tbl = db.getTable(hiveExternalTable);
+            table = (HiveTable) tbl;
+            table.setNewFullSchema(columns);
+        } finally {
+            db.readUnlock();
         }
     }
 
@@ -6368,8 +6419,10 @@ public class GlobalStateMgr {
                 if (olapTable != null) {
                     if (enAble.equals(PropertyAnalyzer.DISABLE_LOW_CARD_DICT)) {
                         olapTable.setHasForbitGlobalDict(true);
+                        IDictManager.getInstance().disableGlobalDict(olapTable.getId());
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
+                        IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
             } else {
@@ -6802,7 +6855,7 @@ public class GlobalStateMgr {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache();
+            table.refreshTableCache(dbName, tableName);
         }
     }
 

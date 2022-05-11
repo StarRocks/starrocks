@@ -19,14 +19,6 @@ struct DataSegment {
     ChunkPtr chunk;
     Columns order_by_columns;
 
-    uint32_t _next_output_row = 0;
-    uint64_t _partitions_rows = 0;
-
-    // used for full sort.
-    Permutation* _sorted_permutation = nullptr;
-
-    bool has_next() { return _next_output_row < _partitions_rows; }
-
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
@@ -79,6 +71,8 @@ struct DataSegment {
 };
 using DataSegments = std::vector<DataSegment>;
 
+class SortedRuns;
+
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
@@ -109,16 +103,13 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
-    virtual DataSegment* get_result_data_segment() = 0;
+    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
+    virtual SortedRuns get_sorted_runs() = 0;
+
+    // Return accurate output rows of this operator
+    virtual size_t get_output_rows() const = 0;
 
     Status finish(RuntimeState* state);
-
-    // used to get size of partition chunks.
-    virtual uint64_t get_partition_rows() const = 0;
-
-    // used to get permutation for partition chunks,
-    // and this is used only with full sort.
-    virtual Permutation* get_permutation() const = 0;
 
     bool sink_complete();
 
@@ -137,6 +128,7 @@ protected:
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
+    // TODO: refactor it with SortDesc
     std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
     std::vector<int> _null_first_flag; // 1 for greatest, -1 for least.
     const std::string _sort_keys;

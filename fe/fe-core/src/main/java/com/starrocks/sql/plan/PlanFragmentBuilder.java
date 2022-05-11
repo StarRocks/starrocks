@@ -1929,7 +1929,8 @@ public class PlanFragmentBuilder {
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
                         return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE);
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_AGG);
                     });
         }
 

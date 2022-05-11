@@ -11,130 +11,130 @@
 
 namespace starrocks::vectorized {
 
-#define APPLY_FOR_VARIANT_NOT_NULL(M) \
-    M(phase1_uint8)                   \
-    M(phase1_int8)                    \
-    M(phase1_int16)                   \
-    M(phase1_int32)                   \
-    M(phase1_int64)                   \
-    M(phase1_int128)                  \
-    M(phase1_decimal32)               \
-    M(phase1_decimal64)               \
-    M(phase1_decimal128)              \
-    M(phase1_date)                    \
-    M(phase1_timestamp)               \
-    M(phase1_string)                  \
-    M(phase1_slice)                   \
-    M(phase1_slice_two_level)         \
-    M(phase1_int32_two_level)         \
-    M(phase2_uint8)                   \
-    M(phase2_int8)                    \
-    M(phase2_int16)                   \
-    M(phase2_int32)                   \
-    M(phase2_int64)                   \
-    M(phase2_decimal32)               \
-    M(phase2_decimal64)               \
-    M(phase2_decimal128)              \
-    M(phase2_int128)                  \
-    M(phase2_date)                    \
-    M(phase2_timestamp)               \
-    M(phase2_string)                  \
-    M(phase2_slice)                   \
-    M(phase2_slice_two_level)         \
-    M(phase2_int32_two_level)         \
-    M(phase1_slice_fx4)               \
-    M(phase1_slice_fx8)               \
-    M(phase1_slice_fx16)              \
-    M(phase2_slice_fx4)               \
-    M(phase2_slice_fx8)               \
+#define APPLY_FOR_AGG_VARIANT_NOT_NULL(M) \
+    M(phase1_uint8)                       \
+    M(phase1_int8)                        \
+    M(phase1_int16)                       \
+    M(phase1_int32)                       \
+    M(phase1_int64)                       \
+    M(phase1_int128)                      \
+    M(phase1_decimal32)                   \
+    M(phase1_decimal64)                   \
+    M(phase1_decimal128)                  \
+    M(phase1_date)                        \
+    M(phase1_timestamp)                   \
+    M(phase1_string)                      \
+    M(phase1_slice)                       \
+    M(phase1_slice_two_level)             \
+    M(phase1_int32_two_level)             \
+    M(phase2_uint8)                       \
+    M(phase2_int8)                        \
+    M(phase2_int16)                       \
+    M(phase2_int32)                       \
+    M(phase2_int64)                       \
+    M(phase2_decimal32)                   \
+    M(phase2_decimal64)                   \
+    M(phase2_decimal128)                  \
+    M(phase2_int128)                      \
+    M(phase2_date)                        \
+    M(phase2_timestamp)                   \
+    M(phase2_string)                      \
+    M(phase2_slice)                       \
+    M(phase2_slice_two_level)             \
+    M(phase2_int32_two_level)             \
+    M(phase1_slice_fx4)                   \
+    M(phase1_slice_fx8)                   \
+    M(phase1_slice_fx16)                  \
+    M(phase2_slice_fx4)                   \
+    M(phase2_slice_fx8)                   \
     M(phase2_slice_fx16)
 
-#define APPLY_FOR_VARIANT_NULL(M) \
-    M(phase1_null_uint8)          \
-    M(phase1_null_int8)           \
-    M(phase1_null_int16)          \
-    M(phase1_null_int32)          \
-    M(phase1_null_int64)          \
-    M(phase1_null_int128)         \
-    M(phase1_null_decimal32)      \
-    M(phase1_null_decimal64)      \
-    M(phase1_null_decimal128)     \
-    M(phase1_null_date)           \
-    M(phase1_null_timestamp)      \
-    M(phase1_null_string)         \
-    M(phase2_null_uint8)          \
-    M(phase2_null_int8)           \
-    M(phase2_null_int16)          \
-    M(phase2_null_int32)          \
-    M(phase2_null_int64)          \
-    M(phase2_null_int128)         \
-    M(phase2_null_decimal32)      \
-    M(phase2_null_decimal64)      \
-    M(phase2_null_decimal128)     \
-    M(phase2_null_date)           \
-    M(phase2_null_timestamp)      \
+#define APPLY_FOR_AGG_VARIANT_NULL(M) \
+    M(phase1_null_uint8)              \
+    M(phase1_null_int8)               \
+    M(phase1_null_int16)              \
+    M(phase1_null_int32)              \
+    M(phase1_null_int64)              \
+    M(phase1_null_int128)             \
+    M(phase1_null_decimal32)          \
+    M(phase1_null_decimal64)          \
+    M(phase1_null_decimal128)         \
+    M(phase1_null_date)               \
+    M(phase1_null_timestamp)          \
+    M(phase1_null_string)             \
+    M(phase2_null_uint8)              \
+    M(phase2_null_int8)               \
+    M(phase2_null_int16)              \
+    M(phase2_null_int32)              \
+    M(phase2_null_int64)              \
+    M(phase2_null_int128)             \
+    M(phase2_null_decimal32)          \
+    M(phase2_null_decimal64)          \
+    M(phase2_null_decimal128)         \
+    M(phase2_null_date)               \
+    M(phase2_null_timestamp)          \
     M(phase2_null_string)
 
-#define APPLY_FOR_VARIANT_ALL(M) \
-    M(phase1_uint8)              \
-    M(phase1_int8)               \
-    M(phase1_int16)              \
-    M(phase1_int32)              \
-    M(phase1_int64)              \
-    M(phase1_int128)             \
-    M(phase1_decimal32)          \
-    M(phase1_decimal64)          \
-    M(phase1_decimal128)         \
-    M(phase1_date)               \
-    M(phase1_timestamp)          \
-    M(phase1_string)             \
-    M(phase1_slice)              \
-    M(phase1_null_uint8)         \
-    M(phase1_null_int8)          \
-    M(phase1_null_int16)         \
-    M(phase1_null_int32)         \
-    M(phase1_null_int64)         \
-    M(phase1_null_int128)        \
-    M(phase1_null_decimal32)     \
-    M(phase1_null_decimal64)     \
-    M(phase1_null_decimal128)    \
-    M(phase1_null_date)          \
-    M(phase1_null_timestamp)     \
-    M(phase1_null_string)        \
-    M(phase1_slice_two_level)    \
-    M(phase1_int32_two_level)    \
-    M(phase2_uint8)              \
-    M(phase2_int8)               \
-    M(phase2_int16)              \
-    M(phase2_int32)              \
-    M(phase2_int64)              \
-    M(phase2_int128)             \
-    M(phase2_decimal32)          \
-    M(phase2_decimal64)          \
-    M(phase2_decimal128)         \
-    M(phase2_date)               \
-    M(phase2_timestamp)          \
-    M(phase2_string)             \
-    M(phase2_slice)              \
-    M(phase2_null_uint8)         \
-    M(phase2_null_int8)          \
-    M(phase2_null_int16)         \
-    M(phase2_null_int32)         \
-    M(phase2_null_int64)         \
-    M(phase2_null_int128)        \
-    M(phase2_null_decimal32)     \
-    M(phase2_null_decimal64)     \
-    M(phase2_null_decimal128)    \
-    M(phase2_null_date)          \
-    M(phase2_null_timestamp)     \
-    M(phase2_null_string)        \
-    M(phase2_slice_two_level)    \
-    M(phase2_int32_two_level)    \
-    M(phase1_slice_fx4)          \
-    M(phase1_slice_fx8)          \
-    M(phase1_slice_fx16)         \
-    M(phase2_slice_fx4)          \
-    M(phase2_slice_fx8)          \
+#define APPLY_FOR_AGG_VARIANT_ALL(M) \
+    M(phase1_uint8)                  \
+    M(phase1_int8)                   \
+    M(phase1_int16)                  \
+    M(phase1_int32)                  \
+    M(phase1_int64)                  \
+    M(phase1_int128)                 \
+    M(phase1_decimal32)              \
+    M(phase1_decimal64)              \
+    M(phase1_decimal128)             \
+    M(phase1_date)                   \
+    M(phase1_timestamp)              \
+    M(phase1_string)                 \
+    M(phase1_slice)                  \
+    M(phase1_null_uint8)             \
+    M(phase1_null_int8)              \
+    M(phase1_null_int16)             \
+    M(phase1_null_int32)             \
+    M(phase1_null_int64)             \
+    M(phase1_null_int128)            \
+    M(phase1_null_decimal32)         \
+    M(phase1_null_decimal64)         \
+    M(phase1_null_decimal128)        \
+    M(phase1_null_date)              \
+    M(phase1_null_timestamp)         \
+    M(phase1_null_string)            \
+    M(phase1_slice_two_level)        \
+    M(phase1_int32_two_level)        \
+    M(phase2_uint8)                  \
+    M(phase2_int8)                   \
+    M(phase2_int16)                  \
+    M(phase2_int32)                  \
+    M(phase2_int64)                  \
+    M(phase2_int128)                 \
+    M(phase2_decimal32)              \
+    M(phase2_decimal64)              \
+    M(phase2_decimal128)             \
+    M(phase2_date)                   \
+    M(phase2_timestamp)              \
+    M(phase2_string)                 \
+    M(phase2_slice)                  \
+    M(phase2_null_uint8)             \
+    M(phase2_null_int8)              \
+    M(phase2_null_int16)             \
+    M(phase2_null_int32)             \
+    M(phase2_null_int64)             \
+    M(phase2_null_int128)            \
+    M(phase2_null_decimal32)         \
+    M(phase2_null_decimal64)         \
+    M(phase2_null_decimal128)        \
+    M(phase2_null_date)              \
+    M(phase2_null_timestamp)         \
+    M(phase2_null_string)            \
+    M(phase2_slice_two_level)        \
+    M(phase2_int32_two_level)        \
+    M(phase1_slice_fx4)              \
+    M(phase1_slice_fx8)              \
+    M(phase1_slice_fx16)             \
+    M(phase2_slice_fx4)              \
+    M(phase2_slice_fx8)              \
     M(phase2_slice_fx16)
 
 // Hash maps for phase1
@@ -222,7 +222,7 @@ using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<
 // If the same Hash function and Seed are used,
 // if the open address HashTable is used in the second stage,
 // it will lead to a high conflict rate, resulting in performance degradation in the second stage.
-struct HashMapVariant {
+struct AggHashMapVariant {
     enum class Type {
         phase1_uint8 = 0,
         phase1_int8,
@@ -369,7 +369,7 @@ struct HashMapVariant {
     case Type::NAME:                                                                \
         NAME = std::make_unique<decltype(NAME)::element_type>(state->chunk_size()); \
         break;
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
     }
@@ -379,7 +379,7 @@ struct HashMapVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_map.capacity();
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
         return 0;
@@ -390,13 +390,13 @@ struct HashMapVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_map.size() + (NAME->null_key_data != nullptr);
-            APPLY_FOR_VARIANT_NULL(M)
+            APPLY_FOR_AGG_VARIANT_NULL(M)
 #undef M
 
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_map.size();
-            APPLY_FOR_VARIANT_NOT_NULL(M)
+            APPLY_FOR_AGG_VARIANT_NOT_NULL(M)
 #undef M
         }
         return 0;
@@ -407,7 +407,7 @@ struct HashMapVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_map.dump_bound();
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
         return 0;
@@ -487,7 +487,7 @@ using SerializedKeyAggHashSetFixedSize8 = AggHashSetOfSerializedKeyFixedSize<Fix
 template <PhmapSeed seed>
 using SerializedKeyAggHashSetFixedSize16 = AggHashSetOfSerializedKeyFixedSize<FixedSize16SliceAggHashSet<seed>>;
 
-// 1) HashSetVariant is alike HashMapVariant, while a set only holds keys, no associated value.
+// 1) AggHashSetVariant is alike HashMapVariant, while a set only holds keys, no associated value.
 //
 // 2) Distributed aggregation is divided into two stages.
 // The first stage is local aggregation.
@@ -495,7 +495,7 @@ using SerializedKeyAggHashSetFixedSize16 = AggHashSetOfSerializedKeyFixedSize<Fi
 // If the same Hash function and Seed are used,
 // if the open address HashTable is used in the second stage,
 // it will lead to a high conflict rate, resulting in performance degradation in the second stage.
-struct HashSetVariant {
+struct AggHashSetVariant {
     enum class Type {
         phase1_uint8 = 0,
         phase1_int8,
@@ -643,7 +643,7 @@ struct HashSetVariant {
     case Type::NAME:                                                                \
         NAME = std::make_unique<decltype(NAME)::element_type>(state->chunk_size()); \
         break;
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
     }
@@ -653,7 +653,7 @@ struct HashSetVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_set.capacity();
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
         return 0;
@@ -664,13 +664,13 @@ struct HashSetVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_set.size() + (NAME->has_null_key ? 1 : 0);
-            APPLY_FOR_VARIANT_NULL(M)
+            APPLY_FOR_AGG_VARIANT_NULL(M)
 #undef M
 
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_set.size();
-            APPLY_FOR_VARIANT_NOT_NULL(M)
+            APPLY_FOR_AGG_VARIANT_NOT_NULL(M)
 #undef M
         }
         return 0;
@@ -681,7 +681,7 @@ struct HashSetVariant {
 #define M(NAME)      \
     case Type::NAME: \
         return NAME->hash_set.dump_bound();
-            APPLY_FOR_VARIANT_ALL(M)
+            APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
         return 0;

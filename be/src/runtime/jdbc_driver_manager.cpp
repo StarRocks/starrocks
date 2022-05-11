@@ -6,8 +6,8 @@
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <chrono>
 
-#include "env/env.h"
 #include "fmt/format.h"
+#include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "util/defer_op.h"
 #include "util/download_util.h"
@@ -68,7 +68,7 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
     _driver_dir = driver_dir;
     RETURN_IF_ERROR(FileUtils::create_dir(_driver_dir));
     std::vector<std::string> driver_files;
-    RETURN_IF_ERROR(FileUtils::list_files(Env::Default(), _driver_dir, &driver_files));
+    RETURN_IF_ERROR(FileUtils::list_files(FileSystem::Default(), _driver_dir, &driver_files));
     // load jdbc drivers from file
     for (auto& file : driver_files) {
         std::string target_file = fmt::format("{}/{}", _driver_dir, file);

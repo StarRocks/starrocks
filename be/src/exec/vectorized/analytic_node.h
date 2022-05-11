@@ -8,8 +8,7 @@
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class AnalyticNode final : public ExecNode {
 public:
@@ -37,12 +36,12 @@ private:
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
-    Status _get_next_for_unbounded_preceding_rows_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    Status _get_next_for_rows_between_unbounded_preceding_and_current_row(RuntimeState* state, ChunkPtr* chunk,
+                                                                          bool* eos);
     Status _get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status (AnalyticNode::*_get_next)(RuntimeState* state, ChunkPtr* chunk, bool* eos) = nullptr;
 
     Status _fetch_next_chunk(RuntimeState* state);
-    Status _try_fetch_next_partition_data(RuntimeState* state, int64_t* partition_end);
+    Status _try_fetch_next_partition_data(RuntimeState* state);
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

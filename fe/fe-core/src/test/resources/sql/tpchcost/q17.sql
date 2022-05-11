@@ -80,7 +80,7 @@ UNPARTITIONED
 |  <slot 45> : 45: avg
 |
 8:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+|  join op: INNER JOIN (BUCKET_SHUFFLE(S))
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 29: L_PARTKEY = 18: P_PARTKEY
@@ -99,7 +99,7 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 07
-UNPARTITIONED
+HASH_PARTITIONED: 18: P_PARTKEY
 
 6:Project
 |  <slot 18> : 18: P_PARTKEY

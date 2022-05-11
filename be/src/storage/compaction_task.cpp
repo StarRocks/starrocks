@@ -20,8 +20,7 @@ void CompactionTask::run() {
     scoped_refptr<Trace> trace(new Trace);
     SCOPED_CLEANUP({
         uint64_t time_s = _watch.elapsed_time() / 1e9;
-        if ((compaction_type() == CUMULATIVE_COMPACTION && time_s > config::cumulative_compaction_trace_threshold) ||
-            (compaction_type() == BASE_COMPACTION && time_s > config::base_compaction_trace_threshold)) {
+        if (time_s > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -102,7 +101,7 @@ void CompactionTask::run() {
 }
 
 bool CompactionTask::should_stop() const {
-    return StorageEngine::instance()->bg_worker_stopped() || !config::enable_compaction ||
+    return StorageEngine::instance()->bg_worker_stopped() || config::max_compaction_concurrency == 0 ||
            BackgroundTask::should_stop();
 }
 

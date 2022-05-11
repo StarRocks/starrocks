@@ -29,7 +29,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
@@ -101,14 +101,14 @@ Status BetaRowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_env, Env::CreateSharedFromString(_context.rowset_path_prefix));
-    _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
     return Status::OK();
 }
 
 StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
-        RETURN_IF_ERROR(_env->sync_dir(_context.rowset_path_prefix));
+        RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta->set_num_rows(_num_rows_written);
     _rowset_meta->set_total_row_size(_total_row_size);
@@ -123,7 +123,7 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     _rowset_meta->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        _rowset_meta->set_num_delete_files(!_segment_has_deletes.empty() && _segment_has_deletes[0]);
+        _rowset_meta->set_num_delete_files(_segment_has_deletes.size());
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
         if (_context.partial_update_tablet_schema) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
@@ -177,7 +177,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(tmp_segment_file);
+                auto st = _fs->delete_file(tmp_segment_file);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
             }
             _tmp_segment_files.clear();
@@ -186,13 +186,13 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(path);
+                auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
             }
             for (auto i = 0; i < _segment_has_deletes.size(); ++i) {
                 if (!_segment_has_deletes[i]) {
                     auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-                    auto st = _env->delete_file(path);
+                    auto st = _fs->delete_file(path);
                     LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
                 }
             }
@@ -222,7 +222,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 // Even if an error is encountered, these files that have not been cleaned up
                 // will be cleaned up by the GC background. So here we only print the error
                 // message when we encounter an error.
-                auto st = _env->delete_file(path);
+                auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
@@ -291,8 +291,30 @@ Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk&
 }
 
 Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
+    // 1. pure upsert
+    // once upsert, subsequent flush can only do upsert
+    switch (_flush_chunk_state) {
+    case FlushChunkState::UNKNOWN:
+        _flush_chunk_state = FlushChunkState::UPSERT;
+        break;
+    case FlushChunkState::UPSERT:
+        break;
+    default: {
+        std::string msg =
+                "multi-segment only supported by pure upsert/delete, so pure upsert after another "
+                "operation is illegal";
+        LOG(WARNING) << msg;
+        return Status::Cancelled(msg);
+    }
+    }
+    return _flush_chunk(chunk);
+}
+
+Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) {
     auto segment_writer = _create_segment_writer();
-    if (!segment_writer.ok()) return segment_writer.status();
+    if (!segment_writer.ok()) {
+        return segment_writer.status();
+    }
     RETURN_IF_ERROR((*segment_writer)->append_chunk(chunk));
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -304,13 +326,13 @@ Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
                                                             const vectorized::Column& deletes) {
-    if (!deletes.empty()) {
-        auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
+    auto flush_del_file = [&](const vectorized::Column& deletes) {
+        auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id,
+                                                      _segment_has_deletes.size());
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions opts({path});
         RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
-        // TODO(cbl): temp buffer doubles the memory usage, need to optimize
         std::vector<uint8_t> content(sz);
         if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
             return Status::InternalError("deletes column serialize failed");
@@ -318,8 +340,52 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
         RETURN_IF_ERROR(wblock->finalize());
         RETURN_IF_ERROR(wblock->close());
-        _segment_has_deletes.resize(_num_segment + 1, false);
-        _segment_has_deletes[_num_segment] = true;
+        _segment_has_deletes.push_back(true);
+        return Status::OK();
+    };
+    // three flush states
+    // 1. pure upsert, support multi-segment
+    // 2. pure delete, support multi-segment
+    // 3. mixed upsert/delete, do not support multi-segment
+    if (!upserts.is_empty() && deletes.empty()) {
+        return flush_chunk(upserts);
+    } else if (upserts.is_empty() && !deletes.empty()) {
+        // 2. pure delete
+        // once delete, subsequent flush can only do delete
+        switch (_flush_chunk_state) {
+        case FlushChunkState::UNKNOWN:
+            _flush_chunk_state = FlushChunkState::DELETE;
+            break;
+        case FlushChunkState::DELETE:
+            break;
+        default: {
+            std::string msg =
+                    "multi-segment only supported by pure upsert/delete, so pure delete after another "
+                    "operation is illegal";
+            LOG(WARNING) << msg;
+            return Status::Cancelled(msg);
+        }
+        }
+        RETURN_IF_ERROR(flush_del_file(deletes));
+        return Status::OK();
+    } else if (!upserts.is_empty() && !deletes.empty()) {
+        // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
+        switch (_flush_chunk_state) {
+        case FlushChunkState::UNKNOWN:
+            _flush_chunk_state = FlushChunkState::MIXED;
+            break;
+        case FlushChunkState::MIXED:
+            break;
+        default: {
+            std::string msg =
+                    "multi-segment only supported by pure upsert/delete, so mixed upsert/delete after another "
+                    "operation is illegal";
+            LOG(WARNING) << msg;
+            return Status::Cancelled(msg);
+        }
+        }
+        RETURN_IF_ERROR(flush_del_file(deletes));
+        return _flush_chunk(upserts);
     }
     return flush_chunk(upserts);
 }
@@ -370,13 +436,13 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     if (_num_segment == 1) {
         auto old_path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
         auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
-        auto st = _env->rename_file(old_path, new_path);
+        auto st = _fs->rename_file(old_path, new_path);
         RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
         return Status::OK();
     }
 
     if (!std::all_of(_segment_has_deletes.cbegin(), _segment_has_deletes.cend(), std::logical_not<bool>())) {
-        return Status::NotSupported("multi-segments with delete not supported.");
+        return Status::NotSupported("multi-segments with mixed upsert/delete not supported.");
     }
 
     MonotonicStopWatch timer;
@@ -419,7 +485,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     }
 
     ChunkIteratorPtr itr = nullptr;
-    // schema change vecotrized
+    // schema change vectorized
     // schema change with sorting create temporary segment files first
     // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {
@@ -486,7 +552,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         // Even if an error is encountered, these files that have not been cleaned up
         // will be cleaned up by the GC background. So here we only print the error
         // message when we encounter an error.
-        auto st = _env->delete_file(tmp_segment_file);
+        auto st = _fs->delete_file(tmp_segment_file);
         RETURN_IF_ERROR_WITH_WARN(st, "Fail to delete segment temp file");
     }
     _tmp_segment_files.clear();
@@ -544,7 +610,7 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
             // Even if an error is encountered, these files that have not been cleaned up
             // will be cleaned up by the GC background. So here we only print the error
             // message when we encounter an error.
-            auto st = _env->delete_file(path);
+            auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak

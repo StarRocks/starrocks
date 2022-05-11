@@ -3,6 +3,7 @@
 #pragma once
 
 #include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "gtest/gtest_prod.h"
 
 namespace starrocks {
@@ -28,27 +29,30 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
     void get_next(ChunkPtr* chunk, bool* eos) override;
-    DataSegment* get_result_data_segment() override;
-    uint64_t get_partition_rows() const override;
-    Permutation* get_permutation() const override;
-
     bool pull_chunk(ChunkPtr* chunk) override;
+
+    SortedRuns get_sorted_runs() override;
+    size_t get_output_rows() const override;
 
     int64_t mem_usage() const override;
 
-    friend class SortHelper;
-
 private:
-    Status _sort_chunks(RuntimeState* state);
-    Status _build_sorting_data(RuntimeState* state);
-    Status _sort_by_column_inc(RuntimeState* state);
+    // Three stages of sorting procedure:
+    // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
+    // 2. Sort the accumulated big chunk partially
+    // 3. Merge all big-chunks into global sorted
+    Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
+    Status _partial_sort(RuntimeState* state, bool done);
+    Status _merge_sorted(RuntimeState* state);
 
-    void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
+    size_t _total_rows = 0;               // Total rows of sorting data
+    Permutation _sort_permutation;        // Temp permutation for sorting
+    ChunkPtr _unsorted_chunk;             // Unsorted chunk, accumulate it to a larger chunk
+    std::vector<ChunkPtr> _sorted_chunks; // Partial sorted, but not merged
+    SortedRuns _merged_runs;              // After merge
 
-    ChunkUniquePtr _big_chunk;
-    std::unique_ptr<DataSegment> _sorted_segment;
-    mutable Permutation _sorted_permutation;
-    std::vector<uint32_t> _selective_values; // for appending selective values to sorted rows
+    // TODO: further tunning the buffer parameter
+    static constexpr size_t kMaxBufferedChunkSize = 1024000;
 };
 
 } // namespace vectorized

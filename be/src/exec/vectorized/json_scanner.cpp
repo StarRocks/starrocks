@@ -10,12 +10,12 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "env/env.h"
 #include "exec/vectorized/json_parser.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/json_functions.h"
 #include "formats/json/nullable_column.h"
+#include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
@@ -50,10 +50,6 @@ Status JsonScanner::open() {
     }
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
-
-    if (range.__isset.jsonpaths && range.__isset.json_root) {
-        return Status::InvalidArgument("json path and json root cannot be both set");
-    }
 
     if (range.__isset.jsonpaths) {
         RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
@@ -698,8 +694,8 @@ Status JsonReader::_read_and_parse_json() {
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        RETURN_IF_ERROR(stream_file->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
-                                                      simdjson::SIMDJSON_PADDING));
+        RETURN_IF_ERROR(stream_file->pipe()->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
+                                                              simdjson::SIMDJSON_PADDING));
         if (_parser_buf_sz == 0) {
             return Status::EndOfFile("EOF of reading file");
         }
@@ -724,7 +720,7 @@ Status JsonReader::_read_and_parse_json() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << data[i] << "]";
-            return Status::EndOfFile("illegal json started with " + data[i]);
+            return Status::DataQualityError(fmt::format("illegal json started with {}", data[i]));
         }
     }
 

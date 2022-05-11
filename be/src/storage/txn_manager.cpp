@@ -67,9 +67,10 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
-Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                TTransactionId transaction_id) {
-    return rollback_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
+Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                                bool with_log) {
+    return rollback_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
+                        with_log);
 }
 
 Status TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id) {
@@ -252,10 +253,10 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         auto it = txn_tablet_map.find(key);
         if (it != txn_tablet_map.end()) {
             it->second.erase(tablet_info);
-            LOG(INFO) << "publish txn successfully."
-                      << " partition_id: " << key.first << ", txn_id: " << key.second
-                      << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
-                      << ", version: " << version.first << "," << version.second;
+            VLOG(1) << "publish txn successfully."
+                    << " partition_id: " << key.first << ", txn_id: " << key.second
+                    << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
+                    << ", version: " << version.first << "," << version.second;
             if (it->second.empty()) {
                 txn_tablet_map.erase(it);
                 _clear_txn_partition_map_unlocked(transaction_id, partition_id);
@@ -349,7 +350,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
 // may be committed in another thread and our current thread meets errors when writing to data file
 // BE has to wait for fe call clear txn api
 Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                                SchemaHash schema_hash, const TabletUid& tablet_uid) {
+                                SchemaHash schema_hash, const TabletUid& tablet_uid, bool with_log) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -369,9 +370,11 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
             }
         }
         it->second.erase(tablet_info);
-        LOG(INFO) << "rollback transaction from engine successfully."
-                  << " partition_id: " << key.first << ", transaction_id: " << key.second
-                  << ", tablet: " << tablet_info.to_string();
+        if (with_log) {
+            LOG(INFO) << "rollback transaction from engine successfully."
+                      << " partition_id: " << key.first << ", transaction_id: " << key.second
+                      << ", tablet: " << tablet_info.to_string();
+        }
         if (it->second.empty()) {
             txn_tablet_map.erase(it);
             _clear_txn_partition_map_unlocked(transaction_id, partition_id);

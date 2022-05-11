@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-// NOTE: Deprecated, use `Env::WritableFile` instead.
+// NOTE: Deprecated, use `FileSystem::WritableFile` instead.
 class FileWriter {
 public:
     virtual ~FileWriter() = default;

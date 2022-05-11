@@ -4,8 +4,8 @@
 
 #include <utility>
 
-#include "exec/pipeline/chunk_source.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/scan/chunk_source.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -14,8 +14,9 @@ using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
 
 class SourceOperator : public Operator {
 public:
-    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
-            : Operator(factory, id, name, plan_node_id) {}
+    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                   int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
     ~SourceOperator() override = default;
 
     bool need_input() const override { return false; }
@@ -34,10 +35,17 @@ public:
         return scan_rows_num;
     }
 
+    virtual int64_t get_last_scan_bytes() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
 protected:
     MorselQueue* _morsel_queue = nullptr;
 
     int64_t _last_scan_rows_num = 0;
+    int64_t _last_scan_bytes = 0;
 };
 
 class SourceOperatorFactory : public OperatorFactory {

@@ -29,7 +29,7 @@
 #include "column/hash_set.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -413,6 +413,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
 }
 
 Status ScalarColumnWriter::finish() {
+    if (_encoding_info->encoding() == DICT_ENCODING && _opts.global_dict != nullptr) {
+        _is_global_dict_valid = _page_builder->is_valid_global_dict(_opts.global_dict);
+    } else {
+        _is_global_dict_valid = false;
+    }
     RETURN_IF_ERROR(finish_current_page());
     _opts.meta->set_num_rows(_next_rowid);
     _opts.meta->set_total_mem_footprint(_total_mem_footprint);
@@ -438,13 +443,6 @@ Status ScalarColumnWriter::write_data() {
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wblock,
                                                         body, footer, &dict_pp));
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
-        if (_opts.global_dict != nullptr) {
-            _is_global_dict_valid = _page_builder->is_valid_global_dict(_opts.global_dict);
-        }
-    } else {
-        if (_opts.global_dict != nullptr) {
-            _is_global_dict_valid = false;
-        }
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
 

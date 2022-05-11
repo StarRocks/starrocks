@@ -61,6 +61,8 @@ public class CTEContext {
 
     private boolean enableCTE;
 
+    private boolean forcedCTE;
+
     private double inlineCTERatio = 2.0;
 
     public CTEContext() {
@@ -182,6 +184,10 @@ public class CTEContext {
      *
      */
     public boolean needInline(int cteId) {
+        if (forcedCTE) {
+            return false;
+        }
+
         // 1. Disable CTE reuse
         // 2. CTE consume only use once
         if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
@@ -223,4 +229,11 @@ public class CTEContext {
         return false;
     }
 
+    public boolean isForcedCTE() {
+        return forcedCTE;
+    }
+
+    public void setForcedCTE(boolean forcedCTE) {
+        this.forcedCTE = forcedCTE;
+    }
 }

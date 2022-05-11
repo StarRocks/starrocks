@@ -21,16 +21,16 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/s3_uri_test.cpp
-        ./env/env_broker_test.cpp
-        ./env/env_posix_test.cpp
-        ./env/env_memory_test.cpp
-        ./env/env_s3_test.cpp
-        ./env/output_stream_wrapper_test.cpp
+        ./fs/fs_broker_test.cpp
+        ./fs/fs_posix_test.cpp
+        ./fs/fs_memory_test.cpp
+        ./fs/fs_s3_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
+        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/json_parser_test.cpp
@@ -43,6 +43,7 @@ set(EXEC_FILES
         ./exec/vectorized/parquet_scanner_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
+        ./exec/vectorized/analytor_test.cpp
         ./exec/es_scan_reader_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
@@ -125,6 +126,7 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
+        ./http/transaction_stream_load_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
@@ -133,6 +135,7 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./storage/decimal12_test.cpp
+        ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
@@ -251,7 +254,6 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
-        ./util/lru_cache_util_test.cpp
         ./util/md5_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp

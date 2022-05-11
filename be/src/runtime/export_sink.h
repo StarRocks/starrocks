@@ -23,10 +23,10 @@
 
 #include <vector>
 
-#include "env/env.h"
 #include "exec/data_sink.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream_file.h"
+#include "fs/fs.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

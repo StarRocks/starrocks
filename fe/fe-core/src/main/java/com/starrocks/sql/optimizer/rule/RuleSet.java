@@ -107,6 +107,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneR
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctOptimizedRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
@@ -260,6 +261,7 @@ public class RuleSet {
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
                 new RewriteMultiDistinctRule(),
+                new RewriteMultiDistinctOptimizedRule(),
                 new RewriteDuplicateAggregateFnRule()
         ));
 

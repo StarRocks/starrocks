@@ -29,7 +29,8 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id);
+    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+             int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -84,8 +85,7 @@ public:
     // output chunks will be produced
     virtual bool is_finished() const = 0;
 
-    // pending_finish returns whether this operator still has pending i/o task which executed in i/o threads
-    // and has reference to the object owned by the operator or FragmentContext.
+    // pending_finish returns whether this operator still has reference to the object owned by the operator or FragmentContext.
     // It can ONLY be called after calling set_finished().
     // When a driver's sink operator is finished, the driver should wait for pending i/o task completion.
     // Otherwise, pending tasks shall reference to destructed objects in the operator or FragmentContext,
@@ -152,6 +152,7 @@ protected:
     const std::string _name;
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
+    const int32_t _driver_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.
@@ -214,15 +215,15 @@ public:
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
-                             std::vector<SlotId>&& filter_null_value_columns,
-                             std::vector<TupleSlotMapping>&& tuple_slot_mappings) {
+                             const std::vector<SlotId>& filter_null_value_columns,
+                             const std::vector<TupleSlotMapping>& tuple_slot_mappings) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
         _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
-        _filter_null_value_columns = std::move(filter_null_value_columns);
-        _tuple_slot_mappings = std::move(tuple_slot_mappings);
+        _filter_null_value_columns = filter_null_value_columns;
+        _tuple_slot_mappings = tuple_slot_mappings;
     }
     // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
     // to bound its runtime in-filters.

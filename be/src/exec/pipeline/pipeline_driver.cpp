@@ -6,8 +6,8 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
@@ -450,6 +450,19 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
                                              op->_finishing_timer->value() + op->_finished_timer->value() +
                                              op->_close_timer->value());
     return Status::OK();
+}
+
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    driver_acct().increment_schedule_times();
+    driver_acct().update_last_chunks_moved(total_chunks_moved);
+    driver_acct().update_accumulated_rows_moved(total_rows_moved);
+    driver_acct().update_last_time_spent(time_spent);
+
+    // Update statistics of scan operator
+    if (SourceOperator* source = source_operator()) {
+        query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
+    }
 }
 
 } // namespace starrocks::pipeline

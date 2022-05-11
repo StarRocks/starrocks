@@ -33,7 +33,6 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowAnalyzeStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
@@ -130,6 +129,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
@@ -330,7 +330,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
     }
 
-    // Handle show authors
+    // Handle show process list
     private void handleShowProcesslist() {
         ShowProcesslistStmt showStmt = (ShowProcesslistStmt) stmt;
         List<List<String>> rowSet = Lists.newArrayList();

@@ -38,15 +38,6 @@
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 
-#define APPLY_FOR_NUMBERIC_TYPE(M) \
-    M(TYPE_TINYINT)                \
-    M(TYPE_SMALLINT)               \
-    M(TYPE_INT)                    \
-    M(TYPE_BIGINT)                 \
-    M(TYPE_FLOAT)                  \
-    M(TYPE_DOUBLE)                 \
-    M(TYPE_BOOLEAN)
-
 namespace starrocks::vectorized {
 
 struct UDFFunctionCallHelper {
@@ -59,7 +50,6 @@ struct UDFFunctionCallHelper {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         std::vector<DirectByteBuffer> buffers;
-        std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
 
@@ -74,81 +64,34 @@ struct UDFFunctionCallHelper {
         for (auto col : columns) {
             input_cols.emplace_back(col.get());
         }
+        // each input arguments as three local references (nullcolumn, offsetcolumn, bytescolumn)
+        // result column as a ref
+        env->PushLocalFrame((num_cols + 1) * 3 + 1);
         // convert input columns to object columns
         std::vector<jobject> input_col_objs;
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
                                                       &input_col_objs);
         // call UDF method
-        jobject res = helper.batch_call(ctx, fn_desc->udf_handle, fn_desc->evaluate->method, input_col_objs.data(),
-                                        input_col_objs.size(), size);
+        jobject res = helper.batch_call(ctx, fn_desc->udf_handle.handle(), fn_desc->evaluate->method.handle(),
+                                        input_col_objs.data(), input_col_objs.size(), size);
 
-        env->PushLocalFrame(size * (num_cols + 1));
         // get result
-        auto result_cols = get_boxed_result(res, size);
-        // call clear
+        auto result_cols = get_boxed_result(ctx, res, size);
         env->PopLocalFrame(nullptr);
-        for (auto ref : args) {
-            env->DeleteLocalRef(ref);
-        }
-        env->DeleteLocalRef(res);
-
         return result_cols;
     }
 
-#define GET_BOX_RESULT(NAME, cxx_type)                                           \
-    case NAME: {                                                                 \
-        auto null_col = NullColumn::create(num_rows);                            \
-        auto data_col = RunTimeColumnType<NAME>::create(num_rows);               \
-        auto& null_data = null_col->get_data();                                  \
-        auto& container = data_col->get_data();                                  \
-        for (int i = 0; i < num_rows; ++i) {                                     \
-            auto data = env->GetObjectArrayElement((jobjectArray)result, i);     \
-            if (data != nullptr) {                                               \
-                container[i] = helper.val##cxx_type(data);                       \
-            } else {                                                             \
-                null_data[i] = true;                                             \
-            }                                                                    \
-        }                                                                        \
-        return NullableColumn::create(std::move(data_col), std::move(null_col)); \
-    }
-
-    ColumnPtr get_boxed_result(jobject result, size_t num_rows) {
+    ColumnPtr get_boxed_result(FunctionContext* ctx, jobject result, size_t num_rows) {
         if (result == nullptr) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
         auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
         DCHECK(call_desc->method_desc[0].is_box);
-        switch (call_desc->method_desc[0].type) {
-            GET_BOX_RESULT(TYPE_BOOLEAN, uint8_t)
-            GET_BOX_RESULT(TYPE_TINYINT, int8_t)
-            GET_BOX_RESULT(TYPE_SMALLINT, int16_t)
-            GET_BOX_RESULT(TYPE_INT, int32_t)
-            GET_BOX_RESULT(TYPE_BIGINT, int64_t)
-            GET_BOX_RESULT(TYPE_FLOAT, float)
-            GET_BOX_RESULT(TYPE_DOUBLE, double)
-        case TYPE_VARCHAR: {
-            _data_buffer.resize(num_rows);
-            auto null_col = NullColumn::create(num_rows);
-            auto& null_data = null_col->get_data();
-            std::vector<Slice> slices;
-            slices.resize(num_rows);
-            for (int i = 0; i < num_rows; ++i) {
-                auto data = env->GetObjectArrayElement((jobjectArray)result, i);
-                if (data != nullptr) {
-                    slices[i] = helper.sliceVal((jstring)data, &_data_buffer[i]);
-                } else {
-                    null_data[i] = true;
-                }
-            }
-            auto data_col = BinaryColumn::create();
-            data_col->append_strings(slices);
-            return NullableColumn::create(std::move(data_col), std::move(null_col));
-        }
-        default:
-            DCHECK(false) << "unsupport type:" << call_desc->method_desc[0].type;
-        }
-        return ColumnHelper::create_const_null_column(num_rows);
+        TypeDescriptor type_desc(call_desc->method_desc[0].type);
+        auto res = ColumnHelper::create_column(type_desc, true);
+        helper.get_result_from_boxed_array(ctx, type_desc.type, res.get(), result, num_rows);
+        down_cast<NullableColumn*>(res.get())->update_has_null();
+        return res;
     }
 };
 
@@ -231,10 +174,8 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
         RETURN_IF_ERROR(_func_desc->udf_classloader->init());
         _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
-        _func_desc->udf_class = _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol);
-        if (_func_desc->udf_class.clazz() == nullptr) {
-            return Status::InternalError(fmt::format("Not found symbol:{}", _fn.scalar_fn.symbol));
-        }
+
+        ASSIGN_OR_RETURN(_func_desc->udf_class, _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
 
         auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
             bool has_method = false;
@@ -262,7 +203,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
 
         // create UDF function instance
-        RETURN_IF_ERROR(_func_desc->udf_class.newInstance(&_func_desc->udf_handle));
+        ASSIGN_OR_RETURN(_func_desc->udf_handle, _func_desc->udf_class.newInstance());
 
         _call_helper = std::make_shared<UDFFunctionCallHelper>();
         _call_helper->fn_desc = _func_desc.get();
@@ -291,7 +232,7 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
-    call_function_in_pthread(state, function_close);
+    call_function_in_pthread(state, function_close)->get_future().get();
     Expr::close(state, context, scope);
 }
 
@@ -300,7 +241,7 @@ void JavaFunctionCallExpr::_call_udf_close() {
     JNIEnv* env = helper.getEnv();
     jmethodID methodID = env->GetMethodID(_func_desc->udf_class.clazz(), _func_desc->close->name.c_str(),
                                           _func_desc->close->signature.c_str());
-    env->CallVoidMethod(_func_desc->udf_handle, methodID);
+    env->CallVoidMethod(_func_desc->udf_handle.handle(), methodID);
     if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
         LOG(WARNING) << "Exception occur:" << helper.dumpExceptionString(jthr);
         env->ExceptionClear();

@@ -11,10 +11,10 @@ namespace starrocks::pipeline {
 // For more detail information, see the comments of class ExceptBuildSinkOperator.
 class ExceptProbeSinkOperator final : public Operator {
 public:
-    ExceptProbeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+    ExceptProbeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                             std::shared_ptr<ExceptContext> except_ctx, const std::vector<ExprContext*>& dst_exprs,
                             const int32_t dependency_index)
-            : Operator(factory, id, "except_probe_sink", plan_node_id),
+            : Operator(factory, id, "except_probe_sink", plan_node_id, driver_sequence),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {
@@ -67,8 +67,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ExceptContextPtr except_ctx = _except_partition_ctx_factory->get_or_create(driver_sequence);
-        return std::make_shared<ExceptProbeSinkOperator>(this, _id, _plan_node_id, std::move(except_ctx), _dst_exprs,
-                                                         _dependency_index);
+        return std::make_shared<ExceptProbeSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                         std::move(except_ctx), _dst_exprs, _dependency_index);
     }
 
     Status prepare(RuntimeState* state) override;

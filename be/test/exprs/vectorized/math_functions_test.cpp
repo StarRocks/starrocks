@@ -320,11 +320,12 @@ TEST_F(VecMathFunctionsTest, DecimalRoundUpToByColTest) {
     testRoundDecimal<TYPE_ROUND_UP_TO>(
             {"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {}, 15, 5,
             {0, 1, 2, 3, 4, 5, 6}, {},
-            {"123", "123.50000", "123.46000", "123.45700", "123.45680", "123.45678", "123.45678"}, {});
+            {"123.00000", "123.50000", "123.46000", "123.45700", "123.45680", "123.45678", "123.45678"}, {});
     testRoundDecimal<TYPE_ROUND_UP_TO>(
             {"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
             {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
-            {"123", "INVALID", "123.46000", "123.45700", "123.45680", "123.45678", "INVALID"}, {0, 1, 0, 0, 0, 0, 1});
+            {"123.00000", "INVALID", "123.46000", "123.45700", "123.45680", "123.45678", "INVALID"},
+            {0, 1, 0, 0, 0, 0, 1});
 }
 
 TEST_F(VecMathFunctionsTest, DecimalTruncateTest) {
@@ -359,11 +360,12 @@ TEST_F(VecMathFunctionsTest, DecimalTruncateByColTest) {
     testRoundDecimal<TYPE_TRUNCATE>(
             {"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {}, 15, 5,
             {0, 1, 2, 3, 4, 5, 6}, {},
-            {"123", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
+            {"123.00000", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
     testRoundDecimal<TYPE_TRUNCATE>(
             {"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
             {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
-            {"123", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"}, {0, 1, 0, 0, 0, 0, 1});
+            {"123.00000", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"},
+            {0, 1, 0, 0, 0, 0, 1});
     // truncate(v,d), v is const column
     testRoundDecimal<TYPE_TRUNCATE>({"12345.6789", "12345.6789", "12345.6789", "12345.6789"}, {}, 15, 5, {1, 2, 3, 4},
                                     {}, {"12345.60000", "12345.67000", "12345.67800", "12345.67890"}, {});
@@ -380,6 +382,68 @@ TEST_F(VecMathFunctionsTest, RoundUpToTest) {
         int ints[] = {2, 3, 1, 4};
 
         double res[] = {2341.23, 4999.901, 2144.3, 934.1244};
+
+        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+            tc1->append(dous[i]);
+            tc2->append(ints[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns);
+
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i]);
+        }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        double dous[] = {7.845, 7.855};
+        int ints[] = {2, 2};
+
+        double res[] = {7.85, 7.86};
+
+        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+            tc1->append(dous[i]);
+            tc2->append(ints[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns);
+
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i]);
+        }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        double dous[] = {45.0, 44.0};
+        int ints[] = {-1, -1};
+
+        double res[] = {50, 40};
 
         for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
             tc1->append(dous[i]);

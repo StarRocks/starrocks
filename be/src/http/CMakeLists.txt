@@ -47,6 +47,7 @@ add_library(Webserver STATIC
   action/pprof_actions.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
+  action/transaction_stream_load.cpp
   action/meta_action.cpp
   action/compaction_action.cpp
   action/update_config_action.cpp

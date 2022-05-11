@@ -4,7 +4,7 @@
 
 #include <google/protobuf/message.h>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_define.h"
 #include "storage/utils.h"
@@ -25,7 +25,8 @@ typedef struct _FixedFileHeader {
     uint32_t protobuf_checksum;
 } __attribute__((packed)) FixedFileHeader;
 
-ProtobufFile::ProtobufFile(std::string path, Env* env) : _path(std::move(path)), _env(env ? env : Env::Default()) {}
+ProtobufFile::ProtobufFile(std::string path, FileSystem* fs)
+        : _path(std::move(path)), _fs(fs ? fs : FileSystem::Default()) {}
 
 Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync) {
     uint32_t unused_flag = 0;
@@ -39,7 +40,7 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
     header.magic_number = OLAP_FIX_HEADER_MAGIC_NUMBER;
 
     std::unique_ptr<WritableFile> output_file;
-    ASSIGN_OR_RETURN(output_file, _env->new_writable_file(_path));
+    ASSIGN_OR_RETURN(output_file, _fs->new_writable_file(_path));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&header), sizeof(header))));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&unused_flag), sizeof(unused_flag))));
     RETURN_IF_ERROR(output_file->append(serialized_message));
@@ -47,7 +48,7 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
 }
 
 Status ProtobufFile::load(::google::protobuf::Message* message) {
-    ASSIGN_OR_RETURN(auto input_file, _env->new_sequential_file(_path));
+    ASSIGN_OR_RETURN(auto input_file, _fs->new_sequential_file(_path));
 
     FixedFileHeader header;
     ASSIGN_OR_RETURN(auto nread, input_file->read(&header, sizeof(header)));

@@ -66,7 +66,6 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
         : _unreported_error_idx(0),
           _query_id(query_id),
           _obj_pool(new ObjectPool()),
-          _is_cancelled(false),
           _per_fragment_instance_idx(0),
           _num_rows_load_total(0),
           _num_rows_load_filtered(0),

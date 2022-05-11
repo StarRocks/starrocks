@@ -2,16 +2,12 @@
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
-#include <execinfo.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
+#include "exec/vectorized/chunks_sorter_heap_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/expr.h"
 #include "runtime/current_thread.h"
@@ -45,11 +41,16 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectoriz
 }
 
 Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    // skip sorting if cancelled
+    if (state->is_cancelled()) {
+        _is_finished = true;
+        return Status::Cancelled("runtime state is cancelled");
+    }
     RETURN_IF_ERROR(_chunks_sorter->finish(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.
-    _sort_context->finish_partition(_chunks_sorter->get_partition_rows());
+    _sort_context->finish_partition(_chunks_sorter->get_output_rows());
     _is_finished = true;
     return Status::OK();
 }
@@ -67,9 +68,9 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
     std::shared_ptr<ChunksSorter> chunks_sorter;
     if (_limit >= 0) {
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            chunks_sorter =
-                    std::make_unique<HeapChunkSorter>(runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                      &_is_asc_order, &_is_null_first, _sort_keys, _offset, _limit);
+            chunks_sorter = std::make_unique<ChunksSorterHeapSort>(
+                    runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                    _sort_keys, _offset, _limit);
         } else {
             size_t max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(_limit);
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
@@ -85,8 +86,8 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
 
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(
-            this, _id, _plan_node_id, chunks_sorter, _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
-            _parent_node_row_desc, _parent_node_child_row_desc, sort_context.get());
+            this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
+            _materialized_tuple_desc, _parent_node_row_desc, _parent_node_child_row_desc, sort_context.get());
     return ope;
 }
 

@@ -250,11 +250,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
-                // TODO: pass predicate to get table statistics
-                new ArrayList<>(),
-                ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
-        context.setStatistics(stats);
+        if (context.getStatistics() == null) {
+            Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
+                    // TODO: pass predicate to get table statistics
+                    new ArrayList<>(),
+                    ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
+            context.setStatistics(stats);
+        }
         return visitOperator(node, context);
     }
 

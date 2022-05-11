@@ -203,4 +203,17 @@ public class OperationType {
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
+
+    // external hive table column change
+    public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
+
+    // New version of heartbeat
+    public static final short OP_HEARTBEAT_V2 = 10041; // V2 version of heartbeat
+
+    // create external catalog
+    public static final short OP_CREATE_CATALOG = 10051;
+
+    // drop external catalog
+    public static final short OP_DROP_CATALOG = 10061;
+
 }

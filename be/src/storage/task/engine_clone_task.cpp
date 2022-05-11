@@ -27,7 +27,7 @@
 #include <set>
 
 #include "common/status.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/split.h"
@@ -550,7 +550,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
             std::string from = strings::Substitute("$0/$1", clone_dir, clone_file);
             std::string to = strings::Substitute("$0/$1", tablet_dir, clone_file);
-            res = Env::Default()->link_file(from, to);
+            res = FileSystem::Default()->link_file(from, to);
             if (!res.ok()) {
                 LOG(WARNING) << "Fail to link " << from << " to " << to << ": " << res;
                 break;
@@ -757,11 +757,11 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         local_files.erase(fname);
     }
 
-    auto env = Env::Default();
+    auto fs = FileSystem::Default();
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
-        RETURN_IF_ERROR(env->link_file(from, to));
+        RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.

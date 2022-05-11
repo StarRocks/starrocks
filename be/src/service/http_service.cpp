@@ -34,6 +34,7 @@
 #include "http/action/runtime_filter_cache_action.h"
 #include "http/action/snapshot_action.h"
 #include "http/action/stream_load.h"
+#include "http/action/transaction_stream_load.h"
 #include "http/action/update_config_action.h"
 #include "http/default_path_handlers.h"
 #include "http/download_action.h"
@@ -66,6 +67,16 @@ Status HttpService::start() {
     StreamLoadAction* stream_load_action = new StreamLoadAction(_env);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
+
+    // register transaction load
+    TransactionManagerAction* transaction_manager_action = new TransactionManagerAction(_env);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/{db}/transaction/{txn_op}", transaction_manager_action);
+    _http_handlers.emplace_back(transaction_manager_action);
+
+    TransactionStreamLoadAction* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/transaction/load/{table}",
+                                      transaction_stream_load_action);
+    _http_handlers.emplace_back(transaction_stream_load_action);
 
     // register download action
     std::vector<std::string> allow_paths;

@@ -220,6 +220,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return true;
         }
 
+        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
                 txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
