@@ -283,7 +283,7 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
 
     // Check concurrency limit
     DCHECK_GE(_num_queries, 0);
-    if (_concurrency_limit && _num_queries > _concurrency_limit) {
+    if (_concurrency_limit > 0 && _num_queries > _concurrency_limit) {
         return Status::Cancelled(fmt::format("Exceed concurrency limit: current is {} but limit is ",
                                              _num_queries.load(), _concurrency_limit));
     } else {

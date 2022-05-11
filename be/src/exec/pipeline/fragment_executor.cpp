@@ -131,7 +131,6 @@ Status FragmentExecutor::_prepare_fragment_ctx(const TExecPlanFragmentParams& re
 Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& request) {
     // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
-    // wg is always non-nullable, when request.enable_resource_group is true.
     if (request.__isset.enable_resource_group && request.enable_resource_group) {
         _fragment_ctx->set_enable_resource_group();
         if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
@@ -141,16 +140,15 @@ Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& reque
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        if (_query_ctx->init_query(wg.get())) {
-            _wg = wg;
-        }
+        _query_ctx->init_query(wg.get());
+        _wg = wg;
     }
+    DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
 
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
-                                                WorkGroupPtr wg) {
+Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
@@ -158,6 +156,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     const auto& query_options = request.query_options;
     const auto& t_desc_tbl = request.desc_tbl;
     const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
+    auto& wg = _wg;
 
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
@@ -267,8 +266,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
-                                                  WorkGroupPtr wg) {
+Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     const auto fragment_instance_id = request.params.fragment_instance_id;
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.fragment;
@@ -324,9 +322,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                if (wg != nullptr) {
+                if (_wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    scan_operator->set_workgroup(wg);
+                    scan_operator->set_workgroup(_wg);
                 } else {
                     if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
@@ -359,9 +357,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
         return maybe_driver_token.status();
     }
 
-    if (wg != nullptr) {
+    if (_wg != nullptr) {
         for (auto& driver : _fragment_ctx->drivers()) {
-            driver->set_workgroup(wg);
+            driver->set_workgroup(_wg);
         }
     }
 
@@ -396,10 +394,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
     RETURN_IF_ERROR(_prepare_fragment_ctx(request));
     RETURN_IF_ERROR(_prepare_workgroup(request));
-    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request, _wg));
+    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request, _wg));
+    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
 
     _query_ctx->fragment_mgr()->register_ctx(request.params.fragment_instance_id, _fragment_ctx);
     prepare_success = true;
@@ -420,14 +418,11 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     }
     prepare_success = true;
 
-    if (_fragment_ctx->enable_resource_group()) {
-        for (const auto& driver : _fragment_ctx->drivers()) {
-            exec_env->wg_driver_executor()->submit(driver.get());
-        }
-    } else {
-        for (const auto& driver : _fragment_ctx->drivers()) {
-            exec_env->driver_executor()->submit(driver.get());
-        }
+    auto* executor =
+            _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
+    for (const auto& driver : _fragment_ctx->drivers()) {
+        DCHECK(!_fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
+        executor->submit(driver.get());
     }
 
     return Status::OK();

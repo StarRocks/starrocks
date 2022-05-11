@@ -357,7 +357,6 @@ std::string PipelineDriver::to_readable_string() const {
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
-    DCHECK(_workgroup != nullptr);
     return _workgroup.get();
 }
 
