@@ -203,8 +203,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
-            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                               _parent->_is_pipeline_level_shuffle ? driver_sequence : -1);
+            TRY_CATCH_BAD_ALLOC(
+                    _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
+                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
         } else {
@@ -212,7 +213,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
                 _chunk_request->add_driver_sequences(driver_sequence);
             }
             auto pchunk = _chunk_request->add_chunks();
-            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
             _current_request_bytes += pchunk->data().size();
         }
     }
@@ -413,7 +414,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // 1. create a new chunk PB to serialize
             ChunkPB* pchunk = _chunk_request->add_chunks();
             // 2. serialize input chunk to pchunk
+<<<<<<< HEAD
             RETURN_IF_ERROR(serialize_chunk(chunk.get(), pchunk, &_is_first_chunk, _channels.size()));
+=======
+            TRY_CATCH_BAD_ALLOC(
+                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
+>>>>>>> 0d1bf3660 ([Bugfix] support splitting chunk into multiple TFetchDataResults to avoid failures of thrift serialization (#5865))
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > _request_bytes_threshold) {
