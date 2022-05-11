@@ -66,7 +66,6 @@ public:
     void close(RuntimeState* state) { _data_source->close(state); }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
-        // VLOG_FILE << "scanner get chunk size = " << (*chunk)->num_rows();
         return Status::OK();
     }
 

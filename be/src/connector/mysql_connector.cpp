@@ -1,53 +1,61 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "mysql_scan_node.h"
+#include "connector/mysql_connector.h"
 
-#include <fmt/format.h>
-
-#include <sstream>
-
-#include "column/binary_column.h"
-#include "column/column_helper.h"
-#include "column/nullable_column.h"
-#include "common/config.h"
+#include "exprs/expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "gen_cpp/PlanNodes_types.h"
-#include "runtime/date_value.hpp"
-#include "runtime/decimalv2_value.h"
-#include "runtime/decimalv3.h"
-#include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
-#include "util/runtime_profile.h"
+#include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+namespace connector {
+#define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_TINYINT, APPEND_TO_SQL)                 \
+    M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \
+    M(TYPE_SMALLINT, APPEND_TO_SQL)                \
+    M(TYPE_INT, APPEND_TO_SQL)                     \
+    M(TYPE_BIGINT, APPEND_TO_SQL)
 
-MysqlScanNode::MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs),
-          _is_init(false),
-          _table_name(tnode.mysql_scan_node.table_name),
-          _tuple_id(tnode.mysql_scan_node.tuple_id),
-          _columns(tnode.mysql_scan_node.columns),
-          _filters(tnode.mysql_scan_node.filters),
-          _tuple_desc(nullptr) {
-    _limit = -1;
-    if (tnode.mysql_scan_node.__isset.limit) {
-        _limit = tnode.mysql_scan_node.limit;
-    }
+#define APPLY_FOR_VARCHAR_DATE_TYPE(M, APPEND_TO_SQL) \
+    M(TYPE_DATE, APPEND_TO_SQL)                       \
+    M(TYPE_DATETIME, APPEND_TO_SQL)                   \
+    M(TYPE_CHAR, APPEND_TO_SQL)                       \
+    M(TYPE_VARCHAR, APPEND_TO_SQL)
+
+using namespace vectorized;
+
+// ================================
+
+DataSourceProviderPtr MySQLConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+                                                                  const TPlanNode& plan_node) const {
+    return std::make_unique<MySQLDataSourceProvider>(scan_node, plan_node);
 }
 
-Status MysqlScanNode::prepare(RuntimeState* state) {
-    VLOG(1) << "MysqlScanNode::Prepare";
+// ================================
 
-    if (_is_init) {
-        return Status::OK();
-    }
+MySQLDataSourceProvider::MySQLDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+        : _scan_node(scan_node), _mysql_scan_node(plan_node.mysql_scan_node) {}
+
+DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan_range) {
+    return std::make_unique<MySQLDataSource>(this, scan_range);
+}
+
+// ================================
+
+MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range)
+        : _provider(provider) {}
+
+Status MySQLDataSource::_init_params(RuntimeState* state) {
+    VLOG(1) << "MySQLDataSource::init mysql scan params";
 
     DCHECK(state != nullptr);
 
-    RETURN_IF_ERROR(ScanNode::prepare(state));
+    _columns = _provider->_mysql_scan_node.columns;
+    _filters = _provider->_mysql_scan_node.filters;
+
+    _table_name = _provider->_mysql_scan_node.table_name;
 
     // get tuple desc
-    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_mysql_scan_node.tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
     _slot_num = _tuple_desc->slots().size();
@@ -64,22 +72,12 @@ Status MysqlScanNode::prepare(RuntimeState* state) {
     _mysql_scanner = std::make_unique<MysqlScanner>(_my_param);
     DCHECK(_mysql_scanner != nullptr);
 
-    _tuple_pool = std::make_unique<MemPool>();
-    DCHECK(_tuple_pool != nullptr);
-
-    _is_init = true;
-
     return Status::OK();
 }
 
-Status MysqlScanNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::open(state));
-    VLOG(1) << "MysqlScanNode::Open";
-
+Status MySQLDataSource::open(RuntimeState* state) {
+    _init_params(state);
     DCHECK(state != nullptr);
-    DCHECK(_is_init);
-
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(_mysql_scanner->open());
@@ -98,22 +96,25 @@ Status MysqlScanNode::open(RuntimeState* state) {
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
         ExprContext* ctx = _conjunct_ctxs[i];
         const Expr* root_expr = ctx->root();
-        if (root_expr != nullptr) {
-            std::vector<SlotId> slot_ids;
+        if (root_expr == nullptr) {
+            continue;
+        }
 
-            // In Filter must has only one slot_id.
-            if (root_expr->get_slot_ids(&slot_ids) != 1) {
-                continue;
-            }
+        std::vector<SlotId> slot_ids;
 
-            SlotId slot_id = slot_ids[0];
-            auto iter = slot_by_id.find(slot_id);
-            if (iter != slot_by_id.end()) {
-                PrimitiveType type = iter->second->type().type;
-                // dipatch to process,
-                // we support numerical type, char type and date type.
-                switch (type) {
-                    // In Filter is must handle by VectorizedInConstPredicate type.
+        // In Filter must has only one slot_id.
+        if (root_expr->get_slot_ids(&slot_ids) != 1) {
+            continue;
+        }
+
+        SlotId slot_id = slot_ids[0];
+        auto iter = slot_by_id.find(slot_id);
+        if (iter != slot_by_id.end()) {
+            PrimitiveType type = iter->second->type().type;
+            // dipatch to process,
+            // we support numerical type, char type and date type.
+            switch (type) {
+                // In Filter is must handle by VectorizedInConstPredicate type.
 #define READ_CONST_PREDICATE(TYPE, APPEND_TO_SQL)                                             \
     case TYPE: {                                                                              \
         if (typeid(*root_expr) == typeid(VectorizedInConstPredicate<TYPE>)) {                 \
@@ -135,7 +136,7 @@ Status MysqlScanNode::open(RuntimeState* state) {
     }
 
 #define DIRECT_APPEND_TO_SQL vector_values.emplace_back(std::to_string(value));
-                    APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
+                APPLY_FOR_NUMERICAL_TYPE(READ_CONST_PREDICATE, DIRECT_APPEND_TO_SQL)
 #undef APPLY_FOR_NUMERICAL_TYPE
 #undef DIRECT_APPEND_TO_SQL
 
@@ -148,36 +149,36 @@ Status MysqlScanNode::open(RuntimeState* state) {
         ss << c;                       \
     }                                  \
     vector_values.emplace_back(fmt::format("'{}'", ss.str()));
-                    APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
+                APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
-                case INVALID_TYPE:
-                case TYPE_NULL:
-                case TYPE_BINARY:
-                case TYPE_DECIMAL:
-                case TYPE_STRUCT:
-                case TYPE_ARRAY:
-                case TYPE_MAP:
-                case TYPE_HLL:
-                case TYPE_TIME:
-                case TYPE_OBJECT:
-                case TYPE_PERCENTILE:
-                case TYPE_LARGEINT:
-                case TYPE_DECIMAL128:
-                case TYPE_DECIMALV2:
-                case TYPE_DECIMAL32:
-                case TYPE_DECIMAL64:
-                case TYPE_DOUBLE:
-                case TYPE_FLOAT:
-                case TYPE_JSON:
-                    break;
-                }
+            case INVALID_TYPE:
+            case TYPE_NULL:
+            case TYPE_BINARY:
+            case TYPE_DECIMAL:
+            case TYPE_STRUCT:
+            case TYPE_ARRAY:
+            case TYPE_MAP:
+            case TYPE_HLL:
+            case TYPE_TIME:
+            case TYPE_OBJECT:
+            case TYPE_PERCENTILE:
+            case TYPE_LARGEINT:
+            case TYPE_DECIMAL128:
+            case TYPE_DECIMALV2:
+            case TYPE_DECIMAL32:
+            case TYPE_DECIMAL64:
+            case TYPE_DOUBLE:
+            case TYPE_FLOAT:
+            case TYPE_JSON:
+                break;
             }
         }
     }
 
-    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _limit));
+    RETURN_IF_ERROR(
+            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
     // check materialize slot num
     int materialize_num = 0;
 
@@ -194,8 +195,87 @@ Status MysqlScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MysqlScanNode::append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
-                                            Column* column) {
+Status MySQLDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    VLOG(1) << "MySQLDataSource::GetNext";
+
+    DCHECK(state != nullptr && chunk != nullptr);
+
+    RETURN_IF_CANCELLED(state);
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    if (_is_finished) {
+        return Status::EndOfFile("finished!");
+    }
+
+    *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, state->chunk_size());
+    // indicates whether there are more rows to process. Set in _hbase_scanner.next().
+    bool mysql_eos = false;
+    int row_num = 0;
+
+    while (true) {
+        RETURN_IF_CANCELLED(state);
+
+        if (row_num >= state->chunk_size()) {
+            return Status::OK();
+        }
+
+        // read mysql
+        char** data = nullptr;
+        size_t* length = nullptr;
+        RETURN_IF_ERROR(_mysql_scanner->get_next_row(&data, &length, &mysql_eos));
+        if (mysql_eos) {
+            _is_finished = true;
+            return Status::OK();
+        }
+
+        ++row_num;
+        RETURN_IF_ERROR(fill_chunk(chunk, data, length));
+        ++_rows_read;
+    }
+}
+
+int64_t MySQLDataSource::raw_rows_read() const {
+    return _rows_read;
+}
+
+int64_t MySQLDataSource::num_rows_read() const {
+    return _rows_read;
+}
+
+void MySQLDataSource::close(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+}
+
+Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
+    int materialized_col_idx = -1;
+    for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
+        SlotDescriptor* slot_desc = _tuple_desc->slots()[col_idx];
+        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+
+        // because the fe planner filter the non_materialize column
+        if (!slot_desc->is_materialized()) {
+            continue;
+        }
+
+        ++materialized_col_idx;
+
+        if (data[materialized_col_idx] == nullptr) {
+            if (slot_desc->is_nullable()) {
+                column->append_nulls(1);
+            } else {
+                std::stringstream ss;
+                ss << "nonnull column contains NULL. table=" << _table_name << ", column=" << slot_desc->col_name();
+                return Status::InternalError(ss.str());
+            }
+        } else {
+            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx], slot_desc,
+                                                  column.get()));
+        }
+    }
+    return Status::OK();
+}
+
+Status MySQLDataSource::append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
+                                              Column* column) {
     // only \N will be treated as NULL
     if (slot_desc->is_nullable()) {
         if (len == 2 && data[0] == '\\' && data[1] == 'N') {
@@ -217,7 +297,7 @@ Status MysqlScanNode::append_text_to_column(const char* data, const int& len, co
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
         Slice value(data, len);
-        dynamic_cast<BinaryColumn*>(data_column)->append(value);
+        reinterpret_cast<BinaryColumn*>(data_column)->append(value);
         break;
     }
     case TYPE_BOOLEAN: {
@@ -374,129 +454,12 @@ Status MysqlScanNode::append_text_to_column(const char* data, const int& len, co
 }
 
 template <PrimitiveType PT, typename CppType>
-void MysqlScanNode::append_value_to_column(Column* column, CppType& value) {
+void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     using ColumnType = typename vectorized::RunTimeColumnType<PT>;
 
     ColumnType* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);
 }
 
-Status MysqlScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    VLOG(1) << "MysqlScanNode::GetNext";
-
-    DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
-    DCHECK(_is_init);
-
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    SCOPED_TIMER(materialize_tuple_timer());
-
-    if (reached_limit() || _is_finished) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    *chunk = std::make_shared<Chunk>();
-    std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
-    // init column information
-    for (auto& slot_desc : slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
-    }
-
-    // indicates whether there are more rows to process. Set in _hbase_scanner.next().
-    bool mysql_eos = false;
-    int row_num = 0;
-
-    while (true) {
-        RETURN_IF_CANCELLED(state);
-
-        if (reached_limit()) {
-            _is_finished = true;
-            // if row_num is greater than 0, in this call, eos = false, and eos will be set to true
-            // in the next call
-            if (row_num == 0) {
-                *eos = true;
-            }
-            return Status::OK();
-        }
-
-        if (row_num >= runtime_state()->chunk_size()) {
-            return Status::OK();
-        }
-
-        // read mysql
-        char** data = nullptr;
-        size_t* length = nullptr;
-        RETURN_IF_ERROR(_mysql_scanner->get_next_row(&data, &length, &mysql_eos));
-        if (mysql_eos) {
-            _is_finished = true;
-            // if row_num is greater than 0, in this call, eos = false, and eos will be set to true
-            // in the next call
-            if (row_num == 0) {
-                *eos = true;
-            }
-            return Status::OK();
-        }
-
-        ++row_num;
-
-        int materialized_col_idx = -1;
-        for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
-            SlotDescriptor* slot_desc = slot_descs[col_idx];
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-
-            // because the fe planner filter the non_materialize column
-            if (!slot_desc->is_materialized()) {
-                continue;
-            }
-
-            ++materialized_col_idx;
-
-            if (data[materialized_col_idx] == nullptr) {
-                if (slot_desc->is_nullable()) {
-                    column->append_nulls(1);
-                } else {
-                    std::stringstream ss;
-                    ss << "nonnull column contains NULL. table=" << _table_name << ", column=" << slot_desc->col_name();
-                    return Status::InternalError(ss.str());
-                }
-            } else {
-                RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx],
-                                                      slot_desc, column.get()));
-            }
-        }
-
-        ++_num_rows_returned;
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
-}
-
-Status MysqlScanNode::close(RuntimeState* state) {
-    if (is_closed()) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    _tuple_pool.reset();
-
-    return ScanNode::close(state);
-}
-
-void MysqlScanNode::debug_string(int indentation_level, std::stringstream* out) const {
-    *out << string(static_cast<size_t>(indentation_level) * 2, ' ');
-    *out << "MysqlScanNode(tupleid=" << _tuple_id << " table=" << _table_name;
-    *out << ")" << std::endl;
-
-    for (const auto& child : _children) {
-        child->debug_string(indentation_level + 1, out);
-    }
-}
-
-Status MysqlScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
-    return Status::OK();
-}
-
-} // namespace starrocks::vectorized
+} // namespace connector
+} // namespace starrocks
