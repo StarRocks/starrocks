@@ -67,9 +67,14 @@ public:
     ~BufferControlBlock();
 
     Status init();
+    // In order not to affect the current implementation of the non-pipeline engine,
+    // this method is reserved and is only used in the non-pipeline engine
     Status add_batch(TFetchDataResult* result);
+    Status add_batch(std::unique_ptr<TFetchDataResult>& result);
+
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(TFetchDataResult* result);
+    StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
+    StatusOr<bool> try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
 
     // get result from batch, use timeout?
     Status get_batch(TFetchDataResult* result);
@@ -98,6 +103,8 @@ public:
     }
 
 private:
+    void _process_batch_without_lock(std::unique_ptr<TFetchDataResult>& result);
+
     typedef std::list<TFetchDataResult*> ResultQueue;
 
     // result's query id

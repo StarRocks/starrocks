@@ -30,10 +30,10 @@ public:
 private:
     void _init_profile();
 
-    void _fill_statistic_data_v1(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
-                                 TFetchDataResult* result);
-    void _fill_dict_statistic_data(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
+    Status _fill_statistic_data_v1(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
                                    TFetchDataResult* result);
+    Status _fill_dict_statistic_data(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
+                                     TFetchDataResult* result);
 
 private:
     BufferControlBlock* _sinker;
