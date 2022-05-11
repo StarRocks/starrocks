@@ -48,7 +48,6 @@ public class ResultReceiver {
     private boolean isCancel = false;
     private long packetIdx = 0;
     private final long timeoutTs;
-    private final int expireSeconds;
     private final TNetworkAddress address;
     private final PUniqueId finstId;
     private final Long backendId;
@@ -61,7 +60,6 @@ public class ResultReceiver {
         this.backendId = backendId;
         this.address = address;
         this.timeoutTs = System.currentTimeMillis() + timeoutMs;
-        this.expireSeconds = timeoutMs / 1000;
     }
 
     public RowBatch getNext(Status status) throws TException {
@@ -128,14 +126,16 @@ public class ResultReceiver {
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
                 status.setStatus(new Status(TStatusCode.TIMEOUT,
-                        String.format("Query exceeded time limit of %d seconds", expireSeconds)));
+                        String.format("Query exceeded time limit of %d seconds",
+                                ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlacklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", finstId, e);
-            status.setStatus(String.format("Query exceeded time limit of %d seconds", expireSeconds));
+            status.setStatus(String.format("Query exceeded time limit of %d seconds",
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }
