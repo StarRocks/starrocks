@@ -24,7 +24,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
