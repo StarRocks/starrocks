@@ -76,7 +76,7 @@ public class ShowProcAction extends RestBaseAction {
             // ConnectContext build in RestBaseAction
             ConnectContext context = ConnectContext.get();
             MasterOpExecutor masterOpExecutor = new MasterOpExecutor(new OriginStatement(showProcStmt, 0), context,
-                    RedirectStatus.FORWARD_NO_SYNC, true);
+                    RedirectStatus.FORWARD_NO_SYNC);
             LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
 
             try {
