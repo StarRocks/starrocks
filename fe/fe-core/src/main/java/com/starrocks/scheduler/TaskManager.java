@@ -22,7 +22,6 @@ import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +54,7 @@ public class TaskManager {
     private final Map<Long, TaskRun> runningTaskRunMap;
 
     // include SUCCESS/FAILED taskRun
-    private final Deque<TaskRun> taskHistory;
+    private final TaskRunHistory taskHistory;
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
@@ -75,7 +74,7 @@ public class TaskManager {
         manualTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         taskRunExecutor = new TaskRunExecutor();
-        taskHistory = Queues.newLinkedBlockingDeque();
+        taskHistory = new TaskRunHistory();
         lock = new QueryableReentrantLock(true);
 
         dispatchScheduler.scheduleAtFixedRate(() -> {
@@ -91,7 +90,7 @@ public class TaskManager {
                     Future<?> future = taskRun.getFuture();
                     if (future.isDone()) {
                         runningIterator.remove();
-                        taskHistory.addFirst(taskRun);
+                        taskHistory.addHistory(taskRun);
                         // TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun,
                         //        Constants.TaskRunStatus.RUNNING, taskRun.getStatus());
                         // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
@@ -109,7 +108,7 @@ public class TaskManager {
                             pendingIterator.remove();
                         } else {
                             TaskRun pendingTaskRun = taskRunQueue.poll();
-                            pendingTaskRun.setStatus(Constants.TaskRunStatus.RUNNING);
+                            pendingTaskRun.setStatus(Constants.TaskRunState.RUNNING);
                             runningTaskRunMap.put(mvTableId, pendingTaskRun);
                             taskRunExecutor.executeTaskRun(pendingTaskRun);
                             // TaskRunStatusChange statusChange =
@@ -202,7 +201,7 @@ public class TaskManager {
             taskRunList.addAll(pJobs);
         }
         taskRunList.addAll(runningTaskRunMap.values());
-        taskRunList.addAll(taskHistory);
+        taskRunList.addAll(taskHistory.getAllHistory());
         return taskRunList;
     }
 

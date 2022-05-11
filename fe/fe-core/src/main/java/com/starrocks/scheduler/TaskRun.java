@@ -41,7 +41,7 @@ public class TaskRun implements Writable {
     private String definition;
 
     @SerializedName("status")
-    private Constants.TaskRunStatus status = Constants.TaskRunStatus.PENDING;
+    private Constants.TaskRunState status = Constants.TaskRunState.PENDING;
 
     @SerializedName("createTime")
     private LocalDateTime createTime;
@@ -101,11 +101,11 @@ public class TaskRun implements Writable {
         this.definition = definition;
     }
 
-    public Constants.TaskRunStatus getStatus() {
+    public Constants.TaskRunState getStatus() {
         return status;
     }
 
-    public void setStatus(Constants.TaskRunStatus status) {
+    public void setStatus(Constants.TaskRunState status) {
         this.status = status;
     }
 

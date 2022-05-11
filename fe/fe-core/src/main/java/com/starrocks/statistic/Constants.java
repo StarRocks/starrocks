@@ -45,13 +45,12 @@ public class Constants {
     //                    -> SUCCESS
     //                    -> CANCELED
     //         -> CANCELED
-    public enum TaskRunStatus {
+    public enum TaskRunState {
         PENDING,
         RUNNING,
         CANCELED,
         FAILED,
         SUCCESS,
     }
-
 
 }

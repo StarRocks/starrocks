@@ -21,26 +21,26 @@ public class TaskRunExecutor {
             return;
         }
 
-        if (taskRun.getStatus() == Constants.TaskRunStatus.SUCCESS ||
-                taskRun.getStatus() == Constants.TaskRunStatus.FAILED ||
-                taskRun.getStatus() == Constants.TaskRunStatus.CANCELED) {
+        if (taskRun.getStatus() == Constants.TaskRunState.SUCCESS ||
+                taskRun.getStatus() == Constants.TaskRunState.FAILED ||
+                taskRun.getStatus() == Constants.TaskRunState.CANCELED) {
             LOG.warn("TaskRun {} is in final status {} ", taskRun.getQueryId(), taskRun.getStatus());
             return;
         }
 
         Future<?> future = taskRunPool.submit(() -> {
-            taskRun.setStatus(Constants.TaskRunStatus.RUNNING);
+            taskRun.setStatus(Constants.TaskRunState.RUNNING);
             try {
                 taskRun.setStartTime(LocalDateTime.now());
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {
-                    taskRun.setStatus(Constants.TaskRunStatus.SUCCESS);
+                    taskRun.setStatus(Constants.TaskRunState.SUCCESS);
                 } else {
-                    taskRun.setStatus(Constants.TaskRunStatus.FAILED);
+                    taskRun.setStatus(Constants.TaskRunState.FAILED);
                 }
             } catch (Exception ex) {
                 LOG.warn("failed to execute TaskRun.", ex);
-                taskRun.setStatus(Constants.TaskRunStatus.FAILED);
+                taskRun.setStatus(Constants.TaskRunState.FAILED);
                 taskRun.setErrorCode(-1);
                 taskRun.setErrorMsg(ex.toString());
             } finally {
