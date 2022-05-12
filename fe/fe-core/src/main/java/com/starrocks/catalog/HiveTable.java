@@ -333,12 +333,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         // 1. check column exists in hive table
         // 2. check column type mapping
         // 3. check hive partition column exists in table column list
-        org.apache.hadoop.hive.metastore.api.Table hmsTable = hiveTable;
-        if (hmsTable == null) {
-            hmsTable = GlobalStateMgr.getCurrentState().getHiveRepository()
+        if (hiveTable == null) {
+            hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getTable(resourceName, this.hiveDbName, this.hiveTableName);
         }
-        String hiveTableType = hmsTable.getTableType();
+        String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
             throw new DdlException("Unknown hive table type.");
         }
@@ -351,9 +350,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             default:
                 throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
         }
-        List<FieldSchema> unPartHiveColumns = hmsTable.getSd().getCols();
-        List<FieldSchema> partHiveColumns = hmsTable.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hmsTable);
+        List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
+        List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable);
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
@@ -387,7 +386,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // set hdfs path
         // todo hdfs ip may change, store it in cache?
-        this.hdfsPath = hmsTable.getSd().getLocation();
+        this.hdfsPath = hiveTable.getSd().getLocation();
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
