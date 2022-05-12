@@ -54,12 +54,17 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -157,10 +162,14 @@ public class AuthTest {
         resolver = new MockDomianResolver(auth);
     }
 
+    @After
+    public void tearDown() throws Exception {
+        Config.enable_validate_password = false;  // skip password validation
+    }
+
     @Test
     public void test() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         // 1. create cmy@%
-        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1288,7 +1297,6 @@ public class AuthTest {
 
     @Test
     public void testResource() {
-        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("testUser", "%");
         String role = "role0";
         String resourceName = "spark0";
@@ -1863,7 +1871,6 @@ public class AuthTest {
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
     @Test
     public void testManyUsersAndTables() throws Exception {
-        Config.enable_validate_password = false;  // skip password validation
         int BIG_NUMBER = 500;
         int BIG_NUMBER2 = BIG_NUMBER / 2;
         int LOG_INTERVAL = BIG_NUMBER / 50;
@@ -1946,7 +1953,6 @@ public class AuthTest {
 
     @Test
     public void testCanEnterCluster() throws Exception {
-        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("test_user", "%");
         userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
@@ -1976,7 +1982,6 @@ public class AuthTest {
 
     @Test
     public void testGetPasswordByApproximate() throws Exception {
-        Config.enable_validate_password = false;  // skip password validation
         UserIdentity userIdentity = new UserIdentity("test_user", "%");
         userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
@@ -1991,4 +1996,140 @@ public class AuthTest {
         Assert.assertNotNull(auth.getUserPrivTable().getPasswordByApproximate(
                 SystemInfoService.DEFAULT_CLUSTER + ":test_user", "localhost"));
     }
+
+    /**
+     * TODO I think this case should in UserPrivTableTest instead of AuthTest
+     *    Unfortunately the two classes are highly coupled.
+     */
+    @Test
+    public void testMultiUserMatch() throws Exception {
+        Assert.assertEquals(1, auth.getUserPrivTable().size());
+        String PASSWORD_STR = "12345";
+
+        // create four entries
+        String userHostPatterns[][] = {
+                {"user_1", "10.1.1.1"},
+                {"user_1", "%"},
+                {"user_zzz", "%"},
+                {"user_zzz", "10.1.1.1"},
+        };
+        for (String[] userHost: userHostPatterns) {
+            UserIdentity userIdentity = new UserIdentity(userHost[0], userHost[1]);
+            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            UserDesc userDesc = new UserDesc(userIdentity, PASSWORD_STR, true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+        }
+        Assert.assertEquals(5, auth.getUserPrivTable().size());
+
+        // check if login match
+        // remote_user, remote_ip, expect_user_identity
+        String userHostAndMatchedUserHosts[][] = {
+                // login as user_1 from 10.1.1.1, expected identified as user_1@10.1.1.1
+                {"user_1", "10.1.1.1", "user_1", "10.1.1.1"},
+                // login as user_1 from 10.1.1.2, expected identified as user_1@%, fuzzy matching
+                {"user_1", "10.1.1.2", "user_1", "%"},
+                {"user_zzz", "10.1.1.1", "user_zzz", "10.1.1.1"},
+                {"user_zzz", "10.1.1.2", "user_zzz", "%"},
+
+        };
+        for (String[] userHostAndMatchedUserHost : userHostAndMatchedUserHosts) {
+            List<UserIdentity> identities = new ArrayList<>();
+            String remoteUser = SystemInfoService.DEFAULT_CLUSTER + ":" + userHostAndMatchedUserHost[0];
+            String remoteIp = userHostAndMatchedUserHost[1];
+            String expectQualifiedUser = SystemInfoService.DEFAULT_CLUSTER + ":" + userHostAndMatchedUserHost[2];
+            String expectHost = userHostAndMatchedUserHost[3];
+
+            auth.checkPlainPassword(remoteUser, remoteIp, PASSWORD_STR, identities);
+            Assert.assertEquals(1, identities.size());
+            Assert.assertEquals(expectQualifiedUser, identities.get(0).getQualifiedUser());
+            Assert.assertEquals(expectHost, identities.get(0).getHost());
+
+            identities.clear();
+            byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+            byte[] scramble = MysqlPassword.scramble(seed, PASSWORD_STR);
+            auth.checkPassword(remoteUser, remoteIp, scramble, seed, identities);
+            Assert.assertEquals(1, identities.size());
+            Assert.assertEquals(expectQualifiedUser, identities.get(0).getQualifiedUser());
+            Assert.assertEquals(expectHost, identities.get(0).getHost());
+        }
+
+        // test iterator
+        // full iterator
+        Iterator<PrivEntry> iter = auth.getUserPrivTable().getFullReadOnlyIterator();
+        List<String> userHostResult = new ArrayList<>();
+        while(iter.hasNext()) {
+            PrivEntry entry = iter.next();
+            if (entry.getOrigUser() != "root") {
+                userHostResult.add(String.format("%s@%s", entry.getOrigUser(), entry.getOrigHost()));
+            }
+        }
+        Assert.assertEquals(4, userHostResult.size());
+        List<String> expect = new ArrayList<>();
+        for (String[] userHost : userHostPatterns) {
+            expect.add(String.format("default_cluster:%s@%s", userHost[0], userHost[1]));
+        }
+        Collections.sort(expect);
+        Collections.sort(userHostResult);
+        Assert.assertEquals(expect, userHostResult);
+
+        UserIdentity user = new UserIdentity("user_1", "10.1.1.1");
+        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        iter = auth.getUserPrivTable().getReadOnlyIteratorByUser(user);
+        userHostResult.clear();
+        while(iter.hasNext()) {
+            PrivEntry entry = iter.next();
+            userHostResult.add(String.format("%s@%s", entry.getOrigUser(), entry.getOrigHost()));
+        }
+        // expect match 2: user_1@10.1.1.1 & user_1@%
+        Assert.assertEquals(2, userHostResult.size());
+        Assert.assertTrue(userHostResult.contains("default_cluster:user_1@10.1.1.1"));
+        Assert.assertTrue(userHostResult.contains("default_cluster:user_1@%"));
+
+
+        // test grant
+        // GRANT select_priv on db1.table1 to user_1@%
+        // GRANT select_priv on db1.table2 to user_1@10.1.1.2
+        // see if user_1@10.1.1.1 can see two table
+        // and user_1@10.1.1.2 can see one table
+
+        // GRANT select_priv on db1.table1 to user_1@%
+        TablePattern tablePattern = new TablePattern("db1", "table1");
+        tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
+        user = new UserIdentity("user_1", "%");
+        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        auth.grantPrivs(user, tablePattern, privileges, false);
+
+        // GRANT select_priv on db1.table2 to user_1@10.1.1.1
+        tablePattern = new TablePattern("db1", "table2");
+        tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
+        user = new UserIdentity("user_1", "10.1.1.1");
+        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        auth.grantPrivs(user, tablePattern, privileges, false);
+
+        // check if user_1@10.1.1.1 can see two table
+        List<UserIdentity> identities = new ArrayList<>();
+        auth.checkPlainPassword(
+                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.1", PASSWORD_STR, identities);
+        Assert.assertEquals(1, identities.size());
+        user = identities.get(0);
+        Assert.assertEquals("10.1.1.1", user.getHost());
+        String db = SystemInfoService.DEFAULT_CLUSTER + ":db1";
+        // TODO: this is a legacy bug, I will fix it in another PR
+        // Assert.assertTrue(auth.checkTblPriv(user, db, "table1", PrivPredicate.SELECT));
+        Assert.assertTrue(auth.checkTblPriv(user, db, "table2", PrivPredicate.SELECT));
+
+        // check if user_1@10.1.1.2 can see one table
+        identities.clear();
+        auth.checkPlainPassword(
+                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.2", PASSWORD_STR, identities);
+        Assert.assertEquals(1, identities.size());
+        user = identities.get(0);
+        Assert.assertEquals("%", user.getHost());
+        Assert.assertTrue(auth.checkTblPriv(user, db, "table1", PrivPredicate.SELECT));
+        Assert.assertFalse(auth.checkTblPriv(user, db, "table2", PrivPredicate.SELECT));
+     }
  }

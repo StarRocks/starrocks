@@ -77,12 +77,9 @@ public class TablePrivTable extends PrivTable {
      *      I will try to remove this in another PR.
      */
     public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
-        List<PrivEntry> userPrivEntryList = map.get(currentUser);
-        if (userPrivEntryList == null) {
-            return false;
-        }
-        for (PrivEntry entry : userPrivEntryList) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             // check priv
             if (tblPrivEntry.privSet.satisfy(wanted)) {
                 return true;
@@ -92,12 +89,9 @@ public class TablePrivTable extends PrivTable {
     }
 
     public boolean hasPrivsOfDb(UserIdentity currentUser, String db) {
-        List<PrivEntry> userPrivEntryList = map.get(currentUser);
-        if (userPrivEntryList == null) {
-            return false;
-        }
-        for (PrivEntry entry : userPrivEntryList) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             // check db
             Preconditions.checkState(!tblPrivEntry.isAnyDb());
             if (!tblPrivEntry.getDbPattern().match(db)) {
@@ -121,7 +115,7 @@ public class TablePrivTable extends PrivTable {
     }
 
     public boolean hasClusterPriv(ConnectContext ctx, String clusterName) {
-        Iterator<PrivEntry> iter = this.getFullIterator();
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             if (tblPrivEntry.getOrigDb().startsWith(clusterName)) {

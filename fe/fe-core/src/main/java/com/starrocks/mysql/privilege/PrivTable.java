@@ -21,6 +21,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -36,15 +37,26 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public abstract class PrivTable implements Writable {
     private static final Logger LOG = LogManager.getLogger(PrivTable.class);
 
-    protected Map<UserIdentity, List<PrivEntry>> map = new HashMap<>();
+    // keep user identity sorted
+    protected Map<UserIdentity, List<PrivEntry>> map = new TreeMap<>(new Comparator<UserIdentity>() {
+        @Override
+        public int compare(UserIdentity o1, UserIdentity o2) {
+            int compareByUser = o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
+            if (compareByUser != 0) {
+                return - compareByUser;
+            }
+            return - o1.getHost().compareTo(o2.getHost());
+        }
+    });
 
     // see PrivEntry for more detail
     protected boolean isClassNameWrote = false;
@@ -62,10 +74,8 @@ public abstract class PrivTable implements Writable {
                 throw new DdlException("User " + newEntry.getUserIdent() + " does not exist");
             }
             UserIdentity newUser = newEntry.getUserIdent();
-            if (! map.containsKey(newUser)) {
-                map.put(newEntry.getUserIdent(), new ArrayList<>());
-            }
-            map.get(newUser).add(newEntry);
+            List<PrivEntry> entries = map.computeIfAbsent(newUser, k -> new ArrayList<>());
+            entries.add(newEntry);
             LOG.debug("add priv entry: {}", newEntry);
             return newEntry;
         } else {
@@ -251,12 +261,18 @@ public abstract class PrivTable implements Writable {
 
     /**
      * return a iterator used for a complete loop in the whole table
+     * This is READ ONLY, please don't use it for any kinds of modification
      */
-    public Iterator<PrivEntry> getFullIterator() {
-        final Iterator<Map.Entry<UserIdentity, List<PrivEntry>>> mapIterator = map.entrySet().iterator();
-
+    public Iterator<PrivEntry> getFullReadOnlyIterator() {
         return new Iterator<PrivEntry>() {
-            private Iterator<PrivEntry> privEntryIterator = null;
+            private Iterator<Map.Entry<UserIdentity, List<PrivEntry>>> mapIterator;
+            private Iterator<PrivEntry> privEntryIterator;
+
+            {
+                // init
+                mapIterator = map.entrySet().iterator();
+                privEntryIterator = null;
+            }
 
             @Override
             public boolean hasNext() {
@@ -277,10 +293,79 @@ public abstract class PrivTable implements Writable {
         };
     }
 
+    /**
+     * return a iterator to all the entries that match currentUser
+     */
+    public Iterator<PrivEntry> getReadOnlyIteratorByUser(UserIdentity currentUser) {
+        return getReadOnlyIteratorByUser(currentUser.getQualifiedUser(), currentUser.getHost());
+    }
+
+    /**
+     * return a iterator to all the entries that match user@host
+     */
+    public Iterator<PrivEntry> getReadOnlyIteratorByUser(String user, String host) {
+        return new Iterator<PrivEntry>() {
+            private Iterator<Map.Entry<UserIdentity, List<PrivEntry>>> mapIterator;
+            // always point at the entry to be visit next
+            private Iterator<PrivEntry> privEntryIterator;
+
+            {
+                // init
+                mapIterator = map.entrySet().iterator();
+                privEntryIterator = null;
+                iterMapToNextMatchedIdentity();
+            }
+
+            /**
+             * iterator to the next user identity that match user
+             * return false if no such user found, true if found
+             */
+            private boolean iterMapToNextMatchedIdentity() {
+                while (mapIterator.hasNext()) {
+                    Map.Entry<UserIdentity, List<PrivEntry>> mapEntry = mapIterator.next();
+                    List<PrivEntry> entries = mapEntry.getValue();
+                    Preconditions.checkArgument(entries.size() > 0);
+                    PrivEntry privEntry = entries.get(0);
+
+                    // check user
+                    if (!privEntry.isAnyUser() && !privEntry.getUserPattern().match(user)) {
+                        continue;
+                    }
+                    // check host
+                    if (!privEntry.isAnyHost() && !privEntry.getHostPattern().match(host)) {
+                        continue;
+                    }
+
+                    // user & host all match
+                    privEntryIterator = entries.iterator();
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean hasNext() {
+                if (privEntryIterator == null) {
+                    return false;
+                }
+                if (privEntryIterator.hasNext()) {
+                    return true;
+                } else {
+                    return iterMapToNextMatchedIdentity();
+                }
+            }
+
+            @Override
+            public PrivEntry next() {
+                return privEntryIterator.next();
+            }
+        };
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("\n");
-        Iterator<PrivEntry> iter = this.getFullIterator();
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             sb.append(iter.next()).append("\n");
         }
@@ -295,7 +380,7 @@ public abstract class PrivTable implements Writable {
             isClassNameWrote = true;
         }
         out.writeInt(this.size());
-        Iterator<PrivEntry> iter = this.getFullIterator();
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             iter.next().write(out);
         }
@@ -307,10 +392,8 @@ public abstract class PrivTable implements Writable {
         for (int i = 0; i < size; i++) {
             PrivEntry entry = PrivEntry.read(in);
             UserIdentity newUser = entry.getUserIdent();
-            if (! map.containsKey(newUser)) {
-                map.put(entry.getUserIdent(), new ArrayList<>());
-            }
-            map.get(newUser).add(entry);
+            List<PrivEntry> entries = map.computeIfAbsent(newUser, k -> new ArrayList<>());
+            entries.add(entry);
         }
     }
 

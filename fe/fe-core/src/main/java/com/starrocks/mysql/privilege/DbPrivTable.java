@@ -68,16 +68,12 @@ public class DbPrivTable extends PrivTable {
     }
 
     /*
-     * Check if user@host has specified privilege on any database
+     * Check if current user has specified privilege on any database
      */
     public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
-        List<PrivEntry> userPrivEntryList = map.get(currentUser);
-        if (userPrivEntryList == null) {
-            return false;
-        }
-
-        for (PrivEntry entry : userPrivEntryList) {
-            DbPrivEntry dbPrivEntry = (DbPrivEntry) entry;
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
             // check priv
             if (dbPrivEntry.privSet.satisfy(wanted)) {
                 return true;
@@ -87,7 +83,7 @@ public class DbPrivTable extends PrivTable {
     }
 
     public boolean hasClusterPriv(ConnectContext ctx, String clusterName) {
-        Iterator<PrivEntry> iter = this.getFullIterator();
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
             if (dbPrivEntry.getOrigDb().startsWith(clusterName)) {
