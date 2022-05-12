@@ -24,7 +24,7 @@ public class PruneAssertOneRowRule extends TransformationRule {
         if (OperatorType.LOGICAL_AGGR.equals(input.getInputs().get(0).getOp().getOpType())) {
             LogicalAggregationOperator lao = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
 
-            return lao.getGroupingKeys().isEmpty();
+            return lao.getGroupingKeys().isEmpty() && (lao.getPredicate() == null);
         }
 
         return false;

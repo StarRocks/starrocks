@@ -90,7 +90,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateExceptRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateJoinRule;
@@ -213,7 +212,6 @@ public class RuleSet {
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
                 new CastToEmptyRule(),
-                new PushDownPredicateDirectRule(),
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
