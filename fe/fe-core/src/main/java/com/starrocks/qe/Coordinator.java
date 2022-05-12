@@ -97,10 +97,12 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -479,6 +481,12 @@ public class Coordinator {
             boolean isEnablePipelineEngine = connectContext != null &&
                     connectContext.getSessionVariable().isEnablePipelineEngine() &&
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
+            List<String> dbNames = descTable == null ||
+                    CollectionUtils.isEmpty(descTable.getTableDescriptors()) ?
+                    null :
+                    descTable.getTableDescriptors().stream()
+                            .map(TTableDescriptor::getDbName)
+                            .collect(Collectors.toList());
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
@@ -535,7 +543,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbNames, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -2076,6 +2084,7 @@ public class Coordinator {
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
+                                               List<String> dbNames,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
@@ -2089,7 +2098,7 @@ public class Coordinator {
             WorkGroup workgroup = null;
             if (connectContext != null) {
                 workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                        connectContext, WorkGroupClassifier.QueryType.SELECT);
+                        connectContext, WorkGroupClassifier.QueryType.SELECT, dbNames);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();

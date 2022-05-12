@@ -23,6 +23,7 @@ public class WorkGroup implements Writable {
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
     public static final String SOURCE_IP = "source_ip";
+    public static final String DATABASES = "database";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
@@ -103,7 +104,7 @@ public class WorkGroup implements Writable {
 
     public List<List<String>> showVisible(String user, String roleName, String ip) {
         return classifiers.stream().filter(c -> c.isVisible(user, roleName, ip))
-                .map(c -> this.showClassifier(c)).collect(Collectors.toList());
+                .map(this::showClassifier).collect(Collectors.toList());
     }
 
     public long getVersion() {

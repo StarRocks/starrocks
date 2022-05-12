@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Splitter;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
@@ -12,6 +13,7 @@ import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
 import java.util.List;
@@ -25,6 +27,7 @@ public class WorkGroupAnalyzer {
     // 2. role = operator
     // 3. query_type in ('select', 'insert')
     // 4. source_ip = "192.168.1.1/24"
+    // 5. databases = "db1,db2,db3"
     public static WorkGroupClassifier convertPredicateToClassifier(List<Predicate> predicates)
             throws SemanticException {
         WorkGroupClassifier classifier = new WorkGroupClassifier();
@@ -56,6 +59,13 @@ public class WorkGroupAnalyzer {
                 } else if (key.equalsIgnoreCase(WorkGroup.SOURCE_IP)) {
                     SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(value).getInfo();
                     classifier.setSourceIp(subnetInfo.getCidrSignature());
+                } else if (key.equalsIgnoreCase(WorkGroup.DATABASES)) {
+                    List<String> databases = Splitter.on(",").splitToList(value);
+                    if (CollectionUtils.isEmpty(databases)) {
+                        throw new SemanticException(
+                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
+                    }
+                    classifier.setDatabases(databases);
                 } else {
                     throw new SemanticException(
                             String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.SOURCE_IP, eqPred));
@@ -87,8 +97,9 @@ public class WorkGroupAnalyzer {
 
         if (classifier.getUser() == null &&
                 classifier.getRole() == null &&
-                (classifier.getQueryTypes() == null || classifier.getQueryTypes().isEmpty())
-                && classifier.getSourceIp() == null) {
+                (classifier.getQueryTypes() == null || classifier.getQueryTypes().isEmpty()) &&
+                classifier.getSourceIp() == null &&
+                classifier.getDatabases() == null) {
             throw new SemanticException("At least one of ('user', 'role', 'query_type', 'source_ip') should be given");
         }
         return classifier;

@@ -11,6 +11,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
@@ -96,6 +97,16 @@ public class WorkGroupStmtTest {
             "   'big_query_cpu_core_second_limit'='1024',\n" +
             "    'type' = 'normal'\n" +
             ");";
+    private String createRg5Sql = "create resource_group rg5\n" +
+            "to\n" +
+            "     (database='db1')\n" +
+            "with (\n" +
+            "    'cpu_core_limit' = '25',\n" +
+            "    'mem_limit' = '80%',\n" +
+            "    'concurrency_limit' = '10',\n" +
+            "    'type' = 'normal'\n" +
+            ");";
+
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -125,14 +136,14 @@ public class WorkGroupStmtTest {
     }
 
     private void createResourceGroups() throws Exception {
-        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql};
+        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql, createRg5Sql};
         for (String sql : sqls) {
             starRocksAssert.executeWorkGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
-        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4"};
+        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5"};
         for (String name : rgNames) {
             starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE_GROUP " + name);
         }
@@ -155,7 +166,8 @@ public class WorkGroupStmtTest {
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
-                "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
+                "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, databases='db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -320,8 +332,44 @@ public class WorkGroupStmtTest {
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                 starRocksAssert.getCtx(),
-                WorkGroupClassifier.QueryType.SELECT);
+                WorkGroupClassifier.QueryType.SELECT,
+                null);
         Assert.assertEquals(wg.getName(), "rg1");
+        dropResourceGroups();
+    }
+
+    @Test
+    public void testChooseResourceGroupWithDb() throws Exception {
+        createResourceGroups();
+        String qualifiedUser = "default_cluster:rg1_user1";
+        String remoteIp = "192.168.2.4";
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setRemoteIP(remoteIp);
+        {
+            List<String> dbNames = Arrays.asList("db1");
+            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                    starRocksAssert.getCtx(),
+                    WorkGroupClassifier.QueryType.SELECT,
+                    dbNames);
+            Assert.assertEquals("rg5", wg.getName());
+        }
+        {
+            List<String> dbNames = Arrays.asList("db2");
+            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                    starRocksAssert.getCtx(),
+                    WorkGroupClassifier.QueryType.SELECT,
+                    dbNames);
+            Assert.assertEquals("rg1", wg.getName());
+        }
+        {
+            List<String> dbNames = Arrays.asList("db1", "db2");
+            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                    starRocksAssert.getCtx(),
+                    WorkGroupClassifier.QueryType.SELECT,
+                    dbNames);
+            Assert.assertEquals("rg1", wg.getName());
+        }
         dropResourceGroups();
     }
 
@@ -337,6 +385,7 @@ public class WorkGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, databases='db1')\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
         Assert.assertEquals(result, expect);
@@ -390,7 +439,8 @@ public class WorkGroupStmtTest {
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
-                "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
+                "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, databases='db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
