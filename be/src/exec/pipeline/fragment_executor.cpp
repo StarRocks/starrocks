@@ -140,7 +140,7 @@ Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& reque
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        _query_ctx->init_query(wg.get());
+        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);

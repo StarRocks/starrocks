@@ -80,7 +80,7 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    bool init_query(workgroup::WorkGroup* wg);
+    Status init_query(workgroup::WorkGroup* wg);
 
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
     int64_t cpu_cost() const { return _cur_cpu_cost; }

@@ -130,11 +130,8 @@ public:
     void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
     Status check_big_query(const QueryContext& query_context);
-    void incr_num_queries() { _num_queries++; }
-    void decr_num_queries() {
-        int64_t old = _num_queries.fetch_sub(1);
-        DCHECK_GT(old, 0);
-    }
+    Status try_incr_num_queries();
+    void decr_num_queries();
     int64_t num_running_queries() const { return _num_queries; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }

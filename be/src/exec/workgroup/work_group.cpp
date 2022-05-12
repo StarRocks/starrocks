@@ -165,8 +165,8 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
                                                                  MetricLabels().add("name", wg->name()),
                                                                  resource_group_mem_allocated_bytes.get());
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_running_queries",
-                                                                MetricLabels().add("name", wg->name()),
-                                                                resource_group_running_queries.get());
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_running_queries.get());
 
         _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
         _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
@@ -274,6 +274,20 @@ void WorkGroup::estimate_trend_factor_period() {
     _period_ask_chunk_num = 1;
 }
 
+Status WorkGroup::try_incr_num_queries() {
+    int64_t old = _num_queries.fetch_add(1);
+    if (_concurrency_limit > 0 && old >= _concurrency_limit) {
+        _num_queries.fetch_sub(1);
+        return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
+    }
+    return Status::OK();
+}
+
+void WorkGroup::decr_num_queries() {
+    int64_t old = _num_queries.fetch_sub(1);
+    DCHECK_GT(old, 0);
+}
+
 Status WorkGroup::check_big_query(const QueryContext& query_context) {
     // Check big query run time
     if (_big_query_cpu_core_second_limit) {
@@ -288,14 +302,6 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
     if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
         return Status::Cancelled(fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
                                              query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
-    }
-
-    // TODO: check concurrency before query execution
-    // Check concurrency limit
-    DCHECK_GE(_num_queries, 0);
-    if (_concurrency_limit > 0 && _num_queries > _concurrency_limit) {
-        return Status::Cancelled(fmt::format("Exceed concurrency limit: current is {} but limit is {}",
-                                             _num_queries.load(), _concurrency_limit));
     }
 
     return Status::OK();
