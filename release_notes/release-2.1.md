@@ -100,3 +100,16 @@ The following bugs are fixed:
 - Query fails because the plan for complex expressions is wrong when there are more than 4 tables to join.
 - BEs may stop working under Shuffle Join when the shuffle column is a low-cardinality column. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
 - BEs may stop working when the SPLIT function uses a NULL parameter. [#4092](https://github.com/StarRocks/starrocks/issues/4092)
+
+## 2.1.6
+
+Release date: May 10, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- When you run queries after you perform multiple DELETE operations, you may obtain incorrect query results if optimization on low-cardinality columns is performed for the queries. [#5712](https://github.com/StarRocks/starrocks/issues/5712)
+- If tablets are migrated in specific data ingestion phases, data continues to be written to the original disk on which the tablets are stored. As a result, data is lost, and queries cannot be run properly. [#5160](https://github.com/StarRocks/starrocks/issues/5160)
+- If you covert values between the DECIMAL and STRING data types, the return values may be in an unexpected precision. [#5608](https://github.com/StarRocks/starrocks/issues/5608)
+- If you multiply a DECIMAL value by a BIGINT value, an arithmetic overflow may occur. A few adjustments and optimizations are made to fix this bug. [#4211](https://github.com/StarRocks/starrocks/pull/4211)
