@@ -86,7 +86,7 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
 
         Rewriter leftRewriter = new Rewriter(leftProjectMaps);
         Rewriter rightRewriter = new Rewriter(rightProjectMaps);
-        ScalarOperator newJoinOnPredicate = onPredicate.accept(leftRewriter, null).accept(rightRewriter, null);
+        ScalarOperator newJoinOnPredicate = onPredicate.clone().accept(leftRewriter, null).accept(rightRewriter, null);
 
         OptExpression newJoinOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(joinOperator)
                 .setOnPredicate(newJoinOnPredicate)
