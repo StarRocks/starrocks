@@ -274,6 +274,11 @@ public class MaterializedViewTest {
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
         }
 
+        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
+            singleRangePartitionDesc.analyze(columns, null);
+            partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20001L, true);
+        }
+
         return partitionInfo;
     }
 

@@ -22,7 +22,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -62,71 +61,17 @@ public class RangePartitionInfo extends PartitionInfo {
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
 
-    // use InternalRange for serialization
+    // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
-    // ATTN: call preSerialize before serialize and postDeserialized after deserialize
-    @SerializedName(value = "internalIdToRange")
-    private Map<Long, InternalRange> internalIdToRange;
+    // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+    @SerializedName(value = "serializedIdToRange")
+    private Map<Long, byte[]> serializedIdToRange;
 
-    // use InternalRange for serialization
+    // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
-    // ATTN: call preSerialize before serialize and postDeserialized after deserialize
-    @SerializedName(value = "internalIdToTempRange")
-    private Map<Long, InternalRange> internalIdToTempRange;
-
-    static class InternalRange {
-        @SerializedName(value = "hasLowerBound")
-        private boolean hasLowerBound;
-
-        @SerializedName(value = "lowerClosed")
-        private boolean lowerClosed;
-
-        @SerializedName(value = "lowerBound")
-        private byte[] lowerBound;
-
-        @SerializedName(value = "hasUpperBound")
-        private boolean hasUpperBound;
-
-        @SerializedName(value = "upperClosed")
-        private boolean upperClosed;
-
-        @SerializedName(value = "upperBound")
-        private byte[] upperBound;
-
-        public InternalRange(boolean hasLowerBound, boolean lowerClosed, byte[] lowerBound,
-                             boolean hasUpperBound, boolean upperClosed, byte[] upperBound) {
-            this.hasLowerBound = hasLowerBound;
-            this.lowerClosed = lowerClosed;
-            this.lowerBound = lowerBound;
-            this.hasUpperBound = hasUpperBound;
-            this.upperClosed = upperClosed;
-            this.upperBound = upperBound;
-        }
-
-        public boolean hasLowerBound() {
-            return hasLowerBound;
-        }
-
-        public boolean hasUpperBound() {
-            return hasUpperBound;
-        }
-
-        public boolean isLowerClosed() {
-            return lowerClosed;
-        }
-
-        public byte[] getLowerBound() {
-            return lowerBound;
-        }
-
-        public boolean isUpperClosed() {
-            return upperClosed;
-        }
-
-        public byte[] getUpperBound() {
-            return upperBound;
-        }
-    }
+    // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+    @SerializedName(value = "serializedIdToTempRange")
+    private Map<Long, byte[]> serializedIdToTempRange;
 
     public RangePartitionInfo() {
         // for persist
@@ -393,114 +338,51 @@ public class RangePartitionInfo extends PartitionInfo {
         return partitionInfo;
     }
 
-    private InternalRange convertToInternalRange(Range<PartitionKey> partitionKeyRange) throws IOException {
-        boolean hasLowerBound = partitionKeyRange.hasLowerBound();
-        boolean lowerBoundIncluded = hasLowerBound ? partitionKeyRange.lowerBoundType() == BoundType.CLOSED : false;
-
-        boolean hasUpperBound = partitionKeyRange.hasUpperBound();
-        boolean upperBoundIncluded = hasUpperBound ? partitionKeyRange.upperBoundType() == BoundType.CLOSED : false;
-        byte[] lowerBound = null;
-        if (partitionKeyRange.lowerEndpoint() != null) {
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            DataOutputStream dos = new DataOutputStream(stream);
-            PartitionKey key = partitionKeyRange.lowerEndpoint();
-            key.write(dos);
-            lowerBound = stream.toByteArray();
-        }
-        byte[] upperBound = null;
-        if (partitionKeyRange.upperEndpoint() != null) {
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            DataOutputStream dos = new DataOutputStream(stream);
-            PartitionKey key = partitionKeyRange.upperEndpoint();
-            key.write(dos);
-            upperBound = stream.toByteArray();
-        }
-        return new InternalRange(hasLowerBound, lowerBoundIncluded, lowerBound,
-                hasUpperBound, upperBoundIncluded, upperBound);
+    byte[] serializeRange(Range<PartitionKey> range) throws IOException {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(stream);
+        RangeUtils.writeRange(dos, range);
+        return stream.toByteArray();
     }
 
-    private Range<PartitionKey> convertToRange(InternalRange partitionKeyInternalRange) throws IOException {
-        boolean hasLowerBound = partitionKeyInternalRange.hasLowerBound();
-        boolean lowerBoundClosed = partitionKeyInternalRange.isLowerClosed();
-        boolean hasUpperBound = partitionKeyInternalRange.hasUpperBound();
-        boolean upperBoundClosed = partitionKeyInternalRange.isUpperClosed();
-        PartitionKey lowerBound = null;
-        if (hasLowerBound) {
-            InputStream inputStream =
-                    new ByteArrayInputStream(partitionKeyInternalRange.getLowerBound());
-            DataInput dataInput = new DataInputStream(inputStream);
-            lowerBound = PartitionKey.read(dataInput);
-        }
-
-        PartitionKey upperBound = null;
-        if (hasUpperBound) {
-            InputStream inputStream =
-                    new ByteArrayInputStream(partitionKeyInternalRange.getUpperBound());
-            DataInput dataInput = new DataInputStream(inputStream);
-            upperBound = PartitionKey.read(dataInput);
-        }
-
-        if (hasLowerBound && lowerBoundClosed && hasUpperBound && upperBoundClosed) {
-            return Range.closed(lowerBound, upperBound);
-        }
-        if (hasLowerBound && lowerBoundClosed && hasUpperBound && !upperBoundClosed) {
-            return Range.closedOpen(lowerBound, upperBound);
-        }
-        if (hasLowerBound && !lowerBoundClosed && hasUpperBound && upperBoundClosed) {
-            return Range.openClosed(lowerBound, upperBound);
-        }
-        if (hasLowerBound && !lowerBoundClosed && hasUpperBound && !upperBoundClosed) {
-            return Range.open(lowerBound, upperBound);
-        }
-        if (hasLowerBound && lowerBoundClosed && !hasUpperBound) {
-            return Range.atLeast(lowerBound);
-        }
-        if (hasLowerBound && !lowerBoundClosed && !hasUpperBound) {
-            return Range.greaterThan(lowerBound);
-        }
-        if (!hasLowerBound && hasUpperBound && upperBoundClosed) {
-            return Range.atMost(upperBound);
-        }
-        if (!hasLowerBound && hasUpperBound && !upperBoundClosed) {
-            return Range.lessThan(upperBound);
-        }
-        // Neither lower bound nor upper bound exists, return null. This means just one partition
-        return null;
+    Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
+        InputStream inputStream = new ByteArrayInputStream(serializedRange);
+        DataInput dataInput = new DataInputStream(inputStream);
+        Range<PartitionKey> range = RangeUtils.readRange(dataInput);
+        return range;
     }
 
-    // convert Range<PartitionKey> to InternalRange for serialization by gson
     @Override
     public void preSerialize() throws IOException {
         if (idToRange != null) {
-            internalIdToRange = Maps.newHashMap();
+            serializedIdToRange = Maps.newHashMap();
             for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
-                InternalRange internalRange = convertToInternalRange(entry.getValue());
-                internalIdToRange.put(entry.getKey(), internalRange);
+                byte[] serializedRange = serializeRange(entry.getValue());
+                serializedIdToRange.put(entry.getKey(), serializedRange);
             }
         }
         if (idToTempRange != null) {
-            internalIdToTempRange = Maps.newHashMap();
+            serializedIdToTempRange = Maps.newHashMap();
             for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
-                InternalRange internalRange = convertToInternalRange(entry.getValue());
-                internalIdToTempRange.put(entry.getKey(), internalRange);
+                byte[] serializedRange = serializeRange(entry.getValue());
+                serializedIdToTempRange.put(entry.getKey(), serializedRange);
             }
         }
     }
 
-    // convert InternalRange back to Range<PartitionKey> for deserialization by gson
     @Override
     public void postDeserialized() throws IOException {
-        if (internalIdToRange != null && !internalIdToRange.isEmpty()) {
-            for (Map.Entry<Long, InternalRange> entry : internalIdToRange.entrySet()) {
-                idToRange.put(entry.getKey(), convertToRange(entry.getValue()));
+        if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
+            for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
+                idToRange.put(entry.getKey(), deserializeRange(entry.getValue()));
             }
-            internalIdToRange = null;
+            serializedIdToRange = null;
         }
-        if (internalIdToTempRange != null && !internalIdToTempRange.isEmpty()) {
-            for (Map.Entry<Long, InternalRange> entry : internalIdToTempRange.entrySet()) {
-                idToTempRange.put(entry.getKey(), convertToRange(entry.getValue()));
+        if (serializedIdToTempRange != null && !serializedIdToTempRange.isEmpty()) {
+            for (Map.Entry<Long, byte[]> entry : serializedIdToTempRange.entrySet()) {
+                idToTempRange.put(entry.getKey(), deserializeRange(entry.getValue()));
             }
-            internalIdToTempRange = null;
+            serializedIdToTempRange = null;
         }
     }
 
