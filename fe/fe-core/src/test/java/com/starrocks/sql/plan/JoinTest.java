@@ -1968,13 +1968,15 @@ public class JoinTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        starRocksAssert.query(sql).explainContains("  4:CROSS JOIN\n" +
-                        "  |  cross join:\n" +
-                        "  |  predicates is NULL",
+        String plan  = starRocksAssert.query(sql).explainQuery();
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
+                "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                        "  |  output: max(22: k9)\n" +
-                        "  |  group by: \n" +
-                        "  |  having: CAST(23: max AS DOUBLE) > 0.0");
+                "  |  output: max(22: k9)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
     }
 
     @Test

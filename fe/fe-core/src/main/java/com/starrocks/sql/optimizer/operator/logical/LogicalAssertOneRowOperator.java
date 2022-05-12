@@ -54,19 +54,7 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        LogicalAssertOneRowOperator that = (LogicalAssertOneRowOperator) o;
-        return checkRows == that.checkRows &&
-                assertion == that.assertion &&
-                Objects.equals(tips, that.tips);
+        return this == o;
     }
 
     @Override
