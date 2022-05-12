@@ -337,7 +337,7 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
 
-    const constexpr PrimitiveType TYPE = TYPE_INT;
+    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
     ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0].get());
     RunTimeColumnType<TYPE>::Container& element_container =
             array_column->elements_column()->is_nullable()
