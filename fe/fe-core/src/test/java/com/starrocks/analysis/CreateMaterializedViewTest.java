@@ -73,6 +73,20 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl4\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k2,k3)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('20','30'),\n" +
+                        "    PARTITION p2 values less than('40','50')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withTable("CREATE TABLE `t1` (\n" +
                         "  `c_1_0` decimal128(30, 4) NOT NULL COMMENT \"\",\n" +
                         "  `c_1_1` boolean NOT NULL COMMENT \"\",\n" +
@@ -396,25 +410,43 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionKeyNoBaseTablePartitionKey() {
+    public void testPartitionColumnNoBaseTablePartitionColumn() {
         String sql = "create materialized view mv1 " +
-                "partition by s1 " +
+                "partition by s2 " +
                 "distributed by hash(s2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select k1 s1, k2 s2 from tbl2;";
+                "as select k1 s1, k2 s2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(),
-                    "Materialized view partition key in partition exp must be base table partition key");
+                    "Materialized view partition column in partition exp must be base table partition column");
         }
     }
 
     @Test
-    public void testBaseTableNoPartitionKey() {
+    public void testPartitionColumnBaseTableHasMultiPartitionColumn() {
+        String sql = "create materialized view mv1 " +
+                "partition by s2 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1 s1, k2 s2 from tbl4;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Materialized view related base table partition columnsonly supports single column");
+        }
+    }
+
+    @Test
+    public void testBaseTableNoPartitionColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
                 "distributed by hash(s2) " +
@@ -427,7 +459,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(),
-                    "Materialized view partition key in partition exp must be base table partition key");
+                    "Materialized view partition column in partition exp must be base table partition column");
         }
     }
 

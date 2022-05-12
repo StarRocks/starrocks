@@ -54,7 +54,6 @@ public class MaterializedViewAnalyzer {
                                                          ConnectContext context) {
             statement.getTableName().normalization(context);
             QueryStatement queryStatement = statement.getQueryStatement();
-            ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             //check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
@@ -94,14 +93,14 @@ public class MaterializedViewAnalyzer {
             // record the relationship between columns and outputExpressions for next check
             genColumnAndSetIntoStmt(statement, selectRelation, columnExprMap);
             // some check if partition exp exists
-            if (expressionPartitionDesc != null) {
-                // check partition expression all in column list which in createMaterializedViewStatement
+            if (statement.getPartitionExpDesc() != null) {
+                // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
-                checkExpInColumn(expressionPartitionDesc, statement.getMvColumnItems(), columnExprMap);
+                checkExpInColumn(statement, columnExprMap);
                 // check whether partition expression functions are allowed if it exists
-                checkPartitionExpParams(expressionPartitionDesc);
-                // check partition key must be base table's partition key
-                checkPartitionKeyWithBaseTable(expressionPartitionDesc, tableNameTableMap);
+                checkPartitionExpParams(statement);
+                // check partition column must be base table's partition column
+                checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
             }
             // check and analyze distribution
             checkDistribution(statement);
@@ -136,9 +135,10 @@ public class MaterializedViewAnalyzer {
             statement.setMvColumnItems(mvColumns);
         }
 
-        private void checkExpInColumn(ExpressionPartitionDesc expressionPartitionDesc,
-                                      List<Column> columns,
+        private void checkExpInColumn(CreateMaterializedViewStatement statement,
                                       Map<Column, Expr> columnExprMap) {
+            ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
+            List<Column> columns = statement.getMvColumnItems();
             SlotRef slotRef = expressionPartitionDesc.getSlotRef();
             boolean hasColumn = false;
             for (Column column : columns) {
@@ -182,8 +182,8 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionExpParams(ExpressionPartitionDesc expressionPartitionDesc) {
-            Expr expr = expressionPartitionDesc.getExpr();
+        private void checkPartitionExpParams(CreateMaterializedViewStatement statement) {
+            Expr expr = statement.getPartitionExpDesc().getExpr();
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
@@ -199,27 +199,36 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionKeyWithBaseTable(ExpressionPartitionDesc expressionPartitionDesc,
-                                                    Map<TableName, Table> tableNameTableMap) {
-            SlotRef slotRef = expressionPartitionDesc.getSlotRef();
+        private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
+                                                       Map<TableName, Table> tableNameTableMap) {
+            SlotRef slotRef = statement.getPartitionExpDesc().getSlotRef();
             // must have table
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
             PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
-                if (expressionPartitionDesc.getExpr() != null) {
-                    throw new SemanticException("Materialized view partition key in partition exp " +
-                            "must be base table partition key");
-                }
-            } else {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else if (partitionInfo instanceof RangePartitionInfo) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                SlotRef finalSlotRef = slotRef;
-                if (partitionColumns.stream().filter(column -> {
-                    return column.getName().equals(finalSlotRef.getColumnName());
-                }).count() == 0) {
-                    throw new SemanticException("Materialized view partition key in partition exp " +
-                            "must be base table partition key");
+                if (partitionColumns.size() > 1) {
+                    throw new SemanticException("Materialized view related base table partition columns " +
+                            "only supports single column");
                 }
+                boolean isInPartitionColumns = false;
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equals(slotRef.getColumnName())) {
+                        isInPartitionColumns = true;
+                        break;
+                    }
+                }
+                if (!isInPartitionColumns) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            } else {
+                throw new SemanticException("Materialized view related base table partition type:" +
+                        partitionInfo.getType().name() + "not supports");
             }
         }
 
