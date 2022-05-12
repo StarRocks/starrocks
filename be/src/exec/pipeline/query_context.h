@@ -41,7 +41,7 @@ public:
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
     void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
-
+    inline int get_expire_seconds() { return _expire_seconds.count(); }
     // now time point pass by deadline point.
     bool is_expired() {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
