@@ -33,7 +33,7 @@ RESULT SINK
 cardinality: 5
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -47,7 +47,7 @@ OutPut Exchange Id: 28
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 26:AGGREGATE (merge finalize)
 |  aggregate: sum[([55: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -55,7 +55,7 @@ OutPut Exchange Id: 28
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 25:EXCHANGE
 cardinality: 5
@@ -73,7 +73,7 @@ OutPut Exchange Id: 25
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -143,7 +143,6 @@ OutPut Exchange Id: 25
 table: lineitem, rollup: lineitem
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=28.0
 cardinality: 600000000
 probe runtime filters:
@@ -192,7 +191,6 @@ OutPut Exchange Id: 21
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10111
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
@@ -236,7 +234,6 @@ OutPut Exchange Id: 18
 table: nation, rollup: nation
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10185
 actualRows=0, avgRowSize=33.0
 cardinality: 25
 probe runtime filters:
@@ -264,7 +261,6 @@ table: region, rollup: region
 preAggregation: on
 Predicates: [51: R_NAME, CHAR, false] = 'AFRICA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -313,7 +309,6 @@ OutPut Exchange Id: 05
 table: customer, rollup: customer
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
@@ -342,7 +337,6 @@ table: orders, rollup: orders
 preAggregation: on
 Predicates: [14: O_ORDERDATE, DATE, false] >= '1995-01-01', [14: O_ORDERDATE, DATE, false] < '1996-01-01'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 actualRows=0, avgRowSize=20.0
 cardinality: 22765073
 column statistics:

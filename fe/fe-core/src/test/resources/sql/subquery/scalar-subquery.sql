@@ -135,7 +135,10 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
+<<<<<<< HEAD
 tabletList=10006,10008,10010
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 cardinality=1
 avgRowSize=3.0
 numNodes=0
@@ -173,7 +176,10 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
+<<<<<<< HEAD
 tabletList=10033,10035,10037
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 cardinality=1
 avgRowSize=2.0
 numNodes=0
@@ -254,7 +260,10 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
+<<<<<<< HEAD
 tabletList=10006,10008,10010
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 cardinality=1
 avgRowSize=4.0
 numNodes=0
@@ -297,7 +306,10 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
+<<<<<<< HEAD
 tabletList=10033,10035,10037
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 cardinality=1
 avgRowSize=5.0
 numNodes=0

@@ -1118,6 +1118,18 @@ public class PlanTestBase {
         return gson.toJson(jsonObject);
     }
 
+<<<<<<< HEAD
+=======
+    private void checkWithIgnoreTabletList(String expect, String actual) {
+        expect = Stream.of(expect.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+
+        actual = Stream.of(actual.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        Assert.assertEquals(expect, actual);
+    }
+
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
     protected void assertPlanContains(String sql, String... explain) throws Exception {
         String explainString = getFragmentPlan(sql);
 
