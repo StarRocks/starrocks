@@ -22,8 +22,6 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
     // Error sql message, use for throw exception in BE
     private final String tips;
 
-    private boolean hasPushDownFilter = false;
-
     private LogicalAssertOneRowOperator(AssertNumRowsElement.Assertion assertion, long checkRows, String tips) {
         super(OperatorType.LOGICAL_ASSERT_ONE_ROW);
         this.assertion = assertion;
@@ -44,14 +42,6 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     public AssertNumRowsElement.Assertion getAssertion() {
         return assertion;
-    }
-
-    public boolean hasPushDownFilter() {
-        return hasPushDownFilter;
-    }
-
-    public void setHasPushDownFilter(boolean hasPushDownFilter) {
-        this.hasPushDownFilter = hasPushDownFilter;
     }
 
     public long getCheckRows() {

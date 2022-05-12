@@ -1969,21 +1969,14 @@ public class JoinTest extends PlanTestBase {
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
         String plan  = starRocksAssert.query(sql).explainQuery();
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
+                "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: max(22: k9)\n" +
                 "  |  group by: \n" +
-                "  |  having: CAST(23: max AS DOUBLE) > 0.0");
-        assertContains(plan, "  5:SELECT\n" +
-                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
                 "  |  \n" +
-                "  4:ASSERT NUMBER OF ROWS\n" +
-                "  |  assert number of rows: LE 1\n" +
-                "  |  \n" +
-                "  3:EXCHANGE");
+                "  1:OlapScanNode");
     }
 
     @Test
