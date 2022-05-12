@@ -480,10 +480,10 @@ TEST_F(LikeTest, constValueLike) {
     auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
     auto pattern_col = BinaryColumn::create();
     pattern_col->append("abc");
-    pattern_col->append("abc%");
+    pattern_col->append("ab%");
     pattern_col->append("abc_");
-    pattern_col->append("%abc");
-    pattern_col->append("_abc");
+    pattern_col->append("%cd");
+    pattern_col->append("_bcd");
     pattern_col->append("a%d");
     pattern_col->append("ab_d");
     pattern_col->append("abcd");
