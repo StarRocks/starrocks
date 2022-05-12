@@ -11,6 +11,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
@@ -65,7 +67,11 @@ public class WorkGroupAnalyzer {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
                     }
-                    classifier.setDatabases(databases);
+                    String clusterName = ConnectContext.get() != null ? ConnectContext.get().getClusterName() : "";
+                    List<String> fullNames = databases.stream()
+                            .map(x -> ClusterNamespace.getFullName(clusterName, x))
+                            .collect(Collectors.toList());
+                    classifier.setDatabases(fullNames);
                 } else {
                     throw new SemanticException(
                             String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.SOURCE_IP, eqPred));

@@ -1,5 +1,6 @@
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.FeConstants;
@@ -11,10 +12,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -347,7 +348,7 @@ public class WorkGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         {
-            List<String> dbNames = Arrays.asList("db1");
+            Set<String> dbNames = ImmutableSet.of("db1");
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
@@ -355,7 +356,7 @@ public class WorkGroupStmtTest {
             Assert.assertEquals("rg5", wg.getName());
         }
         {
-            List<String> dbNames = Arrays.asList("db2");
+            Set<String> dbNames = ImmutableSet.of("db2");
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
@@ -363,7 +364,7 @@ public class WorkGroupStmtTest {
             Assert.assertEquals("rg1", wg.getName());
         }
         {
-            List<String> dbNames = Arrays.asList("db1", "db2");
+            Set<String> dbNames = ImmutableSet.of("db1", "db2");
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,

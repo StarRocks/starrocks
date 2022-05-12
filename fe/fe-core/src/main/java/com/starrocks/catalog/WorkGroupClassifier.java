@@ -35,7 +35,7 @@ public class WorkGroupClassifier implements Writable {
     private String sourceIp;
     @SerializedName(value = "workgroupId")
     private long workgroupId;
-    @SerializedName(value = "databases")
+    @SerializedName(value = "database")
     private Set<String> databases;
 
     public static WorkGroupClassifier read(DataInput in) throws IOException {
@@ -106,7 +106,7 @@ public class WorkGroupClassifier implements Writable {
     }
 
     public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp,
-                               List<String> dbNames) {
+                               Set<String> dbNames) {
         if (!isVisible(user, role, sourceIp)) {
             return false;
         }
@@ -174,7 +174,7 @@ public class WorkGroupClassifier implements Writable {
         }
         if (CollectionUtils.isNotEmpty(databases)) {
             String str = String.join(",", databases);
-            classifiersStr.append(", databases='" + str + "'");
+            classifiersStr.append(", database='" + str + "'");
         }
         if (sourceIp != null) {
             classifiersStr.append(", source_ip=" + sourceIp);
