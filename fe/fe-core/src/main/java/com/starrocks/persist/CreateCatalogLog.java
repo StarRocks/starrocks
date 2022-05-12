@@ -16,16 +16,23 @@ public class CreateCatalogLog implements Writable {
 
     @SerializedName(value = "catalogName")
     private String catalogName;
+    @SerializedName(value = "comment")
+    private String comment;
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    public CreateCatalogLog(String catalogName, Map<String, String> properties) {
+    public CreateCatalogLog(String catalogName, String comment, Map<String, String> properties) {
         this.catalogName = catalogName;
+        this.comment = comment;
         this.properties = properties;
     }
 
     public String getCatalogName() {
         return catalogName;
+    }
+
+    public String getComment() {
+        return comment;
     }
 
     public Map<String, String> getProperties() {

@@ -14,6 +14,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowCatalogsStmt;
 
 public class ShowStmtAnalyzer {
 
@@ -64,6 +65,11 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCatalogsStmt(ShowCatalogsStmt node, ConnectContext context) {
             return null;
         }
 
