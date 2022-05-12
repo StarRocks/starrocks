@@ -279,6 +279,8 @@ private:
 
     bool _inited = false;
     bool _has_bitmap_index = false;
+
+    bool _context_switch_next_time = false;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::Schema schema,
@@ -286,7 +288,8 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-          _predicate_columns(_opts.predicates.size()) {}
+          _predicate_columns(_opts.predicates.size()),
+          _context_switch_next_time(false) {}
 
 Status SegmentIterator::_init() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
@@ -667,7 +670,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
-    uint16_t chunk_start = 0;
     const uint32_t chunk_capacity = _opts.chunk_size;
     const bool has_predicate = !_opts.predicates.empty();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
@@ -689,25 +691,30 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                           _context->_overflow_read_chunk_rowids.end());
             _context->_overflow_read_chunk_rowids.clear();
         }
+        DCHECK(_context->_read_chunk->num_rows() > 0);
+        DCHECK(_context->_overflow_read_chunk->is_empty());
     }
 
     Chunk* chunk = _context->_read_chunk.get();
+    uint16_t chunk_start = chunk->num_rows();
 
-    while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
-        if (config::enable_segment_overflow_read_chunk) {
-            RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
-        } else {
-            RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
-        }
-        chunk->check_or_die();
-        size_t next_start = chunk->num_rows();
-
-        if (has_predicate) {
-            next_start = _filter(chunk, rowid, chunk_start, next_start);
+    if (LIKELY(!_context_switch_next_time)) {
+        while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
+            if (config::enable_segment_overflow_read_chunk) {
+                RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
+            } else {
+                RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
+            }
             chunk->check_or_die();
+            size_t next_start = chunk->num_rows();
+
+            if (has_predicate) {
+                next_start = _filter(chunk, rowid, chunk_start, next_start);
+                chunk->check_or_die();
+            }
+            chunk_start = next_start;
+            DCHECK_EQ(chunk_start, chunk->num_rows());
         }
-        chunk_start = next_start;
-        DCHECK_EQ(chunk_start, chunk->num_rows());
     }
 
     // If _read_chunk contains more rows than its capacity, we save the overflow rows in _overflow_read_chunk.
@@ -765,7 +772,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
                chunk_size * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
-        _context_switch_count++;
+        if (LIKELY(!_context_switch_next_time)) {
+            _context_switch_count++;
+        }
+    }
+
+    if (UNLIKELY(_context_switch_next_time)) {
+        need_switch_context = true;
+        _context_switch_next_time = false;
     }
 
     // remove (logical) deleted rows.
@@ -802,7 +816,15 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
-        _switch_context(_context->_next);
+        // If config::enable_segment_overflow_read_chunk is enabled, when we performn context switch,
+        // we need to first check whether current context's _overflow_read_chunk is empty, if it is not
+        // we will handle _overflow_read_chunk in the next batch and also delay the context switch to next batch.
+        if (config::enable_segment_overflow_read_chunk && _context->_overflow_read_chunk != nullptr &&
+            !_context->_overflow_read_chunk->is_empty()) {
+            _context_switch_next_time = true;
+        } else {
+            _switch_context(_context->_next);
+        }
     }
 
     return Status::OK();
