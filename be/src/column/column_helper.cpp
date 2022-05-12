@@ -240,7 +240,7 @@ bool ColumnHelper::is_all_const(const Columns& columns) {
     return std::all_of(std::begin(columns), std::end(columns), [](const ColumnPtr& col) { return col->is_constant(); });
 }
 
-pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
+std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
     if (columns.empty()) {
         return {false, 0};
     }
