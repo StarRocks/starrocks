@@ -836,9 +836,14 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                 return false;
             }
             if (chunk != nullptr && eos != nullptr) {
-                vectorized::Chunk* out;
+                vectorized::Chunk* out = nullptr;
                 *eos = !q->try_get_chunk(&out);
-                *chunk = ChunkUniquePtr(out);
+                if (out) {
+                    *chunk = ChunkUniquePtr(out);
+                    return true;
+                } else {
+                    return false;
+                }
             }
             return true;
         };
