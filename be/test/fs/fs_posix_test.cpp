@@ -131,13 +131,11 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
     {
         std::vector<std::string> children;
         ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
-        ASSERT_EQ(4, children.size());
+        ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
-        ASSERT_STREQ(".", children[0].c_str());
-        ASSERT_STREQ("..", children[1].c_str());
-        ASSERT_STREQ("123", children[2].c_str());
-        ASSERT_STREQ("abc", children[3].c_str());
+        ASSERT_STREQ("123", children[0].c_str());
+        ASSERT_STREQ("abc", children[1].c_str());
     }
     {
         std::vector<std::string> children;
@@ -154,13 +152,11 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
     {
         std::vector<std::string> children;
         ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
-        ASSERT_EQ(4, children.size());
+        ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
-        ASSERT_STREQ(".", children[0].c_str());
-        ASSERT_STREQ("..", children[1].c_str());
-        ASSERT_STREQ("123", children[2].c_str());
-        ASSERT_STREQ("abc", children[3].c_str());
+        ASSERT_STREQ("123", children[0].c_str());
+        ASSERT_STREQ("abc", children[1].c_str());
     }
 
     // Delete directory recursively, should success.

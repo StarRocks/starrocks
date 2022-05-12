@@ -83,7 +83,6 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
 
     int64_t trunc_len = partial_rowset_footer.position() + partial_rowset_footer.size();
     RETURN_IF_ERROR(FileSystemUtil::resize_file(src_path, trunc_len));
-    block_mgr->erase_block_cache(src_path);
 
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({src_path});

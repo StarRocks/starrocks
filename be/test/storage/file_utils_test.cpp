@@ -31,6 +31,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "storage/olap_define.h"
+#include "testutil/assert.h"
 #include "util/logging.h"
 
 #ifndef BE_TEST
@@ -84,7 +85,7 @@ TEST_F(FileUtilsTest, TestCopyFile) {
 
 TEST_F(FileUtilsTest, TestRemove) {
     // remove_all
-    ASSERT_TRUE(FileUtils::remove_all("./file_test").ok());
+    ASSERT_OK(FileUtils::remove_all("./file_test"));
     ASSERT_FALSE(FileUtils::check_exist("./file_test"));
 
     ASSERT_TRUE(FileUtils::create_dir("./file_test/123/456/789").ok());

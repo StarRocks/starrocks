@@ -351,7 +351,6 @@ Status BetaRowset::reload() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        block_mgr->erase_block_cache(seg_path);
         auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
                                  _schema, &footer_size_hint);
         if (!res.ok()) {

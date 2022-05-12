@@ -221,8 +221,6 @@ public:
     // Does not modify 'block' on error.
     virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
 
-    virtual void erase_block_cache(const std::string& path) = 0;
-
     static const std::string block_manager_preflush_control;
 };
 

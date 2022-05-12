@@ -29,7 +29,6 @@
 
 #include "common/status.h"
 #include "storage/fs/block_manager.h"
-#include "util/file_cache.h"
 
 namespace starrocks {
 
@@ -74,8 +73,6 @@ public:
 
     Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) override;
 
-    void erase_block_cache(const std::string& path) override;
-
 private:
     friend class internal::FileReadableBlock;
     friend class internal::FileWritableBlock;
@@ -95,9 +92,6 @@ private:
 
     // The options that the FileBlockManager was created with.
     const BlockManagerOptions _opts;
-
-    // Underlying cache instance. Caches opened files.
-    std::unique_ptr<FileCache<RandomAccessFile>> _file_cache;
 };
 
 } // namespace fs

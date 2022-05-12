@@ -19,12 +19,15 @@
 #include <filesystem>
 #include <memory>
 
+#include "common/config.h"
 #include "common/logging.h"
+#include "fs/fd_cache.h"
 #include "fs/fs.h"
 #include "gutil/gscoped_ptr.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
 #include "util/errno.h"
 #include "util/slice.h"
@@ -50,6 +53,21 @@ public:
 private:
     const int fd_;
 };
+
+class CachedFdInputStream : public io::FdInputStream {
+public:
+    explicit CachedFdInputStream(FdCache::Handle* h) : io::FdInputStream(FdCache::fd(h)), _h(h) {}
+
+    ~CachedFdInputStream() { FdCache::Instance()->release(_h); }
+
+private:
+    FdCache::Handle* _h;
+};
+
+inline bool enable_fd_cache(std::string_view path) {
+    // .dat is the suffix of segment file name
+    return HasSuffixString(path, ".dat");
+}
 
 static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
@@ -285,14 +303,29 @@ public:
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
-        int fd;
-        RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
-        if (fd < 0) {
-            return io_error(fname, errno);
+        if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
+            FdCache::Handle* h = FdCache::Instance()->lookup(fname);
+            if (h == nullptr) {
+                int fd;
+                RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
+                if (fd < 0) {
+                    return io_error(fname, errno);
+                }
+                h = FdCache::Instance()->insert(fname, fd);
+            }
+            auto stream = std::make_shared<CachedFdInputStream>(h);
+            stream->set_close_on_delete(false);
+            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+        } else {
+            int fd;
+            RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
+            if (fd < 0) {
+                return io_error(fname, errno);
+            }
+            auto stream = std::make_shared<io::FdInputStream>(fd);
+            stream->set_close_on_delete(true);
+            return std::make_unique<RandomAccessFile>(std::move(stream), fname);
         }
-        auto stream = std::make_shared<io::FdInputStream>(fd);
-        stream->set_close_on_delete(true);
-        return std::make_unique<RandomAccessFile>(std::move(stream), fname);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
@@ -320,16 +353,10 @@ public:
 
     Status get_children(const std::string& dir, std::vector<std::string>* result) override {
         result->clear();
-        DIR* d = opendir(dir.c_str());
-        if (d == nullptr) {
-            return io_error(dir, errno);
-        }
-        struct dirent* entry;
-        while ((entry = readdir(d)) != nullptr) {
-            result->push_back(entry->d_name);
-        }
-        closedir(d);
-        return Status::OK();
+        return iterate_dir(dir, [&](std::string_view name) -> bool {
+            result->emplace_back(name);
+            return true;
+        });
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
@@ -337,18 +364,27 @@ public:
         if (d == nullptr) {
             return io_error(dir, errno);
         }
+        errno = 0;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
+            std::string_view name(entry->d_name);
+            if (name == "." || name == "..") {
+                continue;
+            }
             // callback returning false means to terminate iteration
-            if (!cb(entry->d_name)) {
+            if (!cb(name)) {
                 break;
             }
         }
         closedir(d);
+        if (errno != 0) return io_error(dir, errno);
         return Status::OK();
     }
 
     Status delete_file(const std::string& fname) override {
+        if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
+            FdCache::Instance()->erase(fname);
+        }
         if (unlink(fname.c_str()) != 0) {
             return io_error(fname, errno);
         }
@@ -399,12 +435,21 @@ public:
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        std::error_code ec;
-        (void)std::filesystem::remove_all(dirname, ec);
-        if (ec.value() != 0) {
-            return io_error(fmt::format("remove {} recursive", dirname), ec.value());
+        auto res = is_directory(dirname);
+        if (res.status().is_not_found()) return Status::OK();
+        if (!res.ok()) return res.status();
+        bool is_dir = *res;
+        if (is_dir) {
+            Status st;
+            RETURN_IF_ERROR(iterate_dir(dirname, [&](std::string_view name) -> bool {
+                st = delete_dir_recursive(fmt::format("{}/{}", dirname, name));
+                return st.ok() ? true : false;
+            }));
+            RETURN_IF_ERROR(st);
+            return delete_dir(dirname);
+        } else {
+            return delete_file(dirname);
         }
-        return Status::OK();
     }
 
     Status sync_dir(const string& dirname) override {
@@ -427,8 +472,6 @@ public:
         } else {
             return S_ISDIR(path_stat.st_mode);
         }
-
-        return Status::OK();
     }
 
     Status canonicalize(const std::string& path, std::string* result) override {
@@ -460,6 +503,10 @@ public:
     }
 
     Status rename_file(const std::string& src, const std::string& target) override {
+        if (config::file_descriptor_cache_capacity > 0) {
+            if (enable_fd_cache(src)) FdCache::Instance()->erase(src);
+            if (enable_fd_cache(target)) FdCache::Instance()->erase(target);
+        }
         if (rename(src.c_str(), target.c_str()) != 0) {
             return io_error(src, errno);
         }
