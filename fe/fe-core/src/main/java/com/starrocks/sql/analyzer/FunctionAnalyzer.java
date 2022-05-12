@@ -7,6 +7,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
@@ -157,6 +158,19 @@ public class FunctionAnalyzer {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
             }
             // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.WINDOW_FUNNEL)) {
+            Expr modeArg = functionCallExpr.getChild(2);
+            if (modeArg instanceof IntLiteral) {
+                IntLiteral modeIntLiteral = (IntLiteral) modeArg;
+                long modeValue = modeIntLiteral.getValue();
+                if (modeValue < 0 || modeValue > 3) {
+                    throw new SemanticException("mode argument's range must be [0-3]");
+                }
+            } else {
+                throw new SemanticException("mode argument must be numerical type");
+            }
         }
 
         // SUM and AVG cannot be applied to non-numeric types
