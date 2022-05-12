@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -371,6 +372,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreateExternalCatalogStatement(StarRocksParser.CreateExternalCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
             List<Property> propertyList = visit(context.properties().property(), Property.class);
@@ -378,7 +383,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateCatalogStmt(catalogName, properties);
+        return new CreateCatalogStmt(catalogName, comment, properties);
     }
 
     @Override
@@ -386,6 +391,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.catalogName);
         String catalogName = identifier.getValue();
         return new DropCatalogStmt(catalogName);
+    }
+
+    @Override
+    public ParseNode visitShowCatalogStatement(StarRocksParser.ShowCatalogStatementContext context) {
+        return new ShowCatalogsStmt();
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------

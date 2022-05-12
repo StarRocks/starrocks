@@ -11,8 +11,8 @@ public class ExternalCatalog extends Catalog {
     private final Map<String, String> config;
     private final String type;
 
-    public ExternalCatalog(String name, Map<String, String> config) {
-        super(name);
+    public ExternalCatalog(String name, String comment, Map<String, String> config) {
+        super(name, comment);
         this.config = config;
         this.type = Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }

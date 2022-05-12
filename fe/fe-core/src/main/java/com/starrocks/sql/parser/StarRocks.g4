@@ -38,6 +38,8 @@ statement
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
     | dropExternalCatalogStatement                                                          #dropCatalog
+    | showCatalogStatement                                                                  #showCatalogs
+    | showDbFromCatalogStatement                                                            #showDbFromCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -145,11 +147,19 @@ alterSystemStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    : CREATE EXTERNAL CATALOG catalogName=identifierOrString properties
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
     ;
 
 dropExternalCatalogStatement
     : DROP EXTERNAL CATALOG catalogName=identifierOrString
+    ;
+
+showCatalogStatement
+    : SHOW CATALOGS
+    ;
+
+showDbFromCatalogStatement
+    : SHOW DATABASES FROM catalogName=identifierOrString
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------

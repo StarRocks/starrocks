@@ -1,0 +1,46 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.sql.ast;
+
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ShowResultSetMetaData;
+
+public class ShowCatalogsStmt extends ShowStmt {
+
+    private static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Catalog", ScalarType.createVarchar(256)))
+                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                    .build();
+
+    public ShowCatalogsStmt() {
+
+    }
+
+    @Override
+    public void analyze(Analyzer analyzer) throws AnalysisException {
+
+    }
+
+    @Override
+    public ShowResultSetMetaData getMetaData() {
+        return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowCatalogsStmt(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW CATALOGS");
+        return sb.toString();
+    }
+}
