@@ -42,10 +42,7 @@ public class UDFClassAnalyzer {
     public static boolean hasMemberMethod(String methodName, Class clazz) {
         for (Method declaredMethod : clazz.getDeclaredMethods()) {
             if (declaredMethod.getName().equals(methodName)) {
-                if (Modifier.isStatic(declaredMethod.getModifiers())) {
-                    return false;
-                }
-                return true;
+                return !Modifier.isStatic(declaredMethod.getModifiers());
             }
         }
         return false;

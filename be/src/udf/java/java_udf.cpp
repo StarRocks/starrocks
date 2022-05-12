@@ -69,7 +69,8 @@ JVMFunctionHelper& JVMFunctionHelper::getInstance() {
         JNIEnv* env = getJNIEnv();
         CHECK(env != nullptr) << "couldn't got a JNIEnv";
         helper.reset(new JVMFunctionHelper(env));
-        helper->_add_class_path(getenv("STARROCKS_HOME") + std::string("/lib/udf-class-loader.jar"));
+        helper->_add_class_path(getenv("STARROCKS_HOME") +
+                                std::string("/lib/udf-extensions-jar-with-dependencies.jar"));
         helper->_add_class_path(getenv("STARROCKS_HOME") +
                                 std::string("/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar"));
         helper->_init();

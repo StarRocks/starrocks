@@ -2,20 +2,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>java-extensions</artifactId>
+        <groupId>com.starrocks</groupId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.starrocks</groupId>
-    <artifactId>jdbc_bridge</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <name>starrocks-jdbc-bridge</name>
+    <artifactId>jdbc-bridge</artifactId>
 
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <java.version>1.8</java.version>
-        <hikaricp.version>3.4.5</hikaricp.version>
-        <log4j.version>2.17.1</log4j.version>
-        <compiler-plugin.version>3.8.1</compiler-plugin.version>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
     </properties>
 
     <dependencies>
@@ -108,11 +106,11 @@
                         <configuration>
                             <fileSets>
                                 <fileSet>
-                                    <sourceFile>../fe/checkstyle.xml</sourceFile>
+                                    <sourceFile>${project.basedir}/../../fe/checkstyle.xml</sourceFile>
                                     <destinationFile>./checkstyle.xml</destinationFile>
                                 </fileSet>
                                 <fileSet>
-                                    <sourceFile>../fe/checkstyle-header.txt</sourceFile>
+                                    <sourceFile>${project.basedir}/../../fe/checkstyle-header.txt</sourceFile>
                                     <destinationFile>./checkstyle-header.txt</destinationFile>
                                 </fileSet>
                             </fileSets>
@@ -132,7 +130,7 @@
                     </dependency>
                 </dependencies>
                 <configuration>
-                    <configLocation>../fe/checkstyle.xml</configLocation>
+                    <configLocation>${project.basedir}/../../fe/checkstyle.xml</configLocation>
                     <encoding>UTF-8</encoding>
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
@@ -150,4 +148,5 @@
             </plugin>
         </plugins>
     </build>
+
 </project>
