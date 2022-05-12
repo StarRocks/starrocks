@@ -477,7 +477,7 @@ TEST_F(LikeTest, constValueLike) {
 
     const int num_rows = 10;
 
-    auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", 1);
+    auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
     auto pattern_col = BinaryColumn::create();
     pattern_col->append("abc");
     pattern_col->append("abc%");
@@ -518,7 +518,7 @@ TEST_F(LikeTest, constValueRegexp) {
 
     const int num_rows = 4;
 
-    auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", 1);
+    auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
     auto pattern_col = BinaryColumn::create();
     pattern_col->append("abc");
     pattern_col->append("ab.*");
