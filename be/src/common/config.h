@@ -505,6 +505,11 @@ CONF_String(es_scroll_keepalive, "5m");
 // HTTP connection timeout for es.
 CONF_Int32(es_http_timeout_ms, "5000");
 
+// es index max result window, and this value affects batch size.
+// if request batch size exceeds this value, ES will return bad request(400)
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html
+CONF_Int32(es_index_max_result_window, "10000");
+
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
 // same cache size configuration.
