@@ -462,11 +462,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.primaryExpression() != null) {
             Expr expr = (Expr) visit(context.primaryExpression());
             if (expr instanceof SlotRef) {
-                expressionPartitionDesc = new ExpressionPartitionDesc(((SlotRef) expr), null, false);
+                expressionPartitionDesc = new ExpressionPartitionDesc(expr);
             } else if (expr instanceof FunctionCallExpr) {
                 for (Expr child : expr.getChildren()) {
                     if (child instanceof SlotRef) {
-                        expressionPartitionDesc = new ExpressionPartitionDesc((SlotRef) child, expr, true);
+                        expressionPartitionDesc = new ExpressionPartitionDesc(expr);
                         break;
                     }
                 }

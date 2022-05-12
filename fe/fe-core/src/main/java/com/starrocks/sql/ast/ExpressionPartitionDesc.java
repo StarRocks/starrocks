@@ -2,32 +2,22 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SlotRef;
 
+import java.util.ArrayList;
+
 public class ExpressionPartitionDesc extends PartitionDesc {
 
-    //must be column
-    private SlotRef slotRef;
     //must be type of SlotRef or FunctionCallRef
     private Expr expr;
-    // if expression is type of FunctionCallExpr, isFunc = true
-    // else isFunc = false
-    private boolean isFunction;
 
-    public ExpressionPartitionDesc(SlotRef slotRef, Expr expr, boolean isFunc) {
-        this.slotRef = slotRef;
+    public ExpressionPartitionDesc(Expr expr) {
+        Preconditions.checkState(expr != null);
         this.expr = expr;
-        this.isFunction = isFunc;
-    }
-
-    public SlotRef getSlotRef() {
-        return slotRef;
-    }
-
-    public void setSlotRef(SlotRef slotRef) {
-        this.slotRef = slotRef;
     }
 
     public Expr getExpr() {
@@ -35,14 +25,23 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     }
 
     public void setExpr(Expr expr) {
+        Preconditions.checkState(expr != null);
         this.expr = expr;
     }
 
-    public boolean isFunction() {
-        return isFunction;
+    public SlotRef getSlotRef() {
+        if (expr instanceof FunctionCallExpr) {
+            ArrayList<Expr> children = expr.getChildren();
+            for (Expr child : children) {
+                if (child instanceof SlotRef) {
+                    return (SlotRef) child;
+                }
+            }
+        }
+        return ((SlotRef) expr);
     }
 
-    public void setFunction(boolean function) {
-        isFunction = function;
+    public boolean isFunction() {
+        return expr instanceof FunctionCallExpr;
     }
 }

@@ -163,8 +163,6 @@ public class MaterializedViewAnalyzer {
                             functionCallExpr.getFnName().getFunction() +
                             " must related with column");
                 }
-                //replace with analyzed SlotRef
-                expressionPartitionDesc.setSlotRef((SlotRef) refExpr);
                 ArrayList<Expr> children = functionCallExpr.getChildren();
                 for (int i = 0; i < children.size(); i++) {
                     if (children.get(i) instanceof SlotRef) {
@@ -175,19 +173,7 @@ public class MaterializedViewAnalyzer {
                 // analyze function, must after update child
                 FunctionAnalyzer.analyze(functionCallExpr);
             } else {
-                if (refExpr instanceof FunctionCallExpr) {
-                    expressionPartitionDesc.setFunction(true);
-                    // expr has alias
-                    ArrayList<Expr> children = refExpr.getChildren();
-                    for (int i = 0; i < children.size(); i++) {
-                        if (children.get(i) instanceof SlotRef) {
-                            expressionPartitionDesc.setSlotRef(((SlotRef) children.get(i)));
-                            break;
-                        }
-                    }
-                    expressionPartitionDesc.setExpr(refExpr);
-                } else if (refExpr instanceof SlotRef) {
-                    expressionPartitionDesc.setSlotRef((SlotRef) refExpr);
+                if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
                     expressionPartitionDesc.setExpr(refExpr);
                 } else {
                     throw new SemanticException(
