@@ -4,6 +4,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 
 import java.util.List;
 
@@ -13,7 +14,7 @@ public interface ConnectorMetadata {
      *
      * @return a list of string containing all database names of connector
      */
-    default List<String> listDatabaseNames() {
+    default List<String> listDatabaseNames() throws DdlException {
         return Lists.newArrayList();
     }
 
@@ -23,7 +24,7 @@ public interface ConnectorMetadata {
      * @param dbName - the string of which all table names are listed
      * @return a list of string containing all table names of `dbName`
      */
-    default List<String> listTableNames(String dbName) {
+    default List<String> listTableNames(String dbName) throws DdlException {
         return Lists.newArrayList();
     }
 
