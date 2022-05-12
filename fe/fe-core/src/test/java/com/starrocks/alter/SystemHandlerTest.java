@@ -31,8 +31,7 @@ public class SystemHandlerTest {
 
     @Test(expected = DdlException.class)
     public void testModifyBackendAddressLogic() throws UserException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test:1000", "sandbox-fqdn");
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>("test", 1000));
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
         systemHandler.process(clauses, null, null, null);
@@ -40,8 +39,7 @@ public class SystemHandlerTest {
 
     @Test(expected = NullPointerException.class)
     public void testModifyFrontendAddressLogic() throws UserException {
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", "sandbox-fqdn");
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>("test", 1000));
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
         systemHandler.process(clauses, null, null, null);

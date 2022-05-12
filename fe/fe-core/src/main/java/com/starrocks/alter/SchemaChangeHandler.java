@@ -1459,9 +1459,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    public void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public String process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws UserException {
-
+        String handleMessage = "";
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
         for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
@@ -1484,16 +1484,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                     GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
-                    return;
+                    return handleMessage;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
                     GlobalStateMgr.getCurrentState().convertDistributionType(db, olapTable);
-                    return;
+                    return handleMessage;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                     /*
                      * This is only for fixing bug when upgrading StarRocks from 0.9.x to 0.10.x.
                      */
                     sendClearAlterTask(db, olapTable);
-                    return;
+                    return handleMessage;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
                         try {
@@ -1508,14 +1508,14 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
-                    return;
+                    return handleMessage;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
                     GlobalStateMgr.getCurrentState().modifyTableDefaultReplicationNum(db, olapTable, properties);
-                    return;
+                    return handleMessage;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
-                    return;
+                    return handleMessage;
                 }
             }
 
@@ -1555,6 +1555,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
+        return handleMessage;
     }
 
     private void sendClearAlterTask(Database db, OlapTable olapTable) {

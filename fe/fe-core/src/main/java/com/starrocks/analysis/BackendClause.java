@@ -55,7 +55,7 @@ public class BackendClause extends AlterClause {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         for (String hostPort : hostPorts) {
-            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, true);
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
             hostPortPairs.add(pair);
         }
 

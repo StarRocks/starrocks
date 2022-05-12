@@ -43,10 +43,6 @@ CONF_Int32(brpc_num_threads, "-1");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 
-// A flag to determine if fqdn is used
-// default is false
-CONF_Bool(enable_fqdn, "false");
-
 ////
 //// tcmalloc gc parameter
 ////

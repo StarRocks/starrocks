@@ -2,7 +2,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 
 import org.junit.Assert;
@@ -13,11 +12,9 @@ public class ModifyFrontendAddressClauseTest {
 
     @Test
     public void testCreateClause() {    
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("originalHost-test:1000", "sandbox");
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("originalHost-test", "sandbox");
         Assert.assertEquals("sandbox", clause.getFqdn());
-        Assert.assertEquals("originalHost-test:1000", clause.getWantToModifyHostPort());
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>("originalHost-test", 1000));
-        Assert.assertEquals(new Pair<String, Integer>("originalHost-test", 1000), clause.getWantToModifyHostPortPair());
+        Assert.assertEquals("originalHost-test", clause.getToBeModifyHost());
     }
 
     @Test

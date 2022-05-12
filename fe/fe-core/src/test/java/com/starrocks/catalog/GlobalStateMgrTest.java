@@ -332,18 +332,16 @@ public class GlobalStateMgrTest {
         globalStateMgr.setEditLog(editLog);
         List<Frontend> frontends = globalStateMgr.getFrontends(null);
         Frontend fe = frontends.get(0);
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", "sandbox-fqdn");
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>(fe.getHost(), fe.getEditLogPort()));
-        globalStateMgr.updateFrontendHost(clause);
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
+        globalStateMgr.modifyFrontendHost(clause);
     }
 
     @Test(expected = DdlException.class)
     public void testUpdateFeNotFoundException() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", "sandbox-fqdn");
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>("test", 1000));
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
         // this case will occur [frontend does not exist] exception
-        globalStateMgr.updateFrontendHost(clause);
+        globalStateMgr.modifyFrontendHost(clause);
     }
 
     @Test(expected = DdlException.class)
@@ -356,9 +354,8 @@ public class GlobalStateMgrTest {
         Field fieldFeType = globalStateMgr.getClass().getDeclaredField("feType");
         fieldFeType.setAccessible(true);
         fieldFeType.set(globalStateMgr, FrontendNodeType.MASTER);
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000", "sandbox-fqdn");
-        clause.setWantToModifyHostPortPair(new Pair<String, Integer>("test", 1000));
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
-        globalStateMgr.updateFrontendHost(clause);
+        globalStateMgr.modifyFrontendHost(clause);
     }
 }

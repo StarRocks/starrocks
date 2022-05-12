@@ -1734,29 +1734,29 @@ public class GlobalStateMgr {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
 
-    public void updateFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        Pair<String, Integer> wPair = modifyFrontendAddressClause.getWantToModifyHostPortPair();
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
+        String toBeModifyHost = modifyFrontendAddressClause.getToBeModifyHost();
         String fqdn = modifyFrontendAddressClause.getFqdn();
-        if (wPair.first.equals(selfNode.first) && wPair.second.equals(selfNode.second) && feType == FrontendNodeType.MASTER) {
+        if (toBeModifyHost.equals(selfNode.first) && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not modify current master node.");
         }
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(wPair.first, wPair.second);
-            if (fe == null) {
-                throw new DdlException("frontend does not exist[" + wPair.first + ":" + wPair.second + "]");
+            Frontend preUpdateFe = getFeByHost(toBeModifyHost);
+            if (preUpdateFe == null) {
+                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
             }
             // step 1 update the fe information stored in bdb
-            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(fe.getNodeName(), fqdn, wPair.second);
+            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
             // step 2 update the fe information stored in memory
-            fe.updateHostAndEditLogPort(fqdn, wPair.second);
-            frontends.put(fe.getNodeName(), fe);
+            preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
+            frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
             
             // editLog
-            editLog.logUpdateFrontend(fe);
-            LOG.info("send update fe editlog success, fe info is [{}]", fe.toString());
+            editLog.logUpdateFrontend(preUpdateFe);
+            LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
         } finally {
             unlock();
         }
@@ -2756,8 +2756,8 @@ public class GlobalStateMgr {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public void alterCluster(AlterSystemStmt stmt) throws UserException {
-        this.alter.processAlterCluster(stmt);
+    public String alterCluster(AlterSystemStmt stmt) throws UserException {
+        return this.alter.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {

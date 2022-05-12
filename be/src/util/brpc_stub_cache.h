@@ -91,20 +91,6 @@ public:
         return get_stub(endpoint);
     }
 
-    std::string hostname_to_ip(const std::string& host) {
-        std::vector<std::string> addresses;
-        Status status = hostname_to_ip_addrs(host, &addresses);
-        if (!status.ok()) {
-            LOG(WARNING) << "status of hostname_to_ip_addrs was not ok";
-            return "";
-        }
-        if (addresses.size() != 1) {
-            LOG(WARNING) << "the number of addresses could only be equal to 1, failed to get ip from host";
-            return "";
-        }
-        return addresses[0];
-    }
-
 private:
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;

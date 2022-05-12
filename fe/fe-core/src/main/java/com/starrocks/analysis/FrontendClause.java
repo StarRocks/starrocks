@@ -77,7 +77,7 @@ public class FrontendClause extends AlterClause {
                     analyzer.getQualifiedUser());
         }
 
-        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, true);
+        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
         this.host = pair.first;
         this.port = pair.second;
         Preconditions.checkState(!Strings.isNullOrEmpty(host));

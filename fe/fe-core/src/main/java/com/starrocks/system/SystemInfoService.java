@@ -44,6 +44,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend.BackendState;
@@ -171,16 +172,16 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public void updateBackendAddress(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
-        Pair<String, Integer> wantToModifyHostPort = modifyBackendAddressClause.getWantToModifyHostPortPair();
+    public String modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+        String willBeModifiedHost = modifyBackendAddressClause.getToBeModifyHost();
         String fqdn = modifyBackendAddressClause.getFqdn();
-        if (getBackendWithHeartbeatPort(wantToModifyHostPort.first, wantToModifyHostPort.second) == null) {
-            throw new DdlException("backend does not exists[" + 
-                wantToModifyHostPort.first + ":" + 
-                wantToModifyHostPort.second + "]");
+        List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
+        if (null == candidateBackends || candidateBackends.size() == 0) {
+            throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
         }
+        
         // update idToBackend
-        Backend preUpdateBackend = getBackendWithHeartbeatPort(wantToModifyHostPort.first, wantToModifyHostPort.second);
+        Backend preUpdateBackend = candidateBackends.get(0);
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         Backend updateBackend = copiedBackends.get(preUpdateBackend.getId());
         updateBackend.setHost(fqdn);
@@ -188,6 +189,7 @@ public class SystemInfoService {
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
+        return String.format("%s:%d's host has been modified to %s", willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -330,11 +332,30 @@ public class SystemInfoService {
     public Backend getBackendWithBePort(String host, int bePort) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         for (Backend backend : idToBackend.values()) {
-            if (backend.getHost().equals(host) && backend.getBePort() == bePort) {
+            String ip = "";
+            if (!NetUtils.validIPAddress(backend.getHost())) {
+                try {
+                    ip = InetAddress.getByName(backend.getHost()).getHostAddress();
+                } catch (UnknownHostException e) {
+                    LOG.info("fqdn [{}] can't cast to ip", backend.getHost());
+                }
+            }
+            if ((backend.getHost().equals(host) || ip.equals(host)) && backend.getBePort() == bePort) {
                 return backend;
             }
         }
         return null;
+    }
+
+    public List<Backend> getBackendOnlyWithHost(String host) {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        List<Backend> resultBackends = new ArrayList<>();
+        for (Backend backend : idToBackend.values()) {
+            if (backend.getHost().equals(host)) {
+                resultBackends.add(backend);
+            }
+        }
+        return resultBackends;
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
@@ -665,7 +686,7 @@ public class SystemInfoService {
         this.idToReportVersionRef = null;
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean needTransToIp) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -684,7 +705,7 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && needTransToIp && !Config.enable_fqdn) {
+            if (!InetAddressValidator.getInstance().isValid(host) && !Config.enable_fqdn) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
