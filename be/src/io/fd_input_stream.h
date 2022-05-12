@@ -45,10 +45,6 @@ public:
     // Otherwise, this is zero.
     int get_errno() const { return _errno; }
 
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t count) override;
-
-    Status read_at_fully(int64_t offset, void* data, int64_t count) override;
-
 private:
     int _fd;
     int _errno;
