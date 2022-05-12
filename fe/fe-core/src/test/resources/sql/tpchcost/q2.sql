@@ -217,7 +217,7 @@ OutPut Exchange Id: 34
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 400000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----31:EXCHANGE
 |       cardinality: 100000
@@ -252,7 +252,7 @@ OutPut Exchange Id: 31
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -264,7 +264,7 @@ OutPut Exchange Id: 31
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----28:EXCHANGE
 |       cardinality: 100000
@@ -275,7 +275,7 @@ OutPut Exchange Id: 31
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 24:Project
 |  output columns:

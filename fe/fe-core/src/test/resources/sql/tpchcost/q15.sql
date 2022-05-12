@@ -36,171 +36,6 @@ where
 )
 order by
     s_suppkey;
-[fragment]
-PLAN FRAGMENT 0
-OUTPUT EXPRS:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
-PARTITION: UNPARTITIONED
-
-RESULT SINK
-
-22:MERGING-EXCHANGE
-
-PLAN FRAGMENT 1
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 22
-UNPARTITIONED
-
-21:SORT
-|  order by: <slot 1> 1: S_SUPPKEY ASC
-|  offset: 0
-|
-20:Project
-|  <slot 1> : 1: S_SUPPKEY
-|  <slot 2> : 2: S_NAME
-|  <slot 3> : 3: S_ADDRESS
-|  <slot 5> : 5: S_PHONE
-|  <slot 27> : 27: sum
-|
-19:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 1: S_SUPPKEY = 11: L_SUPPKEY
-|
-|----18:EXCHANGE
-|
-0:OlapScanNode
-TABLE: supplier
-PREAGGREGATION: ON
-partitions=1/1
-rollup: supplier
-tabletRatio=1/1
-tabletList=10111
-cardinality=1000000
-avgRowSize=84.0
-numNodes=0
-
-PLAN FRAGMENT 2
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 11: L_SUPPKEY
-
-STREAM DATA SINK
-EXCHANGE ID: 18
-BUCKET_SHFFULE_HASH_PARTITIONED: 11: L_SUPPKEY
-
-17:Project
-|  <slot 11> : 11: L_SUPPKEY
-|  <slot 27> : 27: sum
-|
-16:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 27: sum = 47: max
-|
-|----15:EXCHANGE
-|
-5:AGGREGATE (merge finalize)
-|  output: sum(27: sum)
-|  group by: 11: L_SUPPKEY
-|
-4:EXCHANGE
-
-PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: UNPARTITIONED
-
-STREAM DATA SINK
-EXCHANGE ID: 15
-UNPARTITIONED
-
-14:AGGREGATE (merge finalize)
-|  output: max(47: max)
-|  group by:
-|
-13:EXCHANGE
-
-PLAN FRAGMENT 4
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 30: L_SUPPKEY
-
-STREAM DATA SINK
-EXCHANGE ID: 13
-UNPARTITIONED
-
-12:AGGREGATE (update serialize)
-|  output: max(46: sum)
-|  group by:
-|
-11:Project
-|  <slot 46> : 46: sum
-|
-10:AGGREGATE (merge finalize)
-|  output: sum(46: sum)
-|  group by: 30: L_SUPPKEY
-|
-9:EXCHANGE
-
-PLAN FRAGMENT 5
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 09
-HASH_PARTITIONED: 30: L_SUPPKEY
-
-8:AGGREGATE (update serialize)
-|  STREAMING
-|  output: sum(45: expr)
-|  group by: 30: L_SUPPKEY
-|
-7:Project
-|  <slot 30> : 30: L_SUPPKEY
-|  <slot 45> : 33: L_EXTENDEDPRICE * 1.0 - 34: L_DISCOUNT
-|
-6:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-PREDICATES: 38: L_SHIPDATE >= '1995-07-01', 38: L_SHIPDATE < '1995-10-01'
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=21861386
-avgRowSize=32.0
-numNodes=0
-
-PLAN FRAGMENT 6
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 04
-HASH_PARTITIONED: 11: L_SUPPKEY
-
-3:AGGREGATE (update serialize)
-|  STREAMING
-|  output: sum(26: expr)
-|  group by: 11: L_SUPPKEY
-|
-2:Project
-|  <slot 11> : 11: L_SUPPKEY
-|  <slot 26> : 14: L_EXTENDEDPRICE * 1.0 - 15: L_DISCOUNT
-|
-1:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-PREDICATES: 19: L_SHIPDATE >= '1995-07-01', 19: L_SHIPDATE < '1995-10-01'
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=21861386
-avgRowSize=32.0
-numNodes=0
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -215,7 +50,7 @@ column statistics:
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-* sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+* sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -233,7 +68,7 @@ OutPut Exchange Id: 22
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
 |  output columns:
@@ -248,7 +83,7 @@ OutPut Exchange Id: 22
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -262,7 +97,7 @@ OutPut Exchange Id: 22
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 1
@@ -295,7 +130,7 @@ OutPut Exchange Id: 18
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -305,8 +140,8 @@ OutPut Exchange Id: 18
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
 |       cardinality: 1
@@ -319,7 +154,7 @@ OutPut Exchange Id: 18
 |  - filter_id = 0, probe_expr = (27: sum)
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 4:EXCHANGE
 cardinality: 1000000
@@ -334,7 +169,7 @@ OutPut Exchange Id: 15
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 13:EXCHANGE
 cardinality: 1
@@ -349,14 +184,14 @@ OutPut Exchange Id: 13
 |  aggregate: max[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 11:Project
 |  output columns:
 |  46 <-> [46: sum, DOUBLE, true]
 |  cardinality: 1000000
 |  column statistics:
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
 |  aggregate: sum[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -364,7 +199,7 @@ OutPut Exchange Id: 13
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 9:EXCHANGE
 cardinality: 1000000
@@ -382,7 +217,7 @@ OutPut Exchange Id: 09
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 7:Project
 |  output columns:
@@ -421,7 +256,7 @@ OutPut Exchange Id: 04
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 2:Project
 |  output columns:
