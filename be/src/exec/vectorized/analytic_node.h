@@ -36,7 +36,8 @@ private:
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
-    Status _get_next_for_unbounded_preceding_rows_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    Status _get_next_for_rows_between_unbounded_preceding_and_current_row(RuntimeState* state, ChunkPtr* chunk,
+                                                                          bool* eos);
     Status _get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status (AnalyticNode::*_get_next)(RuntimeState* state, ChunkPtr* chunk, bool* eos) = nullptr;
 
