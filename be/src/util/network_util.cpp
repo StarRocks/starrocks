@@ -104,8 +104,21 @@ Status hostname_to_ip_addrs(const std::string& name, std::vector<std::string>* a
 
 bool is_valid_ip(const std::string& ip) {
     unsigned char buf[sizeof(struct in6_addr)];
-    int ret = inet_pton(AF_INET, ip.data(), buf);
-    return ret > 0;
+    return inet_pton(AF_INET, ip.data(), buf) > 0;
+}
+
+std::string hostname_to_ip(const std::string& host) {
+    std::vector<std::string> addresses;
+    Status status = hostname_to_ip_addrs(host, &addresses);
+    if (!status.ok()) {
+        LOG(WARNING) << "status of hostname_to_ip_addrs was not ok";
+        return "";
+    }
+    if (addresses.size() != 1) {
+        LOG(WARNING) << "the number of addresses could only be equal to 1, failed to get ip from host";
+        return "";
+    }
+    return addresses[0];
 }
 
 bool find_first_non_localhost(const std::vector<std::string>& addresses, std::string* addr) {

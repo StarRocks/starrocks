@@ -129,11 +129,11 @@ public class SystemHandler extends AlterHandler {
 
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized void process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
+    public synchronized String process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
                                      OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
-
+        String alterMessage = "";                                       
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
@@ -153,7 +153,7 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().updateBackendAddress(modifyBackendAddressClause);
+            alterMessage = GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
@@ -186,7 +186,7 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof ModifyFrontendAddressClause) {
             // update Frontend Address
             ModifyFrontendAddressClause modifyFrontendAddressClause = (ModifyFrontendAddressClause) alterClause;
-            GlobalStateMgr.getCurrentState().updateFrontendHost(modifyFrontendAddressClause);
+            GlobalStateMgr.getCurrentState().modifyFrontendHost(modifyFrontendAddressClause);
         } else if (alterClause instanceof DropFollowerClause) {
             DropFollowerClause clause = (DropFollowerClause) alterClause;
             GlobalStateMgr.getCurrentState()
@@ -200,6 +200,7 @@ public class SystemHandler extends AlterHandler {
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }
+        return alterMessage;
     }
 
     private List<Backend> checkDecommission(DecommissionBackendClause decommissionBackendClause)

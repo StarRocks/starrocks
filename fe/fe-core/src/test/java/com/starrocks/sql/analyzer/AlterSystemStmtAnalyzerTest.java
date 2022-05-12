@@ -21,45 +21,44 @@ public class AlterSystemStmtAnalyzerTest {
     @Mocked 
     InetAddress addr1;
 
-    @Test(expected = SemanticException.class)
-    public void testVisitModifyBackendHostClauseAnalysisException() {
-        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test","fqdn");
-        visitor.visitModifyBackendHostClause(clause, null);
+    private void mockNet() {
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getByName(String host) throws UnknownHostException {
+                return addr1;
+            }
+        };
     }
 
     @Test
     public void testVisitModifyBackendHostClause() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
+        mockNet();
         AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test:1000","fqdn");
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test","fqdn");
         Void resutl = visitor.visitModifyBackendHostClause(clause, null);
         Assert.assertTrue(resutl == null);
     }
 
-    @Test(expected = SemanticException.class)
-    public void testVisitModifyFrontendHostClauseAnalysisException() {
-        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test","fqdn");
-        visitor.visitModifyFrontendHostClause(clause, null);
-    }
-
     @Test
     public void testVisitModifyFrontendHostClause() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
+        mockNet();
         AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test:1000","fqdn");
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test","fqdn");
         Void resutl = visitor.visitModifyFrontendHostClause(clause, null);
         Assert.assertTrue(resutl == null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyBackendHostClauseException() {
+        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test","127.0.0.1");
+        visitor.visitModifyBackendHostClause(clause, null);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testVisitModifyFrontendHostClauseException() {
+        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test","127.0.0.1");
+        visitor.visitModifyFrontendHostClause(clause, null);
     }
 }

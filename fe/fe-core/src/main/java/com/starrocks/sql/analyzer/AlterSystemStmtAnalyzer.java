@@ -35,7 +35,7 @@ public class AlterSystemStmtAnalyzer {
         public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
             try {
                 for (String hostPort : backendClause.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, true);
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
                     backendClause.getHostPortPairs().add(pair);
                 }
                 Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
@@ -48,7 +48,7 @@ public class AlterSystemStmtAnalyzer {
         @Override
         public Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context) {
             try {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(frontendClause.getHostPort(), true);
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(frontendClause.getHostPort());
                 frontendClause.setHost(pair.first);
                 frontendClause.setPort(pair.second);
                 Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
@@ -61,17 +61,12 @@ public class AlterSystemStmtAnalyzer {
         @Override
         public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, ConnectContext context) {
             try {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(clause.getWantToModifyHostPort(), false);
-                Preconditions.checkState(!Strings.isNullOrEmpty(pair.first));
-                clause.setWantToModifyHostPortPair(pair);
                 String fqdn = clause.getFqdn();
-                // fqdn is now allowed to be a legitimate ip, 
-                // if it is a domain name need to determine whether it is a legitimate domain name
-                if (!NetUtils.validIPAddress(fqdn)) {
-                    InetAddress.getByName(fqdn);
+                // if fqdn is a domain name need to determine whether it is a legitimate domain name
+                if (NetUtils.validIPAddress(fqdn)) {
+                    throw new SemanticException("the host you want to set could't be an ip");
                 }
-            } catch (AnalysisException e) {
-                throw new SemanticException("target front host or port was wrong!");
+                InetAddress.getByName(fqdn);
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());
             }
@@ -81,19 +76,14 @@ public class AlterSystemStmtAnalyzer {
         @Override
         public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
             try {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(clause.getWantToModifyHostPort(), false);
-                Preconditions.checkState(!Strings.isNullOrEmpty(pair.first));
-                clause.setWantToModifyHostPortPair(pair);
                 String fqdn = clause.getFqdn();
-                // fqdn is now allowed to be a legitimate ip, 
-                // if it is a domain name need to determine whether it is a legitimate domain name
-                if (!NetUtils.validIPAddress(fqdn)) {
-                    InetAddress.getByName(fqdn);
+                // if fqdn is a domain name need to determine whether it is a legitimate domain name
+                if (NetUtils.validIPAddress(fqdn)) {
+                    throw new SemanticException("the host you want to set could't be an ip");
                 }
-            } catch (AnalysisException e) {
-                throw new SemanticException("target backend host or port was wrong!");
+                InetAddress.getByName(fqdn);
             } catch (UnknownHostException e) {
-                throw new SemanticException("unknown host" + e.getMessage());
+                throw new SemanticException("unknown host " + e.getMessage());
             }
             return null;
         }

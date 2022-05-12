@@ -382,7 +382,7 @@ public abstract class AlterHandler extends MasterDaemon {
     /*
      * entry function. handle alter ops
      */
-    public abstract void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public abstract String process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws UserException;
 
     /*

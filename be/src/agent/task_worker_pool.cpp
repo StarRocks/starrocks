@@ -390,6 +390,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
 
         TFinishTaskRequest finish_task_request;
         finish_task_request.__set_finish_tablet_infos(finish_tablet_infos);
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_report_version(_s_report_version);
         finish_task_request.__set_task_type(agent_task_req.task_type);
@@ -445,6 +446,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -547,6 +549,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     }
 
     // Return result to fe
+    _backend.__set_host(BackendOptions::get_localhost());
     finish_task_request->__set_backend(_backend);
     finish_task_request->__set_report_version(_s_report_version);
     finish_task_request->__set_task_type(task_type);
@@ -684,6 +687,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         TStatus task_status;
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -901,6 +905,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         }
 
         status.to_thrift(&finish_task_request.task_status);
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(publish_version_task->task_type);
         finish_task_request.__set_signature(publish_version_task->signature);
@@ -990,6 +995,7 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
 
         TFinishTaskRequest finish_task_request;
         finish_task_request.__set_task_status(task_status);
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1067,6 +1073,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
 
         TFinishTaskRequest finish_task_request;
         finish_task_request.__set_task_status(task_status);
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1105,6 +1112,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
         // Return result to fe
         TStatus task_status;
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1199,6 +1207,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
         std::vector<std::string> error_msgs;
         TStatus task_status;
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1322,6 +1331,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1339,6 +1349,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
+    worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
@@ -1378,6 +1389,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
+    worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
@@ -1434,6 +1446,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
+    worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
     request.__set_backend(worker_pool_this->_backend);
     request.__isset.tablets = true;
     AgentStatus status = STARROCKS_SUCCESS;
@@ -1482,6 +1495,7 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
+    worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
     request.__set_backend(worker_pool_this->_backend);
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -1555,6 +1569,7 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1611,6 +1626,7 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1685,6 +1701,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1739,6 +1756,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
@@ -1807,6 +1825,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
 
         TFinishTaskRequest finish_task_request;
+        worker_pool_this->_backend.__set_host(BackendOptions::get_localhost());
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
