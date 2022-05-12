@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class PushDownPredicateAssertOneRow extends TransformationRule {
     public PushDownPredicateAssertOneRow() {
-        super(RuleType.TF_PUSH_DOWN_PREDICATE_DIRECT, Pattern.create(OperatorType.LOGICAL_FILTER)
+        super(RuleType.TF_PUSH_DOWN_PREDICATE_ASSERT_ONE_ROW, Pattern.create(OperatorType.LOGICAL_FILTER)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_ASSERT_ONE_ROW, OperatorType.PATTERN_LEAF)));
     }
 
