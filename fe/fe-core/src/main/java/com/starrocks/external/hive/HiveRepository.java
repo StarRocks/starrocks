@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+
 public class HiveRepository {
     // hiveResourceName => HiveMetaClient
     Map<String, HiveMetaClient> metaClients = Maps.newHashMap();
@@ -93,13 +95,6 @@ public class HiveRepository {
         }
 
         return client;
-    }
-
-    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
-    // for table of external catalog. The table of external catalog will not create a real resource.
-    // We will reconstruct this part later. The concept of resource will not be used for external catalog
-    private boolean isInternalCatalog(String resourceName) {
-        return !resourceName.startsWith("thrift://");
     }
 
     public HiveMetaCache getMetaCache(String resourceName) throws DdlException {

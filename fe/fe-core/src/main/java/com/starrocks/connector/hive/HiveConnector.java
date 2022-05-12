@@ -4,6 +4,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -31,6 +32,7 @@ public class HiveConnector implements Connector {
     public void validate() {
         this.resourceName = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+        Util.validateMetastoreUris(resourceName);
     }
 
     @Override
