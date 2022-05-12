@@ -142,6 +142,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     DCHECK_LE(tablet_updates_pb.next_log_id(), _next_log_id) << " tabletid:" << _tablet.tablet_id();
 
     // Load pending rowsets
+    _pending_commits.clear();
     RETURN_IF_ERROR(TabletMetaManager::pending_rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(),
             [&](int64_t version, const std::string_view& rowset_meta_data) -> bool {
@@ -570,6 +571,10 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                 LOG(WARNING) << "ignore pending rowset tablet: " << _tablet.tablet_id() << " version:" << version
                              << " txn:" << itr->second->txn_id() << " #pending:" << _pending_commits.size();
                 _ignore_rowset_commit(version, itr->second);
+                auto st = TabletMetaManager::delete_pending_rowset(_tablet.data_dir(), _tablet.tablet_id(), version);
+                LOG_IF(WARNING, !st.ok())
+                        << "Failed to delete_pending_rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                        << " txn:" << itr->second->txn_id() << " rowset: " << itr->second->rowset_id().to_string();
                 itr = _pending_commits.erase(itr);
             } else if (version == current_version + 1) {
                 auto& rowset = itr->second;
@@ -1884,9 +1889,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
-    LOG(INFO) << "start link_from. "
-              << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
-              << " #pending:" << _pending_commits.size();
+    LOG(INFO) << "link_from start tablet:" << _tablet.tablet_id() << " #pending:" << _pending_commits.size()
+              << " base_tablet:" << base_tablet->tablet_id() << " request_version:" << request_version;
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
         LOG(WARNING) << "link_from: base_tablet's max_version:" << max_version << " < alter_version:" << request_version
@@ -1910,6 +1914,9 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     uint32_t next_rowset_id = 0;
+    size_t total_bytes = 0;
+    size_t total_rows = 0;
+    size_t total_files = 0;
     vector<RowsetLoadInfo> new_rowsets(rowsets.size());
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
@@ -1941,6 +1948,9 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
             }
         }
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_info.num_segments);
+        total_bytes += rowset_meta_pb.total_disk_size();
+        total_rows += rowset_meta_pb.num_rows();
+        total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
     }
     // 2. construct new meta
     TabletMetaPB meta_pb;
@@ -1968,8 +1978,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     rocksdb::WriteBatch wb;
     RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
     for (auto& info : new_rowsets) {
         RETURN_IF_ERROR(TabletMetaManager::put_rowset_meta(data_dir, &wb, tablet_id, info.rowset_meta_pb));
@@ -1986,21 +1996,23 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         return Status::InternalError("Fail to delete old meta and write new meta");
     }
 
+    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    index.unload();
+    update_manager->index_cache().release(index_entry);
     // 4. load from new meta
     st = _load_from_pb(*updates_pb);
     if (!st.ok()) {
         LOG(WARNING) << "_load_from_pb failed tablet_id:" << tablet_id << " " << st;
         return st;
     }
-    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
-    auto& index = index_entry->value();
-    index.unload();
-    update_manager->index_cache().release(index_entry);
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "link_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
-              << " base tablet:" << base_tablet->tablet_id() << " #rowset:" << rowsets.size()
-              << " #pending:" << _pending_commits.size() << ". elapsed time=" << watch.get_elapse_second() << "s.";
+    LOG(INFO) << "link_from finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " base tablet:" << base_tablet->tablet_id() << " #pending:" << _pending_commits.size()
+              << " time:" << watch.get_elapse_second() << "s"
+              << " #rowset:" << rowsets.size() << " #file:" << total_files << " #row:" << total_rows
+              << " bytes:" << total_bytes;
     return Status::OK();
 }
 
@@ -2010,9 +2022,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
             << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
-    LOG(INFO) << "start convert_from."
-              << " new tablet_id:" << _tablet.tablet_id() << " request_version:" << request_version
-              << " #pending:" << _pending_commits.size();
+    LOG(INFO) << "convert_from start tablet:" << _tablet.tablet_id() << " #pending:" << _pending_commits.size()
+              << " base_tablet:" << base_tablet->tablet_id() << " request_version:" << request_version;
     int64_t max_version = base_tablet->updates()->max_version();
     if (max_version < request_version) {
         LOG(WARNING) << "convert_from: base_tablet's max_version:" << max_version
@@ -2041,6 +2052,9 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     OlapReaderStatistics stats;
 
+    size_t total_bytes = 0;
+    size_t total_rows = 0;
+    size_t total_files = 0;
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 
@@ -2074,6 +2088,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             return Status::InternalError("build rowset writer failed");
         }
 
+        // notice: rowset's del files not linked, it's not useful
         status = _convert_from_base_rowset(base_tablet, res.value(), chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << "failed to convert from base rowset, exit alter process";
@@ -2093,6 +2108,10 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         rowset_meta_pb.set_rowset_id_v2(rid.to_string());
 
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
+
+        total_bytes += rowset_meta_pb.total_disk_size();
+        total_rows += rowset_meta_pb.num_rows();
+        total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
     }
 
     TabletMetaPB meta_pb;
@@ -2120,8 +2139,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     rocksdb::WriteBatch wb;
     RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
-    RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
     DelVector delvec;
     for (const auto& new_rowset_load_info : new_rowset_load_infos) {
@@ -2140,6 +2159,12 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         return Status::InternalError("Fail to delete old meta and write new meta");
     }
 
+    auto update_manager = StorageEngine::instance()->update_manager();
+    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    index.unload();
+    update_manager->index_cache().release(index_entry);
     // 4. load from new meta
     status = _load_from_pb(*updates_pb);
     if (!status.ok()) {
@@ -2148,9 +2173,12 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
-    LOG(INFO) << "convert_from: finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
-              << " base tablet:" << base_tablet->tablet_id() << " #rowset:" << src_rowsets.size()
-              << " #pending:" << _pending_commits.size() << ". elapsed time=" << watch.get_elapse_second() << "s.";
+    LOG(INFO) << "convert_from finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " base tablet:" << base_tablet->tablet_id() << " #pending:" << _pending_commits.size()
+              << " time:" << watch.get_elapse_second() << "s"
+              << " #column:" << _tablet.tablet_schema().num_columns() << " #rowset:" << src_rowsets.size()
+              << " #file:" << total_files << " #row:" << total_rows << " bytes:" << total_bytes;
+    ;
     return Status::OK();
 }
 
