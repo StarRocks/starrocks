@@ -173,7 +173,6 @@ OutPut Exchange Id: 38
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10111
 actualRows=0, avgRowSize=197.0
 cardinality: 1000000
 probe runtime filters:
@@ -220,7 +219,7 @@ OutPut Exchange Id: 34
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 400000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----31:EXCHANGE
 |       cardinality: 100000
@@ -229,7 +228,6 @@ OutPut Exchange Id: 34
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 actualRows=0, avgRowSize=24.0
 cardinality: 80000000
 probe runtime filters:
@@ -255,7 +253,7 @@ OutPut Exchange Id: 31
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -268,7 +266,7 @@ OutPut Exchange Id: 31
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----28:EXCHANGE
 |       cardinality: 100000
@@ -279,7 +277,7 @@ OutPut Exchange Id: 31
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
-|  * min-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 24:Project
 |  output columns:
@@ -310,7 +308,6 @@ OutPut Exchange Id: 31
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 actualRows=0, avgRowSize=24.0
 cardinality: 80000000
 probe runtime filters:
@@ -341,7 +338,6 @@ table: part, rollup: part
 preAggregation: on
 Predicates: [6: P_SIZE, INT, false] = 12, 5: P_TYPE LIKE '%COPPER'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 actualRows=0, avgRowSize=62.0
 cardinality: 100000
 column statistics:
@@ -382,7 +378,6 @@ OutPut Exchange Id: 22
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10111
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
@@ -423,7 +418,6 @@ OutPut Exchange Id: 19
 table: nation, rollup: nation
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10185
 actualRows=0, avgRowSize=8.0
 cardinality: 25
 probe runtime filters:
@@ -450,7 +444,6 @@ table: region, rollup: region
 preAggregation: on
 Predicates: [54: R_NAME, CHAR, false] = 'AMERICA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -492,7 +485,6 @@ OutPut Exchange Id: 07
 table: nation, rollup: nation
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10185
 actualRows=0, avgRowSize=33.0
 cardinality: 25
 probe runtime filters:
@@ -520,7 +512,6 @@ table: region, rollup: region
 preAggregation: on
 Predicates: [31: R_NAME, CHAR, false] = 'AMERICA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10106
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
