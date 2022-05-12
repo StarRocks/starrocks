@@ -1313,6 +1313,13 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
+            sleep(config::sleep_one_second);
+            continue;
+        }
         std::map<TTaskType::type, std::set<int64_t>> tasks;
         for (int i = 0; i < TTaskType::type::NUM_TASK_TYPE; i++) {
             std::lock_guard task_signatures_lock(_s_task_signatures_locks[i]);
