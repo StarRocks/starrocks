@@ -1089,4 +1089,25 @@ public class PlanTestBase {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(jsonObject);
     }
+<<<<<<< HEAD
+=======
+
+    private void checkWithIgnoreTabletList(String expect, String actual) {
+        expect = Stream.of(expect.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+
+        actual = Stream.of(actual.split("\n")).
+                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
+        Assert.assertEquals(expect, actual);
+    }
+
+    protected void assertPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 }

@@ -71,11 +71,11 @@ public class ExpressionStatisticsCalculatorTest {
         // test max function
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
-        Assert.assertEquals(columnStatistic.getMinValue(), max, 0.001);
+        Assert.assertEquals(columnStatistic.getMinValue(), min, 0.001);
         // test min function
         callOperator = new CallOperator("min", Type.INT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assert.assertEquals(columnStatistic.getMaxValue(), min, 0.001);
+        Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), min, 0.001);
         // test count function
         callOperator = new CallOperator("count", Type.INT, Lists.newArrayList(columnRefOperator));
