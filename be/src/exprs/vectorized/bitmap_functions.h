@@ -103,7 +103,7 @@ public:
     /**
      * @param: 
      * @paramType columns: [TYPE_OBJECT]
-     * @return ARRAY_VARCHAR
+     * @return ARRAY_BIGINT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_array);
 
