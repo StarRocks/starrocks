@@ -20,69 +20,6 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
-[fragment]
-PLAN FRAGMENT 0
-OUTPUT EXPRS:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
-PARTITION: UNPARTITIONED
-
-RESULT SINK
-
-6:MERGING-EXCHANGE
-
-PLAN FRAGMENT 1
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 9: L_RETURNFLAG, 10: L_LINESTATUS
-
-STREAM DATA SINK
-EXCHANGE ID: 06
-UNPARTITIONED
-
-5:SORT
-|  order by: <slot 9> 9: L_RETURNFLAG ASC, <slot 10> 10: L_LINESTATUS ASC
-|  offset: 0
-|
-4:AGGREGATE (merge finalize)
-|  output: sum(20: sum), sum(21: sum), sum(22: sum), sum(23: sum), avg(24: avg), avg(25: avg), avg(26: avg), count(27: count)
-|  group by: 9: L_RETURNFLAG, 10: L_LINESTATUS
-|
-3:EXCHANGE
-
-PLAN FRAGMENT 2
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 03
-HASH_PARTITIONED: 9: L_RETURNFLAG, 10: L_LINESTATUS
-
-2:AGGREGATE (update serialize)
-|  STREAMING
-|  output: sum(5: L_QUANTITY), sum(6: L_EXTENDEDPRICE), sum(18: expr), sum(19: expr), avg(5: L_QUANTITY), avg(6: L_EXTENDEDPRICE), avg(7: L_DISCOUNT), count(*)
-|  group by: 9: L_RETURNFLAG, 10: L_LINESTATUS
-|
-1:Project
-|  <slot 5> : 5: L_QUANTITY
-|  <slot 6> : 6: L_EXTENDEDPRICE
-|  <slot 7> : 7: L_DISCOUNT
-|  <slot 9> : 9: L_RETURNFLAG
-|  <slot 10> : 10: L_LINESTATUS
-|  <slot 18> : 29: multiply
-|  <slot 19> : 29: multiply * 1.0 + 8: L_TAX
-|  common expressions:
-|  <slot 28> : 1.0 - 7: L_DISCOUNT
-|  <slot 29> : 6: L_EXTENDEDPRICE * 28: subtract
-|
-0:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-PREDICATES: 11: L_SHIPDATE <= '1998-12-01'
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=600000000
-avgRowSize=54.0
-numNodes=0
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
@@ -94,13 +31,13 @@ cardinality: 3
 column statistics:
 * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-* sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-* avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
@@ -116,13 +53,13 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
@@ -132,13 +69,13 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
@@ -158,13 +95,13 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 1:Project

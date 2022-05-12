@@ -33,7 +33,7 @@ RESULT SINK
 cardinality: 5
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -47,7 +47,7 @@ OutPut Exchange Id: 28
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 26:AGGREGATE (merge finalize)
 |  aggregate: sum[([55: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -55,7 +55,7 @@ OutPut Exchange Id: 28
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 25:EXCHANGE
 cardinality: 5
@@ -73,7 +73,7 @@ OutPut Exchange Id: 25
 |  cardinality: 5
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 23:Project
 |  output columns:

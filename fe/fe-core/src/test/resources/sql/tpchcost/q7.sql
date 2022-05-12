@@ -50,7 +50,7 @@ column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -66,7 +66,7 @@ OutPut Exchange Id: 25
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -76,7 +76,7 @@ OutPut Exchange Id: 25
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
 |
 22:EXCHANGE
 cardinality: 297
@@ -96,7 +96,7 @@ OutPut Exchange Id: 22
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 296.630859375] ESTIMATE
 |
 20:Project
 |  output columns:
