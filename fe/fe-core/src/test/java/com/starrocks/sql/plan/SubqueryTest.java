@@ -65,8 +65,11 @@ public class SubqueryTest extends PlanTestBase {
     public void testSubqueryLimit() throws Exception {
         String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
-                "  |  assert number of rows: LE 1"));
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 4: v4 = 2\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1");
     }
 
     @Test
@@ -127,10 +130,10 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "SELECT max(1) FROM t0 WHERE 1 = (SELECT t1.v4 FROM t0, t1 WHERE t1.v4 IN (SELECT t1.v4 FROM  t1))";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  8:Project\n" +
+        assertContains(explainString, ("9:Project\n" +
                 "  |  <slot 7> : 7: v4\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
+                "  8:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
     }
 
@@ -151,9 +154,9 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  predicates: 4: v4 = 2\n" +
                 "  |  \n" +
                 "  3:ASSERT NUMBER OF ROWS");
-        assertContains(plan, "  1:OlapScanNode\n" +
+        assertContains(plan, "1:OlapScanNode\n" +
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 = 2");
+                "     partitions=0/1");
     }
 }
