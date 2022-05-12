@@ -34,18 +34,49 @@
   + [Spark Connector](/unloading/Spark_connector.md)
   + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
-  + [用Bitmap实现精确去重](/using_starrocks/Using_bitmap.md)
-  + [用HLL实现近似去重](/using_starrocks/Using_HLL.md)
+  + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
-  + [Colocation Join](/using_starrocks/Colocation_join.md)
   + [外部表](/using_starrocks/External_table.md)
-  + [数组](/using_starrocks/Array.md)
+  + [Colocate Join](/using_starrocks/Colocate_join.md)
+  + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [窗口函数](/using_starrocks/Window_function.md)
   + [JAVA UDF](/using_starrocks/JAVA_UDF.md)
-  + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
-  + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [数组](/using_starrocks/Array.md)
+  + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
+  + [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)
+  + [基于 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
+  + [基于 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [时区](/using_starrocks/timezone.md)
   + [文件管理器](/using_starrocks/filemanager.md)
+  + [临时分区](/using_starrocks/Temporary_partition.md)
++ 管理手册
+  + 部署使用
+    + [容器编译](/administration/Build_in_docker.md)
+    + [集群部署](/administration/Deployment.md)
+    + [集群管理](/administration/Cluster_administration.md)
+    + [DorisDB升级StarRocks手册](/administration/update_from_dorisdb.md)
+    + [ApacheDoris升级StarRocks手册](/administration/update_from_doris.md)
+  + 运维操作
+    + [扩容缩容](/administration/Scale_up_down.md)
+    + [备份恢复](/administration/Backup_and_restore.md)
+    + [参数配置](/administration/Configuration.md)
+    + [监控报警](/administration/Monitor_and_Alert.md)
+    + 资源管理
+      + [资源隔离](/administration/Resource_Group.md)
+      + [查询管理](/administration/Query_management.md)
+      + [内存管理](/administration/Memory_management.md)
+      + [负载均衡](/administration/Load_balance.md)
+      + [副本管理](/administration/Replica.md)
+      + [黑名单管理](/administration/Blacklist.md)
+  + 数据恢复
+    + [数据删除恢复](/administration/Data_recovery.md)
+    + [元数据恢复](/administration/Metadata_recovery.md)
+  + 用户权限及认证
+    + [用户权限](/administration/User_privilege.md)
+    + [认证方式](/administration/Authentication.md)
+  + 性能调优
+    + [查询分析](/administration/Query_planning.md)
+    + [性能优化](/administration/Profiling.md)
 + 参考手册
   + SQL参考
     + 用户账户管理
@@ -417,34 +448,6 @@
   + [系统变量](/reference/System_variable.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
-+ 管理指南
-  + 部署使用
-    + [容器编译](/administration/Build_in_docker.md)
-    + [集群部署](/administration/Deployment.md)
-    + [集群管理](/administration/Cluster_administration.md)
-    + [DorisDB升级StarRocks手册](/administration/update_from_dorisdb.md)
-    + [ApacheDoris升级StarRocks手册](/administration/update_from_doris.md)
-  + 运维操作
-    + [扩容缩容](/administration/Scale_up_down.md)
-    + [备份恢复](/administration/Backup_and_restore.md)
-    + [参数配置](/administration/Configuration.md)
-    + [监控报警](/administration/Monitor_and_Alert.md)
-    + 资源管理
-      + [资源隔离](/administration/Resource_Group.md)
-      + [查询管理](/administration/Query_management.md)
-      + [内存管理](/administration/Memory_management.md)
-      + [负载均衡](/administration/Load_balance.md)
-      + [副本管理](/administration/Replica.md)
-      + [黑名单管理](/administration/Blacklist.md)
-  + 数据恢复
-    + [数据删除恢复](/administration/Data_recovery.md)
-    + [元数据恢复](/administration/Metadata_recovery.md)
-  + 用户权限及认证
-    + [用户权限](/administration/User_privilege.md)
-    + [认证方式](/administration/Authentication.md)
-  + 性能调优
-    + [查询分析](/administration/Query_planning.md)
-    + [性能优化](/administration/Profiling.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
