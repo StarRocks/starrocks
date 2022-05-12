@@ -95,8 +95,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_RESOURCE = "resource";
 
-    private String hiveDb;
-    private String hiveTable;
+    private String hiveDbName;
+    private String hiveTableName;
     private String resourceName;
     private String hdfsPath;
     private final List<String> partColumnNames = Lists.newArrayList();
@@ -123,7 +123,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public String getHiveDbTable() {
-        return String.format("%s.%s", hiveDb, hiveTable);
+        return String.format("%s.%s", hiveDbName, hiveTableName);
     }
 
     public String getResourceName() {
@@ -131,16 +131,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public String getHiveDb() {
-        return hiveDb;
-    }
-
-    public String getHiveTable() {
-        return hiveTable;
+        return hiveDbName;
     }
 
     @Override
     public String getTableName() {
-        return hiveTable;
+        return hiveTableName;
     }
 
     @Override
@@ -174,7 +170,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public void initHmsTableInfo() {
         if (hmsTableInfo == null) {
-            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
+            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDbName, hiveTableName,
                     partColumnNames, dataColumnNames, nameToColumn, type);
         }
     }
@@ -201,7 +197,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
         org.apache.hadoop.hive.metastore.api.Table table = GlobalStateMgr.getCurrentState().getHiveRepository()
-                .getTable(resourceName, this.hiveDb, this.hiveTable);
+                .getTable(resourceName, this.hiveDbName, this.hiveTableName);
         Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
         Map<String, Column> preNameToColumn = nameToColumn;
         boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
@@ -215,7 +211,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     private void refreshTableCache(Map<String, Column> nameToColumn) throws DdlException {
-        HiveMetaStoreTableInfo hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
+        HiveMetaStoreTableInfo hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDbName, hiveTableName,
                 partColumnNames, new ArrayList<>(nameToColumn.keySet()), nameToColumn, TableType.HIVE);
         GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableCache(hmsTableInfo);
@@ -291,7 +287,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
-    private void validate(Map<String, String> properties, org.apache.hadoop.hive.metastore.api.Table hmsTable)
+    private void validate(Map<String, String> properties, org.apache.hadoop.hive.metastore.api.Table hiveTable)
             throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hive table, "
@@ -299,14 +295,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
-        hiveDb = copiedProps.get(HIVE_DB);
-        if (Strings.isNullOrEmpty(hiveDb)) {
+        hiveDbName = copiedProps.get(HIVE_DB);
+        if (Strings.isNullOrEmpty(hiveDbName)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, HIVE_DB, HIVE_DB));
         }
         copiedProps.remove(HIVE_DB);
 
-        hiveTable = copiedProps.get(HIVE_TABLE);
-        if (Strings.isNullOrEmpty(hiveTable)) {
+        hiveTableName = copiedProps.get(HIVE_TABLE);
+        if (Strings.isNullOrEmpty(hiveTableName)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, HIVE_TABLE, HIVE_TABLE));
         }
         copiedProps.remove(HIVE_TABLE);
@@ -337,12 +333,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         // 1. check column exists in hive table
         // 2. check column type mapping
         // 3. check hive partition column exists in table column list
-        org.apache.hadoop.hive.metastore.api.Table hiveTable = hmsTable;
-        if (hiveTable == null) {
-            hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
-                    .getTable(resourceName, this.hiveDb, this.hiveTable);
+        org.apache.hadoop.hive.metastore.api.Table hmsTable = hiveTable;
+        if (hmsTable == null) {
+            hmsTable = GlobalStateMgr.getCurrentState().getHiveRepository()
+                    .getTable(resourceName, this.hiveDbName, this.hiveTableName);
         }
-        String hiveTableType = hiveTable.getTableType();
+        String hiveTableType = hmsTable.getTableType();
         if (hiveTableType == null) {
             throw new DdlException("Unknown hive table type.");
         }
@@ -355,9 +351,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             default:
                 throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
         }
-        List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
-        List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable);
+        List<FieldSchema> unPartHiveColumns = hmsTable.getSd().getCols();
+        List<FieldSchema> partHiveColumns = hmsTable.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hmsTable);
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
@@ -391,7 +387,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // set hdfs path
         // todo hdfs ip may change, store it in cache?
-        this.hdfsPath = hiveTable.getSd().getLocation();
+        this.hdfsPath = hmsTable.getSd().getLocation();
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
@@ -520,7 +516,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
-                0, hiveTable, hiveDb);
+                0, hiveTableName, hiveDbName);
         tTableDescriptor.setHdfsTable(tHdfsTable);
         return tTableDescriptor;
     }
@@ -530,8 +526,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         super.write(out);
 
         JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty(JSON_KEY_HIVE_DB, hiveDb);
-        jsonObject.addProperty(JSON_KEY_HIVE_TABLE, hiveTable);
+        jsonObject.addProperty(JSON_KEY_HIVE_DB, hiveDbName);
+        jsonObject.addProperty(JSON_KEY_HIVE_TABLE, hiveTableName);
         if (!Strings.isNullOrEmpty(resourceName)) {
             jsonObject.addProperty(JSON_KEY_RESOURCE_NAME, resourceName);
         }
@@ -568,8 +564,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_3) {
             String json = Text.readString(in);
             JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-            hiveDb = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_DB).getAsString();
-            hiveTable = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_TABLE).getAsString();
+            hiveDbName = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_DB).getAsString();
+            hiveTableName = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_TABLE).getAsString();
             if (jsonObject.has(JSON_KEY_RESOURCE_NAME)) {
                 resourceName = jsonObject.getAsJsonPrimitive(JSON_KEY_RESOURCE_NAME).getAsString();
             }
@@ -608,8 +604,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 }
             }
         } else {
-            hiveDb = Text.readString(in);
-            hiveTable = Text.readString(in);
+            hiveDbName = Text.readString(in);
+            hiveTableName = Text.readString(in);
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);
