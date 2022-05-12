@@ -20,6 +20,7 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+<<<<<<< HEAD
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
@@ -90,6 +91,8 @@ cardinality=600000000
 avgRowSize=54.0
 numNodes=0
 use vectorized: true
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
@@ -101,13 +104,13 @@ cardinality: 3
 column statistics:
 * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-* sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-* avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-* avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-* avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+* sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+* avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
@@ -123,13 +126,13 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
@@ -139,13 +142,13 @@ OutPut Exchange Id: 06
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
@@ -165,13 +168,13 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
 |  * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * sum-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * sum-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * avg-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * avg-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * sum-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * sum-->[810.9, 113345.46000000002, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
+|  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
 |  * count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 1:Project
@@ -201,7 +204,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [11: L_SHIPDATE, DATE, false] <= '1998-12-01'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=54.0
 cardinality: 600000000
 column statistics:

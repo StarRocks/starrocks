@@ -227,7 +227,11 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
+<<<<<<< HEAD
         Assert.assertEquals(162, planCount);
+=======
+        Assert.assertEquals(22, planCount);
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
     }
 
     @Test

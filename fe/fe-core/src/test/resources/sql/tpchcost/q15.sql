@@ -36,6 +36,7 @@ where
 )
 order by
     s_suppkey;
+<<<<<<< HEAD
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -224,6 +225,8 @@ cardinality=21861386
 avgRowSize=32.0
 numNodes=0
 use vectorized: true
+=======
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 [fragment statistics]
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -238,7 +241,7 @@ column statistics:
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-* sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+* sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -256,7 +259,7 @@ OutPut Exchange Id: 22
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
 |  output columns:
@@ -271,7 +274,7 @@ OutPut Exchange Id: 22
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -285,7 +288,7 @@ OutPut Exchange Id: 22
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 1
@@ -294,7 +297,6 @@ OutPut Exchange Id: 22
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10111
 actualRows=0, avgRowSize=84.0
 cardinality: 1000000
 probe runtime filters:
@@ -318,7 +320,7 @@ OutPut Exchange Id: 18
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -328,8 +330,8 @@ OutPut Exchange Id: 18
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
 |       cardinality: 1
@@ -342,7 +344,7 @@ OutPut Exchange Id: 18
 |  - filter_id = 0, probe_expr = (27: sum)
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 4:EXCHANGE
 cardinality: 1000000
@@ -357,7 +359,7 @@ OutPut Exchange Id: 15
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 13:EXCHANGE
 cardinality: 1
@@ -372,14 +374,14 @@ OutPut Exchange Id: 13
 |  aggregate: max[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 11:Project
 |  output columns:
 |  46 <-> [46: sum, DOUBLE, true]
 |  cardinality: 1000000
 |  column statistics:
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
 |  aggregate: sum[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -387,7 +389,7 @@ OutPut Exchange Id: 13
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 9:EXCHANGE
 cardinality: 1000000
@@ -405,7 +407,7 @@ OutPut Exchange Id: 09
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 7:Project
 |  output columns:
@@ -421,7 +423,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [38: L_SHIPDATE, DATE, false] >= '1995-07-01', [38: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=32.0
 cardinality: 21861386
 column statistics:
@@ -444,7 +445,7 @@ OutPut Exchange Id: 04
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 2:Project
 |  output columns:
@@ -460,7 +461,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-07-01', [19: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=32.0
 cardinality: 21861386
 column statistics:

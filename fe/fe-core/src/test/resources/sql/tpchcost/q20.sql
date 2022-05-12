@@ -128,7 +128,6 @@ OutPut Exchange Id: 22
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10111
 actualRows=0, avgRowSize=73.0
 cardinality: 1000000
 probe runtime filters:
@@ -157,7 +156,6 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [10: N_NAME, CHAR, false] = 'ARGENTINA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10185
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -189,12 +187,28 @@ OutPut Exchange Id: 15
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----12:EXCHANGE
 |       cardinality: 20000000
 |
+<<<<<<< HEAD
 5:EXCHANGE
+=======
+4:AGGREGATE (merge finalize)
+|  aggregate: sum[([48: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  group by: [33: L_SUPPKEY, INT, false], [32: L_PARTKEY, INT, false]
+|  cardinality: 86732673
+|  probe runtime filters:
+|  - filter_id = 1, probe_expr = (32: L_PARTKEY)
+|  - filter_id = 2, probe_expr = (33: L_SUPPKEY)
+|  column statistics:
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
+|
+3:EXCHANGE
+>>>>>>> a4c95cea5 ([BugFix] Fix Max/Min aggregate function column statistics error (#5982))
 cardinality: 86732673
 
 PLAN FRAGMENT 5(F03)
@@ -233,7 +247,6 @@ OutPut Exchange Id: 12
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
@@ -261,7 +274,6 @@ table: part, rollup: part
 preAggregation: on
 Predicates: 21: P_NAME LIKE 'sienna%'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
 column statistics:
@@ -300,7 +312,7 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673267326732674E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 1:Project
 |  output columns:
@@ -318,7 +330,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [41: L_SHIPDATE, DATE, false] >= '1993-01-01', [41: L_SHIPDATE, DATE, false] < '1994-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=24.0
 cardinality: 86732673
 column statistics:
