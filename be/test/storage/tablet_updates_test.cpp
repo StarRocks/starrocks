@@ -1715,13 +1715,11 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     std::string rowset_path = last_rowset->rowset_path();
     std::string segment_path =
             strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
-    std::unique_ptr<fs::ReadableBlock> rblock;
     std::shared_ptr<fs::BlockManager> block_mgr;
     ASSIGN_OR_ABORT(block_mgr, fs::fs_util::block_manager("posix://"));
-    ASSERT_TRUE(block_mgr->open_block(segment_path, &rblock).ok());
+    ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(segment_path));
 
-    ASSERT_TRUE(Segment::parse_segment_footer(rblock.get(), footer, nullptr, nullptr).ok());
-    rblock->close();
+    ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());
 }
 
 void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(bool enable_persistent_index) {

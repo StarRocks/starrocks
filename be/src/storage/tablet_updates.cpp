@@ -2672,9 +2672,8 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(block_mgr->open_block((*segment)->file_name(), &rblock));
-        iter_opts.rblock = rblock.get();
+        ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file((*segment)->file_name()));
+        iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             ColumnIterator* col_iter_raw_ptr = nullptr;
             RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter_raw_ptr));

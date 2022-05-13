@@ -33,16 +33,16 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
+class RandomAccessFile;
 struct OlapReaderStatistics;
 
 namespace fs {
-class ReadableBlock;
 class WritableBlock;
 } // namespace fs
 
 struct PageReadOptions {
     // block to read page
-    fs::ReadableBlock* rblock = nullptr;
+    RandomAccessFile* read_file = nullptr;
     // location of the page
     PagePointer page_pointer;
     // decompressor for page body (null means page body is not compressed)
@@ -60,7 +60,7 @@ struct PageReadOptions {
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 
     void sanity_check() const {
-        CHECK_NOTNULL(rblock);
+        CHECK_NOTNULL(read_file);
         CHECK_NOTNULL(stats);
     }
 };
