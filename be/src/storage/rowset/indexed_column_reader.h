@@ -80,12 +80,12 @@ public:
     Status next_batch(size_t* n, ColumnBlockView* column_view);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<fs::ReadableBlock> rblock);
+    IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<RandomAccessFile> read_file);
 
     Status _read_data_page(const PagePointer& pp);
 
     const IndexedColumnReader* _reader = nullptr;
-    std::unique_ptr<fs::ReadableBlock> _rblock;
+    std::unique_ptr<RandomAccessFile> _read_file;
     // iterator for ordinal index page
     IndexPageIterator _ordinal_iter;
     // iterator for value index page
@@ -130,11 +130,11 @@ public:
     bool kept_in_memory() const { return _kept_in_memory; }
 
 private:
-    Status load_index_page(fs::ReadableBlock* rblock, const PagePointerPB& pp, PageHandle* handle,
+    Status load_index_page(RandomAccessFile* read_file, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);
 
     // read a page specified by `pp' from `file' into `handle'
-    Status read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
+    Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
                      PageFooterPB* footer) const;
 
     fs::BlockManager* _block_mgr;

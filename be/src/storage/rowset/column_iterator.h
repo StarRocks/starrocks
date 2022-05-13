@@ -36,14 +36,11 @@ class ColumnPredicate;
 class SparseRange;
 } // namespace vectorized
 
-namespace fs {
-class ReadableBlock;
-} // namespace fs
-
 class ColumnReader;
+class RandomAccessFile;
 
 struct ColumnIteratorOptions {
-    fs::ReadableBlock* rblock = nullptr;
+    RandomAccessFile* read_file = nullptr;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
@@ -52,7 +49,7 @@ struct ColumnIteratorOptions {
     bool check_dict_encoding = false;
 
     void sanity_check() const {
-        CHECK_NOTNULL(rblock);
+        CHECK_NOTNULL(read_file);
         CHECK_NOTNULL(stats);
     }
 

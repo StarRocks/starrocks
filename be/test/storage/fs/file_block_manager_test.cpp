@@ -26,6 +26,7 @@
 #include <string>
 
 #include "fs/fs.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/slice.h"
 
@@ -67,16 +68,12 @@ TEST_F(FileBlockManagerTest, NormalTest) {
     wblock->append(data);
     wblock->close();
 
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    st = fbm->open_block(fname, &rblock);
-    uint64_t file_size = 0;
-    ASSERT_TRUE(rblock->size(&file_size).ok());
+    ASSIGN_OR_ABORT(auto rf, fbm->new_random_access_file(fname));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
     ASSERT_EQ(data.size(), file_size);
     std::string read_buff(data.size(), 'a');
-    Slice read_slice(read_buff);
-    rblock->read(0, read_slice);
+    ASSERT_OK(rf->read_at_fully(0, read_buff.data(), read_buff.size()));
     ASSERT_EQ(data, read_buff);
-    rblock->close();
 }
 
 } // namespace starrocks

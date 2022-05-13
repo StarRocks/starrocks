@@ -243,8 +243,7 @@ private:
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
 
-    // block for file to read
-    std::unique_ptr<fs::ReadableBlock> _rblock;
+    std::unique_ptr<RandomAccessFile> _rfile;
 
     SparseRange _scan_range;
     SparseRangeIterator _range_iter;
@@ -323,7 +322,7 @@ Status SegmentIterator::_init() {
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
-    RETURN_IF_ERROR(_opts.block_mgr->open_block(_segment->file_name(), &_rblock));
+    ASSIGN_OR_RETURN(_rfile, _opts.block_mgr->new_random_access_file(_segment->file_name()));
 
     /// the calling order matters, do not change unless you know why.
 
@@ -385,7 +384,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             ColumnIteratorOptions iter_opts;
             iter_opts.stats = _opts.stats;
             iter_opts.use_page_cache = _opts.use_page_cache;
-            iter_opts.rblock = _rblock.get();
+            iter_opts.read_file = _rfile.get();
             iter_opts.check_dict_encoding = check_dict_enc;
             iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
@@ -1439,7 +1438,7 @@ void SegmentIterator::close() {
     _context_list[0].close();
     _context_list[1].close();
     _obj_pool.clear();
-    _rblock.reset();
+    _rfile.reset();
     _segment.reset();
     _column_decoders.clear();
 

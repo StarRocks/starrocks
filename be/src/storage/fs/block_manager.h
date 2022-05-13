@@ -135,32 +135,6 @@ public:
     virtual State state() const = 0;
 };
 
-// A block that has been opened for reading. Multiple in-memory blocks may
-// be constructed for the same logical block, and the same in-memory block
-// may be shared amongst threads for concurrent reading.
-class ReadableBlock : public Block {
-public:
-    ~ReadableBlock() override = default;
-
-    // Destroys the in-memory representation of the block.
-    virtual Status close() = 0;
-
-    // Get a pointer back to this block's manager.
-    virtual BlockManager* block_manager() const = 0;
-
-    // Returns the on-disk size of a written block.
-    virtual Status size(uint64_t* sz) = 0;
-
-    // Reads exactly 'result.size' bytes beginning from 'offset' in the block,
-    // returning an error if fewer bytes exist.
-    // Sets "result" to the data that was read.
-    // If an error was encountered, returns a non-OK status.
-    virtual Status read(uint64_t offset, Slice result) = 0;
-
-    // Returns the memory usage of this object including the object itself.
-    // virtual size_t memory_footprint() const = 0;
-};
-
 // Provides options and hints for block placement. This is used for identifying
 // the correct DataDirGroups to place blocks. In the future this may also be
 // used to specify directories based on block type (e.g. to prefer bloom block
@@ -210,16 +184,7 @@ public:
     // Does not modify 'block' on error.
     virtual Status create_block(const CreateBlockOptions& opts, std::unique_ptr<WritableBlock>* block) = 0;
 
-    // Opens an existing block for reading.
-    //
-    // While it is safe to delete a block that has already been opened, it is
-    // not safe to do so concurrently with the OpenBlock() call itself. In some
-    // block manager implementations this may result in unusual behavior. For
-    // example, OpenBlock() may succeed but subsequent ReadableBlock operations
-    // may fail.
-    //
-    // Does not modify 'block' on error.
-    virtual Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) = 0;
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) = 0;
 
     static const std::string block_manager_preflush_control;
 };

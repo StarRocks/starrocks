@@ -71,7 +71,7 @@ public:
 
     Status create_block(const CreateBlockOptions& opts, std::unique_ptr<WritableBlock>* block) override;
 
-    Status open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) override;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
 
 private:
     friend class internal::FileReadableBlock;

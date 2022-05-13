@@ -49,6 +49,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 
 using std::string;
 
@@ -170,14 +171,13 @@ protected:
             auto st = reader->new_iterator(&iter);
             ASSERT_TRUE(st.ok());
             std::unique_ptr<ColumnIterator> guard(iter);
-            std::unique_ptr<fs::ReadableBlock> rblock;
-            block_mgr->open_block(fname, &rblock);
+            ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(fname));
 
             ASSERT_TRUE(st.ok());
             ColumnIteratorOptions iter_opts;
             OlapReaderStatistics stats;
             iter_opts.stats = &stats;
-            iter_opts.rblock = rblock.get();
+            iter_opts.read_file = read_file.get();
             iter_opts.use_page_cache = true;
             st = iter->init(iter_opts);
             ASSERT_TRUE(st.ok());
@@ -419,13 +419,12 @@ protected:
             ColumnIterator* iter = nullptr;
             ASSERT_TRUE(reader->new_iterator(&iter).ok());
             std::unique_ptr<ColumnIterator> guard(iter);
-            std::unique_ptr<fs::ReadableBlock> rblock;
-            block_mgr->open_block(fname, &rblock);
+            ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
             OlapReaderStatistics stats;
             iter_opts.stats = &stats;
-            iter_opts.rblock = rblock.get();
+            iter_opts.read_file = read_file.get();
             ASSERT_TRUE(iter->init(iter_opts).ok());
 
             // sequence read

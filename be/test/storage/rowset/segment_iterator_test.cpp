@@ -276,11 +276,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ColumnIterator* scalar_iter = nullptr;
     DeferOp defer([&]() { delete scalar_iter; });
     ColumnIteratorOptions iter_opts;
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    ASSERT_OK(_block_mgr->open_block(segment->file_name(), &rblock));
+    ASSIGN_OR_ABORT(auto read_file, _block_mgr->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
     iter_opts.use_page_cache = false;
-    iter_opts.rblock = rblock.get();
+    iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
     ASSERT_OK(segment->new_column_iterator(1, &scalar_iter));

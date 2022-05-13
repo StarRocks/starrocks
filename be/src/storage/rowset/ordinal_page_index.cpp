@@ -73,11 +73,10 @@ Status OrdinalIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
         return Status::OK();
     }
     // need to read index page
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(block_mgr->open_block(filename, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(filename));
 
     PageReadOptions opts;
-    opts.rblock = rblock.get();
+    opts.read_file = read_file.get();
     opts.page_pointer = PagePointer(index_meta->root_page().root_page());
     opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
     OlapReaderStatistics tmp_stats;
