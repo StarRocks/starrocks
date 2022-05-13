@@ -192,6 +192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE = "enable_exchange_pass_through_expire";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -478,9 +479,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
     // and it will cause memory statistics problem of fragment instance,
     // It also which will introduce the problem of cross-thread memory allocate and release,
-    // So i temporarily disable the enable_exchange_pass_throuth.
+    // So i temporarily disable the enable_exchange_pass_through.
     // I will turn on int after all the above problems are solved.
-    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE, alias = ENABLE_EXCHANGE_PASS_THROUGH,
+            show = ENABLE_EXCHANGE_PASS_THROUGH)
     private boolean enableExchangePassThrough = false;
 
     // The following variables are deprecated and invisible //
