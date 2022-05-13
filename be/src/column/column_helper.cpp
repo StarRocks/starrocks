@@ -245,6 +245,19 @@ bool ColumnHelper::is_all_const(const Columns& columns) {
     return std::all_of(std::begin(columns), std::end(columns), [](const ColumnPtr& col) { return col->is_constant(); });
 }
 
+std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
+    if (columns.empty()) {
+        return {false, 0};
+    }
+
+    bool all_const = is_all_const(columns);
+    if (!all_const) {
+        return {all_const, columns[0]->size()};
+    }
+
+    return {all_const, 1};
+}
+
 using ColumnsConstIterator = Columns::const_iterator;
 bool ColumnHelper::is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end) {
     for (auto it = begin; it < end; ++it) {
