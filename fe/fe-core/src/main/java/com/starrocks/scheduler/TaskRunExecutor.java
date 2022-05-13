@@ -19,30 +19,32 @@ public class TaskRunExecutor {
         if (taskRun == null) {
             return;
         }
-
-        if (taskRun.getState() == Constants.TaskRunState.SUCCESS ||
-                taskRun.getState() == Constants.TaskRunState.FAILED) {
-            LOG.warn("TaskRun {} is in final status {} ", taskRun.getQueryId(), taskRun.getState());
+        TaskRunStatus status = taskRun.getStatus();
+        if (status == null) {
+            return;
+        }
+        if (status.getState() == Constants.TaskRunState.SUCCESS ||
+                status.getState() == Constants.TaskRunState.FAILED) {
+            LOG.warn("TaskRun {} is in final status {} ", status.getQueryId(), status.getState());
             return;
         }
 
         Future<?> future = taskRunPool.submit(() -> {
-            taskRun.setState(Constants.TaskRunState.RUNNING);
+            status.setState(Constants.TaskRunState.RUNNING);
             try {
-                taskRun.setStartTime(System.currentTimeMillis());
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {
-                    taskRun.setState(Constants.TaskRunState.SUCCESS);
+                    status.setState(Constants.TaskRunState.SUCCESS);
                 } else {
-                    taskRun.setState(Constants.TaskRunState.FAILED);
+                    status.setState(Constants.TaskRunState.FAILED);
                 }
             } catch (Exception ex) {
                 LOG.warn("failed to execute TaskRun.", ex);
-                taskRun.setState(Constants.TaskRunState.FAILED);
-                taskRun.setErrorCode(-1);
-                taskRun.setErrorMsg(ex.toString());
+                status.setState(Constants.TaskRunState.FAILED);
+                status.setErrorCode(-1);
+                status.setErrorMsg(ex.toString());
             } finally {
-                taskRun.setCompleteTime(System.currentTimeMillis());
+                status.setCompleteTime(System.currentTimeMillis());
             }
         });
         taskRun.setFuture(future);

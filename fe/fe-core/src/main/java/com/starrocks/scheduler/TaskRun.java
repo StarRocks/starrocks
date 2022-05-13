@@ -2,63 +2,26 @@
 package com.starrocks.scheduler;
 
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
-import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
-public class TaskRun implements Writable {
+public class TaskRun {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
-    @SerializedName("queryId")
-    private String queryId = null;
-
-    @SerializedName("dbName")
-    private String dbName;
-
-    @SerializedName("taskId")
     private long taskId;
 
-    @SerializedName("definition")
-    private String definition;
-
-    @SerializedName("state")
-    private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
-
-    @SerializedName("createTime")
-    private long createTime;
-
-    @SerializedName("startTime")
-    private long startTime;
-
-    @SerializedName("completeTime")
-    private long completeTime;
-
-    @SerializedName("properties")
     private Map<String, String> properties;
-
-    @SerializedName("errorCode")
-    private int errorCode;
-
-    @SerializedName("errorMsg")
-    private String errorMsg;
 
     private Future<?> future;
 
@@ -68,21 +31,7 @@ public class TaskRun implements Writable {
 
     private TaskRunProcessor processor;
 
-    public String getQueryId() {
-        return queryId;
-    }
-
-    public void setQueryId(String queryId) {
-        this.queryId = queryId;
-    }
-
-    public String getDbName() {
-        return dbName;
-    }
-
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
+    private TaskRunStatus status;
 
     public long getTaskId() {
         return taskId;
@@ -90,46 +39,6 @@ public class TaskRun implements Writable {
 
     public void setTaskId(long taskId) {
         this.taskId = taskId;
-    }
-
-    public String getDefinition() {
-        return definition;
-    }
-
-    public void setDefinition(String definition) {
-        this.definition = definition;
-    }
-
-    public Constants.TaskRunState getState() {
-        return state;
-    }
-
-    public void setState(Constants.TaskRunState state) {
-        this.state = state;
-    }
-
-    public long getCreateTime() {
-        return createTime;
-    }
-
-    public void setCreateTime(long createTime) {
-        this.createTime = createTime;
-    }
-
-    public long getStartTime() {
-        return startTime;
-    }
-
-    public void setStartTime(long startTime) {
-        this.startTime = startTime;
-    }
-
-    public long getCompleteTime() {
-        return completeTime;
-    }
-
-    public void setCompleteTime(long completeTime) {
-        this.completeTime = completeTime;
     }
 
     public Map<String, String> getProperties() {
@@ -166,7 +75,7 @@ public class TaskRun implements Writable {
 
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
-        taskRunContext.setDefinition(definition);
+        taskRunContext.setDefinition(status.getDefinition());
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext newCtx = new ConnectContext();
         newCtx.setCluster(ctx.getClusterName());
@@ -175,7 +84,7 @@ public class TaskRun implements Writable {
         newCtx.setQualifiedUser(ctx.getQualifiedUser());
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
         newCtx.getState().reset();
-        newCtx.setQueryId(UUID.fromString(queryId));
+        newCtx.setQueryId(UUID.fromString(status.getQueryId()));
         SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
         if (properties != null) {
             for (String key : properties.keySet()) {
@@ -188,10 +97,12 @@ public class TaskRun implements Writable {
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            errorMsg = queryState.getErrorMessage();
+            status.setErrorMsg(queryState.getErrorMessage());
+            int errorCode = -1;
             if (queryState.getErrorCode() != null) {
                 errorCode = queryState.getErrorCode().getCode();
             }
+            status.setErrorCode(errorCode);
             return false;
         }
         return true;
@@ -205,45 +116,19 @@ public class TaskRun implements Writable {
         this.ctx = ctx;
     }
 
-    public int getErrorCode() {
-        return errorCode;
+    public TaskRunStatus getStatus() {
+        return status;
     }
 
-    public void setErrorCode(int errorCode) {
-        this.errorCode = errorCode;
-    }
-
-    public String getErrorMsg() {
-        return errorMsg;
-    }
-
-    public void setErrorMsg(String errorMsg) {
-        this.errorMsg = errorMsg;
-    }
-
-    @Override
-    public String toString() {
-        return "TaskRun{" +
-                "queryId='" + queryId + '\'' +
-                ", dbName='" + dbName + '\'' +
-                ", taskId=" + taskId +
-                ", status=" + state +
-                ", createTime=" + createTime +
-                ", startTime=" + startTime +
-                ", endTime=" + completeTime +
-                ", properties=" + properties +
-                '}';
-    }
-
-    public static TaskRun read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TaskRun.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public TaskRunStatus initStatus(String queryId) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setQueryId(queryId);
+        status.setTaskName(task.getName());
+        status.setCreateTime(System.currentTimeMillis());
+        status.setDbName(task.getDbName());
+        status.setDefinition(task.getDefinition());
+        this.status = status;
+        return status;
     }
 
 }

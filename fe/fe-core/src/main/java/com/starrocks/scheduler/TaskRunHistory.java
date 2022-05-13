@@ -8,13 +8,13 @@ import java.util.Deque;
 
 public class TaskRunHistory {
 
-    private final Deque<TaskRun> historyDeque = Queues.newLinkedBlockingDeque();
+    private final Deque<TaskRunStatus> historyDeque = Queues.newLinkedBlockingDeque();
 
-    public void addHistory(TaskRun pendingTaskRun) {
-        historyDeque.addFirst(pendingTaskRun);
+    public void addHistory(TaskRunStatus status) {
+        historyDeque.addFirst(status);
     }
 
-    public Deque<TaskRun> getAllHistory() {
+    public Deque<TaskRunStatus> getAllHistory() {
         return historyDeque;
     }
 }

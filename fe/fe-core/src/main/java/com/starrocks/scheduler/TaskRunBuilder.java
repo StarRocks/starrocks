@@ -19,9 +19,6 @@ public class TaskRunBuilder {
     public TaskRun build() {
         TaskRun taskRun = new TaskRun();
         taskRun.setTaskId(task.getId());
-        taskRun.setDbName(task.getDbName());
-        taskRun.setCreateTime(System.currentTimeMillis());
-        taskRun.setDefinition(task.getDefinition());
         taskRun.setProperties(task.getProperties());
         taskRun.setCtx(ConnectContext.get());
         taskRun.setTask(task);
@@ -33,6 +30,7 @@ public class TaskRunBuilder {
             // default processor
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }
+
         return taskRun;
     }
 
