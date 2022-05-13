@@ -44,7 +44,6 @@ import java.util.Map;
  * them unique ids..
  */
 public class DescriptorTable {
-    private static final Logger LOG = LogManager.getLogger(DescriptorTable.class);
 
     private final HashMap<TupleId, TupleDescriptor> tupleDescs = new HashMap<TupleId, TupleDescriptor>();
     // List of referenced tables with no associated TupleDescriptor to ship to the BE.
