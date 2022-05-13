@@ -160,7 +160,7 @@ public class WorkGroup implements Writable {
         }
 
         if (bigQueryCpuSecondLimit != null) {
-            twg.setBig_query_cpu_core_second_limit(bigQueryCpuSecondLimit);
+            twg.setBig_query_cpu_second_limit(bigQueryCpuSecondLimit);
         }
 
         if (concurrencyLimit != null) {

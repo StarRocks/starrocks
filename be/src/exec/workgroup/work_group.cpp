@@ -54,8 +54,8 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
         _big_query_scan_rows_limit = twg.big_query_scan_rows_limit;
     }
 
-    if (twg.__isset.big_query_cpu_core_second_limit) {
-        _big_query_cpu_second_limit = twg.big_query_cpu_core_second_limit * NANOS_PER_SEC;
+    if (twg.__isset.big_query_cpu_second_limit) {
+        _big_query_cpu_second_limit = twg.big_query_cpu_second_limit * NANOS_PER_SEC;
     }
 }
 
