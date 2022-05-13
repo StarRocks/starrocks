@@ -80,7 +80,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_num_drivers(_acc_num_drivers);
     twg.__set_big_query_mem_limit(_big_query_mem_limit);
     twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
-    twg.__set_big_query_cpu_core_second_limit(_big_query_cpu_second_limit);
+    twg.__set_big_query_cpu_second_limit(_big_query_cpu_second_limit);
     return twg;
 }
 
