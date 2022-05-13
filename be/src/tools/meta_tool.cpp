@@ -475,28 +475,38 @@ void check_meta_consistency(DataDir* data_dir) {
                 }
                 auto seg_file = std::move(res).value();
                 starrocks::SegmentFooterPB footer;
-                auto status = get_segment_footer(seg_file.get(), &footer);
-                if (!status.ok()) {
+                res = get_segment_footer(seg_file.get(), &footer);
+                if (!res.ok()) {
                     continue;
                 }
 
-                std::unordered_map<uint32_t, int32_t> column_unique_id_to_type;
+                // unique_id: ordinal: column_type
+                std::unordered_map<uint32_t, std::pair<uint32_t, int32_t>> columns_in_footer;
                 for (uint32_t ordinal = 0; ordinal < footer.columns().size(); ++ordinal) {
                     const auto& column_pb = footer.columns(ordinal);
-                    column_unique_id_to_type.emplace(column_pb.unique_id(), column_pb.type());
+                    columns_in_footer.emplace(column_pb.unique_id(), std::make_pair(ordinal, column_pb.type()));
                 }
                 for (uint32_t col_id = 0; col_id < columns.size(); ++col_id) {
                     uint32_t unique_id = columns[col_id].unique_id();
                     starrocks::FieldType type = columns[col_id].type();
-                    auto iter = column_unique_id_to_type.find(unique_id);
-                    if (iter == column_unique_id_to_type.end()) {
+                    auto iter = columns_in_footer.find(unique_id);
+                    if (iter == columns_in_footer.end()) {
                         continue;
                     }
 
                     // find a segment inconsistency, return directly
-                    if (iter->second != type) {
+                    if (iter->second.second != type) {
                         tablet_ids.emplace_back(tablet_id);
                         return true;
+                    }
+
+                    // if type is varchar, check length
+                    if (type == starrocks::FieldType::OLAP_FIELD_TYPE_VARCHAR) {
+                        const auto& column_pb = footer.columns(iter->second.first);
+                        if (columns[col_id].length() != column_pb.length()) {
+                            tablet_ids.emplace_back(tablet_id);
+                            return true;
+                        }
                     }
                 }
             }
