@@ -28,8 +28,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.thrift.TDescriptorTable;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,7 +42,6 @@ import java.util.Map;
  * them unique ids..
  */
 public class DescriptorTable {
-    private static final Logger LOG = LogManager.getLogger(DescriptorTable.class);
 
     private final HashMap<TupleId, TupleDescriptor> tupleDescs = new HashMap<TupleId, TupleDescriptor>();
     // List of referenced tables with no associated TupleDescriptor to ship to the BE.
