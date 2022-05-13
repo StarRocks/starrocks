@@ -1177,13 +1177,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAdminShowReplicaDistribution(StarRocksParser.AdminShowReplicaDistributionContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        if (context.PARTITION() != null) {
-            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-            return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null,
-                    new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))));
-        } else {
-            return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null));
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
         }
+        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null, partitionNames));
     }
 
     @Override
@@ -1191,13 +1189,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        if (context.PARTITION() != null) {
-            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-            return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null,
-                    new PartitionNames(false, identifierList.stream().map(Identifier::getValue).collect(toList()))), where);
-        } else {
-            return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null), where);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
         }
+        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
     }
 
     @Override
