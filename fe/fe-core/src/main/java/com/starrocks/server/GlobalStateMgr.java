@@ -541,7 +541,7 @@ public class GlobalStateMgr {
         return systemInfoService;
     }
 
-    private SystemInfoService getClusterInfo() {
+    public SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
 
@@ -562,7 +562,7 @@ public class GlobalStateMgr {
         return this.colocateTableIndex;
     }
 
-    private CatalogRecycleBin getRecycleBin() {
+    public CatalogRecycleBin getRecycleBin() {
         return this.recycleBin;
     }
 
@@ -6636,6 +6636,10 @@ public class GlobalStateMgr {
         if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
             isDefaultClusterCreated = true;
         }
+    }
+
+    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
+        this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
     /**
