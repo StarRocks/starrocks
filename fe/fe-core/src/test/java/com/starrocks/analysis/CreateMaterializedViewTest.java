@@ -441,7 +441,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             assertEquals(e.getMessage(),
-                    "Materialized view related base table partition columnsonly supports single column");
+                    "Materialized view related base table partition columns only supports single column");
         }
     }
 
