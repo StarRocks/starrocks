@@ -475,8 +475,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
+    // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
+    // and it will cause memory statistics problem of fragment instance,
+    // It also which will introduce the problem of cross-thread memory allocate and release,
+    // So i temporarily disable the enable_exchange_pass_throuth.
+    // I will turn on int after all the above problems are solved.
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = true;
+    private boolean enableExchangePassThrough = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
