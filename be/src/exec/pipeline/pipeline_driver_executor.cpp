@@ -111,28 +111,20 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
 
-            auto status = driver->process(runtime_state, worker_id);
+            auto maybe_state = driver->process(runtime_state, worker_id);
+            Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
             // Check big query
-            Status bigquery_status = Status::OK();
-            if (auto wg = driver->workgroup()) {
-                bigquery_status = wg->check_big_query(*query_ctx);
+            if (status.ok() && driver->workgroup()) {
+                status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
-            if (!status.ok() || !bigquery_status.ok()) {
-                if (!bigquery_status.ok()) {
-                    LOG(WARNING) << "[Driver] Process exceed limit, query_id="
-                                 << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                                 << ", status=" << bigquery_status;
-                    query_ctx->cancel(bigquery_status);
-                } else {
-                    LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                                 << ", error=" << status.status().to_string();
-                    query_ctx->cancel(status.status());
-                }
+            if (!status.ok()) {
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", status=" << status;
+                query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -142,7 +134,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 }
                 continue;
             }
-            auto driver_state = status.value();
+            auto driver_state = maybe_state.value();
             switch (driver_state) {
             case READY:
             case RUNNING: {
