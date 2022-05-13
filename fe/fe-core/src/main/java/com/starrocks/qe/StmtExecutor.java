@@ -294,7 +294,7 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
