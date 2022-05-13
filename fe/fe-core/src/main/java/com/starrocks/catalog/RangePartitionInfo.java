@@ -354,19 +354,16 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void preSerialize() throws IOException {
-        if (idToRange != null) {
-            serializedIdToRange = Maps.newHashMap();
-            for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
-                byte[] serializedRange = serializeRange(entry.getValue());
-                serializedIdToRange.put(entry.getKey(), serializedRange);
-            }
+        serializedIdToRange = Maps.newHashMap();
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
+            byte[] serializedRange = serializeRange(entry.getValue());
+            serializedIdToRange.put(entry.getKey(), serializedRange);
         }
-        if (idToTempRange != null) {
-            serializedIdToTempRange = Maps.newHashMap();
-            for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
-                byte[] serializedRange = serializeRange(entry.getValue());
-                serializedIdToTempRange.put(entry.getKey(), serializedRange);
-            }
+
+        serializedIdToTempRange = Maps.newHashMap();
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
+            byte[] serializedRange = serializeRange(entry.getValue());
+            serializedIdToTempRange.put(entry.getKey(), serializedRange);
         }
     }
 
