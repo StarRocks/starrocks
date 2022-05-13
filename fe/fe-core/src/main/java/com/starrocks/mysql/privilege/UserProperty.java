@@ -28,8 +28,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ResourceType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
@@ -52,7 +50,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /*
@@ -76,8 +73,6 @@ public class UserProperty implements Writable {
     private String qualifiedUser;
 
     private long maxConn = 100;
-    // Resource belong to this user.
-    private UserResource resource = new UserResource(1000);
     // load cluster
     private String defaultLoadCluster = null;
     private Map<String, DppConfig> clusterToDppConfig = Maps.newHashMap();
@@ -166,7 +161,6 @@ public class UserProperty implements Writable {
     public void update(List<Pair<String, String>> properties) throws DdlException {
         // copy
         long newMaxConn = maxConn;
-        UserResource newResource = resource.getCopiedUserResource();
         String newDefaultLoadCluster = defaultLoadCluster;
         Map<String, DppConfig> newDppConfigs = Maps.newHashMap(clusterToDppConfig);
 
@@ -191,42 +185,6 @@ public class UserProperty implements Writable {
                 if (newMaxConn <= 0 || newMaxConn > 10000) {
                     throw new DdlException(PROP_MAX_USER_CONNECTIONS + " is not valid, must between 1 and 10000");
                 }
-            } else if (keyArr[0].equalsIgnoreCase(PROP_RESOURCE)) {
-                // set property "resource.cpu_share" = "100"
-                if (keyArr.length != 2) {
-                    throw new DdlException(PROP_RESOURCE + " format error");
-                }
-
-                int resource = 0;
-                try {
-                    resource = Integer.parseInt(value);
-                } catch (NumberFormatException e) {
-                    throw new DdlException(key + " is not number");
-                }
-
-                if (resource <= 0) {
-                    throw new DdlException(key + " is not valid");
-                }
-
-                newResource.updateResource(keyArr[1], resource);
-            } else if (keyArr[0].equalsIgnoreCase(PROP_QUOTA)) {
-                // set property "quota.normal" = "100"
-                if (keyArr.length != 2) {
-                    throw new DdlException(PROP_QUOTA + " format error");
-                }
-
-                int quota = 0;
-                try {
-                    quota = Integer.parseInt(value);
-                } catch (NumberFormatException e) {
-                    throw new DdlException(key + " is not number");
-                }
-
-                if (quota <= 0) {
-                    throw new DdlException(key + " is not valid");
-                }
-
-                newResource.updateGroupShare(keyArr[1], quota);
             } else if (keyArr[0].equalsIgnoreCase(PROP_LOAD_CLUSTER)) {
                 updateLoadCluster(keyArr, value, newDppConfigs);
             } else if (keyArr[0].equalsIgnoreCase(PROP_DEFAULT_LOAD_CLUSTER)) {
@@ -246,7 +204,6 @@ public class UserProperty implements Writable {
 
         // set
         maxConn = newMaxConn;
-        resource = newResource;
         if (newDppConfigs.containsKey(newDefaultLoadCluster)) {
             defaultLoadCluster = newDefaultLoadCluster;
         } else {
@@ -298,29 +255,12 @@ public class UserProperty implements Writable {
         }
     }
 
-    public UserResource getResource() {
-        return resource;
-    }
-
     public List<List<String>> fetchProperty() {
         List<List<String>> result = Lists.newArrayList();
         String dot = SetUserPropertyVar.DOT_SEPARATOR;
 
         // max user connections
         result.add(Lists.newArrayList(PROP_MAX_USER_CONNECTIONS, String.valueOf(maxConn)));
-
-        // resource
-        ResourceGroup group = resource.getResource();
-        for (Map.Entry<ResourceType, Integer> entry : group.getQuotaMap().entrySet()) {
-            result.add(Lists.newArrayList(PROP_RESOURCE + dot + entry.getKey().getDesc().toLowerCase(),
-                    entry.getValue().toString()));
-        }
-
-        // quota
-        Map<String, AtomicInteger> groups = resource.getShareByGroup();
-        for (Map.Entry<String, AtomicInteger> entry : groups.entrySet()) {
-            result.add(Lists.newArrayList(PROP_QUOTA + dot + entry.getKey(), entry.getValue().toString()));
-        }
 
         // load cluster
         if (defaultLoadCluster != null) {
@@ -391,9 +331,6 @@ public class UserProperty implements Writable {
         Text.writeString(out, qualifiedUser);
         out.writeLong(maxConn);
 
-        // user resource
-        resource.write(out);
-
         // load cluster
         if (defaultLoadCluster == null) {
             out.writeBoolean(false);
@@ -452,8 +389,7 @@ public class UserProperty implements Writable {
             }
         }
 
-        // user resource
-        resource = UserResource.readIn(in);
+        UserResource.readIn(in);
 
         // load cluster
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {

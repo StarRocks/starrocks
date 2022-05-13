@@ -28,7 +28,6 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -81,18 +80,6 @@ public class MysqlProto {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         }
         context.setCluster(clusterName);
-
-        // check resource group level. user name may contains resource group level.
-        // eg:
-        // ...@user_name#HIGH
-        // set resource group if it is valid, or just ignore it
-        strList = tmpUser.split("#", 2);
-        if (strList.length > 1) {
-            tmpUser = strList[0];
-            if (UserResource.isValidGroup(strList[1])) {
-                context.getSessionVariable().setResourceGroup(strList[1]);
-            }
-        }
 
         LOG.debug("parse cluster: {}", clusterName);
         String qualifiedUser = ClusterNamespace.getFullName(clusterName, tmpUser);
