@@ -238,6 +238,12 @@ public class BDBEnvironment {
         restore.execute(insufficientLogEx, config);
     }
 
+    public void refreshAndSetup(InsufficientLogException insufficientLogEx) {
+        refreshLog(insufficientLogEx);
+        close();
+        setup();
+    }
+
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
         return this.replicationGroupAdmin;
     }
