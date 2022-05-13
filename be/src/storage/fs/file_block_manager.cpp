@@ -210,75 +210,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
     return close.ok() ? close : sync;
 }
 
-////////////////////////////////////////////////////////////
-// FileReadableBlock
-////////////////////////////////////////////////////////////
-
-// A file-backed block that has been opened for reading.
-//
-// There may be millions of instances of FileReadableBlock outstanding, so
-// great care must be taken to reduce its size. To that end, it does _not_
-// embed a FileBlockLocation, using the simpler BlockId instead.
-class FileReadableBlock : public ReadableBlock {
-public:
-    FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file);
-
-    ~FileReadableBlock() override;
-
-    Status close() override;
-
-    BlockManager* block_manager() const override;
-
-    const std::string& path() const override;
-
-    Status size(uint64_t* sz) override;
-
-    Status read(uint64_t offset, Slice result) override;
-
-private:
-    // Back pointer to the owning block manager.
-    FileBlockManager* _block_manager;
-
-    std::shared_ptr<RandomAccessFile> _file;
-
-    // Whether or not this block has been closed. Close() is thread-safe, so
-    // this must be an atomic primitive.
-    std::atomic_bool _closed;
-
-    FileReadableBlock(const FileReadableBlock&) = delete;
-    const FileReadableBlock& operator=(const FileReadableBlock&) = delete;
-};
-
-FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, std::shared_ptr<RandomAccessFile> file)
-        : _block_manager(block_manager), _file(std::move(file)), _closed(false) {}
-
-FileReadableBlock::~FileReadableBlock() {
-    WARN_IF_ERROR(close(), strings::Substitute("Failed to close block $0", path()));
-}
-
-Status FileReadableBlock::close() {
-    _closed.store(true);
-    return Status::OK();
-}
-
-BlockManager* FileReadableBlock::block_manager() const {
-    return _block_manager;
-}
-
-const string& FileReadableBlock::path() const {
-    return _file->filename();
-}
-
-Status FileReadableBlock::size(uint64_t* sz) {
-    DCHECK(!_closed.load());
-    ASSIGN_OR_RETURN(*sz, _file->get_size());
-    return Status::OK();
-}
-
-Status FileReadableBlock::read(uint64_t offset, Slice result) {
-    return _file->read_at_fully(offset, result.data, result.size);
-}
-
 } // namespace internal
 
 ////////////////////////////////////////////////////////////
@@ -307,11 +238,8 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     return Status::OK();
 }
 
-Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<ReadableBlock>* block) {
-    VLOG(1) << "Opening block with path at " << path;
-    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(path));
-    *block = std::make_unique<internal::FileReadableBlock>(this, std::move(file));
-    return Status::OK();
+StatusOr<std::unique_ptr<RandomAccessFile>> FileBlockManager::new_random_access_file(const std::string& path) {
+    return _fs->new_random_access_file(path);
 }
 
 // TODO(lingbin): We should do something to ensure that deletion can only be done

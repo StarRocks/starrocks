@@ -60,11 +60,9 @@ Status CompactionState::_do_load(Rowset* rowset) {
     auto tracker = update_manager->compaction_state_mem_tracker();
     segment_states.resize(rowset->num_segments());
     for (auto i = 0; i < rowset->num_segments(); i++) {
-        std::unique_ptr<fs::ReadableBlock> rblock;
         std::string rssid_file = BetaRowset::segment_srcrssid_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
-        RETURN_IF_ERROR(block_mgr->open_block(rssid_file, &rblock));
-        uint64_t file_size = 0;
-        RETURN_IF_ERROR(rblock->size(&file_size));
+        ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(rssid_file));
+        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint32_t>& src_rssids = segment_states[i].src_rssids;
         src_rssids.resize(file_size / sizeof(uint32_t));
         _memory_usage += file_size;
@@ -76,8 +74,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
                        << " size:" << rowset->data_disk_size() << " seg:" << i << " memory:" << _memory_usage
                        << " stats:" << update_manager->memory_stats();
         }
-        Slice read_slice(reinterpret_cast<const char*>(src_rssids.data()), file_size);
-        RETURN_IF_ERROR(rblock->read(0, read_slice));
+        RETURN_IF_ERROR(read_file->read_at_fully(0, src_rssids.data(), file_size));
     }
 
     RowsetReleaseGuard guard(rowset->shared_from_this());

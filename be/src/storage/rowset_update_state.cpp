@@ -64,13 +64,10 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     // always one file for now.
     for (auto i = 0; i < rowset->num_delete_files(); i++) {
         auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
-        std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(block_manager->open_block(path, &rblock));
-        uint64_t file_size = 0;
-        rblock->size(&file_size);
+        ASSIGN_OR_RETURN(auto read_file, block_manager->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint8_t> read_buffer(file_size);
-        Slice read_slice(read_buffer.data(), read_buffer.size());
-        rblock->read(0, read_slice);
+        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
         auto col = pk_column->clone();
         if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
             return Status::InternalError("column deserialization failed");

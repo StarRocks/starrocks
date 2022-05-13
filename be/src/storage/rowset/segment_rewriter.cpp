@@ -28,11 +28,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
     RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
 
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(block_mgr->open_block(src_path, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(src_path));
 
     SegmentFooterPB footer;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &partial_rowset_footer));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, &partial_rowset_footer));
     // keep the partial rowset footer in dest file
     // because be may be crash during update rowset meta
     uint64_t remaining = partial_rowset_footer.position() + partial_rowset_footer.size();
@@ -44,7 +43,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
             raw::stl_string_resize_uninitialized(&read_buffer, remaining);
         }
 
-        RETURN_IF_ERROR(rblock->read(offset, read_buffer));
+        RETURN_IF_ERROR(read_file->read_at_fully(offset, read_buffer.data(), read_buffer.size()));
         RETURN_IF_ERROR(wblock->append(read_buffer));
 
         offset += read_buffer.size();
@@ -75,11 +74,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
                                 std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
                                 const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(src_path));
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(block_mgr->open_block(src_path, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(src_path));
 
     SegmentFooterPB footer;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, nullptr, &partial_rowset_footer));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, &partial_rowset_footer));
 
     int64_t trunc_len = partial_rowset_footer.position() + partial_rowset_footer.size();
     RETURN_IF_ERROR(FileSystemUtil::resize_file(src_path, trunc_len));

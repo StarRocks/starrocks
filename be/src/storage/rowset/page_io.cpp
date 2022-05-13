@@ -122,7 +122,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     auto cache = StoragePageCache::instance();
     PageCacheHandle cache_handle;
-    StoragePageCache::CacheKey cache_key(opts.rblock->path(), opts.page_pointer.offset);
+    StoragePageCache::CacheKey cache_key(opts.read_file->filename(), opts.page_pointer.offset);
     if (opts.use_page_cache && cache->lookup(cache_key, &cache_handle)) {
         // we find page in cache, use it
         *handle = PageHandle(std::move(cache_handle));
@@ -150,7 +150,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     Slice page_slice(page.get(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
-        RETURN_IF_ERROR(opts.rblock->read(opts.page_pointer.offset, page_slice));
+        RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
         opts.stats->compressed_bytes_read += page_size;
     }
 

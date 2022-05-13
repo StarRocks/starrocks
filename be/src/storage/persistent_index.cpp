@@ -788,7 +788,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
         return Status::OK();
     }
     *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)(*shard)->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
     for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
         auto& header = (*shard)->header(pageid);
         for (uint32_t bucketid = 0; bucketid < bucket_per_page; bucketid++) {
@@ -815,7 +815,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* key
     size_t found = 0;
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     uint8_t candidate_idxes[bucket_size_max];
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info.hashes[i]);
@@ -851,7 +851,7 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     }
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     uint8_t candidate_idxes[bucket_size_max];
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info.hashes[i]);
@@ -919,38 +919,40 @@ Status ImmutableIndex::check_not_exist(size_t n, const void* keys) {
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<fs::ReadableBlock>&& rb) {
-    uint64_t file_size;
-    RETURN_IF_ERROR(rb->size(&file_size));
+StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file) {
+    ASSIGN_OR_RETURN(auto file_size, file->get_size());
     if (file_size < 12) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", rb->path(), file_size));
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: file size $1 < 12", file->filename(), file_size));
     }
     size_t footer_read_size = std::min<size_t>(4096, file_size);
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
-    RETURN_IF_ERROR(rb->read(file_size - footer_read_size, buff));
+    RETURN_IF_ERROR(file->read_at_fully(file_size - footer_read_size, buff.data(), buff.size()));
     uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + footer_read_size - 12);
     uint32_t checksum = UNALIGNED_LOAD32(buff.data() + footer_read_size - 8);
     uint32_t magic = UNALIGNED_LOAD32(buff.data() + footer_read_size - 4);
     if (magic != UNALIGNED_LOAD32(index_file_magic)) {
-        return Status::Corruption(strings::Substitute("load immutable index failed $0 illegal magic", rb->path()));
+        return Status::Corruption(
+                strings::Substitute("load immutable index failed $0 illegal magic", file->filename()));
     }
     std::string_view meta_str;
     if (footer_length <= footer_read_size - 12) {
         meta_str = std::string_view(buff.data() + footer_read_size - 12 - footer_length, footer_length + 4);
     } else {
         raw::stl_string_resize_uninitialized(&buff, footer_length + 4);
-        RETURN_IF_ERROR(rb->read(file_size - 12 - footer_length, buff));
+        RETURN_IF_ERROR(file->read_at_fully(file_size - 12 - footer_length, buff.data(), buff.size()));
         meta_str = std::string_view(buff.data(), footer_length + 4);
     }
     auto actual_checksum = crc32c::Value(meta_str.data(), meta_str.size());
     if (checksum != actual_checksum) {
-        return Status::Corruption(strings::Substitute("load immutable index failed $0 checksum not match", rb->path()));
+        return Status::Corruption(
+                strings::Substitute("load immutable index failed $0 checksum not match", file->filename()));
     }
     ImmutableIndexMetaPB meta;
     if (!meta.ParseFromArray(meta_str.data(), meta_str.size() - 4)) {
         return Status::Corruption(
-                strings::Substitute("load immutable index failed $0 parse meta pb failed", rb->path()));
+                strings::Substitute("load immutable index failed $0 parse meta pb failed", file->filename()));
     }
     std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
@@ -967,7 +969,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<f
         dest.offset = src.data().offset();
         dest.bytes = src.data().size();
     }
-    idx->_rb.swap(rb);
+    idx->_file.swap(file);
     return std::move(idx);
 }
 
@@ -1043,11 +1045,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     PagePointerPB page_pb = snapshot_meta.data();
     size_t snapshot_off = page_pb.offset();
     size_t snapshot_size = page_pb.size();
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    std::unique_ptr<fs::ReadableBlock> l1_rblock;
+    std::unique_ptr<RandomAccessFile> l1_rfile;
 
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    RETURN_IF_ERROR(_block_mgr->open_block(l0_index_file_name, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, _block_mgr->new_random_access_file(l0_index_file_name));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
@@ -1073,7 +1074,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
         while (nums > 0) {
             size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
-            RETURN_IF_ERROR(rblock->read(offset, buff));
+            RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
             uint8_t keys[key_size * batch_num];
             std::vector<IndexValue> values;
             values.reserve(batch_num);
@@ -1099,8 +1100,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        RETURN_IF_ERROR(_block_mgr->open_block(l1_block_path, &l1_rblock));
-        auto l1_st = ImmutableIndex::load(std::move(l1_rblock));
+        ASSIGN_OR_RETURN(l1_rfile, _block_mgr->new_random_access_file(l1_block_path));
+        auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
         if (!l1_st.ok()) {
             return l1_st.status();
         }

@@ -239,10 +239,9 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
 
     ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
 
-    std::unique_ptr<fs::ReadableBlock> rb;
     ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
-    ASSERT_TRUE(block_mgr->open_block("./index.l1.1.1", &rb).ok());
-    auto st_load = ImmutableIndex::load(std::move(rb));
+    ASSIGN_OR_ABORT(auto rf, block_mgr->new_random_access_file("./index.l1.1.1"));
+    auto st_load = ImmutableIndex::load(std::move(rf));
     if (!st_load.ok()) {
         LOG(WARNING) << st_load.status();
     }

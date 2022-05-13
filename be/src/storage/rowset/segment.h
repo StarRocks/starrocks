@@ -81,7 +81,7 @@ public:
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr);
 
-    static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
+    static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
