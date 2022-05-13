@@ -70,7 +70,7 @@ bool ScanOperator::has_output() const {
         return false;
     }
     // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
-    if (Status status = get_scan_status(); !status.ok()) {
+    if (!get_scan_status().ok()) {
         return true;
     }
 
