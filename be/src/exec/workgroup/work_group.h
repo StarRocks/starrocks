@@ -100,7 +100,10 @@ public:
         ++_acc_num_drivers;
     }
     // decrease num_driver when the driver is detached from the workgroup
-    void decrease_num_drivers() { --_num_drivers; }
+    void decrease_num_drivers() {
+        int64_t old = _num_drivers.fetch_sub(1);
+        DCHECK_GT(old, 0);
+    }
 
     int num_drivers() const { return _num_drivers; }
 
@@ -126,10 +129,10 @@ public:
     int64_t total_cpu_cost() const { return _total_cpu_cost.load(); }
     void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
-    bool is_big_query(const QueryContext& query_context);
-    void incr_num_queries() { _num_queries++; }
-    void decr_num_queries() { _num_queries--; }
-    int64_t num_queries() const { return _num_queries; }
+    Status check_big_query(const QueryContext& query_context);
+    Status try_incr_num_queries();
+    void decr_num_queries();
+    int64_t num_running_queries() const { return _num_queries; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     bool use_big_query_mem_limit() const {
@@ -156,12 +159,13 @@ private:
     std::string _name;
     int64_t _id;
     int64_t _version;
+    WorkGroupType _type;
 
+    // Specified limitations
     size_t _cpu_limit;
     double _memory_limit;
     int64_t _memory_limit_bytes = -1;
-    size_t _concurrency;
-    WorkGroupType _type;
+    size_t _concurrency_limit = 0;
 
     // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
     int64_t _big_query_mem_limit = 0;
@@ -287,6 +291,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
 
     void add_metrics(const WorkGroupPtr& wg);
     void update_metrics_unlocked();

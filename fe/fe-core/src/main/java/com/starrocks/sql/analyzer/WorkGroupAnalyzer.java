@@ -153,7 +153,7 @@ public class WorkGroupAnalyzer {
 
             if (key.equalsIgnoreCase(WorkGroup.CONCURRENCY_LIMIT)) {
                 int concurrencyLimit = Integer.parseInt(value);
-                if (concurrencyLimit <= 0) {
+                if (concurrencyLimit < 0) {
                     throw new SemanticException("concurrency_limit should be greater than 0");
                 }
                 workgroup.setConcurrencyLimit(concurrencyLimit);

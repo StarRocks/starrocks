@@ -32,16 +32,16 @@ public class WorkGroup implements Writable {
     public static final String WORKGROUP_TYPE = "type";
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("Id", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("MemLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryMemLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryScanRowsLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryCpuCoreSecondLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("ConcurrencyLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Classifiers", ScalarType.createVarchar(1024)))
+                    .addColumn(new Column("name", ScalarType.createVarchar(100)))
+                    .addColumn(new Column("id", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_cpu_core_second_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("type", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
                     .build();
     @SerializedName(value = "classifiers")
     List<WorkGroupClassifier> classifiers;
