@@ -130,14 +130,6 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
         return userIdentity;
     }
 
-    public boolean match(UserIdentity userIdent, boolean exactMatch) {
-        if (exactMatch) {
-            return origUser.equals(userIdent.getQualifiedUser()) && origHost.equals(userIdent.getHost());
-        } else {
-            return origUser.equals(userIdent.getQualifiedUser()) && hostPattern.match(userIdent.getHost());
-        }
-    }
-
     public abstract boolean keyMatch(PrivEntry other);
 
     /*

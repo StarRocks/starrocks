@@ -64,6 +64,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -415,30 +416,36 @@ public class Auth implements Writable {
      * This method will check the given privilege levels
      */
     public boolean checkHasPriv(ConnectContext ctx, PrivPredicate priv, PrivLevel... levels) {
-        return checkHasPrivInternal(ctx.getRemoteIP(), ctx.getQualifiedUser(), priv, levels);
+        // currentUser referred to the account that determines user's access privileges.
+        return checkHasPrivInternal(ctx.getCurrentUserIdentity(), priv, levels);
     }
 
-    private boolean checkHasPrivInternal(String host, String user, PrivPredicate priv, PrivLevel... levels) {
-        for (PrivLevel privLevel : levels) {
-            switch (privLevel) {
-                case GLOBAL:
-                    if (userPrivTable.hasPriv(host, user, priv)) {
-                        return true;
-                    }
-                    break;
-                case DATABASE:
-                    if (dbPrivTable.hasPriv(host, user, priv)) {
-                        return true;
-                    }
-                    break;
-                case TABLE:
-                    if (tablePrivTable.hasPriv(host, user, priv)) {
-                        return true;
-                    }
-                    break;
-                default:
-                    break;
+    private boolean checkHasPrivInternal(UserIdentity currentUser, PrivPredicate priv, PrivLevel... levels) {
+        readLock();
+        try {
+            for (PrivLevel privLevel : levels) {
+                switch (privLevel) {
+                    case GLOBAL:
+                        if (userPrivTable.hasPriv(currentUser, priv)) {
+                            return true;
+                        }
+                        break;
+                    case DATABASE:
+                        if (dbPrivTable.hasPriv(currentUser, priv)) {
+                            return true;
+                        }
+                        break;
+                    case TABLE:
+                        if (tablePrivTable.hasPriv(currentUser, priv)) {
+                            return true;
+                        }
+                        break;
+                    default:
+                        break;
+                }
             }
+        } finally {
+            readUnlock();
         }
         return false;
     }
@@ -1124,11 +1131,11 @@ public class Auth implements Writable {
         List<DbPrivEntry> dbPrivs = Lists.newArrayList();
         readLock();
         try {
-            for (PrivEntry entry : dbPrivTable.entries) {
-                if (!entry.match(userIdent, true /* exact match */)) {
-                    continue;
+            List<PrivEntry> entryList = dbPrivTable.map.get(userIdent);
+            if (entryList != null) {
+                for (PrivEntry entry : entryList) {
+                    dbPrivs.add((DbPrivEntry) entry);
                 }
-                dbPrivs.add((DbPrivEntry) entry);
             }
         } finally {
             readUnlock();
@@ -1140,11 +1147,11 @@ public class Auth implements Writable {
         List<TablePrivEntry> tablePrivs = Lists.newArrayList();
         readLock();
         try {
-            for (PrivEntry entry : tablePrivTable.entries) {
-                if (!entry.match(userIdent, true /* exact match */)) {
-                    continue;
+            List<PrivEntry> entryList = tablePrivTable.map.get(userIdent);
+            if (entryList != null) {
+                for (PrivEntry entry : entryList) {
+                    tablePrivs.add((TablePrivEntry) entry);
                 }
-                tablePrivs.add((TablePrivEntry) entry);
             }
         } finally {
             readUnlock();
@@ -1190,47 +1197,51 @@ public class Auth implements Writable {
         return userAuthInfos;
     }
 
+    /**
+     * TODO: This function is much too long and obscure. I'll refactor it in another PR.
+     */
     private void getUserAuthInfo(List<List<String>> userAuthInfos, UserIdentity userIdent) {
         List<String> userAuthInfo = Lists.newArrayList();
 
         // global
-        for (PrivEntry entry : userPrivTable.entries) {
-            if (!entry.match(userIdent, true /* exact match */)) {
-                continue;
-            }
-            GlobalPrivEntry gEntry = (GlobalPrivEntry) entry;
-            userAuthInfo.add(userIdent.toString());
-            Password password = gEntry.getPassword();
-            //Password
-            if (userIdent.isDomain()) {
-                // for domain user ident, password is saved in property manager
-                userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
-            } else {
-                userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
-            }
-            //AuthPlugin and UserForAuthPlugin
-            if (password == null) {
-                userAuthInfo.add(FeConstants.null_string);
-                userAuthInfo.add(FeConstants.null_string);
-            } else {
-                if (password.getAuthPlugin() == null) {
+        List<PrivEntry> userPrivEntries = userPrivTable.map.get(userIdent);
+        if (userPrivEntries != null) {
+            for (PrivEntry entry : userPrivEntries) {
+                GlobalPrivEntry gEntry = (GlobalPrivEntry) entry;
+                userAuthInfo.add(userIdent.toString());
+                Password password = gEntry.getPassword();
+                //Password
+                if (userIdent.isDomain()) {
+                    // for domain user ident, password is saved in property manager
+                    userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
+                } else {
+                    userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
+                }
+                //AuthPlugin and UserForAuthPlugin
+                if (password == null) {
+                    userAuthInfo.add(FeConstants.null_string);
                     userAuthInfo.add(FeConstants.null_string);
                 } else {
-                    userAuthInfo.add(password.getAuthPlugin().name());
-                }
+                    if (password.getAuthPlugin() == null) {
+                        userAuthInfo.add(FeConstants.null_string);
+                    } else {
+                        userAuthInfo.add(password.getAuthPlugin().name());
+                    }
 
-                if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
-                    userAuthInfo.add(FeConstants.null_string);
-                } else {
-                    userAuthInfo.add(password.getUserForAuthPlugin());
+                    if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
+                        userAuthInfo.add(FeConstants.null_string);
+                    } else {
+                        userAuthInfo.add(password.getUserForAuthPlugin());
+                    }
                 }
+                //GlobalPrivs
+                userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
+                break;
             }
-            //GlobalPrivs
-            userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
-            break;
-        }
-
-        if (userAuthInfo.isEmpty()) {
+        } else {
+            // user not in user priv table
+            // TODO I cannot think of any occation that would lead to this branch.
+            //   I'll try to figure out and clean this up in another PR
             if (!userIdent.isDomain()) {
                 // If this is not a domain user identity, it must have global priv entry.
                 // TODO(cmy): I don't know why previous comment said:
@@ -1254,51 +1265,45 @@ public class Auth implements Writable {
 
         // db
         List<String> dbPrivs = Lists.newArrayList();
-        for (PrivEntry entry : dbPrivTable.entries) {
-            if (!entry.match(userIdent, true /* exact match */)) {
-                continue;
+        List<PrivEntry> dbPrivEntries = dbPrivTable.map.get(userIdent);
+        if (dbPrivEntries != null) {
+            for (PrivEntry entry : dbPrivEntries) {
+                DbPrivEntry dEntry = (DbPrivEntry) entry;
+                dbPrivs.add(dEntry.getOrigDb() + ": " + dEntry.getPrivSet().toString()
+                        + " (" + entry.isSetByDomainResolver() + ")");
             }
-            DbPrivEntry dEntry = (DbPrivEntry) entry;
-            dbPrivs.add(dEntry.getOrigDb() + ": " + dEntry.getPrivSet().toString()
-                    + " (" + entry.isSetByDomainResolver() + ")");
-        }
-        if (dbPrivs.isEmpty()) {
-            userAuthInfo.add(FeConstants.null_string);
-        } else {
             userAuthInfo.add(Joiner.on("; ").join(dbPrivs));
+        } else {
+            userAuthInfo.add(FeConstants.null_string);
         }
 
         // tbl
         List<String> tblPrivs = Lists.newArrayList();
-        for (PrivEntry entry : tablePrivTable.entries) {
-            if (!entry.match(userIdent, true /* exact match */)) {
-                continue;
+        List<PrivEntry> tblPrivEntries = tablePrivTable.map.get(userIdent);
+        if (tblPrivEntries != null) {
+            for (PrivEntry entry : tblPrivEntries) {
+                TablePrivEntry tEntry = (TablePrivEntry) entry;
+                tblPrivs.add(tEntry.getOrigDb() + "." + tEntry.getOrigTbl() + ": "
+                        + tEntry.getPrivSet().toString()
+                        + " (" + entry.isSetByDomainResolver() + ")");
             }
-            TablePrivEntry tEntry = (TablePrivEntry) entry;
-            tblPrivs.add(tEntry.getOrigDb() + "." + tEntry.getOrigTbl() + ": "
-                    + tEntry.getPrivSet().toString()
-                    + " (" + entry.isSetByDomainResolver() + ")");
-        }
-        if (tblPrivs.isEmpty()) {
-            userAuthInfo.add(FeConstants.null_string);
-        } else {
             userAuthInfo.add(Joiner.on("; ").join(tblPrivs));
+        } else {
+            userAuthInfo.add(FeConstants.null_string);
         }
 
         // resource
         List<String> resourcePrivs = Lists.newArrayList();
-        for (PrivEntry entry : resourcePrivTable.entries) {
-            if (!entry.match(userIdent, true /* exact match */)) {
-                continue;
+        List<PrivEntry> resourcePrivEntries = resourcePrivTable.map.get(userIdent);
+        if (resourcePrivEntries != null) {
+            for (PrivEntry entry : resourcePrivEntries) {
+                ResourcePrivEntry rEntry = (ResourcePrivEntry) entry;
+                resourcePrivs.add(rEntry.getOrigResource() + ": " + rEntry.getPrivSet().toString()
+                        + " (" + entry.isSetByDomainResolver() + ")");
             }
-            ResourcePrivEntry rEntry = (ResourcePrivEntry) entry;
-            resourcePrivs.add(rEntry.getOrigResource() + ": " + rEntry.getPrivSet().toString()
-                    + " (" + entry.isSetByDomainResolver() + ")");
-        }
-        if (resourcePrivs.isEmpty()) {
-            userAuthInfo.add(FeConstants.null_string);
-        } else {
             userAuthInfo.add(Joiner.on("; ").join(resourcePrivs));
+        } else {
+            userAuthInfo.add(FeConstants.null_string);
         }
 
         userAuthInfos.add(userAuthInfo);
@@ -1306,30 +1311,22 @@ public class Auth implements Writable {
 
     private Set<UserIdentity> getAllUserIdents(boolean includeEntrySetByResolver) {
         Set<UserIdentity> userIdents = Sets.newHashSet();
-        for (PrivEntry entry : userPrivTable.entries) {
-            if (!includeEntrySetByResolver && entry.isSetByDomainResolver()) {
-                continue;
+        List<PrivTable> allTables = Arrays.asList(userPrivTable, dbPrivTable, tablePrivTable, resourcePrivTable);
+        for (PrivTable table : allTables) {
+            if (includeEntrySetByResolver) {
+                userIdents.addAll(table.map.keySet());
+            } else {
+                for (Map.Entry<UserIdentity, List<PrivEntry>> mapEntry : table.map.entrySet()) {
+                    for (PrivEntry privEntry : mapEntry.getValue()) {
+                        if (!privEntry.isSetByDomainResolver) {
+                            userIdents.add(mapEntry.getKey());
+                            break;
+                        }
+                    } // for privEntry in privEntryList
+                } // for userIdentity, privEntryList in table map
             }
-            userIdents.add(entry.getUserIdent());
-        }
-        for (PrivEntry entry : dbPrivTable.entries) {
-            if (!includeEntrySetByResolver && entry.isSetByDomainResolver()) {
-                continue;
-            }
-            userIdents.add(entry.getUserIdent());
-        }
-        for (PrivEntry entry : tablePrivTable.entries) {
-            if (!includeEntrySetByResolver && entry.isSetByDomainResolver()) {
-                continue;
-            }
-            userIdents.add(entry.getUserIdent());
-        }
-        for (PrivEntry entry : resourcePrivTable.entries) {
-            if (!includeEntrySetByResolver && entry.isSetByDomainResolver()) {
-                continue;
-            }
-            userIdents.add(entry.getUserIdent());
-        }
+        } // for table in all tables
+
         return userIdents;
     }
 

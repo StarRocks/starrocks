@@ -145,6 +145,7 @@ public class DbPrivEntry extends PrivEntry {
         isClassNameWrote = false;
     }
 
+    @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
