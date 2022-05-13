@@ -89,7 +89,6 @@ import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
@@ -194,7 +193,6 @@ public class Coordinator {
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
     private final ConnectContext connectContext;
-    private final TResourceInfo tResourceInfo;
     private final boolean needReport;
     private final String clusterName;
     // force schedule local be for HybridBackendSelector
@@ -238,8 +236,6 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.tResourceInfo = new TResourceInfo(context.getQualifiedUser(),
-                context.getSessionVariable().getResourceGroup());
         this.needReport = context.getSessionVariable().isReportSucc();
         this.clusterName = context.getClusterName();
         this.nextInstanceId = new TUniqueId();
@@ -263,7 +259,6 @@ public class Coordinator {
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
-        this.tResourceInfo = new TResourceInfo("", "");
         this.needReport = true;
         this.clusterName = cluster;
         this.nextInstanceId = new TUniqueId();
@@ -2129,7 +2124,6 @@ public class Coordinator {
 
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
-                params.setResource_info(tResourceInfo);
                 params.setFunc_version(3);
                 params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);
