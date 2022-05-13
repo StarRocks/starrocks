@@ -69,6 +69,10 @@ bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
+    // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
+    if (Status status = get_scan_status(); !status.ok()) {
+        return true;
+    }
 
     for (const auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
@@ -107,6 +111,10 @@ bool ScanOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
+    // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
+    if (Status status = get_scan_status(); !status.ok()) {
+        return false;
+    }
 
     // Any io task is running or needs to run.
     if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
@@ -130,6 +138,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(get_scan_status());
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -196,8 +205,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     size_t num_read_chunks = 0;
-                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                    Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                             _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                    if (!status.ok() && !status.is_end_of_file()) {
+                        set_scan_status(status);
+                    }
                     // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
@@ -225,7 +237,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             if (auto sp = wp.lock()) {
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                    Status status =
+                            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                    if (!status.ok() && !status.is_end_of_file()) {
+                        set_scan_status(status);
+                    }
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
