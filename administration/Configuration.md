@@ -62,7 +62,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_query_retry_time|2|FE 上查询重试的次数|
 |max_create_table_timeout_second|60|建表最大超时时间|
 |max_running_rollup_job_num_per_table|1|每个 Table 执行 Rollup 任务的最大并发度|
-|max_planner_scalar_rewrite_num|10_0000|优化器重写 ScalarOperator 允许的最大次数|
+|max_planner_scalar_rewrite_num|100000|优化器重写 ScalarOperator 允许的最大次数|
 |statistics_manager_sleep_time_sec|60*10|自动创建统计信息表的周期，默认 10min|
 |statistic_collect_interval_sec|120*60|统计信息功能执行周期，默认 2h|
 |statistic_update_interval_sec|24 *60\* 60|统计信息 Job 的默认收集间隔时间，默认为 1 天|
