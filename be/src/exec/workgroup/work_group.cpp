@@ -17,10 +17,10 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
         : _name(name),
           _id(id),
           _version(version),
+          _type(type),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _concurrency(concurrency),
-          _type(type) {}
+          _concurrency_limit(concurrency) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.cpu_core_limit) {
@@ -35,9 +35,9 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     }
 
     if (twg.__isset.concurrency_limit) {
-        _concurrency = twg.concurrency_limit;
+        _concurrency_limit = twg.concurrency_limit;
     } else {
-        _concurrency = -1;
+        _concurrency_limit = -1;
     }
     if (twg.__isset.workgroup_type) {
         _type = twg.workgroup_type;
@@ -76,7 +76,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_state(state);
     twg.__set_cpu_core_limit(_cpu_limit);
     twg.__set_mem_limit(_memory_limit);
-    twg.__set_concurrency_limit(_concurrency);
+    twg.__set_concurrency_limit(_concurrency_limit);
     twg.__set_num_drivers(_acc_num_drivers);
     twg.__set_big_query_mem_limit(_big_query_mem_limit);
     twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
@@ -149,6 +149,8 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
         auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
         //mem concurrent
         auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        // num queries
+        auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
 
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio",
                                                                  MetricLabels().add("name", wg->name()),
@@ -162,11 +164,15 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes",
                                                                  MetricLabels().add("name", wg->name()),
                                                                  resource_group_mem_allocated_bytes.get());
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_running_queries",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_running_queries.get());
 
         _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
         _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
         _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
         _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
+        _wg_running_queries.emplace(wg->name(), std::move(resource_group_running_queries));
     }
     _wg_metrics.emplace(wg->name(), wg->unique_id());
 }
@@ -174,16 +180,19 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
 void WorkGroupManager::update_metrics_unlocked() {
     for (auto& wg_metric : _wg_metrics) {
         auto wg = _workgroups.find(wg_metric.second);
+        auto& name = wg_metric.first;
         if (wg != _workgroups.end()) {
             _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_expected_use_ratio());
             _wg_cpu_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_actual_use_ratio());
             _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_limit());
             _wg_mem_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_tracker()->consumption());
+            _wg_running_queries[name]->set_value(wg->second->num_running_queries());
         } else {
-            _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_cpu_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(0);
-            _wg_mem_metrics.find(wg_metric.first)->second->set_value(0);
+            _wg_cpu_limit_metrics[name]->set_value(0);
+            _wg_cpu_metrics[name]->set_value(0);
+            _wg_mem_limit_metrics[name]->set_value(0);
+            _wg_mem_metrics[name]->set_value(0);
+            _wg_running_queries[name]->set_value(0);
         }
     }
 }
@@ -265,21 +274,37 @@ void WorkGroup::estimate_trend_factor_period() {
     _period_ask_chunk_num = 1;
 }
 
-bool WorkGroup::is_big_query(const QueryContext& query_context) {
+Status WorkGroup::try_incr_num_queries() {
+    int64_t old = _num_queries.fetch_add(1);
+    if (_concurrency_limit > 0 && old >= _concurrency_limit) {
+        _num_queries.fetch_sub(1);
+        return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
+    }
+    return Status::OK();
+}
+
+void WorkGroup::decr_num_queries() {
+    int64_t old = _num_queries.fetch_sub(1);
+    DCHECK_GT(old, 0);
+}
+
+Status WorkGroup::check_big_query(const QueryContext& query_context) {
     // Check big query run time
     if (_big_query_cpu_core_second_limit) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
         if (wg_growth_cpu_use_cost > _big_query_cpu_core_second_limit) {
-            return true;
+            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {] but limit is {}",
+                                                 wg_growth_cpu_use_cost, _big_query_cpu_core_second_limit));
         }
     }
 
     // Check scan rows number
     if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
-        return true;
+        return Status::Cancelled(fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
+                                             query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));
     }
 
-    return false;
+    return Status::OK();
 }
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
