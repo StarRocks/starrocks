@@ -194,7 +194,7 @@ OutPut Exchange Id: 15
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----12:EXCHANGE
 |       cardinality: 20000000
@@ -288,7 +288,7 @@ OutPut Exchange Id: 05
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
 cardinality: 86732673
@@ -307,7 +307,7 @@ OutPut Exchange Id: 03
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673267326732674E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 1:Project
 |  output columns:
