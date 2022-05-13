@@ -55,7 +55,7 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     }
 
     if (twg.__isset.big_query_cpu_core_second_limit) {
-        _big_query_cpu_core_second_limit = twg.big_query_cpu_core_second_limit * NANOS_PER_SEC;
+        _big_query_cpu_second_limit = twg.big_query_cpu_core_second_limit * NANOS_PER_SEC;
     }
 }
 
@@ -80,7 +80,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_num_drivers(_acc_num_drivers);
     twg.__set_big_query_mem_limit(_big_query_mem_limit);
     twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
-    twg.__set_big_query_cpu_core_second_limit(_big_query_cpu_core_second_limit);
+    twg.__set_big_query_cpu_core_second_limit(_big_query_cpu_second_limit);
     return twg;
 }
 
@@ -290,11 +290,11 @@ void WorkGroup::decr_num_queries() {
 
 Status WorkGroup::check_big_query(const QueryContext& query_context) {
     // Check big query run time
-    if (_big_query_cpu_core_second_limit) {
+    if (_big_query_cpu_second_limit) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
-        if (wg_growth_cpu_use_cost > _big_query_cpu_core_second_limit) {
+        if (wg_growth_cpu_use_cost > _big_query_cpu_second_limit) {
             return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {] but limit is {}",
-                                                 wg_growth_cpu_use_cost, _big_query_cpu_core_second_limit));
+                                                 wg_growth_cpu_use_cost, _big_query_cpu_second_limit));
         }
     }
 
