@@ -78,7 +78,6 @@ public class StatementPlanner {
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                session.setCurrentSqlDbNames(dbs.values().stream().map(Database::getFullName).collect(Collectors.toSet()));
                 ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session);
                 setOutfileSink((QueryStatement) stmt, plan);
 

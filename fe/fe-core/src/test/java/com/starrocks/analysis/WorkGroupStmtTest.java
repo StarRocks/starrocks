@@ -12,6 +12,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
@@ -117,6 +118,10 @@ public class WorkGroupStmtTest {
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withRole("rg1_role1");
         starRocksAssert.withUser("rg1_user1", "rg1_role1");
+        List<String> databases = Arrays.asList("db1", "db2");
+        for (String db : databases) {
+            starRocksAssert.withDatabase(db);
+        }
     }
 
     private static String rowsToString(List<List<String>> rows) {
@@ -348,27 +353,32 @@ public class WorkGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         {
-            Set<String> dbNames = ImmutableSet.of("default_cluster:db1");
+            long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
+            Set<Long> dbIds = ImmutableSet.of(dbId);
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
-                    dbNames);
+                    dbIds);
             Assert.assertEquals("rg5", wg.getName());
         }
         {
-            Set<String> dbNames = ImmutableSet.of("default_cluster:db2");
+            long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId();
+            Set<Long> dbIds = ImmutableSet.of(dbId);
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
-                    dbNames);
+                    dbIds);
+            Assert.assertNotNull(wg);
             Assert.assertEquals("rg1", wg.getName());
         }
         {
-            Set<String> dbNames = ImmutableSet.of("db1", "default_cluster:db2");
+            Set<Long> dbIds = ImmutableSet.of(
+                    GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId(),
+                    GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId());
             WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
-                    dbNames);
+                    dbIds);
             Assert.assertEquals("rg1", wg.getName());
         }
         dropResourceGroups();

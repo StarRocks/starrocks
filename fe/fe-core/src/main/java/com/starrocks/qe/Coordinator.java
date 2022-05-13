@@ -479,7 +479,7 @@ public class Coordinator {
             boolean isEnablePipelineEngine = connectContext != null &&
                     connectContext.getSessionVariable().isEnablePipelineEngine() &&
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
-            Set<String> dbNames = connectContext != null ? connectContext.getCurrentSqlDbNames() : null;
+            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
@@ -536,7 +536,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbNames, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -2077,7 +2077,7 @@ public class Coordinator {
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
-                                               Set<String> dbNames,
+                                               Set<Long> dbIds,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
@@ -2091,7 +2091,7 @@ public class Coordinator {
             WorkGroup workgroup = null;
             if (connectContext != null) {
                 workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                        connectContext, WorkGroupClassifier.QueryType.SELECT, dbNames);
+                        connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();

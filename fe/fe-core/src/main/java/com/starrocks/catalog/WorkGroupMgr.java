@@ -389,7 +389,7 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<String> databases) {
+    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
         String user = getUnqualifiedUser(ctx);
         String role = getUnqualifiedRole(ctx);
         String remoteIp = ctx.getRemoteIP();

@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -35,8 +37,8 @@ public class WorkGroupClassifier implements Writable {
     private String sourceIp;
     @SerializedName(value = "workgroupId")
     private long workgroupId;
-    @SerializedName(value = "database")
-    private Set<String> databases;
+    @SerializedName(value = "databaseIds")
+    private Set<Long> databaseIds;
 
     public static WorkGroupClassifier read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -91,12 +93,12 @@ public class WorkGroupClassifier implements Writable {
         this.sourceIp = sourceIp;
     }
 
-    public void setDatabases(List<String> databases) {
-        this.databases = new HashSet<>(databases);
+    public void setDatabases(List<Long> databases) {
+        this.databaseIds = new HashSet<>(databases);
     }
 
-    public Set<String> getDatabases() {
-        return this.databases;
+    public Set<Long> getDatabases() {
+        return this.databaseIds;
     }
 
     @Override
@@ -106,15 +108,15 @@ public class WorkGroupClassifier implements Writable {
     }
 
     public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp,
-                               Set<String> dbNames) {
+                               Set<Long> dbIds) {
         if (!isVisible(user, role, sourceIp)) {
             return false;
         }
         if (CollectionUtils.isNotEmpty(queryTypes) && !this.queryTypes.contains(queryType)) {
             return false;
         }
-        if (CollectionUtils.isNotEmpty(databases)) {
-            return CollectionUtils.isNotEmpty(dbNames) && databases.containsAll(dbNames);
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            return CollectionUtils.isNotEmpty(dbIds) && databaseIds.containsAll(dbIds);
         }
 
         return true;
@@ -148,8 +150,8 @@ public class WorkGroupClassifier implements Writable {
             SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(sourceIp).getInfo();
             w += 1 + (Long.numberOfLeadingZeros(subnetInfo.getAddressCountLong() + 2) - 32) / 64.0;
         }
-        if (CollectionUtils.isNotEmpty(databases)) {
-            w += 10.0 * databases.size();
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            w += 10.0 * databaseIds.size();
         }
         return w;
     }
@@ -172,8 +174,13 @@ public class WorkGroupClassifier implements Writable {
             String queryTypesStr = String.join(", ", queryTypeList);
             classifiersStr.append(", query_type in (" + queryTypesStr + ")");
         }
-        if (CollectionUtils.isNotEmpty(databases)) {
-            String str = String.join(",", databases);
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            String str = databaseIds.stream()
+                    .map(id ->
+                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
+                                    .map(Database::getFullName)
+                                    .orElse("unknown"))
+                    .collect(Collectors.joining(","));
             classifiersStr.append(", database='" + str + "'");
         }
         if (sourceIp != null) {

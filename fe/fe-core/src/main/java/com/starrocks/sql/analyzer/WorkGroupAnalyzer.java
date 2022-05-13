@@ -9,15 +9,18 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,10 +71,17 @@ public class WorkGroupAnalyzer {
                                 String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
                     }
                     String clusterName = ConnectContext.get() != null ? ConnectContext.get().getClusterName() : "";
-                    List<String> fullNames = databases.stream()
-                            .map(x -> ClusterNamespace.getFullName(clusterName, x))
-                            .collect(Collectors.toList());
-                    classifier.setDatabases(fullNames);
+
+                    List<Long> databaseIds = new ArrayList<>();
+                    for (String name : databases) {
+                        String fullName = ClusterNamespace.getFullName(clusterName, name);
+                        Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
+                        if (db == null) {
+                            throw new SemanticException(String.format("Specified database not exists: %s", fullName));
+                        }
+                        databaseIds.add(db.getId());
+                    }
+                    classifier.setDatabases(databaseIds);
                 } else {
                     throw new SemanticException(
                             String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.SOURCE_IP, eqPred));

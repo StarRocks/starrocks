@@ -144,7 +144,6 @@ public class ConnectContext {
 
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
-    protected Set<String> currentSqlDbNames = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
 
@@ -471,14 +470,6 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
-    }
-
-    public Set<String> getCurrentSqlDbNames() {
-        return currentSqlDbNames;
-    }
-
-    public void setCurrentSqlDbNames(Set<String> dbNames) {
-        this.currentSqlDbNames = dbNames;
     }
 
     public PlannerProfile getPlannerProfile() {
