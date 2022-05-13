@@ -63,7 +63,6 @@ StatusOr<vectorized::ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* st
 }
 
 Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    std::cout<<"PUSH"<<std::endl;
     _analytor->input_chunk_first_row_positions().emplace_back(_analytor->input_rows());
     size_t chunk_size = chunk->num_rows();
     _analytor->update_input_rows(chunk_size);
