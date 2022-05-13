@@ -103,8 +103,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test";
-    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_mutable_index_wal";
+    const std::string kIndexFile = "./PersistentIndexTest_test_mutable_index_wal/index.l0.0.0";
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -448,8 +448,8 @@ PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
 
 PARALLEL_TEST(PersistentIndexTest, test_replace) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test";
-    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_replace";
+    const std::string kIndexFile = "./PersistentIndexTest_test_replace/index.l0.0.0";
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
