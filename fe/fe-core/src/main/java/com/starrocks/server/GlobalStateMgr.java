@@ -838,7 +838,7 @@ public class GlobalStateMgr {
     }
 
     // Use tryLock to avoid potential dead lock
-    private boolean tryLock(boolean mustLock) {
+    public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
                 if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -866,7 +866,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private void unlock() {
+    public void unlock() {
         if (lock.isHeldByCurrentThread()) {
             this.lock.unlock();
         }
@@ -3045,7 +3045,7 @@ public class GlobalStateMgr {
             db.writeUnlock();
         }
     }
-
+    // TODO STEPHEN
     public void replayEraseDatabase(long dbId) {
         GlobalStateMgr.getCurrentRecycleBin().replayEraseDatabase(dbId);
     }

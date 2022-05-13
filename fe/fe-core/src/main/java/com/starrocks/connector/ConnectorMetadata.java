@@ -3,6 +3,8 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 
@@ -38,4 +40,8 @@ public interface ConnectorMetadata {
     default Table getTable(String dbName, String tblName) {
         return null;
     }
+
+    default void createDb(CreateDbStmt stmt) throws DdlException {}
+
+    default void dropDb(DropDbStmt stmt) throws DdlException {}
 }
