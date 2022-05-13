@@ -33,9 +33,7 @@ namespace starrocks {
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
-namespace fs {
-class WritableBlock;
-}
+class WritableFile;
 
 class BitmapIndexWriter {
 public:
@@ -48,7 +46,7 @@ public:
 
     virtual void add_nulls(uint32_t count) = 0;
 
-    virtual Status finish(fs::WritableBlock* file, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* file, ColumnIndexMetaPB* index_meta) = 0;
 
     virtual uint64_t size() const = 0;
 

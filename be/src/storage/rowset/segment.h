@@ -27,10 +27,10 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
-#include "storage/fs/block_manager.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -44,10 +44,6 @@ class TabletSchema;
 class ShortKeyIndexDecoder;
 class Schema;
 class StorageReadOptions;
-
-namespace fs {
-class BlockManager;
-}
 
 namespace vectorized {
 class ChunkIterator;
@@ -75,7 +71,7 @@ class Segment : public std::enable_shared_from_this<Segment> {
     struct private_type;
 
 public:
-    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> blk_mgr,
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
                                                    const std::string& filename, uint32_t segment_id,
                                                    const TabletSchema* tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
@@ -84,7 +80,7 @@ public:
     static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
 
-    Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
+    Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema, MemTracker* mem_tracker);
 
     ~Segment() = default;
@@ -141,7 +137,7 @@ public:
 
     MemTracker* mem_tracker() const { return _mem_tracker; }
 
-    fs::BlockManager* block_manager() const { return _block_mgr.get(); }
+    FileSystem* file_system() const { return _fs.get(); }
 
     bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
 
@@ -172,7 +168,7 @@ private:
     friend class SegmentIterator;
     friend class vectorized::SegmentIterator;
 
-    std::shared_ptr<fs::BlockManager> _block_mgr;
+    std::shared_ptr<FileSystem> _fs;
     std::string _fname;
     const TabletSchema* _tablet_schema;
     uint32_t _segment_id = 0;

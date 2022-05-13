@@ -25,9 +25,9 @@
 #include <utility>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/column_block.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_handle.h"
@@ -40,10 +40,6 @@ namespace starrocks {
 
 class KeyCoder;
 class TypeInfo;
-
-namespace fs {
-class BlockManager;
-}
 
 class EncodingInfo;
 class IndexedColumnReader;
@@ -106,9 +102,9 @@ class IndexedColumnReader {
     friend class IndexedColumnIterator;
 
 public:
-    // Does *NOT* take the ownership of |block_mgr|.
-    IndexedColumnReader(fs::BlockManager* block_mgr, std::string file_name, IndexedColumnMetaPB meta)
-            : _block_mgr(block_mgr), _file_name(std::move(file_name)), _meta(std::move(meta)){};
+    // Does *NOT* take the ownership of |fs|.
+    IndexedColumnReader(FileSystem* fs, std::string file_name, IndexedColumnMetaPB meta)
+            : _fs(fs), _file_name(std::move(file_name)), _meta(std::move(meta)){};
 
     Status load(bool use_page_cache, bool kept_in_memory);
 
@@ -137,7 +133,7 @@ private:
     Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
                      PageFooterPB* footer) const;
 
-    fs::BlockManager* _block_mgr;
+    FileSystem* _fs;
     std::string _file_name;
     IndexedColumnMetaPB _meta;
 

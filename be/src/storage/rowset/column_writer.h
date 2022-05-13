@@ -39,10 +39,7 @@ namespace starrocks {
 
 class TypeInfo;
 class BlockCompressionCodec;
-
-namespace fs {
-class WritableBlock;
-}
+class WritableFile;
 
 namespace vectorized {
 class Column;
@@ -82,7 +79,7 @@ class ZoneMapIndexWriter;
 
 class ColumnWriter {
 public:
-    static Status create(const ColumnWriterOptions& opts, const TabletColumn* column, fs::WritableBlock* _wblock,
+    static Status create(const ColumnWriterOptions& opts, const TabletColumn* column, WritableFile* _wfile,
                          std::unique_ptr<ColumnWriter>* writer);
 
     explicit ColumnWriter(std::unique_ptr<Field> field, bool is_nullable)
@@ -138,7 +135,7 @@ private:
 // to file
 class ScalarColumnWriter final : public ColumnWriter {
 public:
-    ScalarColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field, fs::WritableBlock* output_file);
+    ScalarColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field, WritableFile* output_file);
 
     ~ScalarColumnWriter() override;
 
@@ -212,7 +209,7 @@ private:
     Status _write_data_page(Page* page);
 
     ColumnWriterOptions _opts;
-    fs::WritableBlock* _wblock;
+    WritableFile* _wfile;
     uint32_t _curr_page_format;
     // total size of data page list
     uint64_t _data_size;

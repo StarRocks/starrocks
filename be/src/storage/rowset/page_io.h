@@ -34,11 +34,8 @@ namespace starrocks {
 
 class BlockCompressionCodec;
 class RandomAccessFile;
+class WritableFile;
 struct OlapReaderStatistics;
-
-namespace fs {
-class WritableBlock;
-} // namespace fs
 
 struct PageReadOptions {
     // block to read page
@@ -84,20 +81,20 @@ public:
     // Encode page from `body' and `footer' and write to `file'.
     // `body' could be either uncompressed or compressed.
     // On success, the file pointer to the written page is stored in `result'.
-    static Status write_page(fs::WritableBlock* wblock, const std::vector<Slice>& body, const PageFooterPB& footer,
+    static Status write_page(WritableFile* wfile, const std::vector<Slice>& body, const PageFooterPB& footer,
                              PagePointer* result);
 
     // Convenient function to compress page body and write page in one go.
     static Status compress_and_write_page(const BlockCompressionCodec* codec, double min_space_saving,
-                                          fs::WritableBlock* wblock, const std::vector<Slice>& body,
+                                          WritableFile* wfile, const std::vector<Slice>& body,
                                           const PageFooterPB& footer, PagePointer* result) {
         DCHECK_EQ(footer.uncompressed_size(), Slice::compute_total_size(body));
         faststring compressed_body;
         RETURN_IF_ERROR(compress_page_body(codec, min_space_saving, body, &compressed_body));
         if (compressed_body.size() == 0) { // uncompressed
-            return write_page(wblock, body, footer, result);
+            return write_page(wfile, body, footer, result);
         }
-        return write_page(wblock, {Slice(compressed_body)}, footer, result);
+        return write_page(wfile, {Slice(compressed_body)}, footer, result);
     }
 
     // Read and parse a page according to `opts'.

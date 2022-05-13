@@ -528,10 +528,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
     }
 
-    std::unique_ptr<WritableFile> f;
-    ASSIGN_OR_RETURN(f, FileSystem::Default()->new_writable_file(snapshot_dir + "/meta"));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto f, FileSystem::Default()->new_writable_file(opts, snapshot_dir + "/meta"));
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(f.get()));
-    RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
     return Status::OK();
 }

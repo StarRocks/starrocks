@@ -42,7 +42,6 @@
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/heartbeat_flags.h"
 #include "storage/compaction_manager.h"
-#include "storage/fs/fs_util.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
