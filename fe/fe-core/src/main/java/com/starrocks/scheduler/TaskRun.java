@@ -19,7 +19,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -40,17 +39,17 @@ public class TaskRun implements Writable {
     @SerializedName("definition")
     private String definition;
 
-    @SerializedName("status")
-    private Constants.TaskRunState status = Constants.TaskRunState.PENDING;
+    @SerializedName("state")
+    private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
 
     @SerializedName("createTime")
-    private LocalDateTime createTime;
+    private long createTime;
 
     @SerializedName("startTime")
-    private LocalDateTime startTime;
+    private long startTime;
 
     @SerializedName("completeTime")
-    private LocalDateTime completeTime;
+    private long completeTime;
 
     @SerializedName("properties")
     private Map<String, String> properties;
@@ -101,35 +100,35 @@ public class TaskRun implements Writable {
         this.definition = definition;
     }
 
-    public Constants.TaskRunState getStatus() {
-        return status;
+    public Constants.TaskRunState getState() {
+        return state;
     }
 
-    public void setStatus(Constants.TaskRunState status) {
-        this.status = status;
+    public void setState(Constants.TaskRunState state) {
+        this.state = state;
     }
 
-    public LocalDateTime getCreateTime() {
+    public long getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(LocalDateTime createTime) {
+    public void setCreateTime(long createTime) {
         this.createTime = createTime;
     }
 
-    public LocalDateTime getStartTime() {
+    public long getStartTime() {
         return startTime;
     }
 
-    public void setStartTime(LocalDateTime startTime) {
+    public void setStartTime(long startTime) {
         this.startTime = startTime;
     }
 
-    public LocalDateTime getCompleteTime() {
+    public long getCompleteTime() {
         return completeTime;
     }
 
-    public void setCompleteTime(LocalDateTime completeTime) {
+    public void setCompleteTime(long completeTime) {
         this.completeTime = completeTime;
     }
 
@@ -228,7 +227,7 @@ public class TaskRun implements Writable {
                 "queryId='" + queryId + '\'' +
                 ", dbName='" + dbName + '\'' +
                 ", taskId=" + taskId +
-                ", status=" + status +
+                ", status=" + state +
                 ", createTime=" + createTime +
                 ", startTime=" + startTime +
                 ", endTime=" + completeTime +

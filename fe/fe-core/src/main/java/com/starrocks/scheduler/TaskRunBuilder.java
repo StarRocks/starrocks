@@ -4,8 +4,6 @@ package com.starrocks.scheduler;
 
 import com.starrocks.qe.ConnectContext;
 
-import java.time.LocalDateTime;
-
 public class TaskRunBuilder {
     private Task task;
 
@@ -22,7 +20,7 @@ public class TaskRunBuilder {
         TaskRun taskRun = new TaskRun();
         taskRun.setTaskId(task.getId());
         taskRun.setDbName(task.getDbName());
-        taskRun.setCreateTime(LocalDateTime.now());
+        taskRun.setCreateTime(System.currentTimeMillis());
         taskRun.setDefinition(task.getDefinition());
         taskRun.setProperties(task.getProperties());
         taskRun.setCtx(ConnectContext.get());

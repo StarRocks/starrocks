@@ -89,7 +89,7 @@ public class TaskRunManager {
                     pendingIterator.remove();
                 } else {
                     TaskRun pendingTaskRun = taskRunQueue.poll();
-                    pendingTaskRun.setStatus(Constants.TaskRunState.RUNNING);
+                    pendingTaskRun.setState(Constants.TaskRunState.RUNNING);
                     runningTaskRunMap.put(mvTableId, pendingTaskRun);
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     // TaskRunStatusChange statusChange =

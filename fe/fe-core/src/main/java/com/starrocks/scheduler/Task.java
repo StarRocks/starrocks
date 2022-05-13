@@ -11,13 +11,12 @@ import com.starrocks.statistic.Constants;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Map;
 
 public class Task implements Writable {
 
     @SerializedName("id")
-    private Long id;
+    private long id;
 
     @SerializedName("name")
     private String name;
@@ -26,7 +25,7 @@ public class Task implements Writable {
     private Constants.TaskType taskType = Constants.TaskType.MANUAL;
 
     @SerializedName("createTime")
-    private LocalDateTime createTime;
+    private long createTime;
 
     @SerializedName("dbName")
     private String dbName;
@@ -40,11 +39,11 @@ public class Task implements Writable {
     @SerializedName("processorType")
     private Constants.TaskProcessorType processorType = Constants.TaskProcessorType.SQL;
 
-    public Long getId() {
+    public long getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(long id) {
         this.id = id;
     }
 
@@ -64,11 +63,11 @@ public class Task implements Writable {
         this.taskType = taskType;
     }
 
-    public LocalDateTime getCreateTime() {
+    public long getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(LocalDateTime createTime) {
+    public void setCreateTime(long createTime) {
         this.createTime = createTime;
     }
 
