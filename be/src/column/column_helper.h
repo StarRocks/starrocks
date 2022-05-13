@@ -249,6 +249,13 @@ public:
 
     static bool is_all_const(const Columns& columns);
 
+    // Returns
+    //  1. whether all the columns are constant.
+    //  2. the number of the packed rows. If all the columns are constant, it will be 1,
+    //     which could reduce unnecessary calculations.
+    //     Don't forget to resize the result constant columns if necessary.
+    static std::pair<bool, size_t> num_packed_rows(const Columns& columns);
+
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
