@@ -152,7 +152,6 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_rows_between
 
     _process_by_partition_for_rows_between_unbounded_preceding_and_current_row(chunk_size);
 
-    // Chunk may contains multiply partitions, so the chunk need to be reprocessed
     vectorized::ChunkPtr chunk;
     RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
     _analytor->offer_chunk_to_buffer(chunk);
