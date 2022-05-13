@@ -50,11 +50,11 @@ public abstract class PrivTable implements Writable {
     protected Map<UserIdentity, List<PrivEntry>> map = new TreeMap<>(new Comparator<UserIdentity>() {
         @Override
         public int compare(UserIdentity o1, UserIdentity o2) {
-            int compareByUser = o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
-            if (compareByUser != 0) {
-                return - compareByUser;
+            int compareByHost = o1.getHost().compareTo(o2.getHost());
+            if (compareByHost != 0) {
+                return - compareByHost;
             }
-            return - o1.getHost().compareTo(o2.getHost());
+            return - o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
         }
     });
 
@@ -101,7 +101,7 @@ public abstract class PrivTable implements Writable {
 
     public void dropEntry(PrivEntry entry) {
         UserIdentity userIdentity = entry.getUserIdent();
-        List<PrivEntry> userPrivEntryList = map.get(entry.getUserIdent());
+        List<PrivEntry> userPrivEntryList = map.get(userIdentity);
         if (userPrivEntryList == null) {
             return;
         }
@@ -281,8 +281,8 @@ public abstract class PrivTable implements Writable {
 
             @Override
             public PrivEntry next() {
-                if (privEntryIterator == null || ! privEntryIterator.hasNext()) {
-                    if (! mapIterator.hasNext()) {
+                if (privEntryIterator == null || !privEntryIterator.hasNext()) {
+                    if (!mapIterator.hasNext()) {
                         return null;
                     }
                     Map.Entry<UserIdentity, List<PrivEntry>> next = mapIterator.next();
