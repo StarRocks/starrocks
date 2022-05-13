@@ -14,7 +14,7 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
 
     if (type_desc.len < sv.size()) {
         auto err_msg =
-                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$2", name, type_desc.len);
+                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name, type_desc.len);
         return Status::InvalidArgument(err_msg);
     }
 
@@ -30,7 +30,7 @@ static Status add_column_with_string_value(BinaryColumn* column, const TypeDescr
 
     if (type_desc.len < sv.size()) {
         auto err_msg =
-                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$2", name, type_desc.len);
+                strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name, type_desc.len);
         return Status::InvalidArgument(err_msg);
     }
 
