@@ -1127,4 +1127,25 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains("4:AGGREGATE (merge finalize)\n" +
                 "  |  output: multi_distinct_count(19: count)"));
     }
+
+    @Test
+    public void testStringMinMaxPredicate() throws Exception {
+        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having min > '123'";
+        String costPlan = getCostExplain(sql);
+
+        Assert.assertTrue(costPlan.contains("* min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE"));
+
+        sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having max < '1234'";
+        costPlan = getCostExplain(sql);
+        Assert.assertTrue(costPlan.contains(" * min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE"));
+
+        sql = "select Min(C_NAME) as min, Max(C_NAME) as max from customer having max < '1234'";
+        costPlan = getCostExplain(sql);
+        Assert.assertTrue(costPlan.contains("* min-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE"));
+        Assert.assertTrue(costPlan.contains("having: [11: max, VARCHAR, true] < '1234'\n" +
+                "  |  cardinality: 1"));
+    }
 }
