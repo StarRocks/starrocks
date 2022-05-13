@@ -1184,10 +1184,63 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select Min(C_NAME) as min, Max(C_NAME) as max from customer having max < '1234'";
         costPlan = getCostExplain(sql);
-        System.out.println(costPlan);
         assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE\n" +
                 "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE");
         assertContains(costPlan, "having: [11: max, VARCHAR, true] < '1234'\n" +
                 "  |  cardinality: 1");
+    }
+
+    // https://github.com/StarRocks/starrocks/issues/5970
+    @Test
+    public void testSQLSmithGenQuery() throws Exception {
+        String sql = "select  \n" +
+                "  7 as c0, \n" +
+                "  subq_0.c0 as c1, \n" +
+                "  case when ((false) \n" +
+                "        and (ref_1.P_COMMENT = ref_1.P_NAME)) \n" +
+                "      or (subq_0.c0 >= subq_0.c0) then ref_1.P_BRAND else ref_1.P_BRAND end\n" +
+                "     as c2, \n" +
+                "  unix_timestamp() as c3, \n" +
+                "  months_add(\n" +
+                "    cast(subq_0.c2 as DATETIME),\n" +
+                "    cast(case when ref_1.P_MFGR <= ref_1.P_CONTAINER then unix_timestamp() else unix_timestamp() end\n" +
+                "       as INT)) as c4, \n" +
+                "  case when subq_0.c1 <= ref_1.P_PARTKEY then case when ref_1.P_BRAND < ref_1.P_MFGR then subq_0.c2 else subq_0.c2 end\n" +
+                "       else case when ref_1.P_BRAND < ref_1.P_MFGR then subq_0.c2 else subq_0.c2 end\n" +
+                "       end\n" +
+                "     as c5, \n" +
+                "  subq_0.c0 as c6, \n" +
+                "  ref_1.P_BRAND as c7, \n" +
+                "  subq_0.c1 as c8, \n" +
+                "  subq_0.c0 as c9, \n" +
+                "  ref_1.P_TYPE as c10, \n" +
+                "  subq_0.c0 as c11, \n" +
+                "  ref_1.P_NAME as c12, \n" +
+                "  ref_1.P_CONTAINER as c13, \n" +
+                "  ref_1.P_MFGR as c14, \n" +
+                "  subq_0.c2 as c15, \n" +
+                "  ref_1.P_SIZE as c16, \n" +
+                "  ref_1.P_NAME as c17, \n" +
+                "  cast(nullif(subq_0.c2,\n" +
+                "    subq_0.c2) as DATETIME) as c18, \n" +
+                "  46 as c19, \n" +
+                "  subq_0.c0 as c20, \n" +
+                "  ref_1.P_RETAILPRICE as c21\n" +
+                "from \n" +
+                "  (select  \n" +
+                "          ref_0.id_decimal as c0, \n" +
+                "          ref_0.t1c as c1, \n" +
+                "          ref_0.id_datetime as c2\n" +
+                "        from \n" +
+                "          test_all_type as ref_0\n" +
+                "        where cast(null as DOUBLE) <= ref_0.t1f) as subq_0\n" +
+                "    left join part as ref_1\n" +
+                "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
+                "where subq_0.c1 <> subq_0.c1\n" +
+                "limit 63;";
+        String plan = getFragmentPlan(sql);
+        // check without error
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
     }
 }
