@@ -187,12 +187,12 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                CheckFunction checkFunction = FunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
-                if (checkFunction == null) {
+                CheckPartitionFunction checkPartitionFunction = PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support");
                 }
-                if (!checkFunction.check(functionCallExpr)) {
+                if (!checkPartitionFunction.check(functionCallExpr)) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " check failed");
                 }
@@ -266,19 +266,19 @@ public class MaterializedViewAnalyzer {
     }
 
     @FunctionalInterface
-    public interface CheckFunction {
+    public interface CheckPartitionFunction {
 
         boolean check(Expr expr);
     }
 
-    static class FunctionChecker {
+    static class PartitionFunctionChecker {
 
-        public static final Map<String, CheckFunction> FN_NAME_TO_PATTERN;
+        public static final Map<String, CheckPartitionFunction> FN_NAME_TO_PATTERN;
 
         static {
             FN_NAME_TO_PATTERN = Maps.newHashMap();
             // can add some other functions
-            FN_NAME_TO_PATTERN.put("date_trunc", FunctionChecker::checkDateTrunc);
+            FN_NAME_TO_PATTERN.put("date_trunc", PartitionFunctionChecker::checkDateTrunc);
         }
 
         public static boolean checkDateTrunc(Expr expr) {
@@ -287,7 +287,7 @@ public class MaterializedViewAnalyzer {
             }
             FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
             String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equalsIgnoreCase("date_trunc")) {
+            if (!fnNameString.equals("date_trunc")) {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {
