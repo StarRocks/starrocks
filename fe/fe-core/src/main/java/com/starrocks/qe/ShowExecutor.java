@@ -81,11 +81,9 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
-import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
@@ -139,6 +137,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -146,7 +145,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 // Execute one show statement.
@@ -1556,15 +1554,11 @@ public class ShowExecutor {
 
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
-        ConcurrentHashMap<String, Catalog> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs();
-        List<List<String>> rows = Lists.newArrayList();
-        for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-            List<String> catalog = Lists.newArrayList();
-            catalog.add(entry.getKey());
-            Catalog value = entry.getValue();
-            catalog.add(((ExternalCatalog) value).getType());
-            catalog.add(value.getComment());
-            rows.add(catalog);
+        List<List<String>> rows = new ArrayList<>();
+        rows.add(Arrays.asList("default", "default", "internal catalog"));
+        List<List<String>> externalCatalog = GlobalStateMgr.getCurrentState().getCatalogMgr().showCatalogs();
+        for (List<String> val : externalCatalog) {
+            rows.add(val);
         }
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rows);
     }

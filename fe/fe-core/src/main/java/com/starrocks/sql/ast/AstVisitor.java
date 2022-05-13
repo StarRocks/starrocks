@@ -214,10 +214,9 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(stmt, context);
     }
 
-    public R visitShowCatalogStatement(ShowCatalogsStmt stmt, C context) {
+    public R visitShowCatalogsStatement(ShowCatalogsStmt stmt, C context) {
         return visitStatement(stmt, context);
     }
-
     // ----------------- Alter Clause ---------------
 
     public R visitCreateIndexClause(CreateIndexClause clause, C context) {

@@ -38,8 +38,7 @@ statement
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
     | dropExternalCatalogStatement                                                          #dropCatalog
-    | showCatalogStatement                                                                  #showCatalogs
-    | showDbFromCatalogStatement                                                            #showDbFromCatalog
+    | showCatalogsStatement                                                                 #showCatalogs
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -61,7 +60,7 @@ statement
 
     // Other statement
     | USE schema=identifier                                                                 #use
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | showDatabasesStatement                                                                #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
@@ -154,13 +153,10 @@ dropExternalCatalogStatement
     : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
-showCatalogStatement
+showCatalogsStatement
     : SHOW CATALOGS
     ;
 
-showDbFromCatalogStatement
-    : SHOW DATABASES FROM catalogName=identifierOrString
-    ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
@@ -237,6 +233,11 @@ dropAnalyzeJobStatement
 
 showAnalyzeStatement
     : SHOW ANALYZE
+    ;
+
+// ------------------------------------------- Other Statement ---------------------------------------------------------
+showDatabasesStatement
+    : SHOW DATABASES ((LIKE pattern=string) | (WHERE expression) | (FROM catalogName=identifierOrString))?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -746,7 +747,7 @@ number
 nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
-    | CAST | CATALOG | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
+    | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTERNAL | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE

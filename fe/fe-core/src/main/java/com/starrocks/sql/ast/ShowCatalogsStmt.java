@@ -2,11 +2,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 public class ShowCatalogsStmt extends ShowStmt {
@@ -23,24 +21,13 @@ public class ShowCatalogsStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-
-    }
-
-    @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCatalogsStmt(this, context);
+        return visitor.visitShowCatalogsStatement(this, context);
     }
 
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW CATALOGS");
-        return sb.toString();
-    }
 }

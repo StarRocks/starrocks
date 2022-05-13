@@ -69,7 +69,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowCatalogsStmt(ShowCatalogsStmt node, ConnectContext context) {
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt node, ConnectContext context) {
             return null;
         }
 
