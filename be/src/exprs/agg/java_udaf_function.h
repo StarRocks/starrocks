@@ -212,17 +212,18 @@ public:
                                    AggDataPtr __restrict state) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
-        ConvertDirectBufferVistor vistor(buffers);
+        std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
-        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
-        helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                   ctx->impl()->udaf_ctxs()->update->method.handle(), this->data(state).handle(),
-                                   args.data(), num_cols);
-        for (int i = 0; i < num_cols; ++i) {
-            env->DeleteLocalRef(args[i]);
+        env->PushLocalFrame(num_cols * 2 + 1);
+        {
+            JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+
+            auto* stub = ctx->impl()->udaf_ctxs()->update_batch_call_stub.get();
+            auto state_handle = this->data(state).handle();
+            helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
+        env->PopLocalFrame(nullptr);
     }
 
     void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
