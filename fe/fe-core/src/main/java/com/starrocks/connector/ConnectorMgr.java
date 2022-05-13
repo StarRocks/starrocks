@@ -24,6 +24,10 @@ public class ConnectorMgr {
         init();
     }
 
+    public MetadataMgr getMetadataMgr() {
+        return metadataMgr;
+    }
+
     // TODO load jar by plugin
     private void init() {
         addConnectorFactory(new HiveConnectorFactory());

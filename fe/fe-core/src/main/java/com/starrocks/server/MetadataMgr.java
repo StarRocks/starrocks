@@ -33,7 +33,7 @@ public class MetadataMgr {
     }
 
     // get metadata by catalog name
-    private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         // TODO: return local metastore for default internal catalog
         return Optional.of(connectorMetadatas.get(catalogName));
     }

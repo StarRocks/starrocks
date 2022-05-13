@@ -4,6 +4,7 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.common.DdlException;
@@ -15,6 +16,8 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -51,10 +54,6 @@ public class CatalogMgr {
         // TODO edit log
     }
 
-    public synchronized ConcurrentHashMap<String, Catalog> getCatalogs() {
-        return catalogs;
-    }
-
     public boolean catalogExists(String catalogName) {
         return catalogs.containsKey(catalogName);
     }
@@ -79,4 +78,22 @@ public class CatalogMgr {
         dropCatalog(catalogName);
     }
 
+    public List<List<String>> showCatalogs() {
+        List<List<String>> rows = Lists.newArrayList();
+        for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+            List<String> catalog = Lists.newArrayList();
+            catalog.add(entry.getKey());
+            Catalog value = entry.getValue();
+            catalog.add(((ExternalCatalog) value).getType());
+            catalog.add(value.getComment());
+            rows.add(catalog);
+        }
+        rows.sort(new Comparator<List<String>>() {
+            @Override
+            public int compare(List<String> o1, List<String> o2) {
+                return o1.get(0).compareTo(o2.get(0));
+            }
+        });
+        return rows;
+    }
 }

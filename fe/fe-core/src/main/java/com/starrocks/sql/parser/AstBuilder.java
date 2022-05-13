@@ -394,7 +394,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCatalogStatement(StarRocksParser.ShowCatalogStatementContext context) {
+    public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt();
     }
 
@@ -1143,14 +1143,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
+    public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
+        String catalogName = null;
+        if (context.catalogName != null) {
+            Identifier identifier = (Identifier) visit(context.catalogName);
+            catalogName = identifier.getValue();
+        }
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowDbStmt(stringLiteral.getValue());
+            if (catalogName == null) {
+                return new ShowDbStmt(stringLiteral.getValue());
+            } else {
+                return new ShowDbStmt(stringLiteral.getValue(), catalogName);
+            }
         } else if (context.expression() != null) {
-            return new ShowDbStmt(null, (Expr) visit(context.expression()));
+            if (catalogName == null) {
+                return new ShowDbStmt(null, (Expr) visit(context.expression()));
+            } else {
+                return new ShowDbStmt(null, (Expr) visit(context.expression()), catalogName);
+            }
         } else {
-            return new ShowDbStmt(null, null);
+            if (catalogName == null) {
+                return new ShowDbStmt(null, null, null);
+            } else {
+                return new ShowDbStmt(null, null, catalogName);
+            }
         }
     }
 
