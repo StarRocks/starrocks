@@ -230,6 +230,21 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.state = State.PENDING;
     }
 
+    // for test only
+    public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
+                          long idxId, long tabletId, long createTime, SystemInfoService infoService) {
+        this.type = type;
+        this.cluster = cluster;
+        this.dbId = dbId;
+        this.tblId = tblId;
+        this.partitionId = partId;
+        this.indexId = idxId;
+        this.tabletId = tabletId;
+        this.createTime = createTime;
+        this.infoService = infoService;
+        this.state = State.PENDING;
+    }
+
     public void setType(Type type) {
         this.type = type;
     }

@@ -615,7 +615,8 @@ public class TabletScheduler extends MasterDaemon {
         }
     }
 
-    private void handleTabletByTypeAndStatus(TabletStatus status, TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
+    // 'public' for test only
+    public void handleTabletByTypeAndStatus(TabletStatus status, TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         if (tabletCtx.getType() == Type.REPAIR) {
             switch (status) {
