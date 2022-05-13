@@ -232,6 +232,10 @@ public class Group {
                     other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
                             other.statistics);
         }
+        // If statistics is null, use other statistics
+        if (statistics == null) {
+            statistics = other.statistics;
+        }
         other.satisfyRequiredPropertyGroupExpressions.forEach(this::addSatisfyRequiredPropertyGroupExpressions);
     }
 
