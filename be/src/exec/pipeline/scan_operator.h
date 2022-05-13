@@ -4,6 +4,7 @@
 
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -58,6 +59,18 @@ protected:
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
 private:
+    inline void set_scan_status(const Status& status) {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        if (_scan_status.ok()) {
+            _scan_status = status;
+        }
+    }
+
+    inline Status get_scan_status() const {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        return _scan_status;
+    }
+
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
@@ -69,6 +82,8 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    mutable SpinLock _scan_status_mutex;
+    Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
 
