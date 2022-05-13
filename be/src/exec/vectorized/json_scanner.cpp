@@ -403,7 +403,6 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
             // the parser is exhausted.
             _empty_parser = true;
         } else if (!st.ok()) {
-            chunk->set_num_rows(rows_read);
             return st;
         }
     }
@@ -426,7 +425,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             _state->append_error_msg_to_file("", st.to_string());
             return st;
         }
-
+        size_t chunk_row_num = chunk->num_rows();
         st = _construct_row(&row, chunk);
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -437,6 +436,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
+            // Before continuing to process other rows, we need to first clean the fail parsed row.
+            chunk->set_num_rows(chunk_row_num);
         }
         ++(*rows_read);
 
