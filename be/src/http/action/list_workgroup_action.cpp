@@ -50,12 +50,17 @@ void ListWorkGroupAction::handle(HttpRequest* req) {
         type.SetString(workgroup_type.c_str(), workgroup_type.size(), allocator);
         wg_item.AddMember("type", type, allocator);
         wg_item.AddMember("state", rapidjson::Value(wg.state.c_str(), wg.state.size()), allocator);
+
+        int64_t mem_bytes_limit = _exec_env->query_pool_mem_tracker()->limit() * wg.mem_limit;
         wg_item.AddMember("cpu_core_limit", rapidjson::Value(wg.cpu_core_limit), allocator);
         wg_item.AddMember("mem_limit", rapidjson::Value(wg.mem_limit), allocator);
-        int64_t mem_bytes_limit = _exec_env->query_pool_mem_tracker()->limit() * wg.mem_limit;
         wg_item.AddMember("mem_bytes_limit", rapidjson::Value(mem_bytes_limit), allocator);
         wg_item.AddMember("concurrency_limit", rapidjson::Value(wg.concurrency_limit), allocator);
         wg_item.AddMember("num_drivers", rapidjson::Value(wg.num_drivers), allocator);
+        wg_item.AddMember("big_query_cpu_core_second_limit", rapidjson::Value(wg.big_query_cpu_core_second_limit),
+                          allocator);
+        wg_item.AddMember("big_query_mem_list", rapidjson::Value(wg.big_query_mem_limit), allocator);
+        wg_item.AddMember("big_query_scan_rows_limit", rapidjson::Value(wg.big_query_scan_rows_limit), allocator);
         root.PushBack(wg_item, allocator);
     }
     rapidjson::StringBuffer strbuf;
