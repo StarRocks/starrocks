@@ -2331,7 +2331,7 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
             compaction_pb->add_outputs(cp->output);
             auto svpb = compaction_pb->mutable_start_version();
             svpb->set_major(cp->start_version.major());
-            svpb->set_major(cp->start_version.minor());
+            svpb->set_minor(cp->start_version.minor());
         }
         // rowsetid_add is only useful in meta log, and it's a bit harder to construct it
         // so do not set it here
