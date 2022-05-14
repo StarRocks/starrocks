@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.udf;
 
@@ -10,7 +10,21 @@ import org.objectweb.asm.Type;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-import static org.objectweb.asm.Opcodes.*;
+import static org.objectweb.asm.Opcodes.AALOAD;
+import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
+import static org.objectweb.asm.Opcodes.ACC_STATIC;
+import static org.objectweb.asm.Opcodes.ALOAD;
+import static org.objectweb.asm.Opcodes.F_APPEND;
+import static org.objectweb.asm.Opcodes.F_CHOP;
+import static org.objectweb.asm.Opcodes.GOTO;
+import static org.objectweb.asm.Opcodes.ICONST_0;
+import static org.objectweb.asm.Opcodes.IF_ICMPGE;
+import static org.objectweb.asm.Opcodes.ILOAD;
+import static org.objectweb.asm.Opcodes.INTEGER;
+import static org.objectweb.asm.Opcodes.INVOKEVIRTUAL;
+import static org.objectweb.asm.Opcodes.ISTORE;
+import static org.objectweb.asm.Opcodes.RETURN;
+import static org.objectweb.asm.Opcodes.V1_8;
 
 public class CallStubGenerator {
     // generate call stub name
@@ -27,12 +41,12 @@ public class CallStubGenerator {
     // }
     private static class AggBatchCallGenerator {
         AggBatchCallGenerator(Class<?> clazz, Method update) {
-            this.UDAFClazz = clazz;
-            this.UDAFUpdate = update;
+            this.udafClazz = clazz;
+            this.udafUpdate = update;
         }
 
-        private final Class<?> UDAFClazz;
-        private final Method UDAFUpdate;
+        private final Class<?> udafClazz;
+        private final Method udafUpdate;
 
         private final ClassWriter writer = new ClassWriter(0);
 
@@ -42,10 +56,10 @@ public class CallStubGenerator {
 
         // int numRows, FunctionCallClz obj, FunctionCall.State state, Integer[] a
         private void genBatchUpdateSingle() {
-            final Parameter[] parameters = UDAFUpdate.getParameters();
+            final Parameter[] parameters = udafUpdate.getParameters();
             StringBuilder desc = new StringBuilder("(");
             desc.append("I");
-            desc.append(Type.getDescriptor(UDAFClazz));
+            desc.append(Type.getDescriptor(udafClazz));
             for (int i = 0; i < parameters.length; i++) {
                 final Class<?> type = parameters[i].getType();
                 if (type.isPrimitive()) {
@@ -57,7 +71,7 @@ public class CallStubGenerator {
                 desc.append(Type.getDescriptor(type));
             }
 
-            final Class<?> returnType = UDAFUpdate.getReturnType();
+            final Class<?> returnType = udafUpdate.getReturnType();
             if (returnType != void.class) {
                 throw new UnsupportedOperationException("Unsupported return Type:" + returnType.getTypeName());
             }
@@ -74,14 +88,14 @@ public class CallStubGenerator {
             // for (int i = 0...)
             batchCall.visitInsn(ICONST_0);
             // load local i
-            int i_idx = 2 + parameters.length;
-            batchCall.visitVarInsn(ISTORE, i_idx);
+            int iIdx = 2 + parameters.length;
+            batchCall.visitVarInsn(ISTORE, iIdx);
 
             final Label l1 = new Label();
             batchCall.visitLabel(l1);
             batchCall.visitFrame(F_APPEND, 1, new Object[] {INTEGER}, 0, null);
 
-            batchCall.visitVarInsn(ILOAD, i_idx);
+            batchCall.visitVarInsn(ILOAD, iIdx);
             batchCall.visitVarInsn(ILOAD, 0);
 
             final Label l2 = new Label();
@@ -94,15 +108,15 @@ public class CallStubGenerator {
 
             for (int i = 3; i < 3 + parameters.length - 1; i++) {
                 batchCall.visitVarInsn(ALOAD, i);
-                batchCall.visitVarInsn(ILOAD, i_idx);
+                batchCall.visitVarInsn(ILOAD, iIdx);
                 batchCall.visitInsn(AALOAD);
             }
 
-            batchCall.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(UDAFClazz), UDAFUpdate.getName(),
-                    Type.getMethodDescriptor(UDAFUpdate), false);
+            batchCall.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(udafClazz), udafUpdate.getName(),
+                    Type.getMethodDescriptor(udafUpdate), false);
             final Label l4 = new Label();
             batchCall.visitLabel(l4);
-            batchCall.visitIincInsn(i_idx, 1);
+            batchCall.visitIincInsn(iIdx, 1);
             batchCall.visitJumpInsn(GOTO, l1);
 
             batchCall.visitLabel(l2);
@@ -113,9 +127,9 @@ public class CallStubGenerator {
             // define local variables
             final Label l5 = new Label();
             batchCall.visitLabel(l5);
-            batchCall.visitLocalVariable("i", "I", null, l1, l2, i_idx);
+            batchCall.visitLocalVariable("i", "I", null, l1, l2, iIdx);
             batchCall.visitLocalVariable("rows", "I", null, l1, l5, 0);
-            batchCall.visitLocalVariable("obj", "L" + Type.getInternalName(UDAFClazz) + ";", null, l0, l5, 1);
+            batchCall.visitLocalVariable("obj", "L" + Type.getInternalName(udafClazz) + ";", null, l0, l5, 1);
             int padding = 2;
             for (int i = 0; i < parameters.length; ++i) {
                 final Class<?> type = parameters[i].getType();
