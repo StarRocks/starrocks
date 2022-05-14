@@ -3098,13 +3098,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        starRocksAssert.query(sql).explainContains("  4:CROSS JOIN\n" +
-                        "  |  cross join:\n" +
-                        "  |  predicates is NULL",
+        starRocksAssert.query(sql).explainContains("  3:SELECT\n" +
+                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
+                "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                        "  |  output: max(22: k9)\n" +
-                        "  |  group by: \n" +
-                        "  |  having: CAST(23: max AS DOUBLE) > 0.0");
+                "  |  output: max(22: k9)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
     }
 
     @Test
@@ -5024,7 +5025,10 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSubqueryLimit() throws Exception {
         String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
+        Assert.assertTrue(plan.contains("4:SELECT\n" +
+                "  |  predicates: 4: v4 = 2\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS\n" +
                 "  |  assert number of rows: LE 1"));
     }
 
