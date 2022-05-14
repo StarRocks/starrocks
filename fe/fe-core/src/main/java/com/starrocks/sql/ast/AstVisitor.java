@@ -24,6 +24,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -63,7 +64,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -126,6 +126,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {

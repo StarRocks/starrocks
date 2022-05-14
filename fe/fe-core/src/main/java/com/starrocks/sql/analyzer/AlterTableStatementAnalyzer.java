@@ -47,11 +47,7 @@ public class AlterTableStatementAnalyzer {
         @Override
         public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
             IndexDef indexDef = clause.getIndexDef();
-            try {
-                indexDef.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            indexDef.analyze();
             clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
                     indexDef.getIndexType(), indexDef.getComment()));
             return null;

@@ -27,9 +27,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -62,16 +62,16 @@ public class HashDistributionDesc extends DistributionDesc {
     }
 
     @Override
-    public void analyze(Set<String> cols) throws AnalysisException {
+    public void analyze(Set<String> cols) {
         if (numBucket <= 0) {
-            throw new AnalysisException("Number of hash distribution is zero.");
+            throw new SemanticException("Number of hash distribution is zero.");
         }
         if (distributionColumnNames == null || distributionColumnNames.size() == 0) {
-            throw new AnalysisException("Number of hash column is zero.");
+            throw new SemanticException("Number of hash column is zero.");
         }
         for (String columnName : distributionColumnNames) {
             if (!cols.contains(columnName)) {
-                throw new AnalysisException("Distribution column(" + columnName + ") doesn't exist.");
+                throw new SemanticException("Distribution column(" + columnName + ") doesn't exist.");
             }
         }
     }

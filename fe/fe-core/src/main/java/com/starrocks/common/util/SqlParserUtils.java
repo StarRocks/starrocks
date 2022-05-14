@@ -29,6 +29,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -112,6 +113,22 @@ public class SqlParserUtils {
             throw new AnalysisException(errorMsg);
         }
         statementBase.analyze(analyzer);
+        return statementBase;
+    }
+
+    public static StatementBase newParseAndAnalyzeStmt(String originStmt, ConnectContext connectContext) {
+        LOG.info("begin to parse stmt: " + originStmt);
+        StatementBase statementBase = null;
+        try {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+        } catch (Exception e) {
+            String errorMsg = String.format("get exception when parse stmt. Origin stmt is %s . Error msg is %s.",
+                    originStmt, e.getMessage());
+            throw new SemanticException(errorMsg);
+        }
+
         return statementBase;
     }
 }

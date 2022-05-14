@@ -42,27 +42,19 @@ public class IndexDefTest {
 
     @Test
     public void testAnalyzeExpection() throws AnalysisException {
-        try {
-            def = new IndexDef(
-                    "index1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxx"
-                            + "xxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxinde"
-                            + "x1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxx"
-                            + "xxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxx"
-                            + "xxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxx",
-                    Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP,
-                    "balabala");
-            def.analyze();
-            Assert.fail("No exception throws.");
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e instanceof AnalysisException);
-        }
-        try {
-            def = new IndexDef("", Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala");
-            def.analyze();
-            Assert.fail("No exception throws.");
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e instanceof AnalysisException);
-        }
+        def = new IndexDef(
+                "index1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxx"
+                        + "xxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxinde"
+                        + "x1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxx"
+                        + "xxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxx"
+                        + "xxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxx",
+                Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP,
+                "balabala");
+        def.analyze();
+        Assert.fail("No exception throws.");
+        def = new IndexDef("", Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala");
+        def.analyze();
+        Assert.fail("No exception throws.");
     }
 
     @Test

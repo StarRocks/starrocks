@@ -12,6 +12,7 @@ import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -52,6 +53,12 @@ public class Analyzer {
         public void analyze(StatementBase statement, ConnectContext session) {
             statement.setClusterName(session.getClusterName());
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
+            CreateTableAnalyzer.analyze(statement, context);
+            return null;
         }
 
         @Override

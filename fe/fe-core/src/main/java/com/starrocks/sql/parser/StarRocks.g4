@@ -16,6 +16,7 @@ statement
     : queryStatement                                                                        #query
 
     // Table Statement
+    | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
@@ -51,7 +52,60 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
 
+
+
 // ------------------------------------------- Table Statement ---------------------------------------------------------
+
+createTableStatement
+    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+          '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
+          engineDesc?
+          charsetDesc?
+          keyDesc?
+          comment?
+          partitionDesc?
+          distributionDesc?
+          rollupDesc?
+          properties?
+     ;
+
+columnDesc
+    : identifier type aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    ;
+
+defaultDesc
+    : DEFAULT primaryExpression
+    ;
+
+indexDesc
+    : INDEX indexName=identifier identifierList indexType? comment?
+    ;
+
+engineDesc
+    : ENGINE '=' ('olap'|'mysql'|'broker'|'hive')
+    ;
+
+charsetDesc
+    : UTF8
+    | GBK
+    ;
+
+keyDesc
+    : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+aggDesc
+    : SUM
+    |MAX
+    |MIN
+    |REPLACE
+    |HLL_UNION
+    |BITMAP_UNION
+    ;
+
+rollupDesc
+    : ROLLUP '(' rollupName=identifier identifierList (',' rollupName=identifier identifierList)* ')'
+    ;
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName

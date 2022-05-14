@@ -27,6 +27,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -59,6 +60,7 @@ import com.starrocks.analysis.InsertTarget;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -93,7 +95,9 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -159,6 +163,93 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateTableStatement(StarRocksParser.CreateTableStatementContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        CreateTableStmt createTableStmt = new CreateTableStmt(
+                context != null,
+                context.EXTERNAL() != null,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
+                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                context.engineDesc() == null ? "olap" : context.engineDesc().getText(),
+                context.charsetDesc() == null ? "utf8" : context.charsetDesc().getText(),
+                context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                properties,
+                null,
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                context.rollupDesc() == null ? null : (List<AlterClause>) visit(context.rollupDesc()));
+        return createTableStmt;
+    }
+
+    private KeysDesc getKeysDesc(StarRocksParser.KeyDescContext context) {
+        KeysType keysType = null;
+        if (null != context.PRIMARY()) {
+            keysType = KeysType.PRIMARY_KEYS;
+        } else if (null != context.DUPLICATE()) {
+            keysType = KeysType.DUP_KEYS;
+        } else if (null != context.AGGREGATE()) {
+            keysType = KeysType.AGG_KEYS;
+        } else if (null != context.UNIQUE()) {
+            keysType = KeysType.UNIQUE_KEYS;
+        }
+        List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+        return new KeysDesc(keysType, columnList.stream().map(Identifier::getValue).collect(toList()));
+    }
+
+    private List<IndexDef> getIndexDefs(List<StarRocksParser.IndexDescContext> indexDesc) {
+        List<IndexDef> indexDefList = new ArrayList<>();
+        for (StarRocksParser.IndexDescContext context : indexDesc) {
+            String indexName = ((Identifier) visit(context.identifier())).getValue();
+            List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+            String comment = null;
+            if (context.comment() != null) {
+                comment = ((StringLiteral) visit(context.comment())).getStringValue();
+            }
+            final IndexDef indexDef =
+                    new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
+                            IndexDef.IndexType.BITMAP, comment);
+            indexDefList.add(indexDef);
+        }
+        return indexDefList;
+    }
+
+    private List<ColumnDef> getColumnDefs(List<StarRocksParser.ColumnDescContext> columnDesc) {
+        List<ColumnDef> columnDefList = new ArrayList<>();
+        for (StarRocksParser.ColumnDescContext context : columnDesc) {
+            String columnName = ((Identifier) visit(context.identifier())).getValue();
+            TypeDef typeDef = new TypeDef(getType(context.type()));
+            AggregateType aggregateType = null;
+            if (null != context.aggDesc()) {
+                aggregateType = AggregateType.valueOf(context.aggDesc().getText());
+            }
+            Boolean isAllowNull = false;
+            if (context.NULL() != null && context.NOT() == null) {
+                isAllowNull = true;
+            }
+            ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
+            if (context.defaultDesc() != null) {
+                Expr expr = (Expr) visit(context.defaultDesc().primaryExpression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, expr);
+            }
+            String comment = context.comment() == null ? null :
+                    ((StringLiteral) visit(context.comment().string())).getStringValue();
+            ColumnDef columnDef =
+                    new ColumnDef(columnName, typeDef, false, aggregateType, isAllowNull, defaultValueDef, comment);
+            columnDefList.add(columnDef);
+        }
+        return columnDefList;
+    }
+
     @Override
     public ParseNode visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
         Map<String, String> properties = new HashMap<>();
@@ -361,8 +452,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new AdminSetReplicaStatusStmt(properties);
     }
-
-
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
@@ -1852,7 +1941,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 format,
                 properties);
     }
-
 
     @Override
     public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {

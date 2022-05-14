@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -43,7 +42,7 @@ public class DistributionDesc implements ParseNode, Writable {
 
     }
 
-    public void analyze(Set<String> colSet) throws AnalysisException {
+    public void analyze(Set<String> colSet) {
         throw new NotImplementedException();
     }
 

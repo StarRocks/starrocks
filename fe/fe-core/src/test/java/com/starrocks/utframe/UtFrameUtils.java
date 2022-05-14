@@ -160,7 +160,7 @@ public class UtFrameUtils {
             if (e.getMessage() == null) {
                 throw e;
             } else {
-                throw new AnalysisException(e.getMessage(), e);
+                throw new SemanticException(e.getMessage(), e);
             }
         }
 

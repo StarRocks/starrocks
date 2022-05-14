@@ -3234,7 +3234,7 @@ public class GlobalStateMgr {
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
                         (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                                .newParseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();

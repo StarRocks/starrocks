@@ -25,7 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -47,8 +47,8 @@ public class RandomDistributionDesc extends DistributionDesc {
     }
 
     @Override
-    public void analyze(Set<String> colSet) throws AnalysisException {
-        throw new AnalysisException("Random distribution is deprecated now, use Hash distribution instead");
+    public void analyze(Set<String> colSet) {
+        throw new SemanticException("Random distribution is deprecated now, use Hash distribution instead");
     }
 
     @Override

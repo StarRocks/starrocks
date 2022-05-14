@@ -8,6 +8,7 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -169,6 +170,7 @@ public class StatementPlanner {
                 || statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof CreateTableStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -187,6 +189,7 @@ public class StatementPlanner {
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
                 || statement instanceof AlterWorkGroupStmt
+                || statement instanceof CreateTableStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
