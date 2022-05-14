@@ -8,6 +8,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
+import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
@@ -183,20 +184,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateTableStatement(StarRocksParser.CreateTableStatementContext context) {
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = null;
         if (context.properties() != null) {
+            properties = new HashMap<>();
             List<Property> propertyList = visit(context.properties().property(), Property.class);
             for (Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
         }
         CreateTableStmt createTableStmt = new CreateTableStmt(
-                context != null,
+                context.IF() != null,
                 context.EXTERNAL() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? "olap" : context.engineDesc().getText(),
+                context.engineDesc() == null ? "olap" : context.engineDesc().engineName().getText(),
                 context.charsetDesc() == null ? "utf8" : context.charsetDesc().getText(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
@@ -204,8 +206,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties,
                 null,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
-                context.rollupDesc() == null ? null : (List<AlterClause>) visit(context.rollupDesc()));
+                context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
         return createTableStmt;
+    }
+
+    private List<AlterClause> getRollupDesc(StarRocksParser.RollupDescContext context) {
+        List<AlterClause> rollupList = new ArrayList<>();
+        for (int i = 0; i < context.identifier().size(); i++) {
+            String rollupName = ((Identifier) visit(context.identifier(i))).getValue();
+            List<Identifier> columnList = visit(context.identifierList(i).identifier(), Identifier.class);
+            final AddRollupClause addRollupClause =
+                    new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
+                            null, null,
+                            null);
+            rollupList.add(addRollupClause);
+        }
+        return rollupList;
     }
 
     private KeysDesc getKeysDesc(StarRocksParser.KeyDescContext context) {
@@ -247,7 +263,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             TypeDef typeDef = new TypeDef(getType(context.type()));
             AggregateType aggregateType = null;
             if (null != context.aggDesc()) {
-                aggregateType = AggregateType.valueOf(context.aggDesc().getText());
+                aggregateType = AggregateType.valueOf(context.aggDesc().getText().toUpperCase());
             }
             Boolean isAllowNull = false;
             if (context.NULL() != null && context.NOT() == null) {

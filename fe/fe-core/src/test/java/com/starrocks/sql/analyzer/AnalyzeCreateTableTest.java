@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.common.UserException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -20,7 +19,7 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() {
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap duplicate key(col1, col2) distributed by hash(col1) buckets 10");
         Assert.assertEquals("default_cluster:test", stmt.getDbName());
@@ -42,7 +41,7 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
-    public void testDefaultDbNormal() throws UserException {
+    public void testDefaultDbNormal() {
         String sql =
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
@@ -51,6 +50,14 @@ public class AnalyzeCreateTableTest {
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getPartitionDesc());
         Assert.assertNull(stmt.getProperties());
+    }
+
+    @Test
+    public void testNoDb() {
+        AnalyzeTestUtil.getConnectContext().setDatabase(null);
+        String sql =
+                "create table table1 (col1 int, col2 varchar(10)) engine=olap duplicate key(col1, col2) distributed by hash(col1) buckets 10";
+        analyzeFail(sql);
     }
 
     @Test

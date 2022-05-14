@@ -106,7 +106,17 @@ indexDesc
     ;
 
 engineDesc
-    : ENGINE '=' ('olap'|'mysql'|'broker'|'hive')
+    : ENGINE '=' engineName
+    ;
+engineName
+    : OLAP
+    | MYSQL
+    | BROKER
+    | HIVE
+    | ELASTICSEARCH
+    | ICEBERG
+    | HUDI
+    | JDBC
     ;
 
 charsetDesc
@@ -125,6 +135,7 @@ aggDesc
     |REPLACE
     |HLL_UNION
     |BITMAP_UNION
+    |PERCENTILE_UNION
     ;
 
 rollupDesc
@@ -714,7 +725,7 @@ multiRangePartition
 
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
-    | '[' partitionValueList ',' partitionValueList ']'
+    | '[' partitionValueList ',' partitionValueList ')'
     ;
 
 partitionValueList
@@ -790,12 +801,12 @@ typeParameter
 
 baseType
     : BOOLEAN
-    | TINYINT
-    | SMALLINT
-    | INT
-    | INTEGER
-    | BIGINT
-    | LARGEINT
+    | TINYINT typeParameter?
+    | SMALLINT typeParameter?
+    | INT typeParameter?
+    | INTEGER typeParameter?
+    | BIGINT typeParameter?
+    | LARGEINT typeParameter?
     | FLOAT
     | DOUBLE
     | DATE

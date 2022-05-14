@@ -125,6 +125,12 @@ public class ScalarType extends Type implements Cloneable {
                 return createCharType(length);
             } else if ("STRING".equalsIgnoreCase(typeName)) {
                 return DEFAULT_STRING;
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "TINY") ||
+                    StringUtils.startsWithIgnoreCase(typeName, "SMALL") ||
+                    StringUtils.startsWithIgnoreCase(typeName, "INT") ||
+                    StringUtils.startsWithIgnoreCase(typeName, "BIG") ||
+                    StringUtils.startsWithIgnoreCase(typeName, "LARGE")) {
+                return createIntType(typeName);
             }
         } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL")) {
             if ("DECIMAL".equalsIgnoreCase(typeName)) {
@@ -151,6 +157,12 @@ public class ScalarType extends Type implements Cloneable {
         }
 
         throw new IllegalArgumentException("Unsupported type: " + typeName);
+    }
+
+    private static ScalarType createIntType(String typeName) {
+        final String type = typeName.split("\\(")[0];
+        final PrimitiveType primitiveType = PrimitiveType.valueOf(type.toUpperCase());
+        return new ScalarType(primitiveType);
     }
 
     public static ScalarType createCharType(int len) {
