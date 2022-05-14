@@ -96,3 +96,21 @@
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
 - 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
 - 通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
+
+## 2.0.5
+
+发布日期：2022年5月13日
+
+升级建议：本次修复了一些跟数据存储或数据查询正确性相关的关键 Bug，建议您及时升级。
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 【Critical Bug】通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
+- 【Critical Bug】在数据写入中的一些特殊阶段，如果 Tablet 进行并完成迁移，数据会继续写入至原先 Tablet 对应的磁盘，导致数据丢失，进而导致查询错误。[#5160](https://github.com/StarRocks/starrocks/issues/5160)
+- 【Critical Bug】在进行多个 DELETE 操作后，查询时，如果系统内部使用了低基数优化，则查询结果可能是错误的。[#5712](https://github.com/StarRocks/starrocks/issues/5712)
+- 【Critical Bug】JOIN 查询的两个字段类型分别是 DOUBLE 和 VARCHAR 时，JOIN 查询结果可能错误。 [#5809](https://github.com/StarRocks/starrocks/pull/5809)
+- 在数据导入中的某些特殊情形，可能一些副本的某些版本还未生效，却被 FE 标记为生效，导致查询时出现找不到对应版本数据的错误。[#5153](https://github.com/StarRocks/starrocks/issues/5153)
+- `SPLIT` 函数使用 `NULL` 参数时，会导致 BE 停止服务。[#4092](https://github.com/StarRocks/starrocks/issues/4092)  
+- 从 Apache Doris 0.13 升级到 StarRocks 1.19.x 并运行一段时间，再升级到 StarRocks 2.0.1，可能会升级失败。[#5309](https://github.com/StarRocks/starrocks/issues/5309)
