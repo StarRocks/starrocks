@@ -318,4 +318,22 @@ public class CTEPlanTest extends PlanTestBase {
 
         getFragmentPlan(sql2);
     }
+
+    @Test
+    public void testCTEConsumeTuple() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    RANDOM");
+
+        String thrift = getThriftPlan(sql);
+        assertNotContains(thrift, "tuple_id:3");
+    }
 }
