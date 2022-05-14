@@ -359,7 +359,7 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
 
     // for big query check cpu
     auto* query_ctx = driver->query_ctx();
-    if (wg->big_query_cpu_core_second_limit()) {
+    if (wg->big_query_cpu_second_limit()) {
         wg->incr_total_cpu_cost(runtime_ns);
         query_ctx->incr_cpu_cost(runtime_ns);
 
