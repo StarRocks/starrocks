@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -16,12 +17,9 @@ import com.starrocks.statistic.Constants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.UUID;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -172,7 +170,8 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
                         "    \"storage_format\" = \"v2\"\n" +
-                        ");");
+                        ");")
+                .withView("CREATE VIEW v1(vc1,vc2) as select k1+1,k2 from duplicate_table_with_null");
     }
 
     @Test
@@ -313,6 +312,17 @@ public class CTASAnalyzerTest {
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+    }
+
+    @Test
+    public void testCTASView() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "CREATE TABLE tbl as select vc1,vc2 from v1";
+        CreateTableAsSelectStmt createTableStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        HashDistributionDesc hashDistributionDesc
+                = (HashDistributionDesc) createTableStmt.getCreateTableStmt().getDistributionDesc();
+        Assert.assertEquals("vc1", hashDistributionDesc.getDistributionColumnNames().get(0));
     }
 
 }
