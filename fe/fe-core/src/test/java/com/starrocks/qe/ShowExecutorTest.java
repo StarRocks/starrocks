@@ -33,10 +33,10 @@ import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowEnginesStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -486,8 +486,11 @@ public class ShowExecutorTest {
     public void testShowColumn() throws AnalysisException {
         ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
-        ShowColumnStmt stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTbl"), null, null, false);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+
+        ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -499,8 +502,10 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
 
         // verbose
-        stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTbl"), null, null, true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
 
@@ -513,8 +518,9 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
 
         // pattern
-        stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTable"), null, "%1", true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
 
@@ -527,7 +533,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException {
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("testCluster:emptyDb", "testTable"), null, null, false);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
 
         expectedEx.expect(AnalysisException.class);
@@ -536,7 +542,7 @@ public class ShowExecutorTest {
 
         // empty table
         stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "emptyTable"), null, null, true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         executor = new ShowExecutor(ctx, stmt);
 
         expectedEx.expect(AnalysisException.class);

@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
-import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -27,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
@@ -210,8 +210,8 @@ public class Optimizer {
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
-        //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another MergeTwoProjectRule
+        ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectLimitRule());
+
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
@@ -259,7 +259,6 @@ public class Optimizer {
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 
         cleanUpMemoGroup(memo);

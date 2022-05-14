@@ -16,7 +16,6 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -170,34 +169,7 @@ public class StatementPlanner {
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
     }
 
-    public static boolean supportedByNewParser(StatementBase statement) {
-        return AlterTableStmt.isSupportNewPlanner(statement)
-                || AlterSystemStmt.isSupportNewPlanner(statement)
-                || statement instanceof AdminSetConfigStmt
-                || statement instanceof AdminSetReplicaStatusStmt
-                || statement instanceof AlterViewStmt
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt
-                || statement instanceof CreateCatalogStmt
-                || statement instanceof CreateTableAsSelectStmt
-                || statement instanceof CreateViewStmt
-                || statement instanceof DmlStmt
-                || statement instanceof DropAnalyzeJobStmt
-                || statement instanceof DropCatalogStmt
-                || statement instanceof DropMaterializedViewStmt
-                || statement instanceof DropTableStmt
-                || statement instanceof GrantRoleStmt
-                || statement instanceof QueryStmt
-                || statement instanceof QueryStatement
-                || statement instanceof RevokeRoleStmt
-                || statement instanceof ShowAnalyzeStmt
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowMaterializedViewStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof SubmitTaskStmt;
-    }
-
-    public static boolean supportedByNewAnalyzer(StatementBase statement) {
+    public static boolean supportedByNewPlanner(StatementBase statement) {
         return AlterTableStmt.isSupportNewPlanner(statement)
                 || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AdminSetConfigStmt

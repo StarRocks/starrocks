@@ -36,35 +36,24 @@ RESULT SINK
 select sum(a) from (select v1 as a from t0 limit 0) t
 [result]
 AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[]] having [null]
-    EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
-            VALUES
+    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
+        VALUES
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:4: sum
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:4: sum
+PARTITION: UNPARTITIONED
 
-  RESULT SINK
+RESULT SINK
 
-3:AGGREGATE (merge finalize)
-  |  output: sum(4: sum)
-  |  group by:
-  |
-2:EXCHANGE
-
-PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: UNPARTITIONED
-
-  STREAM DATA SINK
-EXCHANGE ID: 02
-    UNPARTITIONED
-
+2:AGGREGATE (merge finalize)
+|  output: sum(4: sum)
+|  group by:
+|
 1:AGGREGATE (update serialize)
-  |  output: sum(1: v1)
-  |  group by:
-  |
-  0:EMPTYSET
+|  output: sum(1: v1)
+|  group by:
+|
+0:EMPTYSET
 [end]
 
 [sql]

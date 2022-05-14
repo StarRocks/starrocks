@@ -96,19 +96,6 @@ public class ShowColumnStmt extends ShowStmt {
         return pattern;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (!Strings.isNullOrEmpty(db)) {
-            tableName.setDb(db);
-        }
-        tableName.analyze(analyzer);
-        if (isVerbose) {
-            metaData = META_DATA_VERBOSE;
-        } else {
-            metaData = META_DATA;
-        }
-    }
-
     public TableName getTableName() {
         return tableName;
     }

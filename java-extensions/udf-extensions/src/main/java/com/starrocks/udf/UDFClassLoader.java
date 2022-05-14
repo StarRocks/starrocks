@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.udf;
 
@@ -18,8 +18,8 @@ public class UDFClassLoader extends URLClassLoader {
 
     private Map<String, Class<?>> genClazzMap = new HashMap<>();
 
-    public UDFClassLoader(String UDFPath) throws IOException {
-        super(new URL[] {new URL("file://" + UDFPath)});
+    public UDFClassLoader(String udfPath) throws IOException {
+        super(new URL[] {new URL("file://" + udfPath)});
     }
 
     @Override
