@@ -13,6 +13,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
@@ -39,6 +41,7 @@ import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.StatementBase;
@@ -97,6 +100,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -108,6 +112,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
@@ -122,7 +127,9 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
@@ -134,6 +141,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -1279,7 +1287,11 @@ public class LocalMetastore implements ConnectorMetadata {
             db.writeUnlock();
         }
     }
-    // TODO STEPHEN
+
+    public void replayErasePartition(long partitionId) throws DdlException {
+        recycleBin.replayErasePartition(partitionId);
+    }
+
     public void replayRecoverPartition(RecoverInfo info) {
         long dbId = info.getDbId();
         Database db = getDb(dbId);
@@ -3419,7 +3431,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfo.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+        final List<Backend> defaultClusterBackends = systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
@@ -3677,7 +3689,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex mIndex : partition.getMaterializedIndices(
+                            MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
@@ -3697,4 +3710,264 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+        List<Pair<Long, Integer>> tabletsWithSchemaHash = backendTabletsInfo.getTabletSchemaHash();
+        if (!tabletsWithSchemaHash.isEmpty()) {
+            // In previous version, we save replica info in `tabletsWithSchemaHash`,
+            // but it is wrong because we can not get replica from `tabletInvertedIndex` when doing checkpoint,
+            // because when doing checkpoint, the tabletInvertedIndex is not initialized at all.
+            //
+            // So we can only discard this information, in this case, it is equivalent to losing the record of these operations.
+            // But it doesn't matter, these records are currently only used to record whether a replica is in a bad state.
+            // This state has little effect on the system, and it can be restored after the system has processed the bad state replica.
+            for (Pair<Long, Integer> tabletInfo : tabletsWithSchemaHash) {
+                LOG.warn("find an old backendTabletsInfo for tablet {}, ignore it", tabletInfo.first);
+            }
+            return;
+        }
+
+        // in new version, replica info is saved here.
+        // but we need to get replica from db->tbl->partition->...
+        List<ReplicaPersistInfo> replicaPersistInfos = backendTabletsInfo.getReplicaPersistInfos();
+        for (ReplicaPersistInfo info : replicaPersistInfos) {
+            long dbId = info.getDbId();
+            Database db = getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            db.writeLock();
+            try {
+                OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
+                if (tbl == null) {
+                    continue;
+                }
+                Partition partition = tbl.getPartition(info.getPartitionId());
+                if (partition == null) {
+                    continue;
+                }
+                MaterializedIndex mindex = partition.getIndex(info.getIndexId());
+                if (mindex == null) {
+                    continue;
+                }
+                LocalTablet tablet = (LocalTablet) mindex.getTablet(info.getTabletId());
+                if (tablet == null) {
+                    continue;
+                }
+                Replica replica = tablet.getReplicaById(info.getReplicaId());
+                if (replica != null) {
+                    replica.setBad(true);
+                    LOG.debug("get replica {} of tablet {} on backend {} to bad when replaying",
+                            info.getReplicaId(), info.getTabletId(), info.getBackendId());
+                }
+            } finally {
+                db.writeUnlock();
+            }
+        }
+    }
+
+    // Convert table's distribution type from random to hash.
+    // random distribution is no longer supported.
+    public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {
+        db.writeLock();
+        try {
+            if (!tbl.convertRandomDistributionToHashDistribution()) {
+                throw new DdlException("Table " + tbl.getName() + " is not random distributed");
+            }
+            TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
+            editLog.logModifyDistributionType(tableInfo);
+            LOG.info("finished to modify distribution type of table: " + tbl.getName());
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    public void replayConvertDistributionType(TableInfo tableInfo) {
+        Database db = getDb(tableInfo.getDbId());
+        db.writeLock();
+        try {
+            OlapTable tbl = (OlapTable) db.getTable(tableInfo.getTableId());
+            tbl.convertRandomDistributionToHashDistribution();
+            LOG.info("replay modify distribution type of table: " + tbl.getName());
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    /*
+     * The entry of replacing partitions with temp partitions.
+     */
+    public void replaceTempPartition(Database db, String tableName, ReplacePartitionClause clause) throws DdlException {
+        List<String> partitionNames = clause.getPartitionNames();
+        // duplicate temp partition will cause Incomplete transaction
+        List<String> tempPartitionNames =
+                clause.getTempPartitionNames().stream().distinct().collect(Collectors.toList());
+
+        boolean isStrictRange = clause.isStrictRange();
+        boolean useTempPartitionName = clause.useTempPartitionName();
+        db.writeLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            }
+
+            if (table.getType() != Table.TableType.OLAP) {
+                throw new DdlException("Table[" + tableName + "] is not OLAP table");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            // check partition exist
+            for (String partName : partitionNames) {
+                if (!olapTable.checkPartitionNameExist(partName, false)) {
+                    throw new DdlException("Partition[" + partName + "] does not exist");
+                }
+            }
+            for (String partName : tempPartitionNames) {
+                if (!olapTable.checkPartitionNameExist(partName, true)) {
+                    throw new DdlException("Temp partition[" + partName + "] does not exist");
+                }
+            }
+
+            olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
+
+            // write log
+            ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
+                    partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
+            editLog.logReplaceTempPartition(info);
+            LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
+                    clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    public void replayReplaceTempPartition(ReplacePartitionOperationLog replaceTempPartitionLog) {
+        Database db = getDb(replaceTempPartitionLog.getDbId());
+        if (db == null) {
+            return;
+        }
+        db.writeLock();
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(replaceTempPartitionLog.getTblId());
+            if (olapTable == null) {
+                return;
+            }
+            olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
+                    replaceTempPartitionLog.getTempPartitions(),
+                    replaceTempPartitionLog.isStrictRange(),
+                    replaceTempPartitionLog.useTempPartitionName());
+        } catch (DdlException e) {
+            LOG.warn("should not happen.", e);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    // entry of checking tablets operation
+    public void checkTablets(AdminCheckTabletsStmt stmt) {
+        AdminCheckTabletsStmt.CheckType type = stmt.getType();
+        if (type == AdminCheckTabletsStmt.CheckType.CONSISTENCY) {
+            stateMgr.getConsistencyChecker().addTabletsToCheck(stmt.getTabletIds());
+        }
+    }
+
+    // Set specified replica's status. If replica does not exist, just ignore it.
+    public void setReplicaStatus(AdminSetReplicaStatusStmt stmt) {
+        long tabletId = stmt.getTabletId();
+        long backendId = stmt.getBackendId();
+        Replica.ReplicaStatus status = stmt.getStatus();
+        setReplicaStatusInternal(tabletId, backendId, status, false);
+    }
+
+    public void replaySetReplicaStatus(SetReplicaStatusOperationLog log) {
+        setReplicaStatusInternal(log.getTabletId(), log.getBackendId(), log.getReplicaStatus(), true);
+    }
+
+    private void setReplicaStatusInternal(long tabletId, long backendId, Replica.ReplicaStatus status, boolean isReplay) {
+        TabletMeta meta = stateMgr.getTabletInvertedIndex().getTabletMeta(tabletId);
+        if (meta == null) {
+            LOG.info("tablet {} does not exist", tabletId);
+            return;
+        }
+        long dbId = meta.getDbId();
+        Database db = getDb(dbId);
+        if (db == null) {
+            LOG.info("database {} of tablet {} does not exist", dbId, tabletId);
+            return;
+        }
+        db.writeLock();
+        try {
+            Replica replica = stateMgr.getTabletInvertedIndex().getReplica(tabletId, backendId);
+            if (replica == null) {
+                LOG.info("replica of tablet {} does not exist", tabletId);
+                return;
+            }
+            if (status == Replica.ReplicaStatus.BAD || status == Replica.ReplicaStatus.OK) {
+                if (replica.setBadForce(status == Replica.ReplicaStatus.BAD)) {
+                    if (!isReplay) {
+                        SetReplicaStatusOperationLog log =
+                                new SetReplicaStatusOperationLog(backendId, tabletId, status);
+                        editLog.logSetReplicaStatus(log);
+                    }
+                    LOG.info("set replica {} of tablet {} on backend {} as {}. is replay: {}",
+                            replica.getId(), tabletId, backendId, status, isReplay);
+                }
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
+        // inverted index
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        Collection<Partition> allPartitions = olapTable.getAllPartitions();
+        for (Partition partition : allPartitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
+        }
+
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+        if (!isReplay) {
+            // drop all replicas
+            for (Partition partition : olapTable.getAllPartitions()) {
+                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        if (partition.isUseStarOS()) {
+                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
+                            batchTask.addTask(dropTask);
+                        } else {
+                            List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                            for (Replica replica : replicas) {
+                                long backendId = replica.getBackendId();
+                                DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                                if (batchTask == null) {
+                                    batchTask = new AgentBatchTask();
+                                    batchTaskMap.put(backendId, batchTask);
+                                }
+                                batchTask.addTask(dropTask);
+                            } // end for replicas
+                        }
+                    } // end for tablets
+                } // end for indices
+            } // end for partitions
+        }
+        // colocation
+        colocateTableIndex.removeTable(olapTable.getId());
+        return batchTaskMap;
+    }
 }

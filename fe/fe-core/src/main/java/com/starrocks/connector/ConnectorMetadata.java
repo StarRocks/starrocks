@@ -19,7 +19,6 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -75,7 +74,15 @@ public interface ConnectorMetadata {
         return null;
     }
 
+    default void dropTable(DropTableStmt stmt) throws DdlException {}
+
+    default void alterTable(AlterTableStmt stmt) throws UserException {}
+
     default void createTable(CreateTableStmt stmt) throws DdlException {}
+
+    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {}
+
+    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {}
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {}
 
@@ -84,23 +91,16 @@ public interface ConnectorMetadata {
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {}
 
-    default void dropTable(DropTableStmt stmt) throws DdlException {}
-
-    default void alterTable(AlterTableStmt stmt) throws UserException {}
-
-    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {}
+    default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {}
 
     default void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {}
 
     default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {}
 
-    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {}
-
-    default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {}
-
     default void createView(CreateViewStmt stmt) throws DdlException {}
 
-    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {}
+    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {}
+
 }
 

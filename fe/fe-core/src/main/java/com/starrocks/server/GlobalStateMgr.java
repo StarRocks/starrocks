@@ -3045,7 +3045,7 @@ public class GlobalStateMgr {
             db.writeUnlock();
         }
     }
-    // TODO STEPHEN
+
     public void replayEraseDatabase(long dbId) {
         GlobalStateMgr.getCurrentRecycleBin().replayEraseDatabase(dbId);
     }
