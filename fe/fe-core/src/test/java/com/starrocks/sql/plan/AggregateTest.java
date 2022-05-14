@@ -1080,4 +1080,78 @@ public class AggregateTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM");
+        assertContains(plan, "  18:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.");
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 13: t1b");
+        assertContains(plan, "  11:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 14: t1c");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup2() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b), count(distinct t1c), sum(t1c), max(t1b) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 14\n" +
+                "    RANDOM");
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(18: t1c), max(17: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 17> : 2: t1b\n" +
+                "  |  <slot 18> : 3: t1c");
+        assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 15: t1b\n" +
+                "  |  \n" +
+                "  7:Project\n" +
+                "  |  <slot 15> : 2: t1b");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup3() throws Exception {
+        String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b), multi_distinct_count(3: t1c)\n");
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup4() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b + 1), count(distinct t1c + 2) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 2");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
 }

@@ -28,7 +28,6 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "storage/fs/block_manager.h"
 #include "storage/page_cache.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/block_compression.h"
@@ -67,7 +66,7 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
     return Status::OK();
 }
 
-Status PageIO::write_page(fs::WritableBlock* wblock, const std::vector<Slice>& body, const PageFooterPB& footer,
+Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, const PageFooterPB& footer,
                           PagePointer* result) {
     // sanity check of page footer
     CHECK(footer.has_type()) << "type must be set";
@@ -103,11 +102,11 @@ Status PageIO::write_page(fs::WritableBlock* wblock, const std::vector<Slice>& b
     encode_fixed32_le(checksum_buf, checksum);
     page.emplace_back(checksum_buf, sizeof(uint32_t));
 
-    uint64_t offset = wblock->bytes_appended();
-    RETURN_IF_ERROR(wblock->appendv(&page[0], page.size()));
+    uint64_t offset = wfile->size();
+    RETURN_IF_ERROR(wfile->appendv(&page[0], page.size()));
 
     result->offset = offset;
-    result->size = wblock->bytes_appended() - offset;
+    result->size = wfile->size() - offset;
     return Status::OK();
 }
 

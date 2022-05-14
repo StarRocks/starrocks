@@ -105,6 +105,7 @@ struct TMasterResult {
     2: optional list<WorkGroup.TWorkGroupOp> workgroup_ops
 }
 
+// Deprecated
 // Now we only support CPU share.
 enum TResourceType {
     TRESOURCE_CPU_SHARE
@@ -119,10 +120,12 @@ enum TResourceType {
     TRESOURCE_HDD_WRITE_MBPS
 }
 
+// Deprecated
 struct TResourceGroup {
     1: required map<TResourceType, i32> resourceByType
 }
 
+// Deprecated
 // Resource per user
 struct TUserResource {
     1: required TResourceGroup resource
@@ -131,6 +134,7 @@ struct TUserResource {
     2: required map<string, i32> shareByGroup
 }
 
+// Deprecated
 struct TFetchResourceResult {
     // Master service not find protocol version, so using agent service version
     1: required AgentService.TAgentServiceVersion protocolVersion

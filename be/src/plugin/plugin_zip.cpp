@@ -85,7 +85,8 @@ Status PluginZip::download(const std::string& zip_path) {
     HttpClient client;
     Md5Digest digest;
 
-    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(zip_path));
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(opts, zip_path));
     RETURN_IF_ERROR(client.init(_source));
 
     auto download_cb = [&status, &digest, &file](const void* data, size_t length) {

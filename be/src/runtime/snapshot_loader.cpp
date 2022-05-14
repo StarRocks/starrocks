@@ -161,8 +161,8 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             auto local_file_path = src_path + "/" + local_file;
 
             BrokerFileSystem fs_broker(broker_addr, broker_prop);
-            std::unique_ptr<WritableFile> broker_file;
-            ASSIGN_OR_RETURN(broker_file, fs_broker.new_writable_file(tmp_broker_file_name));
+            WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
 
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
 
@@ -319,8 +319,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             local_files.erase(find);
 
             // 3. open local file for write
-            std::unique_ptr<WritableFile> local_file;
-            ASSIGN_OR_RETURN(local_file, FileSystem::Default()->new_writable_file(full_local_file));
+            WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(opts, full_local_file));
 
             auto res = FileUtils::copy(broker_file.get(), local_file.get(), 1024 * 1024);
             if (!res.ok()) {

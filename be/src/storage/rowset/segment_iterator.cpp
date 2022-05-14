@@ -13,6 +13,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fmt/compile.h"
+#include "fs/fs.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
@@ -25,7 +26,6 @@
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
-#include "storage/fs/fs_util.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -322,7 +322,7 @@ Status SegmentIterator::_init() {
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
-    ASSIGN_OR_RETURN(_rfile, _opts.block_mgr->new_random_access_file(_segment->file_name()));
+    ASSIGN_OR_RETURN(_rfile, _opts.fs->new_random_access_file(_segment->file_name()));
 
     /// the calling order matters, do not change unless you know why.
 

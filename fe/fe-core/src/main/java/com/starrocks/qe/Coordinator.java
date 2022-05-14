@@ -89,7 +89,6 @@ import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
@@ -194,7 +193,6 @@ public class Coordinator {
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
     private final ConnectContext connectContext;
-    private final TResourceInfo tResourceInfo;
     private final boolean needReport;
     private final String clusterName;
     // force schedule local be for HybridBackendSelector
@@ -238,8 +236,6 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.tResourceInfo = new TResourceInfo(context.getQualifiedUser(),
-                context.getSessionVariable().getResourceGroup());
         this.needReport = context.getSessionVariable().isReportSucc();
         this.clusterName = context.getClusterName();
         this.nextInstanceId = new TUniqueId();
@@ -263,7 +259,6 @@ public class Coordinator {
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
-        this.tResourceInfo = new TResourceInfo("", "");
         this.needReport = true;
         this.clusterName = cluster;
         this.nextInstanceId = new TUniqueId();
@@ -479,6 +474,7 @@ public class Coordinator {
             boolean isEnablePipelineEngine = connectContext != null &&
                     connectContext.getSessionVariable().isEnablePipelineEngine() &&
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
+            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
@@ -535,7 +531,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -2076,6 +2072,7 @@ public class Coordinator {
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
+                                               Set<Long> dbIds,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
@@ -2089,7 +2086,7 @@ public class Coordinator {
             WorkGroup workgroup = null;
             if (connectContext != null) {
                 workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                        connectContext, WorkGroupClassifier.QueryType.SELECT);
+                        connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -2127,7 +2124,6 @@ public class Coordinator {
 
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
-                params.setResource_info(tResourceInfo);
                 params.setFunc_version(3);
                 params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);

@@ -90,6 +90,10 @@ public class Explain {
         return rootOperatorStr.toString();
     }
 
+    public static CostEstimate buildCost(OptExpression optExpression) {
+        return CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+    }
+
     private static class OperatorStr {
         private final String operatorString;
         private final int step;

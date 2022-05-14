@@ -462,7 +462,6 @@ set(STARROCKS_LINK_LIBS
     Serde
     Storage
     Rowset
-    OlapFs
     Runtime
     Service
     Udf

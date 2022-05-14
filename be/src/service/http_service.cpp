@@ -25,7 +25,6 @@
 #include "http/action/checksum_action.h"
 #include "http/action/compaction_action.h"
 #include "http/action/health_action.h"
-#include "http/action/list_workgroup_action.h"
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
 #include "http/action/pprof_actions.h"
@@ -183,10 +182,6 @@ Status HttpService::start() {
     UpdateConfigAction* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
-
-    ListWorkGroupAction* list_workgroup_action = new ListWorkGroupAction(_env);
-    _ev_http_server->register_handler(HttpMethod::POST, "/api/list_resource_groups", list_workgroup_action);
-    _http_handlers.emplace_back(list_workgroup_action);
 
     RuntimeFilterCacheAction* runtime_filter_cache_action = new RuntimeFilterCacheAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/runtime_filter_cache/{action}",

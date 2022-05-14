@@ -10,10 +10,10 @@
 
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
@@ -1715,9 +1715,8 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     std::string rowset_path = last_rowset->rowset_path();
     std::string segment_path =
             strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
-    std::shared_ptr<fs::BlockManager> block_mgr;
-    ASSIGN_OR_ABORT(block_mgr, fs::fs_util::block_manager("posix://"));
-    ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(segment_path));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(segment_path));
 
     ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());
 }

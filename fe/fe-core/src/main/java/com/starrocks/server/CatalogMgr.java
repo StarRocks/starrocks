@@ -17,15 +17,12 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.CreateCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CatalogMgr {
-    private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
 
     private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
     private final ConnectorMgr connectorMgr;

@@ -38,7 +38,6 @@
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -63,7 +62,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> blk_mgr,
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
@@ -166,9 +165,9 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
-Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
+Segment::Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
                  const TabletSchema* tablet_schema, MemTracker* mem_tracker)
-        : _block_mgr(std::move(blk_mgr)),
+        : _fs(std::move(blk_mgr)),
           _fname(std::move(fname)),
           _tablet_schema(tablet_schema),
           _segment_id(segment_id),
@@ -177,7 +176,7 @@ Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr,
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
-    ASSIGN_OR_RETURN(auto read_file, _block_mgr->new_random_access_file(_fname));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
 
     RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
@@ -231,7 +230,7 @@ Status Segment::_load_index(MemTracker* mem_tracker) {
     return _load_index_once.call([this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
-        ASSIGN_OR_RETURN(auto read_file, _block_mgr->new_random_access_file(_fname));
+        ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
 
         PageReadOptions opts;
         opts.use_page_cache = !config::disable_storage_page_cache;

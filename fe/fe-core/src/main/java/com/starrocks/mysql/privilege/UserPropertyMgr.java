@@ -28,8 +28,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.thrift.TAgentServiceVersion;
-import com.starrocks.thrift.TFetchResourceResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,18 +57,6 @@ public class UserPropertyMgr implements Writable {
         }
 
         property = new UserProperty(qualifiedUser);
-
-        // set user properties
-        try {
-            if (isSystemUser) {
-                setSystemUserDefaultResource(property);
-            } else {
-                setNormalUserDefaultResource(property);
-            }
-        } catch (DdlException e) {
-            // this should not happen, because the value is set by us!!
-        }
-
         propertyMap.put(qualifiedUser, property);
         resourceVersion.incrementAndGet();
     }
@@ -125,38 +111,6 @@ public class UserPropertyMgr implements Writable {
 
     public int getPropertyMapSize() {
         return propertyMap.size();
-    }
-
-    private void setSystemUserDefaultResource(UserProperty user) throws DdlException {
-        UserResource userResource = user.getResource();
-        userResource.updateResource("CPU_SHARE", 100);
-        userResource.updateResource("IO_SHARE", 100);
-        userResource.updateResource("SSD_READ_MBPS", 30);
-        userResource.updateResource("SSD_WRITE_MBPS", 30);
-        userResource.updateResource("HDD_READ_MBPS", 30);
-        userResource.updateResource("HDD_WRITE_MBPS", 30);
-    }
-
-    private void setNormalUserDefaultResource(UserProperty user) throws DdlException {
-        UserResource userResource = user.getResource();
-        userResource.updateResource("CPU_SHARE", 1000);
-        userResource.updateResource("IO_SHARE", 1000);
-        userResource.updateResource("SSD_READ_IOPS", 1000);
-        userResource.updateResource("HDD_READ_IOPS", 80);
-        userResource.updateResource("SSD_READ_MBPS", 30);
-        userResource.updateResource("HDD_READ_MBPS", 30);
-    }
-
-    public TFetchResourceResult toResourceThrift() {
-        TFetchResourceResult tResult = new TFetchResourceResult();
-        tResult.setProtocolVersion(TAgentServiceVersion.V1);
-        tResult.setResourceVersion(resourceVersion.get());
-
-        for (Map.Entry<String, UserProperty> entry : propertyMap.entrySet()) {
-            tResult.putToResourceByUser(entry.getKey(), entry.getValue().getResource().toThrift());
-        }
-
-        return tResult;
     }
 
     public List<List<String>> fetchUserProperty(String qualifiedUser) throws AnalysisException {

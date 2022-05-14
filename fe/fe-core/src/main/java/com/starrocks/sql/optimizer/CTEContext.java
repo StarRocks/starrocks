@@ -61,11 +61,12 @@ public class CTEContext {
 
     private boolean enableCTE;
 
-    private boolean forcedCTE;
+    private List<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
 
     public CTEContext() {
+        forceCTEList = Lists.newArrayList();
     }
 
     public void reset() {
@@ -184,7 +185,7 @@ public class CTEContext {
      *
      */
     public boolean needInline(int cteId) {
-        if (forcedCTE) {
+        if (forceCTEList.contains(cteId)) {
             return false;
         }
 
@@ -229,11 +230,7 @@ public class CTEContext {
         return false;
     }
 
-    public boolean isForcedCTE() {
-        return forcedCTE;
-    }
-
-    public void setForcedCTE(boolean forcedCTE) {
-        this.forcedCTE = forcedCTE;
+    public void addForceCTE(int cteId) {
+        this.forceCTEList.add(cteId);
     }
 }

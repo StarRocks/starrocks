@@ -92,7 +92,8 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(SnapshotMetaTest, test_serialize_and_parse) {
-    auto wf = *FileSystem::Default()->new_writable_file("test_serialize_and_parse.meta");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto wf = *FileSystem::Default()->new_writable_file(opts, "test_serialize_and_parse.meta");
     ASSERT_TRUE(_snapshot_meta.serialize_to_file(wf.get()).ok());
     wf->close();
     DeferOp defer([&]() { std::filesystem::remove("test_serialize_and_parse.meta"); });

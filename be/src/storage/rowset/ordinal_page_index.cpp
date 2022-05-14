@@ -23,7 +23,6 @@
 
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "storage/fs/fs_util.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
@@ -37,7 +36,7 @@ void OrdinalIndexWriter::append_entry(ordinal_t ordinal, const PagePointer& data
     _last_pp = data_pp;
 }
 
-Status OrdinalIndexWriter::finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* meta) {
+Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) {
     meta->set_type(ORDINAL_INDEX);
     BTreeMetaPB* root_page_meta = meta->mutable_ordinal_index()->mutable_root_page();
 
@@ -53,7 +52,7 @@ Status OrdinalIndexWriter::finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* 
 
         // write index page (currently it's not compressed)
         PagePointer pp;
-        RETURN_IF_ERROR(PageIO::write_page(wblock, {page_body.slice()}, page_footer, &pp));
+        RETURN_IF_ERROR(PageIO::write_page(wfile, {page_body.slice()}, page_footer, &pp));
 
         root_page_meta->set_is_root_data_page(false);
         pp.to_proto(root_page_meta->mutable_root_page());
@@ -61,9 +60,8 @@ Status OrdinalIndexWriter::finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* 
     return Status::OK();
 }
 
-Status OrdinalIndexReader::load(fs::BlockManager* block_mgr, const std::string& filename,
-                                const OrdinalIndexPB* index_meta, ordinal_t num_values, bool use_page_cache,
-                                bool kept_in_memory) {
+Status OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB* index_meta,
+                                ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
     if (index_meta->root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
@@ -73,7 +71,7 @@ Status OrdinalIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
         return Status::OK();
     }
     // need to read index page
-    ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(filename));
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(filename));
 
     PageReadOptions opts;
     opts.read_file = read_file.get();

@@ -19,8 +19,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/fs/file_block_manager.h"
-
 #include <gtest/gtest.h>
 
 #include <string>
@@ -53,22 +51,16 @@ protected:
 };
 
 TEST_F(FileBlockManagerTest, NormalTest) {
-    fs::BlockManagerOptions bm_opts;
-    bm_opts.read_only = false;
-    auto env = FileSystem::CreateSharedFromString("posix://").value();
-    std::unique_ptr<fs::FileBlockManager> fbm(new fs::FileBlockManager(env, std::move(bm_opts)));
+    auto fs = FileSystem::CreateSharedFromString("posix://").value();
 
-    std::unique_ptr<fs::WritableBlock> wblock;
     std::string fname = kBlockManagerDir + "/test_file";
-    fs::CreateBlockOptions wblock_opts({fname});
-    Status st = fbm->create_block(wblock_opts, &wblock);
-    ASSERT_TRUE(st.ok()) << st.get_error_msg();
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
 
     std::string data = "abcdefghijklmnopqrstuvwxyz";
-    wblock->append(data);
-    wblock->close();
+    ASSERT_OK(wfile->append(data));
+    ASSERT_OK(wfile->close());
 
-    ASSIGN_OR_ABORT(auto rf, fbm->new_random_access_file(fname));
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(fname));
     ASSIGN_OR_ABORT(auto file_size, rf->get_size());
     ASSERT_EQ(data.size(), file_size);
     std::string read_buff(data.size(), 'a');
