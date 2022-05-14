@@ -34,6 +34,7 @@
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
+        <java-extensions.home>${basedir}/../</java-extensions.home>
     </properties>
 
     <build>
@@ -75,9 +76,6 @@
                     </descriptorRefs>
                 </configuration>
             </plugin>
-
-
         </plugins>
     </build>
-
 </project>
