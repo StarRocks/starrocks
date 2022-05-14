@@ -292,14 +292,17 @@ public class SetTest extends PlanTestBase {
         String sql = "select * from t0 union all select * from t0;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  5:EXCHANGE\n" +
+                "     limit: 2");
+        assertContains(plan, "  0:UNION\n" +
                 "  |  limit: 2\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----4:EXCHANGE\n" +
                 "  |       limit: 2\n" +
                 "  |    \n" +
-                "  3:EXCHANGE\n" +
-                "     limit: 2"));
+                "  2:EXCHANGE");
     }
 
     @Test

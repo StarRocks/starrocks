@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A group-expression is the same as an expression except
@@ -279,18 +280,16 @@ public class GroupExpression {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("\n {root group ");
+        sb.append("{root group ");
         if (group != null) {
             sb.append(group.getId());
         } else {
             sb.append(-1);
         }
-        sb.append("\t root operator: ")
-                .append(op).append('\n')
-                .append("\t child group id ");
-        for (Group input : inputs) {
-            sb.append("\t").append(input.getId());
-        }
+        sb.append(" root operator: ")
+                .append(op)
+                .append(" child: ");
+        sb.append(inputs.stream().map(s -> String.valueOf(s.getId())).collect(Collectors.joining(", ")));
         sb.append("}");
         return sb.toString();
     }

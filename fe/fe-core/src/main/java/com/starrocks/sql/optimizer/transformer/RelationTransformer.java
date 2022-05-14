@@ -131,7 +131,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
         if (!root.getRoot().getOp().hasLimit() &&
                 selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-            LogicalLimitOperator limitOperator = new LogicalLimitOperator(selectLimit);
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.local(selectLimit);
             root = root.withNewRoot(limitOperator);
             return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
@@ -328,7 +328,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         LimitElement limit = setOperationRelation.getLimit();
         if (limit != null) {
-            LogicalLimitOperator limitOperator = new LogicalLimitOperator(limit.getLimit(), limit.getOffset());
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
             root = root.withNewRoot(limitOperator);
         }
         return new LogicalPlan(root, outputColumns, null);
