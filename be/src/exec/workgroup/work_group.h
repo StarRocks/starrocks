@@ -132,7 +132,10 @@ public:
     Status check_big_query(const QueryContext& query_context);
     Status try_incr_num_queries();
     void decr_num_queries();
-    int64_t num_running_queries() const { return _num_queries; }
+    int64_t num_running_queries() const { return _num_running_queries; }
+    int64_t num_total_queries() const { return _num_total_queries; }
+    int64_t concurrency_overflow_count() const { return _concurrency_overflow_count; }
+    int64_t bigquery_count() const { return _bigquery_count; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     bool use_big_query_mem_limit() const {
@@ -198,7 +201,10 @@ private:
 
     double _cpu_actual_use_ratio = 0;
 
-    std::atomic<int64_t> _num_queries = 0;
+    std::atomic<int64_t> _num_running_queries = 0;
+    std::atomic<int64_t> _num_total_queries = 0;
+    std::atomic<int64_t> _concurrency_overflow_count = 0;
+    std::atomic<int64_t> _bigquery_count = 0;
 };
 
 class WorkerOwnerManager {
@@ -292,6 +298,9 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_total_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
 
     void add_metrics(const WorkGroupPtr& wg);
     void update_metrics_unlocked();
