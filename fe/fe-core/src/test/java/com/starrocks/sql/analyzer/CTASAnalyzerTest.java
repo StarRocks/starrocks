@@ -340,11 +340,7 @@ public class CTASAnalyzerTest {
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
-        try {
-            CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql2, ctx);
-        } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("Unsupported CTAS transform type: null"));
-        }
+        CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql2, ctx);
 
     }
 
