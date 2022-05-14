@@ -19,6 +19,9 @@ class Unnest final : public TableFunction {
 public:
     std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override {
         *eos = true;
+        if (state->get_columns().empty()) {
+            return {};
+        }
         Column* arg0 = state->get_columns()[0].get();
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         Columns result;
