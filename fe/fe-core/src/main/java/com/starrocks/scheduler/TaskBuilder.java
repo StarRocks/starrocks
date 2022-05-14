@@ -5,7 +5,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.statistic.Constants;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -23,8 +22,7 @@ public class TaskBuilder {
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
-        task.setTaskType(Constants.TaskType.MANUAL);
-        task.setProcessorType(Constants.TaskProcessorType.SQL);
+        task.setProperties(submitTaskStmt.getProperties());
         return task;
     }
 

@@ -79,13 +79,14 @@ public class TaskManagerTest {
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-        TaskManager.processorMap = ImmutableMap.of(Constants.TaskProcessorType.SQL, new MockTaskRunProcessor());
-
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         taskManager.createTask(task);
-        List<Task> taskList = taskManager.showTask();
-        taskManager.executeTask(taskList.get(0).getName());
+        // taskManager.executeTask(taskList.get(0).getName());
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.setProcessor(new MockTaskRunProcessor());
+        taskRunManager.addTaskRun(taskRun);
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 

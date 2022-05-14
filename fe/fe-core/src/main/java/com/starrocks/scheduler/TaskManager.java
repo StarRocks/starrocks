@@ -5,7 +5,6 @@ package com.starrocks.scheduler;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -16,7 +15,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,9 +28,6 @@ public class TaskManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
 
-
-    public static Map<Constants.TaskProcessorType, TaskRunProcessor> processorMap = ImmutableMap
-            .of(Constants.TaskProcessorType.SQL, new SqlTaskRunProcessor());
     public static final long TASK_EXISTS = -1L;
     public static final long DUPLICATE_CREATE_TASK = -2L;
     public static final long TASK_CREATE_TIMEOUT = -3L;
@@ -87,17 +82,12 @@ public class TaskManager {
                 return TASK_EXISTS;
             }
             nameToTaskMap.put(task.getName(), task);
-            switch (task.getTaskType()) {
-                case MANUAL:
-                    if (manualTaskMap.containsKey(task.getId())) {
-                        return DUPLICATE_CREATE_TASK;
-                    }
-                    manualTaskMap.put(task.getId(), task);
-                    // GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
-                    return task.getId();
-                default:
-                    throw new UnsupportedOperationException("unsupported task type:" + task.getTaskType());
+            if (manualTaskMap.containsKey(task.getId())) {
+                return DUPLICATE_CREATE_TASK;
             }
+            manualTaskMap.put(task.getId(), task);
+            // GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
+            return task.getId();
         } finally {
             unlock();
         }
@@ -116,13 +106,8 @@ public class TaskManager {
         if (task == null) {
             return;
         }
-        switch (task.getTaskType())  {
-            case MANUAL: {
-                nameToTaskMap.remove(taskName);
-                manualTaskMap.remove(task.getId());
-            }
-            break;
-        }
+        nameToTaskMap.remove(taskName);
+        manualTaskMap.remove(task.getId());
         // GlobalStateMgr.getCurrentState().getEditLog().logDropTask(taskName);
     }
 

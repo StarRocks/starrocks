@@ -30,17 +30,6 @@ public class Constants {
         FINISH,
     }
 
-    public enum TaskType {
-        MANUAL,
-        PERIODICAL
-    }
-
-    // TaskProcessorType is used to facilitate the generation of specific
-    // executors of TaskRun corresponding to the extension Task
-    public enum TaskProcessorType {
-        SQL
-    }
-
     // PENDING -> RUNNING -> FAILED
     //                    -> SUCCESS
     public enum TaskRunState {

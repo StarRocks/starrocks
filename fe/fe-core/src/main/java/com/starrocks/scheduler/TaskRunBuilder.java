@@ -22,14 +22,7 @@ public class TaskRunBuilder {
         taskRun.setProperties(task.getProperties());
         taskRun.setCtx(ConnectContext.get());
         taskRun.setTask(task);
-
-        TaskRunProcessor taskRunProcessor = TaskManager.processorMap.get(task.getProcessorType());
-        if (taskRunProcessor != null) {
-            taskRun.setProcessor(taskRunProcessor);
-        } else {
-            // default processor
-            taskRun.setProcessor(new SqlTaskRunProcessor());
-        }
+        taskRun.setProcessor(new SqlTaskRunProcessor());
 
         return taskRun;
     }

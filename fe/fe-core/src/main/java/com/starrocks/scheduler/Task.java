@@ -6,7 +6,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.statistic.Constants;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -21,9 +20,6 @@ public class Task implements Writable {
     @SerializedName("name")
     private String name;
 
-    @SerializedName("taskType")
-    private Constants.TaskType taskType = Constants.TaskType.MANUAL;
-
     @SerializedName("createTime")
     private long createTime;
 
@@ -35,9 +31,6 @@ public class Task implements Writable {
 
     @SerializedName("properties")
     private Map<String, String> properties;
-
-    @SerializedName("processorType")
-    private Constants.TaskProcessorType processorType = Constants.TaskProcessorType.SQL;
 
     public long getId() {
         return id;
@@ -53,14 +46,6 @@ public class Task implements Writable {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public Constants.TaskType getTaskType() {
-        return taskType;
-    }
-
-    public void setTaskType(Constants.TaskType taskType) {
-        this.taskType = taskType;
     }
 
     public long getCreateTime() {
@@ -93,14 +78,6 @@ public class Task implements Writable {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
-    }
-
-    public Constants.TaskProcessorType getProcessorType() {
-        return processorType;
-    }
-
-    public void setProcessorType(Constants.TaskProcessorType processorType) {
-        this.processorType = processorType;
     }
 
     public static Task read(DataInput in) throws IOException {
