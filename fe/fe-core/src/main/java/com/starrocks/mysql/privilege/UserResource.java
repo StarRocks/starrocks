@@ -49,8 +49,8 @@ public class UserResource {
 
     public static void write(DataOutput out) throws IOException {
         // Num resources
-        out.write(0);
+        out.writeInt(0);
         // Num groups
-        out.write(0);
+        out.writeInt(0);
     }
 }
