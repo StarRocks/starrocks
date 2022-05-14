@@ -233,6 +233,7 @@ struct TPublishVersionRequest {
     2: required list<TPartitionVersionInfo> partition_version_infos
     // strict mode means BE will check tablet missing version
     3: optional bool strict_mode = false // Deprecated
+    4: optional i64 commit_timestamp
 }
 
 struct TClearAlterTaskRequest {
