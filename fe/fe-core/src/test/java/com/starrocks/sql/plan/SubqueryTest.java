@@ -163,4 +163,13 @@ public class SubqueryTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1");
     }
+
+    @Test
+    public void testCorrelatedComplexInSubQuery() throws Exception {
+        String sql = "SELECT v4  FROM t1\n" +
+                "WHERE ( (\"1969-12-09 14:18:03\") IN (\n" +
+                "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
+                "    ) IS NULL\n";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
 }
