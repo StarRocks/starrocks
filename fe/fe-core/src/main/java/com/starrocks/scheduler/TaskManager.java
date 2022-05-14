@@ -73,7 +73,7 @@ public class TaskManager {
         }, 0, 1, TimeUnit.SECONDS);
     }
 
-    public Long createTask(Task task) {
+    public long createTask(Task task) {
         if (!tryLock()) {
             return TASK_CREATE_TIMEOUT;
         }
@@ -160,13 +160,13 @@ public class TaskManager {
             if (createResult == TASK_EXISTS) {
                 throw new DdlException("Task " +  taskName + " already exist.");
             }
-            throw new DdlException("Failed to create Task:" +  taskName + ",ErrorCode:" + createResult);
+            throw new DdlException("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
         }
         String queryId = this.executeTask(taskName);
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("task_name", ScalarType.createVarchar(40)));
-        builder.addColumn(new Column("status", ScalarType.createVarchar(10)));
+        builder.addColumn(new Column("TaskName", ScalarType.createVarchar(40)));
+        builder.addColumn(new Column("Status", ScalarType.createVarchar(10)));
         List<String> item = ImmutableList.of(taskName, "Submitted");
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
