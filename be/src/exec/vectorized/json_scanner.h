@@ -77,6 +77,8 @@ public:
 
     Status close();
 
+    const std::string& filename() { return _file->filename(); }
+
 private:
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);

@@ -73,9 +73,22 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         RETURN_IF_ERROR(_open_next_reader());
         _cur_file_eof = false;
     }
-    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
-    if (status.is_end_of_file()) {
-        _cur_file_eof = true;
+
+    Status status;
+    try {
+        status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("The format of the json file $0 may be wrong, stop json loader.",
+                                           _cur_file_reader->filename());
+        LOG(WARNING) << err_msg;
+        return Status::DataQualityError(err_msg);
+    }
+    if (!status.ok()) {
+        if (status.is_end_of_file()) {
+            _cur_file_eof = true;
+        } else {
+            return status;
+        }
     }
 
     if (src_chunk->num_rows() == 0) {
