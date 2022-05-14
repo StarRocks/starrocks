@@ -21,6 +21,7 @@
 
 #include "storage/rowset/column_iterator.h"
 
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 
@@ -30,7 +31,7 @@ Status ColumnIterator::decode_dict_codes(const vectorized::Column& codes, vector
     if (codes.is_nullable()) {
         const vectorized::ColumnPtr& data_column = down_cast<const vectorized::NullableColumn&>(codes).data_column();
         const vectorized::Buffer<int32_t>& v =
-                std::static_pointer_cast<vectorized::Int32Column>(data_column)->get_data();
+                vectorized::ColumnHelper::as_column<vectorized::Int32Column>(data_column)->get_data();
         return this->decode_dict_codes(v.data(), v.size(), words);
     } else {
         const vectorized::Buffer<int32_t>& v = down_cast<const vectorized::Int32Column&>(codes).get_data();

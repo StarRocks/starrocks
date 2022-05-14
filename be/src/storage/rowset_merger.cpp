@@ -277,7 +277,7 @@ private:
                                   const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr) {
-        std::unique_ptr<vectorized::Column> pk_column;
+        MutableColumnPtr pk_column;
         if (schema.num_key_fields() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &pk_column).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";

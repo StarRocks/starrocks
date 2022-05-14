@@ -48,7 +48,8 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
+    //ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
+    ColumnPtr bits = ColumnHelper::cast_to_ptr(column);
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.

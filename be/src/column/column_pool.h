@@ -377,7 +377,7 @@ using ColumnPoolList =
                  ColumnPool<UInt32Column>, ColumnPool<Int64Column>, ColumnPool<Int128Column>, ColumnPool<FloatColumn>,
                  ColumnPool<DoubleColumn>, ColumnPool<BinaryColumn>, ColumnPool<DateColumn>,
                  ColumnPool<TimestampColumn>, ColumnPool<DecimalColumn>, ColumnPool<Decimal32Column>,
-                 ColumnPool<Decimal64Column>, ColumnPool<Decimal128Column>>;
+                 ColumnPool<Decimal64Column>, ColumnPool<Decimal128Column> >;
 
 template <typename T>
 __thread typename ColumnPool<T>::LocalPool* ColumnPool<T>::_local_pool = nullptr; // NOLINT

@@ -7,6 +7,7 @@
 #endif
 
 #include "column/bytes.h"
+#include "column/column_helper.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"

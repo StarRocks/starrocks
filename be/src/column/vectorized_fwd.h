@@ -3,6 +3,8 @@
 #include <memory>
 #include <vector>
 
+#include "column/COW.h"
+
 #pragma once
 
 namespace starrocks {
@@ -46,8 +48,8 @@ class DecimalV3Column;
 template <typename T>
 class BinaryColumnBase;
 
-using ColumnPtr = std::shared_ptr<Column>;
-using MutableColumnPtr = std::unique_ptr<Column>;
+using ColumnPtr = typename COW<Column>::Ptr;
+using MutableColumnPtr = typename COW<Column>::MutablePtr;
 using Columns = std::vector<ColumnPtr>;
 using MutableColumns = std::vector<MutableColumnPtr>;
 

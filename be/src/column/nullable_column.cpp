@@ -17,7 +17,7 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())
             << "nullable column's data must be single column";
     ColumnPtr ptr = std::move(null_column);
-    _null_column = std::static_pointer_cast<NullColumn>(ptr);
+    _null_column = ColumnHelper::as_column<NullColumn>(ptr);
     _has_null = SIMD::count_nonzero(_null_column->get_data());
 }
 
@@ -320,7 +320,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
 
     int64_t xor_checksum = 0;
     size_t num = _null_column->size();
-    uint8_t* src = _null_column->get_data().data();
+    const uint8_t* src = _null_column->get_data().data();
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
@@ -356,11 +356,11 @@ StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of NullableColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_data_column);
+    return upgrade_helper_func(_data_column);
 }
 
 StatusOr<ColumnPtr> NullableColumn::downgrade() {
-    return downgrade_helper_func(&_data_column);
+    return downgrade_helper_func(_data_column);
 }
 
 } // namespace starrocks::vectorized

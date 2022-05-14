@@ -205,10 +205,10 @@ StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
-                            NullableColumn::create(ColumnPtr(new_col.release()), NullColumn::create(row_num, 0));
+                            NullableColumn::create(ColumnPtr(std::move(new_col)), NullColumn::create(row_num, 0));
                     materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
                 } else {
-                    materialize_chunk->append_column(ColumnPtr(new_col.release()), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(ColumnPtr(std::move(new_col)), slots_in_row_descriptor[i]->id());
                 }
             }
         } else {

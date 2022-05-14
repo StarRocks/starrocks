@@ -404,7 +404,7 @@ void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     const size_t array_size = _offsets->get_data()[idx + 1] - offset;
 
     buf->begin_push_array();
-    Column* elements = _elements.get();
+    const Column* elements = _elements.get();
     if (array_size > 0) {
         elements->put_mysql_row_buffer(buf, offset);
     }
@@ -450,7 +450,15 @@ void ArrayColumn::reset_column() {
 }
 
 const Column& ArrayColumn::elements() const {
-    return *(_elements.get());
+    return *_elements;
+}
+
+Column& ArrayColumn::elements() {
+    return *_elements;
+}
+
+const ColumnPtr& ArrayColumn::elements_column() const {
+    return _elements;
 }
 
 ColumnPtr& ArrayColumn::elements_column() {
@@ -461,7 +469,15 @@ const UInt32Column& ArrayColumn::offsets() const {
     return *_offsets;
 }
 
-UInt32Column::Ptr& ArrayColumn::offsets_column() {
+UInt32Column& ArrayColumn::offsets() {
+    return *_offsets;
+}
+
+const typename UInt32Column::Ptr& ArrayColumn::offsets_column() const {
+    return _offsets;
+}
+
+typename UInt32Column::Ptr& ArrayColumn::offsets_column() {
     return _offsets;
 }
 
@@ -498,11 +514,11 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    return upgrade_helper_func(_elements);
 }
 
 StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+    return downgrade_helper_func(_elements);
 }
 
 } // namespace starrocks::vectorized

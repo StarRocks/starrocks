@@ -130,7 +130,9 @@ public:
     RandomValueExpr(const TExprNode& t, size_t size, std::default_random_engine& re) : Expr(t), _re(re) { _init(size); }
     ColumnPtr evaluate(ExprContext*, Chunk*) override { return col; }
 
-    typename RunTimeColumnType<Type>::Container get_data() { return col->get_data(); }
+    typename RunTimeColumnType<Type>::Container get_data() {
+        return ColumnHelper::as_column<RunTimeColumnType<Type>>(col)->get_data();
+    }
 
     Expr* clone(ObjectPool* pool) const { return nullptr; }
 
@@ -143,7 +145,7 @@ private:
             col = RunTimeColumnType<Type>::create();
         }
 
-        auto& data = col->get_data();
+        auto& data = ColumnHelper::as_column<RunTimeColumnType<Type>>(col)->get_data();
         data.resize(size);
         for (int i = 0; i < size; ++i) {
             if constexpr (Type == TYPE_BOOLEAN) {
@@ -153,7 +155,7 @@ private:
             }
         }
     }
-    std::shared_ptr<RunTimeColumnType<Type>> col;
+    ColumnPtr col;
     std::default_random_engine& _re;
 };
 

@@ -27,7 +27,7 @@ static unique_ptr<vectorized::Schema> create_key_schema(const vector<FieldType>&
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     auto sc = create_key_schema({OLAP_FIELD_TYPE_INT});
-    unique_ptr<vectorized::Column> dest;
+    vectorized::MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
@@ -48,7 +48,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     auto sc = create_key_schema({OLAP_FIELD_TYPE_LARGEINT});
-    unique_ptr<vectorized::Column> dest;
+    vectorized::MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
@@ -74,7 +74,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     auto sc = create_key_schema(
             {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
-    unique_ptr<vectorized::Column> dest;
+    vectorized::MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
     auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);

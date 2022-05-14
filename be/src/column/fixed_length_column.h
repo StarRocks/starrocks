@@ -18,5 +18,7 @@ public:
 
     FixedLengthColumn(const FixedLengthColumn& src) : SuperClass((const FixedLengthColumnBase<T>&)(src)) {}
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
+
+    static typename SuperClass::MutablePtr mutate(typename SuperClass::Ptr ptr) { return ptr->shallowMutate(); }
 };
 } // namespace starrocks::vectorized

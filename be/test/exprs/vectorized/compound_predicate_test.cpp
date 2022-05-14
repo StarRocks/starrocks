@@ -44,7 +44,7 @@ TEST_F(VectorizedCompoundPredicateTest, andExpr) {
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = ColumnHelper::as_column<BooleanColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -70,7 +70,7 @@ TEST_F(VectorizedCompoundPredicateTest, orExpr) {
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = ColumnHelper::as_column<BooleanColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -103,9 +103,9 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndExpr) {
             }
         }
 
-        auto ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        auto ptr = ColumnHelper::as_column<NullableColumn>(v)->data_column();
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+            ASSERT_EQ(1, (int)ColumnHelper::as_column<BooleanColumn>(ptr)->get_data()[j]);
         }
     }
 
@@ -124,7 +124,7 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        auto ptr = ColumnHelper::cast_to<TYPE_BOOLEAN>(std::static_pointer_cast<NullableColumn>(v)->data_column());
+        auto ptr = ColumnHelper::cast_to<TYPE_BOOLEAN>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
 
         ASSERT_TRUE(v->is_nullable());
         ASSERT_FALSE(v->is_numeric());
@@ -151,13 +151,13 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndTrueExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ColumnPtr ptr = ColumnHelper::as_column<NullableColumn>(v)->data_column();
 
         ASSERT_TRUE(v->is_nullable());
         ASSERT_FALSE(v->is_numeric());
 
         for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+            ASSERT_EQ(1, (int)ColumnHelper::as_column<BooleanColumn>(ptr)->get_data()[j]);
         }
 
         ColumnPtr colv1 = col1.evaluate(nullptr, nullptr);
@@ -180,13 +180,13 @@ TEST_F(VectorizedCompoundPredicateTest, constAndExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ColumnPtr ptr = ColumnHelper::as_column<NullableColumn>(v)->data_column();
 
         ASSERT_TRUE(v->is_nullable());
         ASSERT_FALSE(v->is_numeric());
 
         for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+            ASSERT_EQ(0, (int)ColumnHelper::as_column<BooleanColumn>(ptr)->get_data()[j]);
         }
 
         for (int j = 0; j < ptr->size(); ++j) {
@@ -207,13 +207,13 @@ TEST_F(VectorizedCompoundPredicateTest, nullAndFalseExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ColumnPtr ptr = ColumnHelper::as_column<NullableColumn>(v)->data_column();
 
         ASSERT_TRUE(v->is_nullable());
         ASSERT_FALSE(v->is_numeric());
 
         for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+            ASSERT_EQ(0, (int)ColumnHelper::as_column<BooleanColumn>(ptr)->get_data()[j]);
         }
 
         for (int j = 0; j < ptr->size(); ++j) {
@@ -264,7 +264,7 @@ TEST_F(VectorizedCompoundPredicateTest, mergeNullOrExpr) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(v)->get_data()[j]);
+            ASSERT_EQ(1, (int)ColumnHelper::as_column<BooleanColumn>(v)->get_data()[j]);
         }
 
         for (int j = 0; j < v->size(); ++j) {
@@ -289,7 +289,7 @@ TEST_F(VectorizedCompoundPredicateTest, FalseNullOrExpr) {
         ASSERT_FALSE(v->is_numeric());
         ASSERT_EQ(10, v->size());
 
-        auto p = std::static_pointer_cast<BooleanColumn>(ColumnHelper::as_raw_column<NullableColumn>(v)->data_column());
+        auto p = ColumnHelper::as_column<BooleanColumn>(ColumnHelper::as_raw_column<NullableColumn>(v)->data_column());
 
         for (int j = 0; j < v->size(); ++j) {
             if (j % 2) {
@@ -318,10 +318,10 @@ TEST_F(VectorizedCompoundPredicateTest, OnlyNullOrExpr) {
         ASSERT_TRUE(v->only_null());
         ASSERT_EQ(1, v->size());
 
-        ASSERT_TRUE(nullptr != std::dynamic_pointer_cast<ConstColumn>(v));
-        ASSERT_TRUE(nullptr == std::dynamic_pointer_cast<NullableColumn>(v));
-        ASSERT_TRUE(nullptr != std::dynamic_pointer_cast<NullableColumn>(
-                                       std::dynamic_pointer_cast<ConstColumn>(v)->data_column()));
+        ASSERT_TRUE(nullptr != ColumnHelper::as_column<ConstColumn>(v));
+        ASSERT_TRUE(nullptr == ColumnHelper::as_column<NullableColumn>(v));
+        ASSERT_TRUE(nullptr !=
+                    ColumnHelper::as_column<NullableColumn>(ColumnHelper::as_column<ConstColumn>(v)->data_column()));
     }
 }
 
@@ -338,7 +338,7 @@ TEST_F(VectorizedCompoundPredicateTest, notExpr) {
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = ColumnHelper::as_column<BooleanColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -357,7 +357,7 @@ TEST_F(VectorizedCompoundPredicateTest, notExpr) {
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = ColumnHelper::as_column<BooleanColumn>(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {

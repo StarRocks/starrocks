@@ -125,7 +125,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
             {create_int_key(1), create_int_key(2), create_int_value(3), create_int_value(4), create_int_value(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
     std::vector<uint32_t> read_column_ids{2, 4};
-    std::vector<std::unique_ptr<vectorized::Column>> write_columns(read_column_ids.size());
+    std::vector<vectorized::MutableColumnPtr> write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema.column(read_column_id);
@@ -181,7 +181,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         wblock_tmp->append("test");
     }
 
-    std::vector<std::unique_ptr<vectorized::Column>> new_write_columns(read_column_ids.size());
+    std::vector<vectorized::MutableColumnPtr> new_write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema.column(read_column_id);

@@ -78,11 +78,11 @@ StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_data);
+    return upgrade_helper_func(_data);
 }
 
 StatusOr<ColumnPtr> ConstColumn::downgrade() {
-    return downgrade_helper_func(&_data);
+    return downgrade_helper_func(_data);
 }
 
 } // namespace starrocks::vectorized
