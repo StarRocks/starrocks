@@ -343,4 +343,9 @@ public class EsScanNode extends ScanNode {
                 .append("\n");
         return output.toString();
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

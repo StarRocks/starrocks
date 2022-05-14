@@ -27,6 +27,7 @@ public class HashDistributionSpec extends DistributionSpec {
     }
 
     private boolean isJoinEqColumnsCompatible(HashDistributionSpec requiredSpec) {
+        // keep same logical with `isSatisfy` method of HashDistributionDesc
         List<Integer> requiredShuffleColumns = requiredSpec.getShuffleColumns();
         List<Integer> shuffleColumns = getShuffleColumns();
 
@@ -36,39 +37,65 @@ public class HashDistributionSpec extends DistributionSpec {
             return false;
         }
 
-        if (getHashDistributionDesc().isLocalShuffle()) {
-            // Minority meets majority
-            List<ColumnRefSet> requiredEquivalentColumns = requiredShuffleColumns.stream()
-                    .map(c -> propertyInfo.getEquivalentColumns(c)).collect(Collectors.toList());
-            List<ColumnRefSet> shuffleEquivalentColumns = shuffleColumns.stream()
-                    .map(s -> propertyInfo.getEquivalentColumns(s)).collect(Collectors.toList());
-            return requiredEquivalentColumns.containsAll(shuffleEquivalentColumns);
-        } else if (requiredShuffleColumns.size() == shuffleColumns.size()) {
-            // must keep same
-            for (int i = 0; i < shuffleColumns.size(); i++) {
-                int requiredShuffleColumn = requiredShuffleColumns.get(i);
-                int outputShuffleColumn = shuffleColumns.get(i);
-                /*
-                 * Given the following example：
-                 *      SELECT * FROM A JOIN B ON A.a = B.b
-                 *      JOIN C ON B.b = C.c
-                 *      JOIN D ON C.c = D.d
-                 *      JOIN E ON D.d = E.e
-                 * We focus on the third join `.. join D ON C.c = D.d`
-                 * requiredColumn: D.d
-                 * outputColumn: A.a
-                 * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
-                 *
-                 * A.a can be mapped to D.d through joinEquivalentColumns
-                 */
-                if (!propertyInfo.isEquivalentJoinOnColumns(requiredShuffleColumn, outputShuffleColumn)) {
-                    return false;
-                }
-            }
-            return true;
+        HashDistributionDesc.SourceType requiredShuffleType = requiredSpec.getHashDistributionDesc().getSourceType();
+        HashDistributionDesc.SourceType thisShuffleType = getHashDistributionDesc().getSourceType();
+
+        if (thisShuffleType == HashDistributionDesc.SourceType.SHUFFLE_AGG &&
+                requiredShuffleType == HashDistributionDesc.SourceType.SHUFFLE_JOIN) {
+            return satisfySameColumns(requiredShuffleColumns, shuffleColumns);
+        } else if (thisShuffleType == HashDistributionDesc.SourceType.SHUFFLE_JOIN &&
+                requiredShuffleType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+            return satisfyContainAll(requiredShuffleColumns, shuffleColumns);
+        } else if (!thisShuffleType.equals(requiredShuffleType) &&
+                thisShuffleType != HashDistributionDesc.SourceType.LOCAL) {
+            return false;
         }
 
-        return false;
+        // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
+        if (HashDistributionDesc.SourceType.LOCAL.equals(thisShuffleType) ||
+                HashDistributionDesc.SourceType.SHUFFLE_AGG.equals(thisShuffleType)) {
+            return satisfyContainAll(requiredShuffleColumns, shuffleColumns);
+        }
+
+        return satisfySameColumns(requiredShuffleColumns, shuffleColumns);
+    }
+
+    private boolean satisfyContainAll(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns) {
+        // Minority meets majority
+        List<ColumnRefSet> requiredEquivalentColumns = requiredShuffleColumns.stream()
+                .map(c -> propertyInfo.getEquivalentColumns(c)).collect(Collectors.toList());
+        List<ColumnRefSet> shuffleEquivalentColumns = shuffleColumns.stream()
+                .map(s -> propertyInfo.getEquivalentColumns(s)).collect(Collectors.toList());
+        return requiredEquivalentColumns.containsAll(shuffleEquivalentColumns);
+    }
+
+    private boolean satisfySameColumns(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns) {
+        // must keep same
+        if (requiredShuffleColumns.size() != shuffleColumns.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < shuffleColumns.size(); i++) {
+            int requiredShuffleColumn = requiredShuffleColumns.get(i);
+            int outputShuffleColumn = shuffleColumns.get(i);
+            /*
+             * Given the following example：
+             *      SELECT * FROM A JOIN B ON A.a = B.b
+             *      JOIN C ON B.b = C.c
+             *      JOIN D ON C.c = D.d
+             *      JOIN E ON D.d = E.e
+             * We focus on the third join `.. join D ON C.c = D.d`
+             * requiredColumn: D.d
+             * outputColumn: A.a
+             * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
+             *
+             * A.a can be mapped to D.d through joinEquivalentColumns
+             */
+            if (!propertyInfo.isEquivalentJoinOnColumns(requiredShuffleColumn, outputShuffleColumn)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public boolean isSatisfy(DistributionSpec spec) {
@@ -83,20 +110,15 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionSpec other = (HashDistributionSpec) spec;
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
         HashDistributionDesc.SourceType otherSourceType = other.hashDistributionDesc.getSourceType();
-        // shuffle_local may satisfy shuffle_agg or shuffle_join
-        if (!thisSourceType.equals(otherSourceType) &&
-                thisSourceType != HashDistributionDesc.SourceType.LOCAL) {
-            return false;
-        }
+
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
             long tableId = propertyInfo.tableId;
             // Disable use colocate/bucket join when table with empty partition
-            boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
+            boolean satisfyColocate = propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
                     !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
-                    !propertyInfo.isEmptyPartition())
-                    || propertyInfo.isSinglePartition();
+                    !propertyInfo.isEmptyPartition());
             if (!satisfyColocate) {
                 return false;
             }

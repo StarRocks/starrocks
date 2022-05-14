@@ -31,6 +31,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "storage/olap_define.h"
+#include "testutil/assert.h"
 #include "util/logging.h"
 
 #ifndef BE_TEST
@@ -64,7 +65,8 @@ void save_string_file(const std::filesystem::path& p, const std::string& str) {
 
 TEST_F(FileUtilsTest, TestCopyFile) {
     std::string src_file_name = _s_test_data_path + "/abcd12345.txt";
-    std::unique_ptr<WritableFile> src_file = *FileSystem::Default()->new_writable_file(src_file_name);
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    std::unique_ptr<WritableFile> src_file = *FileSystem::Default()->new_writable_file(opts, src_file_name);
 
     char large_bytes2[(1 << 12)];
     memset(large_bytes2, 0, sizeof(char) * ((1 << 12)));
@@ -84,7 +86,7 @@ TEST_F(FileUtilsTest, TestCopyFile) {
 
 TEST_F(FileUtilsTest, TestRemove) {
     // remove_all
-    ASSERT_TRUE(FileUtils::remove_all("./file_test").ok());
+    ASSERT_OK(FileUtils::remove_all("./file_test"));
     ASSERT_FALSE(FileUtils::check_exist("./file_test"));
 
     ASSERT_TRUE(FileUtils::create_dir("./file_test/123/456/789").ok());

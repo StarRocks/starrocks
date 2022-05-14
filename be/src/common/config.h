@@ -258,14 +258,12 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
-CONF_mInt32(base_compaction_write_mbytes_per_sec, "5");
 
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
-CONF_mInt64(cumulative_compaction_budgeted_bytes, "104857600");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 // cumulative compaction skips recently published deltas in order to prevent
 // compacting a version that might be queried (in case the query planning phase took some time).
@@ -288,21 +286,14 @@ CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 CONF_Int32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
-CONF_mInt32(base_compaction_trace_threshold, "120");
-CONF_mInt32(cumulative_compaction_trace_threshold, "60");
-CONF_mInt32(update_compaction_trace_threshold, "20");
+CONF_mInt32(compaction_trace_threshold, "60");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_mBool(enable_compaction, "true");
 CONF_Bool(enable_event_based_compaction_framework, "false");
-CONF_mInt32(max_compaction_task_num, "4");
-// < 0 means no limit
-CONF_mInt32(max_cumulative_compaction_task, "-1");
-CONF_mInt32(max_base_compaction_task, "1");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -514,6 +505,11 @@ CONF_String(es_scroll_keepalive, "5m");
 // HTTP connection timeout for es.
 CONF_Int32(es_http_timeout_ms, "5000");
 
+// es index max result window, and this value affects batch size.
+// if request batch size exceeds this value, ES will return bad request(400)
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html
+CONF_Int32(es_index_max_result_window, "10000");
+
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
 // same cache size configuration.
@@ -708,6 +704,16 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
+
+// Whether to enable segment overflow read
+// If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
+// after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
+// If false, segment will scan (remaining rows of chunk) rows each time, the final chunk after filtering
+// must be less than of equal to the capacity
+// default: true
+CONF_Bool(enable_segment_overflow_read_chunk, "true");
+
+CONF_Int32(max_batch_publish_latency_ms, "100");
 
 } // namespace config
 

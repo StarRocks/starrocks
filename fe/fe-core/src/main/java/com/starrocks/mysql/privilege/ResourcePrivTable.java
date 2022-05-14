@@ -28,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 /*
  * ResourcePrivTable saves all resources privs
@@ -40,13 +41,14 @@ public class ResourcePrivTable extends PrivTable {
      * saved in 'savedPrivs'.
      */
     public void getPrivs(UserIdentity currentUser, String resourceName, PrivBitSet savedPrivs) {
-        ResourcePrivEntry matchedEntry = null;
-        for (PrivEntry entry : entries) {
-            ResourcePrivEntry resourcePrivEntry = (ResourcePrivEntry) entry;
+        List<PrivEntry> userPrivEntryList = map.get(currentUser);
+        if (userPrivEntryList == null) {
+            return;
+        }
 
-            if (!resourcePrivEntry.match(currentUser, true)) {
-                continue;
-            }
+        ResourcePrivEntry matchedEntry = null;
+        for (PrivEntry entry : userPrivEntryList) {
+            ResourcePrivEntry resourcePrivEntry = (ResourcePrivEntry) entry;
 
             // check resource
             if (!resourcePrivEntry.getResourcePattern().match(resourceName)) {

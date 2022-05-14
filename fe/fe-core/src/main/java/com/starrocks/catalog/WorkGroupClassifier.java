@@ -6,13 +6,17 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -33,6 +37,8 @@ public class WorkGroupClassifier implements Writable {
     private String sourceIp;
     @SerializedName(value = "workgroupId")
     private long workgroupId;
+    @SerializedName(value = "databaseIds")
+    private Set<Long> databaseIds;
 
     public static WorkGroupClassifier read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -87,19 +93,32 @@ public class WorkGroupClassifier implements Writable {
         this.sourceIp = sourceIp;
     }
 
+    public void setDatabases(List<Long> databases) {
+        this.databaseIds = new HashSet<>(databases);
+    }
+
+    public Set<Long> getDatabases() {
+        return this.databaseIds;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
-    public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp) {
+    public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp,
+                               Set<Long> dbIds) {
         if (!isVisible(user, role, sourceIp)) {
             return false;
         }
-        if (this.queryTypes != null && !this.queryTypes.isEmpty() && !this.queryTypes.contains(queryType)) {
+        if (CollectionUtils.isNotEmpty(queryTypes) && !this.queryTypes.contains(queryType)) {
             return false;
         }
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            return CollectionUtils.isNotEmpty(dbIds) && databaseIds.containsAll(dbIds);
+        }
+
         return true;
     }
 
@@ -111,10 +130,7 @@ public class WorkGroupClassifier implements Writable {
             return false;
         }
         if (this.sourceIp != null && sourceIp != null) {
-            SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(this.sourceIp).getInfo();
-            if (!subnetInfo.isInRange(sourceIp)) {
-                return false;
-            }
+            return new SubnetUtils(this.sourceIp).getInfo().isInRange(sourceIp);
         }
         return true;
     }
@@ -134,6 +150,9 @@ public class WorkGroupClassifier implements Writable {
             SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(sourceIp).getInfo();
             w += 1 + (Long.numberOfLeadingZeros(subnetInfo.getAddressCountLong() + 2) - 32) / 64.0;
         }
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            w += 10.0 * databaseIds.size();
+        }
         return w;
     }
 
@@ -149,12 +168,20 @@ public class WorkGroupClassifier implements Writable {
         if (role != null) {
             classifiersStr.append(", role=" + role);
         }
-        if (queryTypes != null && !queryTypes.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(queryTypes)) {
             List<String> queryTypeList = queryTypes.stream().
-                    map(WorkGroupClassifier.QueryType::name).collect(Collectors.toList());
-            queryTypeList.sort(String::compareTo);
+                    map(QueryType::name).sorted(String::compareTo).collect(Collectors.toList());
             String queryTypesStr = String.join(", ", queryTypeList);
             classifiersStr.append(", query_type in (" + queryTypesStr + ")");
+        }
+        if (CollectionUtils.isNotEmpty(databaseIds)) {
+            String str = databaseIds.stream()
+                    .map(id ->
+                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
+                                    .map(Database::getFullName)
+                                    .orElse("unknown"))
+                    .collect(Collectors.joining(","));
+            classifiersStr.append(", database='" + str + "'");
         }
         if (sourceIp != null) {
             classifiersStr.append(", source_ip=" + sourceIp);

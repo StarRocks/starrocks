@@ -320,6 +320,11 @@ private:
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
+    // these functions is only used in ut
+    void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
+
+    void check_for_apply() { _check_for_apply(); }
+
 private:
     Tablet& _tablet;
 

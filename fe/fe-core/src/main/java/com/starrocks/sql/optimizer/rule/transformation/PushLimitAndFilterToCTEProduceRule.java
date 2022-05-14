@@ -71,7 +71,7 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
 
         if (consumeNums == limits.size()) {
             Long maxLimit = limits.stream().reduce(Long::max).orElse(Operator.DEFAULT_LIMIT);
-            child = OptExpression.create(new LogicalLimitOperator(maxLimit), child);
+            child = OptExpression.create(LogicalLimitOperator.local(maxLimit), child);
         }
 
         return Lists.newArrayList(OptExpression.create(produce, child));

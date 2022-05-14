@@ -2,18 +2,25 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Splitter;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +32,7 @@ public class WorkGroupAnalyzer {
     // 2. role = operator
     // 3. query_type in ('select', 'insert')
     // 4. source_ip = "192.168.1.1/24"
+    // 5. databases = "db1,db2,db3"
     public static WorkGroupClassifier convertPredicateToClassifier(List<Predicate> predicates)
             throws SemanticException {
         WorkGroupClassifier classifier = new WorkGroupClassifier();
@@ -56,6 +64,24 @@ public class WorkGroupAnalyzer {
                 } else if (key.equalsIgnoreCase(WorkGroup.SOURCE_IP)) {
                     SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(value).getInfo();
                     classifier.setSourceIp(subnetInfo.getCidrSignature());
+                } else if (key.equalsIgnoreCase(WorkGroup.DATABASES)) {
+                    List<String> databases = Splitter.on(",").splitToList(value);
+                    if (CollectionUtils.isEmpty(databases)) {
+                        throw new SemanticException(
+                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
+                    }
+                    String clusterName = ConnectContext.get() != null ? ConnectContext.get().getClusterName() : "";
+
+                    List<Long> databaseIds = new ArrayList<>();
+                    for (String name : databases) {
+                        String fullName = ClusterNamespace.getFullName(clusterName, name);
+                        Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
+                        if (db == null) {
+                            throw new SemanticException(String.format("Specified database not exists: %s", fullName));
+                        }
+                        databaseIds.add(db.getId());
+                    }
+                    classifier.setDatabases(databaseIds);
                 } else {
                     throw new SemanticException(
                             String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.SOURCE_IP, eqPred));
@@ -87,8 +113,9 @@ public class WorkGroupAnalyzer {
 
         if (classifier.getUser() == null &&
                 classifier.getRole() == null &&
-                (classifier.getQueryTypes() == null || classifier.getQueryTypes().isEmpty())
-                && classifier.getSourceIp() == null) {
+                (classifier.getQueryTypes() == null || classifier.getQueryTypes().isEmpty()) &&
+                classifier.getSourceIp() == null &&
+                classifier.getDatabases() == null) {
             throw new SemanticException("At least one of ('user', 'role', 'query_type', 'source_ip') should be given");
         }
         return classifier;
@@ -142,18 +169,18 @@ public class WorkGroupAnalyzer {
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_CORE_SECOND_LIMIT)) {
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
                 long bigQueryCpuCoreSecondLimit = Long.parseLong(value);
                 if (bigQueryCpuCoreSecondLimit < 0) {
-                    throw new SemanticException("big_query_cpu_core_second_limit should greater than 0 or equal to 0");
+                    throw new SemanticException("big_query_cpu_second_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
+                workgroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 continue;
             }
 
             if (key.equalsIgnoreCase(WorkGroup.CONCURRENCY_LIMIT)) {
                 int concurrencyLimit = Integer.parseInt(value);
-                if (concurrencyLimit <= 0) {
+                if (concurrencyLimit < 0) {
                     throw new SemanticException("concurrency_limit should be greater than 0");
                 }
                 workgroup.setConcurrencyLimit(concurrencyLimit);

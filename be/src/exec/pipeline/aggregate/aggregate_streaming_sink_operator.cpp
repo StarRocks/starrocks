@@ -8,7 +8,7 @@ namespace starrocks::pipeline {
 
 Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
     return _aggregator->open(state);
 }
 
@@ -62,11 +62,11 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME) {                         \
+    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, chunk_size));                                                   \
     }
-    APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {
         DCHECK(false);
@@ -100,11 +100,11 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         if (false) {
         }
 #define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME) {                         \
+    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                 *_aggregator->hash_map_variant().NAME, chunk_size));                                                   \
     }
-        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
         else {
             DCHECK(false);
@@ -126,13 +126,13 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (false) {
             }
-#define HASH_MAP_METHOD(NAME)                                                                  \
-    else if (_aggregator->hash_map_variant().type == vectorized::HashMapVariant::Type::NAME) { \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype(      \
-                                    _aggregator->hash_map_variant().NAME)::element_type>(      \
-                *_aggregator->hash_map_variant().NAME, chunk_size));                           \
+#define HASH_MAP_METHOD(NAME)                                                                     \
+    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) { \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype(         \
+                                    _aggregator->hash_map_variant().NAME)::element_type>(         \
+                *_aggregator->hash_map_variant().NAME, chunk_size));                              \
     }
-            APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+            APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
             else {
                 DCHECK(false);

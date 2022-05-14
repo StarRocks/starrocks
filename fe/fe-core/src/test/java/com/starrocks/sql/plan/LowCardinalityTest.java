@@ -670,6 +670,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "having a < b*1.2 or c not like '%open%'";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        // test couldn't push down having predicate
+        sql = "SELECT count(*) a FROM supplier having max(S_ADDRESS)='123'";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
@@ -924,9 +929,9 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeWithLimit() throws Exception {
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS limit 10";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Decode\n" +
+        assertContains(plan,"  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
-                "  |  limit: 10"));
+                "  |  limit: 10");;
     }
 
     @Test

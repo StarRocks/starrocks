@@ -85,6 +85,10 @@ public class AuditEvent {
     public String stmt = "";
     @AuditField(value = "Digest")
     public String digest = "";
+    @AuditField(value = "PlanCpuCost")
+    public double planCpuCosts = 0.0;
+    @AuditField(value = "PlanMemCost")
+    public double planMemCosts = 0.0;
 
     public static class AuditEventBuilder {
 
@@ -184,6 +188,16 @@ public class AuditEvent {
 
         public AuditEventBuilder setDigest(String digest) {
             auditEvent.digest = digest;
+            return this;
+        }
+
+        public AuditEventBuilder setPlanCpuCosts(double cpuCosts) {
+            auditEvent.planCpuCosts = cpuCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setPlanMemCosts(double memCosts) {
+            auditEvent.planMemCosts = memCosts;
             return this;
         }
 

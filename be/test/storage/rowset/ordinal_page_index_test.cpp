@@ -30,8 +30,8 @@
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/page_cache.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -43,7 +43,6 @@ public:
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
 
@@ -52,7 +51,6 @@ public:
 protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
 };
 
 TEST_F(OrdinalPageIndexTest, normal) {
@@ -67,20 +65,17 @@ TEST_F(OrdinalPageIndexTest, normal) {
     }
     ColumnIndexMetaPB index_meta;
     {
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions opts({filename});
-        ASSERT_TRUE(_block_mgr->create_block(opts, &wblock).ok());
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
 
-        ASSERT_TRUE(builder.finish(wblock.get(), &index_meta).ok());
+        ASSERT_TRUE(builder.finish(wfile.get(), &index_meta).ok());
         ASSERT_EQ(ORDINAL_INDEX, index_meta.type());
         ASSERT_FALSE(index_meta.ordinal_index().root_page().is_root_data_page());
-        ASSERT_TRUE(wblock->close().ok());
+        ASSERT_OK(wfile->close());
         LOG(INFO) << "index page size=" << index_meta.ordinal_index().root_page().root_page().size();
     }
 
     OrdinalIndexReader index;
-    ASSERT_TRUE(index.load(_block_mgr.get(), filename, &index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false)
-                        .ok());
+    ASSERT_TRUE(index.load(_fs.get(), filename, &index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false).ok());
     ASSERT_EQ(16 * 1024, index.num_data_pages());
     ASSERT_EQ(1, index.get_first_ordinal(0));
     ASSERT_EQ(4096, index.get_last_ordinal(0));
@@ -134,7 +129,7 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     }
 
     OrdinalIndexReader index;
-    ASSERT_TRUE(index.load(_block_mgr.get(), "", &index_meta.ordinal_index(), num_values, true, false).ok());
+    ASSERT_TRUE(index.load(_fs.get(), "", &index_meta.ordinal_index(), num_values, true, false).ok());
     ASSERT_EQ(1, index.num_data_pages());
     ASSERT_EQ(0, index.get_first_ordinal(0));
     ASSERT_EQ(num_values - 1, index.get_last_ordinal(0));

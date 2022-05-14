@@ -6,8 +6,8 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
@@ -317,12 +317,21 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            if (_fragment_ctx->enable_resource_group()) {
-                if (_workgroup) {
-                    _workgroup->decr_num_queries();
+
+            auto frag_id = _fragment_ctx->fragment_instance_id();
+            int active_fragments = _query_ctx->num_active_fragments();
+            int active_drivers = _fragment_ctx->num_drivers();
+            // Acquire the pointer to avoid be released when removing query
+            auto wg = _workgroup;
+            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
+                if (wg) {
+                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
+                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
+                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
+                             << ", query_ctx address=" << _query_ctx;
+                    wg->decr_num_queries();
                 }
             }
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
@@ -357,7 +366,6 @@ std::string PipelineDriver::to_readable_string() const {
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
-    DCHECK(_workgroup != nullptr);
     return _workgroup.get();
 }
 
@@ -450,6 +458,19 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
                                              op->_finishing_timer->value() + op->_finished_timer->value() +
                                              op->_close_timer->value());
     return Status::OK();
+}
+
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    driver_acct().increment_schedule_times();
+    driver_acct().update_last_chunks_moved(total_chunks_moved);
+    driver_acct().update_accumulated_rows_moved(total_rows_moved);
+    driver_acct().update_last_time_spent(time_spent);
+
+    // Update statistics of scan operator
+    if (SourceOperator* source = source_operator()) {
+        query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
+    }
 }
 
 } // namespace starrocks::pipeline

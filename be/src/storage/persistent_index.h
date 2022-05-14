@@ -6,9 +6,9 @@
 #include <tuple>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
-#include "storage/fs/block_manager.h"
 #include "storage/rowset/rowset.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -160,18 +160,20 @@ public:
 
     // get Immutable index file size;
     void file_size(uint64_t* file_size) {
-        if (_rb != nullptr) {
-            _rb->size(file_size);
+        if (_file != nullptr) {
+            auto res = _file->get_size();
+            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            *file_size = *res;
         }
     }
 
     void clear() {
-        if (_rb != nullptr) {
-            _rb.reset();
+        if (_file != nullptr) {
+            _file.reset();
         }
     }
 
-    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
+    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
 
 private:
     friend class PersistentIndex;
@@ -187,7 +189,7 @@ private:
 
     Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
 
-    std::unique_ptr<fs::ReadableBlock> _rb;
+    std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
     size_t _size = 0;
     size_t _fixed_key_size = 0;
@@ -349,8 +351,8 @@ private:
     // |_page_size|: the size of last wal in index file
     uint64_t _offset = 0;
     uint32_t _page_size = 0;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
-    std::unique_ptr<fs::WritableBlock> _index_block;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _index_file;
 
     bool _dump_snapshot = false;
     bool _flushed = false;

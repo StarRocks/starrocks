@@ -52,7 +52,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
-    public static final String RESOURCE_VARIABLE = "resource_group";
+    public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
@@ -192,6 +192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE = "enable_exchange_pass_through_expire";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -235,12 +236,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PROFILING)
     private boolean openProfile = false;
 
-    // Set sqlMode to empty string
+    // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE)
-    private long sqlMode = 0L;
+    private long sqlMode = 32L;
 
-    @VariableMgr.VarAttr(name = RESOURCE_VARIABLE)
-    private String resourceGroup = "normal";
+    @Deprecated
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP)
+    private String deprecatedResourceGroup = "normal";
 
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
@@ -475,8 +477,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = true;
+    // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
+    // and it will cause memory statistics problem of fragment instance,
+    // It also which will introduce the problem of cross-thread memory allocate and release,
+    // So i temporarily disable the enable_exchange_pass_through.
+    // I will turn on int after all the above problems are solved.
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE, alias = ENABLE_EXCHANGE_PASS_THROUGH,
+            show = ENABLE_EXCHANGE_PASS_THROUGH)
+    private boolean enableExchangePassThrough = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -617,11 +625,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public String getResourceGroup() {
-        return resourceGroup;
+        return deprecatedResourceGroup;
     }
 
     public void setResourceGroup(String resourceGroup) {
-        this.resourceGroup = resourceGroup;
+        this.deprecatedResourceGroup = resourceGroup;
     }
 
     public boolean isDisableColocateJoin() {
@@ -1067,7 +1075,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             charsetClient = Text.readString(in);
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
-            resourceGroup = Text.readString(in);
+            deprecatedResourceGroup = Text.readString(in);
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {

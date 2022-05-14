@@ -36,7 +36,7 @@ struct Vertex {
     int64_t value = 0;
     // one vertex to other vertex may have multi same edge
     // this is just for compatibility with previous implementations.
-    std::multiset<int64_t, std::greater<int64_t>> edges;
+    std::list<Vertex*> edges;
 
     Vertex(int64_t v) : value(v) {}
 };

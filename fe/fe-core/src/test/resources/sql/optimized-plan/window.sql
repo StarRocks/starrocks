@@ -390,10 +390,8 @@ select row_number() over(partition by v1) col from (select v1 from t0 order by v
 [result]
 ANALYTIC ({4: row_number()=row_number()} [1: v1] [] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     TOP-N (order by [[1: v1 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[1]
-            TOP-N (order by [[1: v1 ASC NULLS FIRST]])
-                TOP-N (order by [[1: v1 ASC NULLS FIRST]])
-                    SCAN (columns[1: v1] predicate[null])
+        TOP-N (order by [[1: v1 ASC NULLS FIRST]])
+            SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]
@@ -417,7 +415,8 @@ ANALYTIC ({4: min(1: v1)=min(1: v1)} [2: v2] [3: v3 DESC NULLS LAST] RANGE BETWE
 [sql]
 select v1 from (select v1, row_number() over() from t0) temp limit 1;
 [result]
-SCAN (columns[1: v1] predicate[null]) Limit 1
+EXCHANGE GATHER
+    SCAN (columns[1: v1] predicate[null]) Limit 1
 [end]
 
 [sql]
@@ -443,6 +442,5 @@ select c2 from (select avg(v1) over(partition by v2, v3 order by v2) as c1, sum(
 [result]
 ANALYTIC ({5: sum(1: v1)=sum(1: v1)} [2: v2] [2: v2 ASC NULLS FIRST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     TOP-N (order by [[2: v2 ASC NULLS FIRST, 3: v3 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[2]
-            VALUES
+        VALUES
 [end]

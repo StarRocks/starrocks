@@ -927,6 +927,8 @@ service FrontendService {
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
+    
+    // Deprecated
     MasterService.TFetchResourceResult fetchResource()
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems

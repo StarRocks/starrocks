@@ -38,9 +38,11 @@ private:
 
 class MemoryWritableFile final : public WritableFile {
 public:
-    MemoryWritableFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
+    MemoryWritableFile(std::string path, InodePtr inode)
+            : _path(std::move(path)), _inode(std::move(inode)), _closed(false) {}
 
     Status append(const Slice& data) override {
+        if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
         _inode->data.append(data.data, data.size);
         return Status::OK();
     }
@@ -53,12 +55,13 @@ public:
     }
 
     Status pre_allocate(uint64_t size) override {
+        if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
         _inode->data.reserve(size);
         return Status::OK();
     }
 
     Status close() override {
-        _inode = nullptr;
+        _closed = true;
         return Status::OK();
     }
 
@@ -73,6 +76,7 @@ public:
 private:
     std::string _path;
     InodePtr _inode;
+    bool _closed;
 };
 
 class EnvMemoryImpl {

@@ -31,11 +31,8 @@
 
 namespace starrocks {
 
-namespace fs {
-class WritableBlock;
-}
-
 class SegmentWriter;
+class WritableFile;
 
 enum class FlushChunkState { UNKNOWN, UPSERT, DELETE, MIXED };
 
@@ -58,7 +55,6 @@ protected:
 
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
     std::shared_ptr<RowsetMeta> _rowset_meta;
     std::unique_ptr<TabletSchema> _rowset_schema;
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;

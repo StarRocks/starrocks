@@ -35,8 +35,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -44,11 +42,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DdlExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -56,7 +54,6 @@ import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -192,24 +189,22 @@ public class StarRocksAssert {
 
     public void executeWorkGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        SqlParser parser = new SqlParser(input);
-        List<StatementBase> statements = SqlParserUtils.getMultiStmts(parser);
-        for (StatementBase stmt : statements) {
-            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-            Assert.assertTrue(stmt.getClass().getSimpleName().contains("WorkGroupStmt"));
-            DdlExecutor.execute(GlobalStateMgr.getCurrentState(), (DdlStmt) stmt);
-        }
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statement, ctx);
+
+        Assert.assertTrue(statement.getClass().getSimpleName().contains("WorkGroupStmt"));
+        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), (DdlStmt) statement);
+
     }
 
     public List<List<String>> executeWorkGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        SqlParser parser = new SqlParser(input);
-        StatementBase statement = SqlParserUtils.getFirstStmt(parser);
-        com.starrocks.sql.analyzer.Analyzer.analyze(statement, ctx);
+
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statement, ctx);
+
         Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
         return GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
     }

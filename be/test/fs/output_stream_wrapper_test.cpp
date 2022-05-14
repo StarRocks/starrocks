@@ -23,7 +23,8 @@ protected:
         }
 
         std::filesystem::path file = path / "test.txt";
-        auto res = FileSystem::Default()->new_writable_file(file.string());
+        WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto res = FileSystem::Default()->new_writable_file(opts, file.string());
         if (!res.ok()) {
             std::cerr << "Fail to create " << file << ": " << res.status() << std::endl;
             LOG(FATAL) << "Fail to create " << file << ": " << res.status();

@@ -42,7 +42,6 @@
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/heartbeat_flags.h"
 #include "storage/compaction_manager.h"
-#include "storage/fs/fs_util.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -61,6 +60,7 @@ class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
+class CompactionManager;
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
@@ -84,8 +84,6 @@ public:
 
     Cache* index_stream_lru_cache() { return _index_stream_lru_cache; }
 
-    std::shared_ptr<Cache> file_cache() { return _file_cache; }
-
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
@@ -104,7 +102,7 @@ public:
     Status set_cluster_id(int32_t cluster_id);
     int32_t effective_cluster_id() const { return _effective_cluster_id; }
 
-    void start_delete_unused_rowset();
+    double delete_unused_rowset();
     void add_unused_rowset(const RowsetSharedPtr& rowset);
 
     // Obtain shard path for new tablet.
@@ -187,9 +185,6 @@ public:
 
     void compaction_check();
 
-    // public for ut
-    size_t compaction_check_one_round();
-
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -251,6 +246,8 @@ private:
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
 
+    size_t _compaction_check_one_round();
+
 private:
     struct CompactionCandidate {
         CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
@@ -284,15 +281,6 @@ private:
     bool _is_all_cluster_id_exist;
 
     Cache* _index_stream_lru_cache = nullptr;
-
-    // _file_cache is a lru_cache for file descriptors of files opened by starrocks,
-    // which can be shared by others. Why we need to share cache with others?
-    // Beacuse a unique memory space is easier for management. For example,
-    // we can deal with segment v1's cache and segment v2's cache at same time.
-    // Note that, we must create _file_cache before sharing it with other.
-    // (e.g. the storage engine's open function must be called earlier than
-    // FileBlockManager created.)
-    std::shared_ptr<Cache> _file_cache;
 
     static StorageEngine* _s_instance;
 

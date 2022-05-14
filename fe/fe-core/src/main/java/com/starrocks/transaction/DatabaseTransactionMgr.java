@@ -137,6 +137,10 @@ public class DatabaseTransactionMgr {
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
 
+    private long lastCommitTs = 0;
+
+    private long commitTsInc = 0;
+
     protected void readLock() {
         this.transactionLock.readLock().lock();
     }
@@ -384,7 +388,8 @@ public class DatabaseTransactionMgr {
             return;
         }
 
-        if (tabletCommitInfos == null || tabletCommitInfos.isEmpty()) {
+        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
 
@@ -463,10 +468,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-        if (tableToPartition.isEmpty()) {
-            // table or all partitions are being dropped
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-        }
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
@@ -914,8 +915,20 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
         }
+        // since we send publish order by commit timestamp
+        // so that we need handle timetamp fallback
+        // & same timestamp cause by granularity
+        // The probability of timestamp fallback after FE failover is small
+        // and it is not considered at present
+        long commitTs = System.currentTimeMillis();
+        if (commitTs <= lastCommitTs) {
+            commitTs = lastCommitTs + ++commitTsInc;
+        } else {
+            commitTsInc = 0;
+        }
+        lastCommitTs = commitTs;
+        transactionState.setCommitTime(commitTs);
         // update transaction state version
-        transactionState.setCommitTime(System.currentTimeMillis());
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
         transactionState.setErrorReplicas(errorReplicaIds);
         for (long tableId : tableToPartition.keySet()) {

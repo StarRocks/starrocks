@@ -43,7 +43,8 @@ TEST_F(PosixFileSystemTest, random_access) {
     WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
     auto fs = FileSystem::Default();
-    wfile = *fs->new_writable_file(fname);
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    wfile = *fs->new_writable_file(opts, fname);
     auto st = wfile->pre_allocate(1024);
     ASSERT_TRUE(st.ok());
     // wirte data
@@ -131,13 +132,11 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
     {
         std::vector<std::string> children;
         ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
-        ASSERT_EQ(4, children.size());
+        ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
-        ASSERT_STREQ(".", children[0].c_str());
-        ASSERT_STREQ("..", children[1].c_str());
-        ASSERT_STREQ("123", children[2].c_str());
-        ASSERT_STREQ("abc", children[3].c_str());
+        ASSERT_STREQ("123", children[0].c_str());
+        ASSERT_STREQ("abc", children[1].c_str());
     }
     {
         std::vector<std::string> children;
@@ -154,13 +153,11 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
     {
         std::vector<std::string> children;
         ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
-        ASSERT_EQ(4, children.size());
+        ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
-        ASSERT_STREQ(".", children[0].c_str());
-        ASSERT_STREQ("..", children[1].c_str());
-        ASSERT_STREQ("123", children[2].c_str());
-        ASSERT_STREQ("abc", children[3].c_str());
+        ASSERT_STREQ("123", children[0].c_str());
+        ASSERT_STREQ("abc", children[1].c_str());
     }
 
     // Delete directory recursively, should success.

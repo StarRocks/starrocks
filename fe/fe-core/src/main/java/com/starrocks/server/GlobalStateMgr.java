@@ -196,10 +196,12 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
+import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -387,6 +389,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private IcebergRepository icebergRepository;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -500,6 +503,10 @@ public class GlobalStateMgr {
     private WorkGroupMgr workGroupMgr;
 
     private StarOSAgent starOSAgent;
+
+    private MetadataMgr metadataMgr;
+    private CatalogMgr catalogMgr;
+    private ConnectorMgr connectorMgr;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -642,6 +649,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
@@ -678,6 +686,9 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
+        this.metadataMgr = new MetadataMgr();
+        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
     }
 
     public static void destroyCheckpoint() {
@@ -812,6 +823,18 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public CatalogMgr getCatalogMgr() {
+        return catalogMgr;
+    }
+
+    public ConnectorMgr getConnectorMgr() {
+        return connectorMgr;
+    }
+
+    public MetadataMgr getMetadataMgr() {
+        return metadataMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -6789,14 +6812,17 @@ public class GlobalStateMgr {
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
             request.setTable_name(tableName);
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
+                        timeout,
+                        Config.thrift_rpc_retry_times,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -7238,7 +7264,8 @@ public class GlobalStateMgr {
         setFrontendConfig(configs);
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
@@ -7250,11 +7277,10 @@ public class GlobalStateMgr {
             request.setValues(new ArrayList<>(configs.values()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(),
-                                        fe.getRpcPort()),
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 timeout,
-                                client -> client.setConfig(request)
-                        );
+                                Config.thrift_rpc_retry_times,
+                                client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");

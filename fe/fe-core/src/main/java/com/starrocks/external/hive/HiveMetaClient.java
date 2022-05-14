@@ -52,6 +52,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -163,6 +164,33 @@ public class HiveMetaClient {
         } catch (Exception e) {
             LOG.warn("get hive table failed", e);
             throw new DdlException("get hive table from meta store failed: " + e.getMessage());
+        }
+    }
+
+    public List<String> getAllDatabaseNames() throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getAllDatabases();
+        } catch (Exception e) {
+            LOG.warn("Failed to get all database names", e);
+            throw new DdlException("Failed to get all database names from meta store: " + e.getMessage());
+        }
+    }
+
+    public List<String> getAllTableNames(String dbName) throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getAllTables(dbName);
+        } catch (Exception e) {
+            LOG.warn("Failed to get all table names on database: " + dbName, e);
+            throw new DdlException("Failed to get all table names from meta store: " + e.getMessage());
+        }
+    }
+
+    public Table getTable(HiveTableName hiveTableName) throws TException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+        } catch (Exception e) {
+            LOG.warn("Failed to get table {}", hiveTableName, e);
+            throw e;
         }
     }
 

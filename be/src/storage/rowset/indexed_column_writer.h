@@ -41,12 +41,9 @@ class KeyCoder;
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
-namespace fs {
-class WritableBlock;
-}
-
 class IndexPageBuilder;
 class PageBuilder;
+class WritableFile;
 
 struct IndexedColumnWriterOptions {
     size_t index_page_size = OLAP_PAGE_SIZE;
@@ -73,8 +70,7 @@ struct IndexedColumnWriterOptions {
 // TODO test with empty input
 class IndexedColumnWriter {
 public:
-    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
-                                 fs::WritableBlock* wblock);
+    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo, WritableFile* wfile);
 
     ~IndexedColumnWriter();
 
@@ -92,7 +88,7 @@ private:
 
     IndexedColumnWriterOptions _options;
     TypeInfoPtr _typeinfo;
-    fs::WritableBlock* _wblock;
+    WritableFile* _wfile;
     // only used for `_first_value`
     MemPool _mem_pool;
 

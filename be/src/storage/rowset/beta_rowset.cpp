@@ -71,13 +71,13 @@ Status BetaRowset::init() {
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status BetaRowset::do_load() {
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
-                                 _schema, &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+                                 &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -236,7 +236,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -315,7 +315,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
@@ -346,14 +346,13 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
 // this function is only used for partial update so far
 // make sure segment_footer is in the end of segment_file before call this function
 Status BetaRowset::reload() {
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        block_mgr->erase_block_cache(seg_path);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
-                                 _schema, &footer_size_hint);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+                                 &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();

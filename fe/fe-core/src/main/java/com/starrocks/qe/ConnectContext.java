@@ -36,7 +36,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -236,10 +235,6 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
-    public TResourceInfo toResourceCtx() {
-        return new TResourceInfo(qualifiedUser, sessionVariable.getResourceGroup());
-    }
-
     public void setCatalog(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -274,10 +269,7 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
-        // user resource group shouldn't be reset
-        String resourceGroup = this.sessionVariable.getResourceGroup();
         this.sessionVariable = VariableMgr.newSessionVariable();
-        this.sessionVariable.setResourceGroup(resourceGroup);
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {

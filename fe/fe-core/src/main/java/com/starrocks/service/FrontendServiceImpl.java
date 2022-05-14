@@ -131,6 +131,7 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -437,7 +438,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     priv -> {
                         boolean isGrantable =
                                 Privilege.NODE_PRIV != priv // NODE_PRIV counld not be granted event with GRANT_PRIV
-                                        && userPrivTable.hasPriv(userIdent.getHost(), userIdent.getQualifiedUser(),
+                                        && userPrivTable.hasPriv(userIdent,
                                         PrivPredicate.GRANT);
                         TUserPrivDesc privDesc = new TUserPrivDesc();
                         privDesc.setIs_grantable(isGrantable);
@@ -617,7 +618,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFetchResourceResult fetchResource() throws TException {
-        return masterImpl.fetchResource();
+        throw new TException("not supported");
     }
 
     @Override
@@ -731,22 +732,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
-        Table table = null;
-        db.readLock();
-        try {
-            table = db.getTable(request.tbl);
-            if (table == null || table.getType() != TableType.OLAP) {
-                throw new UserException("unknown table, table=" + request.tbl);
-            }
-        } finally {
-            db.readUnlock();
-        }
-
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
+                db.getId(), Lists.newArrayList(), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
@@ -865,6 +855,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnRollbackImpl(request);
+        } catch (TransactionNotFoundException e) {
+            LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
+            status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
+            status.addToError_msgs(e.getMessage());
         } catch (UserException e) {
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);

@@ -27,7 +27,7 @@ typedef std::function<bool()> ChunkHasSupplier;
 typedef std::vector<ChunkHasSupplier> ChunkHasSuppliers;
 
 typedef std::function<Status(ChunkUniquePtr)> ChunkConsumer;
-using ChunkProvider = std::function<bool(Chunk**, bool*)>;
+using ChunkProvider = std::function<bool(ChunkUniquePtr*, bool*)>;
 
 // A cursor refers to a record in a Chunk, and can compare to a cursor referring a record in another Chunk.
 class ChunkCursor {

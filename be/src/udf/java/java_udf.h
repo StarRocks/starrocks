@@ -29,6 +29,7 @@ extern "C" JNIEnv* getJNIEnv(void);
 
 namespace starrocks::vectorized {
 class DirectByteBuffer;
+class AggBatchCallStub;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -54,9 +55,10 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
-    // batch update input: col1 col2
-    void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
-                             int cols);
+
+    // batch update single
+    void batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows);
+
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
@@ -68,6 +70,11 @@ public:
     // callers should be Object[]
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
+
+    // type: PrimitiveType
+    // col: result column
+    // jcolumn: Integer[]/String[]
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
     // List methods
     jobject list_get(jobject obj, int idx);
@@ -138,6 +145,7 @@ private:
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
+    jmethodID _get_boxed_result;
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 };
@@ -239,6 +247,23 @@ private:
     JavaGlobalRef _clazz;
 };
 
+class AggBatchCallStub {
+public:
+    AggBatchCallStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+
+    void batch_update_single(int num_rows, jobject state, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    // UDAF object handle, owned by FunctionContext
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
@@ -251,11 +276,15 @@ public:
     ClassLoader(const ClassLoader&) = delete;
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
+    // get batch call stub
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method);
+
     Status init();
 
 private:
     std::string _path;
     jmethodID _get_class = nullptr;
+    jmethodID _get_call_stub = nullptr;
     JavaGlobalRef _handle = nullptr;
     JavaGlobalRef _clazz = nullptr;
 };
@@ -343,6 +372,7 @@ struct JavaUDAFContext {
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
     std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;

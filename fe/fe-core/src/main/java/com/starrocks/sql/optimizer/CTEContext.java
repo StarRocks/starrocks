@@ -61,9 +61,12 @@ public class CTEContext {
 
     private boolean enableCTE;
 
+    private List<Integer> forceCTEList;
+
     private double inlineCTERatio = 2.0;
 
     public CTEContext() {
+        forceCTEList = Lists.newArrayList();
     }
 
     public void reset() {
@@ -182,6 +185,10 @@ public class CTEContext {
      *
      */
     public boolean needInline(int cteId) {
+        if (forceCTEList.contains(cteId)) {
+            return false;
+        }
+
         // 1. Disable CTE reuse
         // 2. CTE consume only use once
         if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
@@ -223,4 +230,7 @@ public class CTEContext {
         return false;
     }
 
+    public void addForceCTE(int cteId) {
+        this.forceCTEList.add(cteId);
+    }
 }

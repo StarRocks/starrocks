@@ -570,17 +570,15 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, Column> scanColumnMap = com.google.common.collect.Maps.newHashMap();
         scanColumnMap.put(column1, new Column("column1", Type.DATE, false));
 
-        OptExpression expression = OptExpression.create(new LogicalLimitOperator(1, 1),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable1,
-
+        OptExpression expression = OptExpression.create(LogicalLimitOperator.init(1),
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1,
                         scanColumnMap, Maps.newHashMap(), null, -1, null)));
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
-        assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        assertTrue(physicalTree.getInputs().isEmpty());
+        Operator root = physicalTree.getOp();
+        assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
     }
 
     @Test
@@ -898,7 +896,7 @@ public class OptimizerTaskTest {
                         new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null, -1,
                                 null)));
 
-        OptExpression limit = OptExpression.create(new LogicalLimitOperator(1), agg);
+        OptExpression limit = OptExpression.create(LogicalLimitOperator.init(1), agg);
 
         OptExpression expression = OptExpression.create(
                 new LogicalProjectOperator(projectColumnMap), limit);
@@ -911,10 +909,8 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column4.getId()));
 
-        Operator operator = physicalTree.getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
-        assertEquals(1, globalAgg.getLimit());
+        Operator root = physicalTree.getOp();
+        assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
     }
 
     @Test

@@ -72,7 +72,7 @@ struct WindowFunnelState {
         bool other_sorted = (uint8_t)datum_array[1].get_int64();
 
         for (size_t i = 2; i < datum_array.size() - 1; i += 2) {
-            typename TimeType::type timestamp = (typename TimeType::type)datum_array[i].get_int64();
+            typename TimeType::type timestamp = datum_array[i].get_int64();
             int64_t event_level = datum_array[i + 1].get_int64();
             other_list.emplace_back(std::make_pair(timestamp, uint8_t(event_level)));
         }
@@ -105,7 +105,7 @@ struct WindowFunnelState {
             array.emplace_back((int64_t)events_size);
             array.emplace_back((int64_t)sorted);
             for (int i = 0; i < size; i++) {
-                array.emplace_back(events_list[i].first);
+                array.emplace_back((int64_t)events_list[i].first);
                 array.emplace_back((int64_t)events_list[i].second);
             }
             array_column->append_datum(array);

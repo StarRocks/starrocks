@@ -21,6 +21,8 @@ statement
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showColumnStatement                                                                   #showColumn
+    | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
 
@@ -29,9 +31,18 @@ statement
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
 
+    // Task Statement
+    | submitTaskStatement                                                                   #submitTask
+
     // Materialized View Statement
     | showMaterializedViewStatement                                                         #showMaterializedView
-    | dropMaterializedViewStatement                                                         #dropMaterialized
+    | dropMaterializedViewStatement                                                         #dropMaterializedView
+
+    // Catalog Statement
+    | createExternalCatalogStatement                                                        #createCatalog
+    | dropExternalCatalogStatement                                                          #dropCatalog
+    | showCatalogStatement                                                                  #showCatalogs
+    | showDbFromCatalogStatement                                                            #showDbFromCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -45,9 +56,22 @@ statement
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
 
-    //Other statement
+    // Analyze Statement
+    | analyzeStatement                                                                      #analyze
+    | createAnalyzeStatement                                                                #createAnalyze
+    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | showAnalyzeStatement                                                                  #showAnalyze
+
+    // Work Group Statement
+    | createWorkGroupStatement                                                              #createWorkGroup
+    | dropWorkGroupStatement                                                                #dropWorkGroup
+    | alterWorkGroupStatement                                                               #alterWorkGroup
+    | showWorkGroupStatement                                                                #showWorkGroup
+
+    // Other statement
     | USE schema=identifier                                                                 #use
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
@@ -142,6 +166,15 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showColumnStatement
+    : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTableStatusStatement
+    : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -160,6 +193,13 @@ dropViewStatement
     : DROP VIEW (IF EXISTS)? qualifiedName
     ;
 
+// ------------------------------------------- Task Statement ----------------------------------------------------------
+
+submitTaskStatement
+    : SUBMIT hint* TASK qualifiedName?
+    AS createTableAsSelectStatement
+    ;
+
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 showMaterializedViewStatement
@@ -174,6 +214,24 @@ dropMaterializedViewStatement
 
 alterSystemStatement
     : ALTER SYSTEM alterClause
+    ;
+
+// ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+createExternalCatalogStatement
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    ;
+
+dropExternalCatalogStatement
+    : DROP EXTERNAL CATALOG catalogName=identifierOrString
+    ;
+
+showCatalogStatement
+    : SHOW CATALOGS
+    ;
+
+showDbFromCatalogStatement
+    : SHOW DATABASES FROM catalogName=identifierOrString
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -231,6 +289,65 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Analyze Statement -------------------------------------------------------
+
+analyzeStatement
+    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+createAnalyzeStatement
+    : CREATE ANALYZE FULL? ALL properties?
+    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
+    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+dropAnalyzeJobStatement
+    : DROP ANALYZE INTEGER_VALUE
+    ;
+
+showAnalyzeStatement
+    : SHOW ANALYZE
+    ;
+
+// ------------------------------------------- Work Group Statement ----------------------------------------------------
+
+createWorkGroupStatement
+    : CREATE RESOURCE_GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
+        TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
+    ;
+
+dropWorkGroupStatement
+    : DROP RESOURCE_GROUP identifier
+    ;
+
+alterWorkGroupStatement
+    : ALTER RESOURCE_GROUP identifier ADD classifier (',' classifier)*
+    | ALTER RESOURCE_GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | ALTER RESOURCE_GROUP identifier DROP ALL
+    | ALTER RESOURCE_GROUP identifier WITH '(' property (',' property)* ')'
+    ;
+
+showWorkGroupStatement
+    : SHOW RESOURCE_GROUP identifier
+    | SHOW RESOURCE_GROUPS ALL?
+    ;
+
+classifier
+    : '(' expression (',' expression)* ')'
+    ;
+
+// ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showVariablesStatement
+    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -740,9 +857,9 @@ number
 nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
+    | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COLUMNS | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
-    | END | EXTRACT | EVERY
+    | END | EXTERNAL | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
     | GLOBAL
     | HASH | HOUR
@@ -753,11 +870,11 @@ nonReserved
     | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
-    | ROLLUP | ROLLBACK | REPLICA
-    | SECOND | SESSION | SETS | START | SUM | STATUS
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
+    | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
+    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
-    | VIEW | VERBOSE
+    | VARIABLES | VIEW | VERBOSE
     | WEEK
     | YEAR
     ;

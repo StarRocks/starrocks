@@ -14,11 +14,13 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +38,12 @@ public class HiveMetaCache {
     private static final long MAX_TABLE_CACHE_SIZE = 1000L;
     private static final long MAX_PARTITION_CACHE_SIZE = MAX_TABLE_CACHE_SIZE * 1000L;
 
+    // Pulling the value of the latest state every time when getting databaseNames or tableNames
+    private static final long MAX_NAMES_CACHE_SIZE = 0L;
+    private static final long REFRESH_TABLE_SCHEMA_SECONDS = 60;
     private final HiveMetaClient client;
+    private String resourceName;
+
 
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>
     // for unPartitioned table, partition map is: ImmutableMap<>.of(new PartitionKey(), PartitionId)
@@ -53,8 +60,19 @@ public class HiveMetaCache {
     // HiveTableColumnsKey => ImmutableMap<ColumnName -> HiveColumnStats>
     LoadingCache<HiveTableColumnsKey, ImmutableMap<String, HiveColumnStats>> tableColumnStatsCache;
 
+    LoadingCache<String, List<String>> databaseNamesCache;
+    LoadingCache<String, List<String>> tableNamesCache;
+
+    // HiveTableName => Table
+    LoadingCache<HiveTableName, Table> tableCache;
+
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
+        this(hiveMetaClient, executor, null);
+    }
+
+    public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor, String resourceName) {
         this.client = hiveMetaClient;
+        this.resourceName = resourceName;
         init(executor);
     }
 
@@ -98,6 +116,30 @@ public class HiveMetaCache {
                         return loadTableColumnStats(key);
                     }
                 }, executor));
+
+        databaseNamesCache = newCacheBuilder(MAX_NAMES_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<String, List<String>>() {
+                    @Override
+                        public List<String> load(String key) throws Exception {
+                        return loadAllDatabaseNames();
+                    }
+                }, executor));
+
+        tableNamesCache = newCacheBuilder(MAX_NAMES_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<String, List<String>>() {
+                    @Override
+                    public List<String> load(String key) throws Exception {
+                        return loadAllTableNames(key);
+                    }
+                }, executor));
+
+        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE, REFRESH_TABLE_SCHEMA_SECONDS)
+                .build(asyncReloading(new CacheLoader<HiveTableName, Table>() {
+                    @Override
+                    public Table load(HiveTableName key) throws Exception {
+                        return loadTable(key);
+                    }
+                }, executor));
     }
 
     /**
@@ -109,6 +151,17 @@ public class HiveMetaCache {
         if (!Config.enable_hms_events_incremental_sync &&
                 Config.hive_meta_cache_ttl_s > Config.hive_meta_cache_refresh_interval_s) {
             cacheBuilder.refreshAfterWrite(Config.hive_meta_cache_refresh_interval_s, SECONDS);
+        }
+        cacheBuilder.maximumSize(maximumSize);
+        return cacheBuilder;
+    }
+
+    private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize, long refreshIntervalSec) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+        cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);
+        if (!Config.enable_hms_events_incremental_sync &&
+                Config.hive_meta_cache_ttl_s > refreshIntervalSec) {
+            cacheBuilder.refreshAfterWrite(refreshIntervalSec, SECONDS);
         }
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
@@ -224,6 +277,44 @@ public class HiveMetaCache {
         } catch (ExecutionException e) {
             throw new DdlException("get table level column stats failed: " + e.getMessage());
         }
+    }
+
+    public List<String> getAllDatabaseNames() throws DdlException {
+        try {
+            return databaseNamesCache.get("");
+        } catch (ExecutionException e) {
+            throw new DdlException("Failed to get all databases name on " + resourceName);
+        }
+    }
+
+    private List<String> loadAllDatabaseNames() throws DdlException {
+        return client.getAllDatabaseNames();
+    }
+
+    public List<String> getAllTableNames(String dbName) throws DdlException {
+        try {
+            return tableNamesCache.get(dbName);
+        } catch (ExecutionException e) {
+            throw new DdlException("Failed to get all tables name on database: " + dbName);
+        }
+    }
+
+    private List<String> loadAllTableNames(String dbName) throws DdlException {
+        return client.getAllTableNames(dbName);
+    }
+
+    public Table getTable(HiveTableName hiveTableName) {
+        try {
+            return tableCache.get(hiveTableName);
+        } catch (Exception e) {
+            LOG.error("Failed to get table {}", hiveTableName, e);
+            return null;
+        }
+    }
+
+    private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
+        return HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
     }
 
     public void alterTableByEvent(HiveTableKey tableKey, HivePartitionKey hivePartitionKey,

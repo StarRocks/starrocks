@@ -85,6 +85,11 @@ public:
 
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
 
+    // this function is only used for ut
+    std::string calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {
+        return _calc_snapshot_id_path(tablet, timeout_s);
+    }
+
 private:
     SnapshotManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker), _snapshot_base_id(0) {}
 

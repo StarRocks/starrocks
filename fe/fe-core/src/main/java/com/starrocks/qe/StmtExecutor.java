@@ -26,9 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
@@ -95,11 +93,14 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
@@ -112,7 +113,6 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -295,7 +295,7 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
@@ -352,6 +352,7 @@ public class StmtExecutor {
                 addRunningQueryDetail();
             }
 
+
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
 
@@ -363,6 +364,11 @@ public class StmtExecutor {
                     SqlBlackList.verifying(originSql);
                 }
 
+                // Record planner costs in audit log
+                Preconditions.checkNotNull(execPlan, "query must has a plan");
+                CostEstimate costs = execPlan.getEstimatedCost();
+                context.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
+
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
                     try {
@@ -373,18 +379,15 @@ public class StmtExecutor {
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
 
-                        if (execPlanBuildByNewPlanner) {
-                            StringBuilder explainStringBuilder = new StringBuilder();
-                            // StarRocksManager depends on explainString to get sql plan
-                            if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-                                explainStringBuilder.append(execPlan.getExplainString(parsedStmt.getExplainLevel()));
-                            }
-                            handleQueryStmt(execPlan.getFragments(), execPlan.getScanNodes(),
-                                    execPlan.getDescTbl().toThrift(),
-                                    execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
-                        } else {
-                            Preconditions.checkState(false, "shouldn't reach here");
+                        Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
+                        StringBuilder explainStringBuilder = new StringBuilder();
+                        // StarRocksManager depends on explainString to get sql plan
+                        if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
+                            explainStringBuilder.append(execPlan.getExplainString(parsedStmt.getExplainLevel()));
                         }
+                        handleQueryStmt(execPlan.getFragments(), execPlan.getScanNodes(),
+                                execPlan.getDescTbl().toThrift(),
+                                execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
 
                         if (context.getSessionVariable().isReportSucc()) {
                             writeProfile(beginTimeInNanoSecond);
@@ -545,8 +548,7 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
-        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus, isQuery);
+        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
         masterOpExecutor.execute();
     }
@@ -971,7 +973,7 @@ public class StmtExecutor {
                 sql,
                 context.getQualifiedUser(),
                 context.getWorkGroup() != null ?
-                    context.getWorkGroup().getName() : "");
+                        context.getWorkGroup().getName() : "");
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
@@ -1101,8 +1103,19 @@ public class StmtExecutor {
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
-                coord.cancel();
-                ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                /*
+                 * In this case, There are two factors that lead query cancelled:
+                 * 1: TIMEOUT
+                 * 2: BE EXCEPTION
+                 * So we should distinguish these two factors.
+                 */
+                if (!coord.checkBackendState()) {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
+                } else {
+                    coord.cancel();
+                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                }
             }
 
             if (!coord.getExecStatus().ok()) {
@@ -1127,25 +1140,6 @@ public class StmtExecutor {
                             + coord.getTrackingUrl());
                     return;
                 }
-            }
-
-            if (loadedRows == 0 && filteredRows == 0) {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(),
-                            transactionId,
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                    );
-                }
-                context.getState().setOk();
-                return;
             }
 
             if (targetTable instanceof ExternalOlapTable) {

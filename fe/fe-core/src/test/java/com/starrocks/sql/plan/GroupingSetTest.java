@@ -163,4 +163,63 @@ public class GroupingSetTest extends PlanTestBase {
                 "     PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL', 1: k1 = '0', 4: k4 = 1, 3: k3 = 'foo'"));
     }
 
+    @Test
+    public void testSameGroupingAggColumn() throws Exception {
+        String sql = "select v1, max(v2), sum(v3) from t0 group by rollup(v1, v2, v3);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: max(4: expr), sum(5: expr)\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 8: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [1], [1, 2], [1, 2, 3]]\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : clone(2: v2)\n" +
+                "  |  <slot 5> : clone(3: v3)");
+    }
+
+    @Test
+    public void testSameGroupingAggColumn2() throws Exception {
+        String sql = "select v1, max(v2 + 1) from t0 group by rollup(v1, v2 + 1, v3);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: max(5: expr)\n" +
+                "  |  group by: 1: v1, 4: expr, 3: v3, 7: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [1], [1, 4], [1, 3, 4]]\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 8: add\n" +
+                "  |  <slot 5> : clone(8: add)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 8> : 2: v2 + 1");
+    }
+
+    @Test
+    public void testSameGroupingAggColumn3() throws Exception {
+        String sql = "select v1, max(v2), sum(v2) from t0 group by rollup(v1, v2, v3);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: max(5: expr), sum(5: expr)\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 8: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [1], [1, 2], [1, 2, 3]]\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 5> : clone(2: v2)");
+    }
 }

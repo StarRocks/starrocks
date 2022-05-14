@@ -78,6 +78,12 @@ public:
 
 class MessageBodySink;
 
+const std::string TXN_BEGIN = "begin";
+const std::string TXN_COMMIT = "commit";
+const std::string TXN_ROLLBACK = "rollback";
+const std::string TXN_LOAD = "load";
+const std::string TXN_LIST = "list";
+
 class StreamLoadContext {
 public:
     explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
@@ -94,6 +100,8 @@ public:
     }
 
     std::string to_json() const;
+
+    std::string to_resp_json(const std::string& txn_op, const Status& st) const;
 
     // return the brief info of this context.
     // also print the load source info if detail is set to true
@@ -143,24 +151,12 @@ public:
     size_t body_bytes = 0;
     size_t receive_bytes = 0;
 
-    int64_t txn_id = -1;
-
-    bool need_rollback = false;
     // when use_streaming is true, we use stream_pipe to send source data,
     // otherwise we save source data to file first, then process it.
     bool use_streaming = false;
     TFileFormatType::type format = TFileFormatType::FORMAT_CSV_PLAIN;
 
-    std::shared_ptr<MessageBodySink> body_sink;
-
     TStreamLoadPutResult put_result;
-
-    std::vector<TTabletCommitInfo> commit_infos;
-
-    std::promise<Status> promise;
-    std::future<Status> future = promise.get_future();
-
-    Status status;
 
     int64_t number_total_rows = 0;
     int64_t number_loaded_rows = 0;
@@ -173,8 +169,11 @@ public:
     int64_t begin_txn_cost_nanos = 0;
     int64_t stream_load_put_cost_nanos = 0;
     int64_t commit_and_publish_txn_cost_nanos = 0;
-    int64_t read_data_cost_nanos = 0;
+    int64_t total_received_data_cost_nanos = 0;
+    int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
+    int64_t begin_txn_ts = 0;
+    int64_t last_active_ts = 0;
 
     std::string error_url;
     // if label already be used, set existing job's status here
@@ -182,6 +181,21 @@ public:
     std::string existing_job_status;
 
     std::unique_ptr<KafkaLoadInfo> kafka_info;
+
+    std::vector<TTabletCommitInfo> commit_infos;
+
+    std::mutex lock;
+
+    std::shared_ptr<MessageBodySink> body_sink;
+    bool need_rollback = false;
+    int64_t txn_id = -1;
+
+    std::promise<Status> promise;
+    std::future<Status> future = promise.get_future();
+
+    Status status;
+
+    int32_t idle_timeout_sec = -1;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }

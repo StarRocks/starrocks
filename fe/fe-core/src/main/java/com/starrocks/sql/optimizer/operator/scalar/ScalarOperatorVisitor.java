@@ -77,4 +77,8 @@ public abstract class ScalarOperatorVisitor<R, C> {
     public R visitDictMappingOperator(DictMappingOperator operator, C context) {
         return visit(operator, context);
     }
+
+    public R visitCloneOperator(CloneOperator operator, C context) {
+        return visit(operator, context);
+    }
 }

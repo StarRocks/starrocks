@@ -65,8 +65,11 @@ public class SubqueryTest extends PlanTestBase {
     public void testSubqueryLimit() throws Exception {
         String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ASSERT NUMBER OF ROWS\n" +
-                "  |  assert number of rows: LE 1"));
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 4: v4 = 2\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1");
     }
 
     @Test
@@ -75,14 +78,18 @@ public class SubqueryTest extends PlanTestBase {
         String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  5:EXCHANGE\n" +
+                "     limit: 10");
+        assertContains(plan, "  0:UNION\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----4:EXCHANGE\n" +
                 "  |       limit: 10\n" +
                 "  |    \n" +
-                "  3:EXCHANGE\n" +
-                "     limit: 10"));
+                "  2:EXCHANGE\n" +
+                "     limit: 10\n");
     }
 
     @Test
@@ -127,10 +134,10 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "SELECT max(1) FROM t0 WHERE 1 = (SELECT t1.v4 FROM t0, t1 WHERE t1.v4 IN (SELECT t1.v4 FROM  t1))";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  8:Project\n" +
+        assertContains(explainString, ("9:Project\n" +
                 "  |  <slot 7> : 7: v4\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
+                "  8:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
     }
 
@@ -141,5 +148,19 @@ public class SubqueryTest extends PlanTestBase {
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
         getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testConstScalarSubQuery() throws Exception {
+        String sql = "select * from t0 where 2 = (select v4 from t1)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 4: v4 = 2\n" +
+                "  |  \n" +
+                "  3:ASSERT NUMBER OF ROWS");
+        assertContains(plan, "1:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
     }
 }

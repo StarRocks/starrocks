@@ -128,7 +128,7 @@ private:
     SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
-    std::unique_ptr<fs::ReadableBlock> _rblock;
+    std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
     ObjectPool _obj_pool;
 };

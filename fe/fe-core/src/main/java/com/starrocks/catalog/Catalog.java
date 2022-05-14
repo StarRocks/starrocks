@@ -11,12 +11,19 @@ import java.io.IOException;
 public abstract class Catalog implements Writable {
     private final String name;
 
-    public Catalog(String name) {
+    private final String comment;
+
+    public Catalog(String name, String comment) {
         this.name = name;
+        this.comment = comment;
     }
 
     public String getName() {
         return name;
+    }
+
+    public String getComment() {
+        return comment;
     }
 
     @Override

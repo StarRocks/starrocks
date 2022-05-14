@@ -37,6 +37,8 @@ struct SpaceInfo {
 
 class FileSystem {
 public:
+    enum Type { POSIX, S3, HDFS, BROKER, MEMORY };
+
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -58,6 +60,8 @@ public:
     // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.
     static FileSystem* Default();
+
+    virtual Type type() const = 0;
 
     // Create a brand new sequentially-readable file with the specified name.
     //  If the file does not exist, returns a non-OK status.
@@ -177,9 +181,9 @@ struct RandomAccessFileOptions {
 // Creation-time options for WritableFile
 struct WritableFileOptions {
     // Call Sync() during Close().
-    bool sync_on_close = false;
+    bool sync_on_close = true;
     // See OpenMode for details.
-    FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.

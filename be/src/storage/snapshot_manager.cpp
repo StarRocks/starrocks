@@ -329,19 +329,30 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
     (void)FileUtils::remove_all(snapshot_dir);
     RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
 
-    // 3. Link files to snapshot directory.
+    // If tablet is PrimaryKey tablet, we should dump snapshot meta file first and then link files
+    // to snapshot directory
+    // The reason is tablet clone assumes rowset file is immutable, but during rowset apply for partial update,
+    // rowset file may be changed.
+    // When doing partial update, if dump snapshot meta file first, there are four conditions as below
+    //  1. rowset status is committed in meta, rowset file is partial rowset
+    //  2. rowset status is committed in meta, rowset file is `partial rowset` when we link files, and rowset apply
+    //     success after link files.
+    //  3. rowset status is committed in meta, rowset file is full rowset
+    //  4. rowset status is applied in meta, rowset file is full rowset
+    // case1 and case4 is normal case, we don't need do additional process.
+    // case2 is almost the same as case1. In normal case, partial rowset files will be delete after rowset apply. But
+    // we do a hard link of partial rowset files, so the partial rowset files will not be delete until snapshot dir is
+    // deleted. So the src BE will download the partial rowset files.
+    // case3 is a bit trick. If the rowset status is committed in meta but the rowset file is full rowset. The src be
+    // will download the full rowset file and apply it again. But we handle this contingency in partial rowset apply,
+    // because if BE crash before update meta, we also need apply this rowset again after BE restart.
+
+    // 3. Build snapshot header/meta file.
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
-            return st;
-        }
         snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
     }
 
-    // 4. Build snapshot header/meta file.
     if (tablet->updates() == nullptr) {
         snapshot_tablet_meta->revise_inc_rs_metas(std::move(snapshot_rowset_metas));
         snapshot_tablet_meta->revise_rs_metas(std::vector<RowsetMetaSharedPtr>());
@@ -351,7 +362,6 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
             (void)FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
         }
-        return snapshot_id_path;
     } else {
         auto st =
                 make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet, snapshot_rowset_metas,
@@ -360,8 +370,19 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
             (void)FileUtils::remove_all(snapshot_id_path);
             return st;
         }
-        return snapshot_id_path;
     }
+
+    // 4. Link files to snapshot directory.
+    for (const auto& rowset : snapshot_rowsets) {
+        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to link rowset file:" << st;
+            (void)FileUtils::remove_all(snapshot_id_path);
+            return st;
+        }
+    }
+
+    return snapshot_id_path;
 }
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
@@ -507,10 +528,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
     }
 
-    std::unique_ptr<WritableFile> f;
-    ASSIGN_OR_RETURN(f, FileSystem::Default()->new_writable_file(snapshot_dir + "/meta"));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto f, FileSystem::Default()->new_writable_file(opts, snapshot_dir + "/meta"));
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(f.get()));
-    RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
     return Status::OK();
 }

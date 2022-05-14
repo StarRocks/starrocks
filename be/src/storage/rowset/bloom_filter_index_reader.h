@@ -35,11 +35,8 @@ namespace starrocks {
 
 class TypeInfo;
 
-namespace fs {
-class BlockManager;
-}
-
 class BloomFilterIndexIterator;
+class FileSystem;
 class IndexedColumnReader;
 class IndexedColumnIterator;
 class BloomFilter;
@@ -50,8 +47,8 @@ class BloomFilterIndexReader {
 public:
     BloomFilterIndexReader() = default;
 
-    Status load(fs::BlockManager* block_mgr, const std::string& file_name,
-                const BloomFilterIndexPB* bloom_filter_index_meta, bool use_page_cache, bool kept_in_memory);
+    Status load(FileSystem* fs, const std::string& file_name, const BloomFilterIndexPB* bloom_filter_index_meta,
+                bool use_page_cache, bool kept_in_memory);
 
     // create a new column iterator.
     Status new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator);

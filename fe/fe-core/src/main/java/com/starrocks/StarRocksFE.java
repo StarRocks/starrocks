@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
 import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
@@ -277,26 +276,30 @@ public class StarRocksFE {
         // go on
     }
 
-    private static boolean createAndLockPidFile(String pidFilePath) throws IOException {
+    private static boolean createAndLockPidFile(String pidFilePath) {
         File pid = new File(pidFilePath);
-        try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
-            FileLock lock = file.getChannel().tryLock();
-            if (lock == null) {
-                return false;
+        for (int i = 0; i < 3; i++) {
+            try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
+                if (i > 0) {
+                    Thread.sleep(10000);
+                }
+                FileLock lock = file.getChannel().tryLock();
+                if (lock == null) {
+                    throw new Exception("get pid file lock failed, lock is null");
+                }
+
+                pid.deleteOnExit();
+
+                String name = ManagementFactory.getRuntimeMXBean().getName();
+                file.setLength(0);
+                file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
+
+                return true;
+            } catch (Throwable t) {
+                LOG.warn("get pid file lock failed, retried: {}", i, t);
             }
-
-            pid.deleteOnExit();
-
-            String name = ManagementFactory.getRuntimeMXBean().getName();
-            file.setLength(0);
-            file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
-
-            return true;
-        } catch (OverlappingFileLockException e) {
-            return false;
-        } catch (IOException e) {
-            throw e;
         }
+
+        return false;
     }
 }
-

@@ -320,7 +320,7 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
 
 StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const WritableFileOptions& opts,
                                                                             const std::string& path) {
-    if (opts.mode == CREATE_OR_OPEN_WITH_TRUNCATE) {
+    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
             return Status::NotSupported("Cannot truncate a file by broker");
         }

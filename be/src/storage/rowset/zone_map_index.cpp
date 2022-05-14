@@ -24,7 +24,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
-#include "storage/fs/block_manager.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
@@ -72,7 +71,7 @@ public:
     // mark the end of one data page so that we can finalize the corresponding zone map
     Status flush() override;
 
-    Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* index_meta) override;
+    Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override;
 
     uint64_t size() const override { return _estimated_size; }
 
@@ -165,7 +164,7 @@ std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field*
 }
 
 template <FieldType type>
-Status ZoneMapIndexWriterImpl<type>::finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* index_meta) {
+Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) {
     index_meta->set_type(ZONE_MAP_INDEX);
     ZoneMapIndexPB* meta = index_meta->mutable_zone_map_index();
     // store segment zone map
@@ -179,7 +178,7 @@ Status ZoneMapIndexWriterImpl<type>::finish(fs::WritableBlock* wblock, ColumnInd
     options.encoding = EncodingInfo::get_default_encoding(OLAP_FIELD_TYPE_OBJECT, false);
     options.compression = NO_COMPRESSION; // currently not compressed
 
-    IndexedColumnWriter writer(options, typeinfo, wblock);
+    IndexedColumnWriter writer(options, typeinfo, wfile);
     RETURN_IF_ERROR(writer.init());
 
     for (auto& value : _values) {
@@ -189,9 +188,9 @@ Status ZoneMapIndexWriterImpl<type>::finish(fs::WritableBlock* wblock, ColumnInd
     return writer.finish(meta->mutable_page_zone_maps());
 }
 
-Status ZoneMapIndexReader::load(fs::BlockManager* block_mgr, const std::string& filename,
-                                const ZoneMapIndexPB* index_meta, bool use_page_cache, bool kept_in_memory) {
-    IndexedColumnReader reader(block_mgr, filename, index_meta->page_zone_maps());
+Status ZoneMapIndexReader::load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB* index_meta,
+                                bool use_page_cache, bool kept_in_memory) {
+    IndexedColumnReader reader(fs, filename, index_meta->page_zone_maps());
     RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
