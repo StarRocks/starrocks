@@ -725,6 +725,7 @@ public class TransactionState implements Writable {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
                     this.getDbId(),
+                    commitTime,
                     partitionVersions,
                     createTime);
             this.addPublishVersionTask(backendId, task);
