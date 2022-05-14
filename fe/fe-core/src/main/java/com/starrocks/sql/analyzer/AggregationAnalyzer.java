@@ -12,6 +12,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -280,6 +281,11 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Void context) {
             return visit(node.getChild(0)) && visit(node.getChild(1));
+        }
+
+        @Override
+        public Boolean visitCloneExpr(CloneExpr node, Void context) {
+            return visit(node.getChild(0));
         }
     }
 }
