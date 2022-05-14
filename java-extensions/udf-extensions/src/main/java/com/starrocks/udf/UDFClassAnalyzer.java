@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.udf;
 
@@ -32,7 +32,7 @@ public class UDFClassAnalyzer {
         String signStr = anlyMap.get(typeName);
         if (signStr != null) {
             return prefix + signStr;
-        } else if (typeName.contains("[L")){
+        } else if (typeName.contains("[L")) {
             return typeName.replace(".", "/");
         } else {
             return prefix + "L" + typeName.replace('.', '/') + ";";
