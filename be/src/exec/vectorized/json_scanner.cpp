@@ -78,8 +78,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     try {
         status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("The format of the json file $0 may be wrong, stop json loader.",
-                                           _cur_file_reader->filename());
+        auto err_msg = strings::Substitute("The format of the json file may be wrong, stop json loader.");
         LOG(WARNING) << err_msg;
         return Status::DataQualityError(err_msg);
     }
@@ -321,7 +320,7 @@ Status JsonReader::open() {
     _empty_parser = false;
 
     if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-        _build_slot_descs();
+        RETURN_IF_ERROR(_build_slot_descs());
     }
 
     _closed = false;
@@ -629,7 +628,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
     }
 }
 
-void JsonReader::_build_slot_descs() {
+Status JsonReader::_build_slot_descs() {
     // build _slot_desc_dict.
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
@@ -646,8 +645,9 @@ void JsonReader::_build_slot_descs() {
 
     // get the first row of json.
     simdjson::ondemand::object obj;
-    if (!_parser->get_current(&obj).ok()) return;
-
+    if (!_parser->get_current(&obj).ok()) {
+        return Status::DataQualityError("can not get first row of json");
+    }
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
 
@@ -657,7 +657,7 @@ void JsonReader::_build_slot_descs() {
             json_str = field.key();
         } catch (simdjson::simdjson_error& e) {
             // Nothing would be done if got any error.
-            return;
+            return Status::DataQualityError("parse invalid field key");
         }
 
         oss << json_str;
@@ -683,7 +683,7 @@ void JsonReader::_build_slot_descs() {
 
     std::swap(ordered_slot_descs, _slot_descs);
 
-    return;
+    return Status::OK();
 }
 
 // read one json string from file read and parse it to json doc.

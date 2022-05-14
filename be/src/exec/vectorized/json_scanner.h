@@ -77,8 +77,6 @@ public:
 
     Status close();
 
-    const std::string& filename() { return _file->filename(); }
-
 private:
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
@@ -94,7 +92,7 @@ private:
                              const std::string& col_name);
 
     // _build_slot_descs builds _slot_descs as the order of first json object and builds _slot_desc_dict;
-    void _build_slot_descs();
+    Status _build_slot_descs();
 
 private:
     RuntimeState* _state = nullptr;
