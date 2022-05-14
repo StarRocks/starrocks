@@ -196,8 +196,9 @@ TEST_F(MemoryFileSystemTest, test_create_dir_recursive) {
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_new_writable_file) {
     std::unique_ptr<WritableFile> file;
-    EXPECT_STATUS(Status::IOError(""), _fs->new_writable_file("/").status());
-    file = *_fs->new_writable_file("/1.csv");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    EXPECT_STATUS(Status::IOError(""), _fs->new_writable_file(opts, "/").status());
+    file = *_fs->new_writable_file(opts, "/1.csv");
     file->append("abc");
     file->close();
     std::vector<std::string> children;
@@ -210,7 +211,8 @@ TEST_F(MemoryFileSystemTest, test_new_writable_file) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_delete_file) {
-    auto file = *_fs->new_writable_file("/1.csv");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto file = *_fs->new_writable_file(opts, "/1.csv");
     file->append("abc");
     file->close();
 
@@ -225,9 +227,10 @@ TEST_F(MemoryFileSystemTest, test_delete_file) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_sequential_read) {
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     std::unique_ptr<WritableFile> writable_file;
     std::unique_ptr<SequentialFile> readable_file;
-    writable_file = *_fs->new_writable_file("/a.txt");
+    writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
 
@@ -239,12 +242,13 @@ TEST_F(MemoryFileSystemTest, test_sequential_read) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN_WITH_TRUNCATE) {
-    auto writable_file = *_fs->new_writable_file("/a.txt");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
-    writable_file = *_fs->new_writable_file("/a.txt");
+    writable_file = *_fs->new_writable_file(opts, "/a.txt");
 
     auto readable_file = *_fs->new_sequential_file("/a.txt");
     SequentialFileWrapper wrapper(readable_file.get());
@@ -253,12 +257,13 @@ TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN_WITH_TRUNCATE) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN) {
-    auto writable_file = *_fs->new_writable_file("/a.txt");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
-    WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN};
+    opts.mode = FileSystem::CREATE_OR_OPEN;
     writable_file = *_fs->new_writable_file(opts, "/a.txt");
 
     auto readable_file = *_fs->new_sequential_file("/a.txt");
@@ -269,12 +274,13 @@ TEST_F(MemoryFileSystemTest, test_CREATE_OR_OPEN) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_MUST_EXIST) {
-    auto writable_file = *_fs->new_writable_file("/a.txt");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
-    WritableFileOptions opts{.mode = FileSystem::MUST_EXIST};
+    opts.mode = FileSystem::MUST_EXIST;
     writable_file = *_fs->new_writable_file(opts, "/a.txt");
 
     auto readable_file = *_fs->new_sequential_file("/a.txt");
@@ -285,12 +291,13 @@ TEST_F(MemoryFileSystemTest, test_MUST_EXIST) {
 
 // NOLINTNEXTLINE
 TEST_F(MemoryFileSystemTest, test_MUST_CREATE) {
-    std::unique_ptr<WritableFile> writable_file = *_fs->new_writable_file("/a.txt");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    std::unique_ptr<WritableFile> writable_file = *_fs->new_writable_file(opts, "/a.txt");
     EXPECT_STATUS(Status::OK(), writable_file->append("first line\n"));
     EXPECT_STATUS(Status::OK(), writable_file->append("second line\n"));
     writable_file->close();
 
-    WritableFileOptions opts{.mode = FileSystem::MUST_CREATE};
+    opts.mode = FileSystem::MUST_CREATE;
     EXPECT_STATUS(Status::AlreadyExist(""), _fs->new_writable_file(opts, "/a.txt").status());
 }
 
@@ -305,7 +312,8 @@ TEST_F(MemoryFileSystemTest, test_link_file) {
     EXPECT_STATUS(Status::AlreadyExist(""), _fs->link_file("/tmp/a.txt", "/home/b.txt"));
     EXPECT_STATUS(Status::OK(), _fs->link_file("/tmp/a.txt", "/home/a.txt"));
 
-    std::unique_ptr<WritableFile> w = *_fs->new_writable_file("/tmp/a.txt");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    std::unique_ptr<WritableFile> w = *_fs->new_writable_file(opts, "/tmp/a.txt");
     std::string content;
 
     EXPECT_STATUS(Status::OK(), w->append("content in a.txt"));

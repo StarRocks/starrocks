@@ -39,8 +39,8 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
     header.version = OLAP_DATA_VERSION_APPLIED;
     header.magic_number = OLAP_FIX_HEADER_MAGIC_NUMBER;
 
-    std::unique_ptr<WritableFile> output_file;
-    ASSIGN_OR_RETURN(output_file, _fs->new_writable_file(_path));
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto output_file, _fs->new_writable_file(opts, _path));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&header), sizeof(header))));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&unused_flag), sizeof(unused_flag))));
     RETURN_IF_ERROR(output_file->append(serialized_message));

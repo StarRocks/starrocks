@@ -281,7 +281,7 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
         mem_tracker()->release(index_meta->SpaceUsedLong());
         _ordinal_index.reader = new OrdinalIndexReader();
         _flags.set(kHasOrdinalIndexReaderPos, true);
-        st = _ordinal_index.reader->load(block_manager(), file_name(), index_meta.get(), num_rows(), use_page_cache,
+        st = _ordinal_index.reader->load(file_system(), file_name(), index_meta.get(), num_rows(), use_page_cache,
                                          kept_in_memory);
         mem_tracker()->consume(_ordinal_index.reader->mem_usage());
     }
@@ -297,8 +297,7 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
         mem_tracker()->release(index_meta->SpaceUsedLong());
         _zone_map_index.reader = new ZoneMapIndexReader();
         _flags.set(kHasZoneMapIndexReaderPos, true);
-        st = _zone_map_index.reader->load(block_manager(), file_name(), index_meta.get(), use_page_cache,
-                                          kept_in_memory);
+        st = _zone_map_index.reader->load(file_system(), file_name(), index_meta.get(), use_page_cache, kept_in_memory);
         mem_tracker()->consume(_zone_map_index.reader->mem_usage());
     }
     return st;
@@ -313,7 +312,7 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
         mem_tracker()->release(index_meta->SpaceUsedLong());
         _bitmap_index.reader = new BitmapIndexReader();
         _flags.set(kHasBitmapIndexReaderPos, true);
-        st = _bitmap_index.reader->load(block_manager(), file_name(), index_meta.get(), use_page_cache, kept_in_memory);
+        st = _bitmap_index.reader->load(file_system(), file_name(), index_meta.get(), use_page_cache, kept_in_memory);
         mem_tracker()->consume(_bitmap_index.reader->mem_usage());
     }
     return st;
@@ -328,7 +327,7 @@ Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_
         mem_tracker()->release(index_meta->SpaceUsedLong());
         _bloom_filter_index.reader = new BloomFilterIndexReader();
         _flags.set(kHasBloomFilterIndexReaderPos, true);
-        st = _bloom_filter_index.reader->load(block_manager(), file_name(), index_meta.get(), use_page_cache,
+        st = _bloom_filter_index.reader->load(file_system(), file_name(), index_meta.get(), use_page_cache,
                                               kept_in_memory);
         mem_tracker()->consume(_bloom_filter_index.reader->mem_usage());
     }

@@ -35,10 +35,8 @@
 
 namespace starrocks {
 
-namespace fs {
-class BlockManager;
-class WritableBlock;
-} // namespace fs
+class FileSystem;
+class WritableFile;
 
 // Ordinal index is implemented by one IndexPage that stores the first value ordinal
 // and file pointer for each data page.
@@ -52,7 +50,7 @@ public:
 
     uint64_t size() { return _page_builder->size(); }
 
-    Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* meta);
+    Status finish(WritableFile* wfile, ColumnIndexMetaPB* meta);
 
 private:
     OrdinalIndexWriter(const OrdinalIndexWriter&) = delete;
@@ -68,8 +66,8 @@ public:
     OrdinalIndexReader() = default;
 
     // load and parse the index page into memory
-    Status load(fs::BlockManager* block_mgr, const std::string& filename, const OrdinalIndexPB* index_meta,
-                ordinal_t num_values, bool use_page_cache, bool kept_in_memory);
+    Status load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB* index_meta, ordinal_t num_values,
+                bool use_page_cache, bool kept_in_memory);
 
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
     OrdinalPageIndexIterator begin();

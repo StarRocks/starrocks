@@ -33,11 +33,8 @@ namespace starrocks {
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
-namespace fs {
-class WritableBlock;
-}
-
 class BloomFilterOptions;
+class WritableFile;
 
 class BloomFilterIndexWriter {
 public:
@@ -53,7 +50,7 @@ public:
 
     virtual Status flush() = 0;
 
-    virtual Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
 
     virtual uint64_t size() = 0;
 

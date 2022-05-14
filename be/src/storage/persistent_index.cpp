@@ -5,9 +5,9 @@
 #include <cstring>
 #include <numeric>
 
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
-#include "storage/fs/fs_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/tablet.h"
@@ -147,7 +147,7 @@ struct ImmutableIndexShard {
         return pages[info.pageid].pack(info.packid);
     }
 
-    Status write(fs::WritableBlock& wb) const;
+    Status write(WritableFile& wb) const;
 
     static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<KVRef>& kv_refs,
                                                                  size_t npage_hint);
@@ -156,7 +156,7 @@ struct ImmutableIndexShard {
     size_t num_entry_moved = 0;
 };
 
-Status ImmutableIndexShard::write(fs::WritableBlock& wb) const {
+Status ImmutableIndexShard::write(WritableFile& wb) const {
     if (pages.size() > 0) {
         return wb.append(Slice((uint8_t*)pages.data(), page_size * pages.size()));
     } else {
@@ -440,9 +440,10 @@ public:
         _version = version;
         _idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
         _idx_file_path_tmp = _idx_file_path + ".tmp";
-        ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_idx_file_path_tmp));
-        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
-        return _block_mgr->create_block(wblock_opts, &_wb);
+        ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
+        WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
+        return Status::OK();
     }
 
     Status write_shard(size_t key_size, size_t value_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
@@ -459,9 +460,9 @@ public:
             return std::move(rs_create).status();
         }
         auto& shard = rs_create.value();
-        size_t pos_before = _wb->bytes_appended();
+        size_t pos_before = _wb->size();
         RETURN_IF_ERROR(shard->write(*_wb));
-        size_t pos_after = _wb->bytes_appended();
+        size_t pos_after = _wb->size();
         auto shard_meta = _meta.add_shards();
         shard_meta->set_size(kvs.size());
         shard_meta->set_npage(shard->npage());
@@ -495,7 +496,6 @@ public:
         put_fixed32_le(&footer, checksum);
         footer.append(index_file_magic, 4);
         RETURN_IF_ERROR(_wb->append(Slice(footer)));
-        RETURN_IF_ERROR(_wb->finalize());
         RETURN_IF_ERROR(_wb->close());
         RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
         _wb.reset();
@@ -506,8 +506,8 @@ private:
     EditVersion _version;
     string _idx_file_path_tmp;
     string _idx_file_path;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
-    std::unique_ptr<fs::WritableBlock> _wb;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _wb;
     size_t _nshard = 0;
     size_t _fixed_key_size = 0;
     size_t _fixed_value_size = 0;
@@ -976,8 +976,8 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
 PersistentIndex::PersistentIndex(const std::string& path) : _path(path) {}
 
 PersistentIndex::~PersistentIndex() {
-    if (_index_block) {
-        _index_block->close();
+    if (_index_file) {
+        _index_file->close();
     }
     if (_l1) {
         _l1->clear();
@@ -1004,11 +1004,11 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     std::string file_name = _get_l0_index_file_name(_path, version);
-    fs::CreateBlockOptions wblock_opts({file_name});
+    WritableFileOptions wblock_opts;
     wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, file_name));
     return Status::OK();
 }
 
@@ -1021,7 +1021,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
 
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
@@ -1048,7 +1048,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     std::unique_ptr<RandomAccessFile> l1_rfile;
 
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    ASSIGN_OR_RETURN(auto read_file, _block_mgr->new_random_access_file(l0_index_file_name));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(l0_index_file_name));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
@@ -1093,14 +1093,14 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     // the data in the end maybe invalid
     // so we need to truncate file first
     RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
-    fs::CreateBlockOptions wblock_opts({l0_index_file_name});
+    WritableFileOptions wblock_opts;
     wblock_opts.mode = FileSystem::MUST_EXIST;
-    RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_name));
 
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        ASSIGN_OR_RETURN(l1_rfile, _block_mgr->new_random_access_file(l1_block_path));
+        ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_block_path));
         auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
         if (!l1_st.ok()) {
             return l1_st.status();
@@ -1130,12 +1130,12 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     // First is _flushed is true, we have flushed all _l0 data into _l1 and reload, we don't need
     // to do additional process
     // Second is _flused is false, we have write all _l0 data into new snapshot file, we need to
-    // create new _index_block from the new snapshot file
+    // create new _index_file from the new snapshot file
     if (!_flushed) {
         std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-        fs::CreateBlockOptions wblock_opts({l0_index_file_path});
+        WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+        ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_path));
     }
 
     RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
@@ -1275,7 +1275,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     // set _dump_snapshot to true
     // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
     _dump_snapshot = true;
@@ -1371,14 +1371,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_flushed) {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
         std::string file_name = _get_l0_index_file_name(_path, _version);
-        //ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(file_name));
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({file_name});
+        WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
-        DeferOp close_block([&wblock] {
-            if (wblock) {
-                wblock->close();
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wblock_opts, file_name));
+        DeferOp close_block([&wfile] {
+            if (wfile) {
+                wfile->close();
             }
         });
         // update PersistentIndexMetaPB
@@ -1446,23 +1444,23 @@ Status PersistentIndex::on_commited() {
     if (_flushed) {
         RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
     } else if (_dump_snapshot) {
-        std::string expired_l0_file_path = _index_block->path();
+        std::string expired_l0_file_path = _index_file->filename();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);
-        if (_block_mgr == nullptr) {
-            ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(index_file_path));
+        if (_fs == nullptr) {
+            ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(index_file_path));
         }
-        std::unique_ptr<fs::WritableBlock> wblock;
-        DeferOp close_block([&wblock] {
-            if (wblock) {
-                wblock->close();
+        std::unique_ptr<WritableFile> wfile;
+        DeferOp close_block([&wfile] {
+            if (wfile) {
+                wfile->close();
             }
         });
 
-        fs::CreateBlockOptions wblock_opts({index_file_path});
+        WritableFileOptions wblock_opts;
         // new index file should be created in commit() phase
         wblock_opts.mode = FileSystem::MUST_EXIST;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
-        _index_block = std::move(wblock);
+        ASSIGN_OR_RETURN(wfile, _fs->new_writable_file(wblock_opts, index_file_path));
+        _index_file = std::move(wfile);
         VLOG(1) << "delete expired l0 index file: " << expired_l0_file_path;
         FileSystem::Default()->delete_file(expired_l0_file_path);
     }
@@ -1551,7 +1549,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
             put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
         }
-        RETURN_IF_ERROR(_index_block->append(fixed_buf));
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
         _page_size += fixed_buf.size();
     }
     return Status::OK();
@@ -1566,7 +1564,7 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
         fixed_buf.append(fkeys + i * _key_size, _key_size);
         put_fixed64_le(&fixed_buf, v);
     }
-    RETURN_IF_ERROR(_index_block->append(fixed_buf));
+    RETURN_IF_ERROR(_index_file->append(fixed_buf));
     _page_size += fixed_buf.size();
     return Status::OK();
 }

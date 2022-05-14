@@ -38,10 +38,7 @@ class TabletSchema;
 class TabletColumn;
 class ShortKeyIndexBuilder;
 class MemTracker;
-
-namespace fs {
-class WritableBlock;
-}
+class WritableFile;
 
 namespace vectorized {
 class Chunk;
@@ -84,7 +81,7 @@ struct SegmentWriterOptions {
 //
 class SegmentWriter {
 public:
-    SegmentWriter(std::unique_ptr<fs::WritableBlock> block, uint32_t segment_id, const TabletSchema* tablet_schema,
+    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
                   const SegmentWriterOptions& opts);
     ~SegmentWriter();
 
@@ -128,7 +125,7 @@ private:
     const TabletSchema* _tablet_schema;
     SegmentWriterOptions _opts;
 
-    std::unique_ptr<fs::WritableBlock> _wblock;
+    std::unique_ptr<WritableFile> _wfile;
 
     SegmentFooterPB _footer;
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;

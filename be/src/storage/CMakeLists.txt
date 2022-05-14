@@ -26,7 +26,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
-add_subdirectory(fs)
 
 add_library(Storage STATIC
     base_tablet.cpp

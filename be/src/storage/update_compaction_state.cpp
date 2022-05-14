@@ -55,13 +55,13 @@ Status CompactionState::_do_load(Rowset* rowset) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(rowset->rowset_path()));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tracker = update_manager->compaction_state_mem_tracker();
     segment_states.resize(rowset->num_segments());
     for (auto i = 0; i < rowset->num_segments(); i++) {
         std::string rssid_file = BetaRowset::segment_srcrssid_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
-        ASSIGN_OR_RETURN(auto read_file, block_mgr->new_random_access_file(rssid_file));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(rssid_file));
         ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint32_t>& src_rssids = segment_states[i].src_rssids;
         src_rssids.resize(file_size / sizeof(uint32_t));

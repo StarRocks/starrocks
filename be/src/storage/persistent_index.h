@@ -6,9 +6,9 @@
 #include <tuple>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
-#include "storage/fs/block_manager.h"
 #include "storage/rowset/rowset.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -351,8 +351,8 @@ private:
     // |_page_size|: the size of last wal in index file
     uint64_t _offset = 0;
     uint32_t _page_size = 0;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
-    std::unique_ptr<fs::WritableBlock> _index_block;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _index_file;
 
     bool _dump_snapshot = false;
     bool _flushed = false;
