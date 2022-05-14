@@ -15,6 +15,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -79,6 +80,9 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
+                if (!(table instanceof OlapTable)) {
+                    continue;
+                }
                 columnNameToTable.put(new Pair<>(tableName,
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
