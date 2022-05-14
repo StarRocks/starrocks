@@ -180,6 +180,7 @@ public class StatementPlanner {
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt
                 || statement instanceof CreateCatalogStmt
+                || statement instanceof CreateTableStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
