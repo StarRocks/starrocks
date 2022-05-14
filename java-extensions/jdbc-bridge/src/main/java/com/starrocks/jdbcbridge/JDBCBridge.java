@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package jdbcbridge;
+package com.starrocks.jdbcbridge;
 
 import java.io.File;
 import java.net.URL;
