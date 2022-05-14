@@ -1,21 +1,36 @@
-# 介绍
+# 使用 DataX 导入 StarRocks
+
+本文介绍利用 DataX 和 StarRocks 开发的 starrockswriter 插件实现将 MySQL、Oracle等数据库中的数据导入到 StarRocks。
+
+## 支持的数据源
+
+* MySQL
+* Oracle
+* [更多](https://github.com/alibaba/DataX)
+
+## 使用场景
+
+Mysql、Oracle 等 DataX 支持读取的数据库**全量数据**通过 DataX 和 starrockswriter 导入到 StarRocks。
+
+## 实现原理
 
 StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能。在底层实现上，StarRocksWriter 通过Stream load以csv或 json 格式导入数据至StarRocks。内部将`reader`读取的数据进行缓存后批量导入至StarRocks，以提高写入性能。总体数据流是 `source -> Reader -> DataX channel -> Writer -> StarRocks`。
+
+## 使用步骤
+
+### 环境准备
 
 [点击下载插件](https://github.com/StarRocks/DataX/releases)
 
 [源码地址](https://github.com/StarRocks/DataX)
 
-测试时可以使用如下命令:
- `python datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug job.json`
-
-## 功能说明
+解压 starrockswriter 插件并放置在 datax/plugin/writer目录下。
 
 ### 配置样例
 
-* 这里使用一份从内存Mysql读取数据后导入至StarRocks。
+> 以下举例从 MySQL 读取数据后导入至 StarRocks 时 datax 的配置。
 
-```json
+~~~json
 {
     "job": {
         "setting": {
@@ -71,9 +86,9 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
     }
 }
 
-```
+~~~
 
-### 参数说明
+**参数说明**
 
 * **username**
 
@@ -145,7 +160,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **jdbcUrl**
 
-  * 描述：目的数据库的 JDBC 连接信息，用于执行`preSql`及`postSql`。
+  * 描述：目的数据库的 JDBC 连接信息，用于执行 `preSql` 及 `postSql`。
 
   * 必选：否
 
@@ -169,7 +184,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **flushInterval**
 
-  * 描述：上一次StreamLoad结束至下一次开始的时间间隔（单位：ms）。
+  * 描述：上一次 StreamLoad 结束至下一次开始的时间间隔（单位：ms）。
 
   * 必选：否
 
@@ -177,39 +192,61 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **loadProps**
 
-  * 描述：StreamLoad 的请求参数，详情参照StreamLoad介绍页面。
+  * 描述：StreamLoad 的请求参数，详情参照 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 介绍页面。
 
   * 必选：否
 
   * 默认值：无
 
-### 导入参数设置
+### 启动任务
+
+>下面 job.json 文件是用于调试 DataX 环境，实际文件内容可根据需求命名即可，比如 job_starrocks.json，内容参考[配置样例](#配置样例)。
+
+~~~bash
+  python bin/datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug job/job.json
+~~~
+
+### 查看导入任务状态
+
+DataX 导入是封装的 Stream Load 实现的，可以在 `datax/log/$date/` 目录下搜索对应的job日志，日志文件名字中包含上文命名的json文件名和任务启动的小时分钟秒，例如：t_datax_job_job_json-20_52_19.196.log，
+
+* 日志中如果有 `http://$fe:${http_port}/api/$db/$tbl/_stream_load` 生成，表示成功触发了 Stream Load 任务，任务结果可参考 [Stream Load 任务状态](../loading/StreamLoad#创建导入任务)。
+
+* 日志中如果没有上述信息，请参考报错提示排查，或者在 [DataX 社区问题](https://github.com/alibaba/DataX/issues)查找。
+
+### 取消或停止导入任务
+
+DataX 导入启动的是一个 python 进程，如果要取消或者停止导入任务，kill 掉进程即可。
+
+## 注意事项
+
+### 导入参数配置
 
 默认传入的数据均会被转为字符串，并以`\t`作为列分隔符，`\n`作为行分隔符，组成`csv`文件进行StreamLoad导入操作。
 如需更改列分隔符，则正确配置 `loadProps` 即可：
 
-```json
+~~~json
 "loadProps": {
     "column_separator": "\\x01",
     "row_delimiter": "\\x02"
 }
-```
+~~~
 
 如需更改导入格式为`json`，则正确配置 `loadProps` 即可：
 
-```json
+~~~json
 "loadProps": {
     "format": "json",
     "strip_outer_array": true
 }
-```
+~~~
 
-## 关于时区
+### 关于时区
 
 源库与目标库时区不同时，执行datax.py，命令行后面需要加如下参数：
 
-```json
+~~~json
 "-Duser.timezone=xx时区"
-```
+~~~
 
 例如，DataX导入PostgreSQL中的数据，源库是UTC时间，在dataX启动时加参数 "-Duser.timezone=GMT+0"。

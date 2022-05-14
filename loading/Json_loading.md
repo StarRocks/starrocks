@@ -1,4 +1,6 @@
-# 介绍
+# Json 数据导入
+
+## 介绍
 
 对于一些半结构化的比如Json类型的数据，我们可以用stream load 或者 routine load的方式进行导入。
 
@@ -7,14 +9,18 @@
 * Stream Load： 对于文本文件存储的Json数据，我们可以使用 stream load进行导入。
 * Routine Load：对于Kafka中的json格式数据，可以使用Routine load的方式导入。
 
-### Stream Load导入
+## Stream Load导入
 
 样例数据：
 
+其中`{}`中的内容表示一行数据，下面`[]`中的内容表示多行数据
+
 ~~~json
-{ "id": 123, "city" : "beijing"},
-{ "id": 456, "city" : "shanghai"},
+[
+    { "id": 123, "city" : "beijing"},
+    { "id": 456, "city" : "shanghai"},
     ...
+]
 ~~~
 
 示例：
@@ -22,7 +28,7 @@
 ~~~shell
 curl -v --location-trusted -u root: \
     -H "format: json" -H "jsonpaths: [\"$.id\", \"$.city\"]" \
-    -T example.json \
+    -H "strip_outer_array: true" -T example.json \
     http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
 ~~~
 
@@ -31,9 +37,9 @@ curl -v --location-trusted -u root: \
 相关参数：
 
 * jsonpaths : 选择每一列的json路径
-* json\_root : 选择json开始解析的列
-* strip\_outer\_array ： 裁剪最外面的 array 字段（可以见下一个样例）
-* strict\_mode：导入过程中的列类型转换进行严格过滤
+* json_root : 选择json开始解析的列
+* strip_outer_array ： 裁剪最外面的 array 字段
+* strict_mode：导入过程中的列类型转换进行严格过滤
 * columns:对应StarRocks表中的字段的名称
 
 jsonpaths参数和columns参数还有StarRocks表中字段三者关系如下：
@@ -57,7 +63,7 @@ curl -v --location-trusted -u root: \
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
     -H "columns: city,tmp_id, id = tmp_id * 100" \
     -T jsontest.json \
-    http://127.0.0.1:8030/api/test/testJson/_stream_load
+    http://127.0.0.1:8030/api/test_db/test_table/_stream_load
 ~~~
 
 导入后结果
@@ -85,7 +91,7 @@ curl -v --location-trusted -u root: \
     -H "format: json" -H "jsonpaths: [\"$.k2\", \"$.k1\"]" \
     -H "columns: k2, tmp_k1, k1 = tmp_k1 * 100" \
     -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
+    http://127.0.0.1:8030/api/test_db/test_table/_stream_load
 ~~~
 
 这里导入过程中进行了将k1乘以100的ETL操作，并且通过Jsonpath来进行column和原始数据的对应
@@ -122,7 +128,7 @@ curl -v --location-trusted -u root: \
 curl -v --location-trusted -u root: \
     -H "format: json" -H "strip_outer_array: true" \
     -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
+    http://127.0.0.1:8030/api/test_db/test_table/_stream_load
 ~~~
 
 导入后结果：
@@ -147,7 +153,7 @@ curl -v --location-trusted -u root: \
     -H "jsonpaths: [\"$.k1\", \"$.k2\"]" \
     -H "columns: k1, tmp_k2, k2 = ifnull(tmp_k2, 'x')" \
     -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
+    http://127.0.0.1:8030/api/test_db/test_table/_stream_load
 ~~~
 
 导入后结果：
@@ -164,7 +170,9 @@ curl -v --location-trusted -u root: \
 +------+------+
 ~~~
 
-### Routine Load导入
+更多Stream Load使用请参考 [STREAM LOAD](../loading/StreamLoad.md)。
+
+## Routine Load导入
 
 对于 Kafka 数据源，和Stream Load的原理类似，每个 Massage 中的内容被视作一个完整的 Json 数据。
 
@@ -395,4 +403,6 @@ FROM KAFKA (
 
 这样就可以完成数据从mysql到StarRocks的近实时同步。
 
-通过`show routine load` 可以看到导入任务的进度和错误信息。
+通过 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) 可以看到导入任务的进度和错误信息。
+
+更多Routine Load使用请参考 [ROUTINE LOAD](../loading/RoutineLoad.md)。

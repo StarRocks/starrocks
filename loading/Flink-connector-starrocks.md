@@ -1,8 +1,18 @@
-# 设计背景
+# 使用 flink-connector-starrocks 导入至 StarRocks
 
-flink的用户想要将数据sink到StarRocks当中，但是flink官方只提供了flink-connector-jdbc, 不足以满足导入性能要求，为此我们新增了一个flink-connector-starrocks，内部实现是通过缓存并批量由stream load导入。
+## 功能简介
 
-## 使用方式
+StarRocks 提供 flink-connector-starrocks，导入数据至 StarRocks，相比于 Flink 官方提供的 flink-connector-jdbc，导入性能更佳。
+flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load 导入。
+
+## 支持的数据源
+
+* CSV
+* JSON
+
+## 操作步骤
+
+### 步骤一：添加 pom 依赖
 
 [源码地址](https://github.com/StarRocks/flink-connector-starrocks)
 
@@ -29,97 +39,103 @@ flink的用户想要将数据sink到StarRocks当中，但是flink官方只提供
 </dependency>
 ```
 
-使用方式如下：
+### 步骤二：调用 flink-connector-starrocks，将 MySQL 数据实时同步至 StarRocks
 
-```scala
-// -------- sink with raw json string stream --------
-fromElements(new String[]{
-    "{\"score\": \"99\", \"name\": \"stephen\"}",
-    "{\"score\": \"100\", \"name\": \"lebron\"}"
-}).addSink(
-    StarRocksSink.sink(
-        // the sink options
-        StarRocksSinkOptions.builder()
-            .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
-            .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-            .withProperty("username", "xxx")
-            .withProperty("password", "xxx")
-            .withProperty("table-name", "xxx")
-            .withProperty("database-name", "xxx")
-            .withProperty("sink.properties.format", "json")
-            .withProperty("sink.properties.strip_outer_array", "true")
-            .build()
-    )
-);
+* 如您使用 Flink DataStream API，则需要参考如下命令。
+
+    ```scala
+    // -------- 原始数据为 json 格式 --------
+    fromElements(new String[]{
+        "{\"score\": \"99\", \"name\": \"stephen\"}",
+        "{\"score\": \"100\", \"name\": \"lebron\"}"
+    }).addSink(
+        StarRocksSink.sink(
+            // the sink options
+            StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
+                .withProperty("username", "xxx")
+                .withProperty("password", "xxx")
+                .withProperty("table-name", "xxx")
+                .withProperty("database-name", "xxx")
+                .withProperty("sink.properties.format", "json")
+                .withProperty("sink.properties.strip_outer_array", "true")
+                .build()
+        )
+    );
 
 
-// -------- sink with stream transformation --------
-class RowData {
-    public int score;
-    public String name;
-    public RowData(int score, String name) {
-        ......
-    }
-}
-fromElements(
-    new RowData[]{
-        new RowData(99, "stephen"),
-        new RowData(100, "lebron")
-    }
-).addSink(
-    StarRocksSink.sink(
-        // the table structure
-        TableSchema.builder()
-            .field("score", DataTypes.INT())
-            .field("name", DataTypes.VARCHAR(20))
-            .build(),
-        // the sink options
-        StarRocksSinkOptions.builder()
-            .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
-            .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-            .withProperty("username", "xxx")
-            .withProperty("password", "xxx")
-            .withProperty("table-name", "xxx")
-            .withProperty("database-name", "xxx")
-            .withProperty("sink.properties.column_separator", "\\x01")
-            .withProperty("sink.properties.row_delimiter", "\\x02")
-            .build(),
-        // set the slots with streamRowData
-        (slots, streamRowData) -> {
-            slots[0] = streamRowData.score;
-            slots[1] = streamRowData.name;
+    // -------- 原始数据为 CSV 格式 --------
+    class RowData {
+        public int score;
+        public String name;
+        public RowData(int score, String name) {
+            ......
         }
+    }
+    fromElements(
+        new RowData[]{
+            new RowData(99, "stephen"),
+            new RowData(100, "lebron")
+        }
+    ).addSink(
+        StarRocksSink.sink(
+            // the table structure
+            TableSchema.builder()
+                .field("score", DataTypes.INT())
+                .field("name", DataTypes.VARCHAR(20))
+                .build(),
+            // the sink options
+            StarRocksSinkOptions.builder()
+                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
+                .withProperty("username", "xxx")
+                .withProperty("password", "xxx")
+                .withProperty("table-name", "xxx")
+                .withProperty("database-name", "xxx")
+                .withProperty("sink.properties.column_separator", "\\x01")
+                .withProperty("sink.properties.row_delimiter", "\\x02")
+                .build(),
+            // set the slots with streamRowData
+            (slots, streamRowData) -> {
+                slots[0] = streamRowData.score;
+                slots[1] = streamRowData.name;
+            }
+        )
     )
-);
-```
+    ;
+    ```
 
-或者：
+* 如您使用 Flink Table API，则需要参考如下命令。
 
-```scala
-// create a table with `structure` and `properties`
-// Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
-tEnv.executeSql(
-    "CREATE TABLE USER_RESULT(" +
-        "name VARCHAR," +
-        "score BIGINT" +
-    ") WITH ( " +
-        "'connector' = 'starrocks'," +
-        "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx'," +
-        "'load-url'='fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port'," +
-        "'database-name' = 'xxx'," +
-        "'table-name' = 'xxx'," +
-        "'username' = 'xxx'," +
-        "'password' = 'xxx'," +
-        "'sink.buffer-flush.max-rows' = '1000000'," +
-        "'sink.buffer-flush.max-bytes' = '300000000'," +
-        "'sink.buffer-flush.interval-ms' = '5000'," +
-        "'sink.properties.column_separator' = '\\x01'," +
-        "'sink.properties.row_delimiter' = '\\x02'," +
-        "'sink.max-retries' = '3'" +
-        "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
-    ")"
-);
-```
+    ```scala
+    // -------- 原始数据为 CSV 格式 --------
+    // create a table with `structure` and `properties`
+    // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
+    tEnv.executeSql(
+        "CREATE TABLE USER_RESULT(" +
+            "name VARCHAR," +
+            "score BIGINT" +
+        ") WITH ( " +
+            "'connector' = 'starrocks'," +
+            "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx'," +
+            "'load-url'='fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port'," +
+            "'database-name' = 'xxx'," +
+            "'table-name' = 'xxx'," +
+            "'username' = 'xxx'," +
+            "'password' = 'xxx'," +
+            "'sink.buffer-flush.max-rows' = '1000000'," +
+            "'sink.buffer-flush.max-bytes' = '300000000'," +
+            "'sink.buffer-flush.interval-ms' = '5000'," +
+            "'sink.properties.column_separator' = '\\x01'," +
+            "'sink.properties.row_delimiter' = '\\x02'," +
+            "'sink.max-retries' = '3'" +
+            "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+        ")"
+    );
+    ```
+
+## 参数说明
 
 其中Sink选项如下：
 
@@ -139,199 +155,55 @@ tEnv.executeSql(
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: **[0, 10]**. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: **[100, 60000]**. |
 | sink.properties.format|  NO | CSV | String | The file format of data loaded into starrocks. Valid values: **CSV** and **JSON**. Default value: **CSV**. |
-| sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**. |
+| sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**,details in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
+| sink.properties.ignore_json_size | NO |false| String | ignore the batching size (100MB) of json data |
 
-### 注意事项
+## Flink 与 StarRocks 的数据类型映射关系
 
-- 支持exactly-once的数据sink保证，需要外部系统的 two phase commit 机制。由于 StarRocks 无此机制，我们需要依赖flink的checkpoint-interval在每次checkpoint时保存批数据以及其label，在checkpoint完成后的第一次invoke中阻塞flush所有缓存在state当中的数据，以此达到精准一次。但如果StarRocks挂掉了，会导致用户的flink sink stream 算子长时间阻塞，并引起flink的监控报警或强制kill。
+| Flink type | StarRocks type |
+|  :-: | :-: |
+| BOOLEAN | BOOLEAN |
+| TINYINT | TINYINT |
+| SMALLINT | SMALLINT |
+| INTEGER | INTEGER |
+| BIGINT | BIGINT |
+| FLOAT | FLOAT |
+| DOUBLE | DOUBLE |
+| DECIMAL | DECIMAL |
+| BINARY | INT |
+| CHAR | STRING |
+| VARCHAR | STRING |
+| STRING | STRING |
+| DATE | DATE |
+| TIMESTAMP_WITHOUT_TIME_ZONE(N) | DATETIME |
+| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME |
+| ARRAY\<T\> | ARRAY\<T\> |
+| MAP\<KT,VT\> | JSON STRING |
+| ROW\<arg T...\> | JSON STRING |
 
-- 默认使用csv格式进行导入，用户可以通过指定`'sink.properties.row_delimiter' = '\\x02'`（此参数自 StarRocks-1.15.0 开始支持）与`'sink.properties.column_separator' = '\\x01'`来自定义行分隔符与列分隔符。
+>注意：当前不支持 Flink 的 BYTES、VARBINARY、TIME、INTERVAL、MULTISET、RAW，具体可参考 [Flink 数据类型](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/table/types/)。
 
-- 如果遇到导入停止的 情况，请尝试增加flink任务的内存。
+## 注意事项
 
-- 如果代码运行正常且能接收到数据，但是写入不成功时请确认当前机器能访问BE的http_port端口，这里指能ping通集群show backends显示的ip:port。举个例子：如果一台机器有外网和内网ip，且FE/BE的http_port均可通过外网ip:port访问，集群里绑定的ip为内网ip，任务里loadurl写的FE外网ip:http_port,FE会将写入任务转发给BE内网ip:port,这时如果Client机器ping不通BE的内网ip就会写入失败。
+* 支持exactly-once的数据sink保证，需要外部系统的 two phase commit 机制。由于 StarRocks 无此机制，我们需要依赖flink的checkpoint-interval在每次checkpoint时保存批数据以及其label，在checkpoint完成后的第一次invoke中阻塞flush所有缓存在state当中的数据，以此达到精准一次。但如果StarRocks挂掉了，会导致用户的flink sink stream 算子长时间阻塞，并引起flink的监控报警或强制kill。
 
-## 使用 Flink-connector 写入实现 MySQL 数据同步
+* 默认使用csv格式进行导入，用户可以通过指定`'sink.properties.row_delimiter' = '\\x02'`（此参数自 StarRocks-1.15.0 开始支持）与`'sink.properties.column_separator' = '\\x01'`来自定义行分隔符与列分隔符。
 
-### 基本原理
+* 如果遇到导入停止的 情况，请尝试增加flink任务的内存。
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现MySQL数据的秒级同步。
+* 如果代码运行正常且能接收到数据，但是写入不成功时请确认当前机器能访问BE的http_port端口，这里指能ping通集群show backends显示的ip:port。举个例子：如果一台机器有外网和内网ip，且FE/BE的http_port均可通过外网ip:port访问，集群里绑定的ip为内网ip，任务里loadurl写的FE外网ip:http_port,FE会将写入任务转发给BE内网ip:port,这时如果Client机器ping不通BE的内网ip就会写入失败。
 
-![MySQL同步](../assets/4.9.2.png)
+## 导入数据可观测指标
 
-如图所示，Smt可以根据MySQL和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。  
-通过Flink-cdc-connector消费MySQL的binlog，然后通过Flink-connector-starrocks写入StarRocks。
+| Name | Type | Description |
+|  :-: | :-:  | :-:  |
+| totalFlushBytes | counter | successfully flushed bytes. |
+| totalFlushRows | counter | successfully flushed rows. |
+| totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed. |
+| totalFlushFailedTimes | counter | number of times that the flushing been failed. |
 
-### 使用说明
+flink-connector-starrocks 导入底层调用的 Stream Load实现，可以在 flink 日志中查看导入状态
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html), 推荐使用1.13，最低支持版本1.11。
-2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的Flink-MySQL-CDC。
-3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)，请注意1.13版本和1.11/1.12版本使用不同的connector.
-4. 复制 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
-5. 下载 [smt.tar.gz](https://www.starrocks.com/en-US/download/community)
-6. 解压并修改配置文件
-  `Db` 需要修改成MySQL的连接信息。  
-  `be_num` 需要配置成StarRocks集群的节点数（这个能帮助更合理的设置bucket数量）。  
-  `[table-rule.1]` 是匹配规则，可以根据正则表达式匹配数据库和表名生成建表的SQL，也可以配置多个规则。  
-  `flink.starrocks.*` 是StarRocks的集群配置信息，参考Flink.  
-  
-    ```bash
-    [db]
-    host = 192.168.1.1
-    port = 3306
-    user = root
-    password =  
+* 日志中如果有 `http://$fe:${http_port}/api/$db/$tbl/_stream_load` 生成，表示成功触发了 Stream Load 任务，任务结果也会打印在 flink 日志中，返回值可参考 [Stream Load 任务状态](../loading/StreamLoad#创建导入任务)。
 
-    [other]
-    # number of backends in StarRocks
-    be_num = 3
-    # `decimal_v3` is supported since StarRocks-1.18.1
-    use_decimal_v3 = false
-    # file to save the converted DDL SQL
-    output_dir = ./result
-
-
-    [table-rule.1]
-    # pattern to match databases for setting properties
-    database = ^console_19321.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=15000
-    ```
-
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下。
-
-    ```bash
-    $./starrocks-migrate-tool
-    $ls result
-    flink-create.1.sql    smt.tar.gz              starrocks-create.all.sql
-    flink-create.all.sql  starrocks-create.1.sql
-    ```
-
-8. 生成StarRocks的表结构。
-
-    ```bash
-    Mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.1.sql
-    ```
-
-9. 生成Flink table并开始同步。
-
-    ```bash
-    bin/sql-client.sh embedded < flink-create.1.sql
-    ```
-
-    命令执行以后同步任务会持续执行。
-    > 注意：记得打开MySQL binlog。
-
-10. 观察任务状况。
-  
-    ```bash
-    bin/flink list 
-    ```
-
-  如果任务执行报错可以通过flink log日志查看详细错误信息，可以通过修改flink conf中配置文件来调整系统配置中内存和slot的配置。
-
-### 注意事项
-
-1. 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置。
-
-    ```bash
-    [table-rule.1]
-    # pattern to match databases for setting properties
-    database = ^console_19321.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=15000
-
-    [table-rule.2]
-    # pattern to match databases for setting properties
-    database = ^database2.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    # 如果导入数据不方便选出合适的分隔符可以考虑使用Json格式，但是会有一定的性能损失,使用方法：用以下参数替换flink.starrocks.sink.properties.column_separator和flink.starrocks.sink.properties.row_delimiter参数
-    flink.starrocks.sink.properties.strip_outer_array=true
-    flink.starrocks.sink.properties.format=json
-    ~~~
-
-2. Flink.starrocks.sink 的参数可以参考[上文](##使用方式)，比如可以给不同的规则配置不同的导入频率等参数。
-
-3. 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
-
-    ```bash
-    [table-rule.3]
-    # pattern to match databases for setting properties
-    database = ^edu_db_[0-9]*$
-    # pattern to match tables for setting properties
-    table = ^course_[0-9]*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=5000
-    ```
-
-    这样会自动生成一个多对一的导入关系，在StarRocks默认生成的表名是 course__auto_shard，也可以自行在生成的配置文件中修改。
-
-4. 如果在sql-client中命令行执行建表和同步任务，需要做对'\'字符进行转义。
-
-    ```bash
-    'sink.properties.column_separator' = '\\x01'
-    'sink.properties.row_delimiter' = '\\x02'  
-    ```
-
-5. 如何开启MySQL binlog。
-  修改/etc/my.cnf
-  
-    ```bash
-    #开启binlog日志
-    log-bin=/var/lib/mysql/mysql-bin
-
-    #log_bin=ON
-    ##binlog日志的基本文件名
-    #log_bin_basename=/var/lib/mysql/mysql-bin
-    ##binlog文件的索引文件，管理所有binlog文件
-    #log_bin_index=/var/lib/mysql/mysql-bin.index
-    #配置serverid
-    server-id=1
-    binlog_format = row
-    ```
-  
-  重启mysqld，然后可以通过 SHOW VARIABLES LIKE 'log_bin'; 确认是否已经打开。
+* 日志中如果没有上述信息，请在论坛提问 [StarRocks 论坛](https://forum.starrocks.com/)，我们会及时跟进。
