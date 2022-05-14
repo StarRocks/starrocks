@@ -452,6 +452,7 @@ public class CreateTableAnalyzer {
             }
 
             keysDesc.analyze(columnDefs);
+            keysDesc.checkColumnDefs(columnDefs);
             for (int i = 0; i < keysDesc.keysColumnSize(); ++i) {
                 columnDefs.get(i).setIsKey(true);
             }
@@ -465,6 +466,7 @@ public class CreateTableAnalyzer {
                     columnDefs.get(i).setAggregateType(type);
                 }
             }
+            statement.setKeysDesc(keysDesc);
         } else {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
@@ -564,6 +566,8 @@ public class CreateTableAnalyzer {
                 }
             }
             distributionDesc.analyze(columnSet);
+            statement.setDistributionDesc(distributionDesc);
+            statement.setProperties(properties);
         } else if (engineName.equalsIgnoreCase("elasticsearch")) {
             EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
         } else {

@@ -201,13 +201,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.engineDesc() == null ? "olap" : context.engineDesc().engineName().getText(),
                 context.charsetDesc() == null ? "utf8" : context.charsetDesc().getText(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
+                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 null,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
         return createTableStmt;
+    }
+
+    private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
+        final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        final List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+        List<PartitionDesc> partitionDescList = new ArrayList<>();
+        for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+            final PartitionDesc partitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+            partitionDescList.add(partitionDesc);
+        }
+        return new RangePartitionDesc(columnList, partitionDescList);
     }
 
     private List<AlterClause> getRollupDesc(StarRocksParser.RollupDescContext context) {
@@ -266,7 +277,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 aggregateType = AggregateType.valueOf(context.aggDesc().getText().toUpperCase());
             }
             Boolean isAllowNull = false;
-            if (context.NULL() != null && context.NOT() == null) {
+            if (context.NOT() == null && context.NULL() != null) {
                 isAllowNull = true;
             }
             ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
@@ -274,7 +285,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr expr = (Expr) visit(context.defaultDesc().primaryExpression());
                 defaultValueDef = new ColumnDef.DefaultValueDef(true, expr);
             }
-            String comment = context.comment() == null ? null :
+            String comment = context.comment() == null ? "" :
                     ((StringLiteral) visit(context.comment().string())).getStringValue();
             ColumnDef columnDef =
                     new ColumnDef(columnName, typeDef, false, aggregateType, isAllowNull, defaultValueDef, comment);
@@ -2188,6 +2199,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitPartitionKeyDesc(StarRocksParser.PartitionKeyDescContext context) {
         PartitionKeyDesc partitionKeyDesc;
         if (context.LESS() != null) {
+            if (context.MAXVALUE() != null) {
+                return PartitionKeyDesc.createMaxKeyDesc();
+            }
             List<PartitionValue> partitionValueList =
                     visit(context.partitionValueList().get(0).partitionValue(), PartitionValue.class);
             partitionKeyDesc = new PartitionKeyDesc(partitionValueList);

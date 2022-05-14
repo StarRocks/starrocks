@@ -32,6 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -54,7 +55,7 @@ public class CreateTableTest {
     }
 
     private static void createTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
@@ -66,13 +67,15 @@ public class CreateTableTest {
     @Test
     public void testNormal() throws DdlException {
 
-        ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.lp_tbl0\n" + "(k1 bigint, k2 varchar(16))\n" + "duplicate key(k1)\n"
-                        + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
-                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "mismatched input 'list' expecting 'RANGE'",
+                () -> createTable(
+                        "create table test.lp_tbl0\n" + "(k1 bigint, k2 varchar(16))\n" + "duplicate key(k1)\n"
+                                + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
+                                + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" + "duplicate key(k1)\n"
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "mismatched input 'list' expecting 'RANGE'",
+                () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" +
+                        "duplicate key(k1)\n"
                         + "partition by list(k2,dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
@@ -134,7 +137,7 @@ public class CreateTableTest {
                 () -> createTable("create table test.atbl1\n" + "(k1 int, k2 float)\n" + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Invalid partition column 'k3': invalid data type FLOAT",
                 () -> createTable("create table test.atbl3\n" + "(k1 int, k2 int, k3 float)\n" + "duplicate key(k1)\n"
                         + "partition by range(k3)\n" + "(partition p1 values less than(\"10\"))\n"
@@ -200,7 +203,7 @@ public class CreateTableTest {
                         + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Invalid data type of key column 'k2': 'JSON'",
                 () -> createTable("create table test.json_tbl0\n"
                         + "(k1 int, k2 json)\n"
@@ -222,13 +225,13 @@ public class CreateTableTest {
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "JSON type could only be used in DUPLICATE KEY table",
                 () -> createTable("create table test.json_tbl0\n" +
                         "(k1 int(40), j json, j1 json, j2 json)\n" +
                         "unique key(k1)\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "JSON type could only be used in DUPLICATE KEY table",
                 () -> createTable("create table test.json_tbl0\n" +
                         "(k1 int(40), j json, j1 json, j2 json)\n" +
@@ -374,7 +377,7 @@ public class CreateTableTest {
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
 }

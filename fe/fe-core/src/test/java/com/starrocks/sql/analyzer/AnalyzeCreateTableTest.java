@@ -57,7 +57,8 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getConnectContext().setDatabase(null);
         String sql =
                 "create table table1 (col1 int, col2 varchar(10)) engine=olap duplicate key(col1, col2) distributed by hash(col1) buckets 10";
-        analyzeFail(sql);
+        analyzeFail(sql, "No database selected");
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
     }
 
     @Test

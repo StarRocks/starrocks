@@ -162,7 +162,8 @@ public class ScalarType extends Type implements Cloneable {
     private static ScalarType createIntType(String typeName) {
         final String type = typeName.split("\\(")[0];
         final PrimitiveType primitiveType = PrimitiveType.valueOf(type.toUpperCase());
-        return new ScalarType(primitiveType);
+        final ScalarType scalarType = new ScalarType(primitiveType);
+        return scalarType;
     }
 
     public static ScalarType createCharType(int len) {

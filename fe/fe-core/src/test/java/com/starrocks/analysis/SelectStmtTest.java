@@ -392,7 +392,7 @@ public class SelectStmtTest {
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
                         "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:BOOLEAN, " +
-                        "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+                        "has_nullable_child:false, is_nullable:false, is_monotonic:false)";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }

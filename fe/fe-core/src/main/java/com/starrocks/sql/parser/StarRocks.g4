@@ -706,7 +706,7 @@ explainDesc
     ;
 
 partitionDesc
-    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     ;
 
 rangePartitionDesc
