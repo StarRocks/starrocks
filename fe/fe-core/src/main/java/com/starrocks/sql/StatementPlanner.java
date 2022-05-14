@@ -1,7 +1,31 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;

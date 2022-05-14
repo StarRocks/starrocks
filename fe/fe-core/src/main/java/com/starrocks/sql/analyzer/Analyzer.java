@@ -1,7 +1,23 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AlterSystemStmt;
+import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.BaseViewStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AnalyzeStmt;
