@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-#include "exec/pipeline/morsel.h"
+#include "exec/pipeline/scan/morsel.h"
 
 namespace starrocks {
 namespace pipeline {
