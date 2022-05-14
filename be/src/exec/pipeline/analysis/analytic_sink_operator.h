@@ -27,10 +27,13 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    Status _process_by_partition_if_necessary();
+    Status _process_by_partition_if_necessary_for_other();
+    Status _process_by_partition_if_necessary_for_rows_between_unbounded_preceding_and_following();
+    Status (AnalyticSinkOperator::*_process_by_partition_if_necessary)() = nullptr;
+
     void _process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition);
     void _process_by_partition_for_unbounded_preceding_range_frame(size_t chunk_size, bool is_new_partition);
-    void _process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size, bool is_new_partition);
+    void _process_by_partition_for_rows_between_unbounded_preceding_and_current_row(size_t chunk_size);
     void _process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition);
     void (AnalyticSinkOperator::*_process_by_partition)(size_t chunk_size, bool is_new_partition) = nullptr;
 
