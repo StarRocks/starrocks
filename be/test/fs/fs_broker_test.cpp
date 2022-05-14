@@ -373,9 +373,6 @@ TEST_F(EnvBrokerTest, test_write_exist_file) {
     ASSERT_OK(_fs_mem->create_file(path));
     ASSERT_OK(_fs_mem->append_file(path, "old content"));
 
-    std::unique_ptr<WritableFile> f;
-    ASSERT_TRUE(_fs.new_writable_file(path).status().is_not_supported());
-
     auto opts = WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSERT_TRUE(_fs.new_writable_file(opts, path).status().is_not_supported());
 

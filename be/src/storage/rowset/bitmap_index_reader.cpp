@@ -28,15 +28,15 @@
 
 namespace starrocks {
 
-Status BitmapIndexReader::load(fs::BlockManager* block_mgr, const std::string& file_name,
-                               const BitmapIndexPB* bitmap_index_meta, bool use_page_cache, bool kept_in_memory) {
+Status BitmapIndexReader::load(FileSystem* fs, const std::string& file_name, const BitmapIndexPB* bitmap_index_meta,
+                               bool use_page_cache, bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = bitmap_index_meta->dict_column();
     const IndexedColumnMetaPB& bitmap_meta = bitmap_index_meta->bitmap_column();
     _has_null = bitmap_index_meta->has_null();
 
-    _dict_column_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, dict_meta);
-    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, bitmap_meta);
+    _dict_column_reader = std::make_unique<IndexedColumnReader>(fs, file_name, dict_meta);
+    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, file_name, bitmap_meta);
     RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
     RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();

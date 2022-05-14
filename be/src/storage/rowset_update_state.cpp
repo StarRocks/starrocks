@@ -60,11 +60,11 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
-    ASSIGN_OR_RETURN(auto block_manager, fs::fs_util::block_manager(rowset->rowset_path()));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     // always one file for now.
     for (auto i = 0; i < rowset->num_delete_files(); i++) {
         auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
-        ASSIGN_OR_RETURN(auto read_file, block_manager->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
         ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint8_t> read_buffer(file_size);
         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));

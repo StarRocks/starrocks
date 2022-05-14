@@ -21,6 +21,7 @@
 
 #include "storage/rowset/indexed_column_reader.h"
 
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/key_coder.h"
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
@@ -42,7 +43,7 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     RETURN_IF_ERROR(get_block_compression_codec(_meta.compression(), &_compress_codec));
     _validx_key_coder = get_key_coder(_type_info->type());
 
-    ASSIGN_OR_RETURN(auto read_file, _block_mgr->new_random_access_file(_file_name));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_file_name));
     // read and parse ordinal index page when exists
     if (_meta.has_ordinal_index_meta()) {
         if (_meta.ordinal_index_meta().is_root_data_page()) {
@@ -93,7 +94,7 @@ Status IndexedColumnReader::read_page(RandomAccessFile* read_file, const PagePoi
 }
 
 Status IndexedColumnReader::new_iterator(std::unique_ptr<IndexedColumnIterator>* iter) {
-    ASSIGN_OR_RETURN(auto file, _block_mgr->new_random_access_file(_file_name));
+    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(_file_name));
     iter->reset(new IndexedColumnIterator(this, std::move(file)));
     return Status::OK();
 }

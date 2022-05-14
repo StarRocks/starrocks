@@ -38,7 +38,6 @@
 #include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
@@ -88,9 +87,8 @@ protected:
 
     void TearDown() override {}
 
-    std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<fs::FileBlockManager>& block_mgr,
-                                                  const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), block_mgr, fname, 1, _dummy_segment_schema.get(),
+    std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
+        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get(),
                                          _tablet_meta_mem_tracker.get());
     }
 
@@ -105,18 +103,14 @@ protected:
         ColumnMetaPB meta;
 
         auto fs = std::make_shared<MemoryFileSystem>();
-        auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
                                                       version, adaptive, null_encoding, null_ratio);
-        auto segment = create_dummy_segment(block_mgr, fname);
+        auto segment = create_dummy_segment(fs, fname);
         // write data
         {
-            std::unique_ptr<fs::WritableBlock> wblock;
-            fs::CreateBlockOptions opts({fname});
-            Status st = block_mgr->create_block(opts, &wblock);
-            ASSERT_TRUE(st.ok()) << st.to_string();
+            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
 
             ColumnWriterOptions writer_opts;
             writer_opts.page_format = version;
@@ -142,9 +136,8 @@ protected:
                 column = create_char_key(1, true, 128);
             }
             std::unique_ptr<ColumnWriter> writer;
-            ColumnWriter::create(writer_opts, &column, wblock.get(), &writer);
-            st = writer->init();
-            ASSERT_TRUE(st.ok()) << st.to_string();
+            ColumnWriter::create(writer_opts, &column, wfile.get(), &writer);
+            ASSERT_OK(writer->init());
 
             ASSERT_TRUE(writer->append(src).ok());
 
@@ -154,8 +147,8 @@ protected:
             ASSERT_TRUE(writer->write_zone_map().ok());
 
             // close the file
-            ASSERT_TRUE(wblock->close().ok());
-            std::cout << "version=" << version << ", bytes append: " << wblock->bytes_appended() << "\n";
+            ASSERT_TRUE(wfile->close().ok());
+            std::cout << "version=" << version << ", bytes append: " << wfile->size() << "\n";
         }
         // read and check
         {
@@ -171,7 +164,7 @@ protected:
             auto st = reader->new_iterator(&iter);
             ASSERT_TRUE(st.ok());
             std::unique_ptr<ColumnIterator> guard(iter);
-            ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(fname));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ASSERT_TRUE(st.ok());
             ColumnIteratorOptions iter_opts;
@@ -338,7 +331,6 @@ protected:
     void test_int_array(std::string null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
         auto fs = std::make_shared<MemoryFileSystem>();
-        auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         TabletColumn array_column = create_array(0, true, sizeof(Collection));
@@ -365,13 +357,10 @@ protected:
 
         // delete test file.
         const std::string fname = TEST_DIR + "/test_array_int.data";
-        auto segment = create_dummy_segment(block_mgr, fname);
+        auto segment = create_dummy_segment(fs, fname);
         // write data
         {
-            std::unique_ptr<fs::WritableBlock> wblock;
-            fs::CreateBlockOptions opts({fname});
-            Status st = block_mgr->create_block(opts, &wblock);
-            ASSERT_TRUE(st.ok()) << st.get_error_msg();
+            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
 
             ColumnWriterOptions writer_opts;
             writer_opts.page_format = version;
@@ -396,9 +385,8 @@ protected:
             element_meta->set_is_nullable(false);
 
             std::unique_ptr<ColumnWriter> writer;
-            ColumnWriter::create(writer_opts, &array_column, wblock.get(), &writer);
-            st = writer->init();
-            ASSERT_TRUE(st.ok()) << st.to_string();
+            ColumnWriter::create(writer_opts, &array_column, wfile.get(), &writer);
+            ASSERT_OK(writer->init());
 
             ASSERT_TRUE(writer->append(*src_column).ok());
 
@@ -407,7 +395,7 @@ protected:
             ASSERT_TRUE(writer->write_ordinal_index().ok());
 
             // close the file
-            ASSERT_TRUE(wblock->close().ok());
+            ASSERT_TRUE(wfile->close().ok());
         }
 
         // read and check
@@ -419,7 +407,7 @@ protected:
             ColumnIterator* iter = nullptr;
             ASSERT_TRUE(reader->new_iterator(&iter).ok());
             std::unique_ptr<ColumnIterator> guard(iter);
-            ASSIGN_OR_ABORT(auto read_file, block_mgr->new_random_access_file(fname));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
             OlapReaderStatistics stats;
@@ -690,17 +678,13 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
 
     ColumnMetaPB meta;
     auto fs = std::make_shared<MemoryFileSystem>();
-    auto block_mgr = std::make_shared<fs::FileBlockManager>(fs, fs::BlockManagerOptions());
     ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
-    auto segment = create_dummy_segment(block_mgr, fname);
+    auto segment = create_dummy_segment(fs, fname);
 
     // write data
     {
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions opts({fname});
-        Status st = block_mgr->create_block(opts, &wblock);
-        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
 
         ColumnWriterOptions writer_opts;
         writer_opts.page_format = 2;
@@ -717,9 +701,8 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
 
         TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, OLAP_FIELD_TYPE_INT);
         std::unique_ptr<ColumnWriter> writer;
-        ColumnWriter::create(writer_opts, &column, wblock.get(), &writer);
-        st = writer->init();
-        ASSERT_TRUE(st.ok()) << st.to_string();
+        ColumnWriter::create(writer_opts, &column, wfile.get(), &writer);
+        ASSERT_OK(writer->init());
 
         ASSERT_TRUE(writer->append(*col).ok());
 
@@ -729,7 +712,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         ASSERT_TRUE(writer->write_zone_map().ok());
 
         // close the file
-        ASSERT_TRUE(wblock->close().ok());
+        ASSERT_TRUE(wfile->close().ok());
     }
 
     // read and check

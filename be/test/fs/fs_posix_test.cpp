@@ -43,7 +43,8 @@ TEST_F(PosixFileSystemTest, random_access) {
     WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
     auto fs = FileSystem::Default();
-    wfile = *fs->new_writable_file(fname);
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    wfile = *fs->new_writable_file(opts, fname);
     auto st = wfile->pre_allocate(1024);
     ASSERT_TRUE(st.ok());
     // wirte data

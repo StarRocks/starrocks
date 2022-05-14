@@ -206,12 +206,12 @@ Status FileUtils::split_pathes(const char* path, std::vector<std::string>* path_
 }
 
 Status FileUtils::copy_file(const std::string& src_path, const std::string& dst_path) {
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_path));
-    ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(dst_path));
+    ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(opts, dst_path));
     RETURN_IF_ERROR(copy(src_file.get(), dst_file.get()));
-    RETURN_IF_ERROR(dst_file->sync());
     RETURN_IF_ERROR(dst_file->close());
     return Status::OK();
 }

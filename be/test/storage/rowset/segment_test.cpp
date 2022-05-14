@@ -34,7 +34,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -65,7 +64,6 @@ class SegmentReaderWriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
         _fs = std::make_shared<MemoryFileSystem>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
@@ -94,10 +92,8 @@ protected:
         // must use unique filename for each segment, otherwise page cache kicks in and produces
         // the wrong answer (it use (filename,offset) as cache key)
         std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions block_opts({filename});
-        ASSERT_OK(_block_mgr->create_block(block_opts, &wblock));
-        SegmentWriter writer(std::move(wblock), 0, &build_schema, opts);
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+        SegmentWriter writer(std::move(wfile), 0, &build_schema, opts);
         ASSERT_OK(writer.init());
 
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(build_schema);
@@ -114,14 +110,13 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
+        *res = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
     const std::string kSegmentDir = "/segment_test";
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
 };
@@ -146,10 +141,8 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     opts.num_rows_per_block = num_rows_per_block;
 
     std::string fname = dname + "/int_case";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({fname});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
-    SegmentWriter writer(std::move(wblock), 0, tablet_schema.get(), opts);
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema.get(), opts);
     ASSERT_OK(writer.init());
 
     // 0, 1, 2, 3
@@ -205,11 +198,9 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     opts.num_rows_per_block = 10;
 
     std::string file_name = kSegmentDir + "/horizontal_write_case";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &tablet_schema, opts);
     ASSERT_OK(writer.init());
 
     int32_t chunk_size = config::vector_chunk_size;
@@ -236,11 +227,11 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
     auto res = segment->new_iterator(schema, seg_options);
@@ -274,11 +265,9 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     opts.num_rows_per_block = 10;
 
     std::string file_name = kSegmentDir + "/vertical_write_case";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
@@ -348,11 +337,11 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
@@ -402,11 +391,9 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     opts.num_rows_per_block = 10;
 
     std::string file_name = kSegmentDir + "/read_multiple_types_column";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
@@ -455,11 +442,11 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);

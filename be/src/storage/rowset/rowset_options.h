@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "runtime/global_dicts.h"
-#include "storage/fs/fs_util.h"
 #include "storage/olap_common.h"
 #include "storage/seek_range.h"
 
