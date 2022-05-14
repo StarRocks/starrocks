@@ -199,7 +199,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             user = context.SINGLE_QUOTED_TEXT(0).getText();
             host = context.SINGLE_QUOTED_TEXT(1).getText();
-            return new GrantStmt(new UserIdentity(user, host), role, new TablePattern(db, tbl);, accessPrivileges);
+            return new GrantStmt(new UserIdentity(user, host), role, new TablePattern(db, tbl), accessPrivileges);
         }
 
         String resource = context.SINGLE_QUOTED_TEXT(0).getText();
