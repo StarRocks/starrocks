@@ -618,7 +618,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFetchResourceResult fetchResource() throws TException {
-        return masterImpl.fetchResource();
+        throw new TException("not supported");
     }
 
     @Override

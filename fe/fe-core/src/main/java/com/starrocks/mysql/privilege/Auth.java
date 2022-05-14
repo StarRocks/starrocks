@@ -55,7 +55,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TFetchResourceResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1506,15 +1505,6 @@ public class Auth implements Writable {
             createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
-        }
-    }
-
-    public TFetchResourceResult toResourceThrift() {
-        readLock();
-        try {
-            return propertyMgr.toResourceThrift();
-        } finally {
-            readUnlock();
         }
     }
 

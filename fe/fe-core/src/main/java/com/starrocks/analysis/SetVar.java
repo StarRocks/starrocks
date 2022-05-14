@@ -29,7 +29,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
@@ -124,13 +123,6 @@ public class SetVar {
         }
 
         result = (LiteralExpr) literalExpr;
-
-        // Need to check if group is valid
-        if (variable.equalsIgnoreCase(SessionVariable.RESOURCE_VARIABLE)) {
-            if (!UserResource.isValidGroup(result.getStringValue())) {
-                throw new AnalysisException("Invalid resource group, now we support {low, normal, high}.");
-            }
-        }
 
         if (variable.equalsIgnoreCase(GlobalVariable.DEFAULT_ROWSET_TYPE)) {
             if (result != null && !HeartbeatFlags.isValidRowsetType(result.getStringValue())) {

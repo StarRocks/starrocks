@@ -52,7 +52,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
-    public static final String RESOURCE_VARIABLE = "resource_group";
+    public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
@@ -240,8 +240,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SQL_MODE)
     private long sqlMode = 32L;
 
-    @VariableMgr.VarAttr(name = RESOURCE_VARIABLE)
-    private String resourceGroup = "normal";
+    @Deprecated
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP)
+    private String deprecatedResourceGroup = "normal";
 
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
@@ -624,11 +625,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public String getResourceGroup() {
-        return resourceGroup;
+        return deprecatedResourceGroup;
     }
 
     public void setResourceGroup(String resourceGroup) {
-        this.resourceGroup = resourceGroup;
+        this.deprecatedResourceGroup = resourceGroup;
     }
 
     public boolean isDisableColocateJoin() {
@@ -1074,7 +1075,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             charsetClient = Text.readString(in);
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
-            resourceGroup = Text.readString(in);
+            deprecatedResourceGroup = Text.readString(in);
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {
