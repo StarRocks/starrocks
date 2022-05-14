@@ -106,12 +106,6 @@ public:
         return _exec_status;
     }
 
-    void set_group(const TResourceInfo& info) {
-        _set_rsc_info = true;
-        _user = info.user;
-        _group = info.group;
-    }
-
     bool is_timeout(const DateTimeValue& now) const {
         if (_timeout_second <= 0) {
             return false;
@@ -146,10 +140,6 @@ private:
     std::mutex _status_lock;
     Status _exec_status;
 
-    bool _set_rsc_info;
-    std::string _user;
-    std::string _group;
-
     int _timeout_second;
 };
 
@@ -162,7 +152,6 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _coord_addr(coord_addr),
           _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
                                               std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-          _set_rsc_info(false),
           _timeout_second(-1) {
     _start_time = DateTimeValue::local_time();
 }
@@ -179,10 +168,6 @@ Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
 
     if (params.__isset.query_options) {
         _timeout_second = params.query_options.query_timeout;
-    }
-
-    if (params.__isset.resource_info) {
-        set_group(params.resource_info);
     }
 
     return _executor.prepare(params);

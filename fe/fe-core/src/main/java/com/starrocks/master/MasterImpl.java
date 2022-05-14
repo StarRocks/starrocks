@@ -97,7 +97,6 @@ import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TDataProperty;
 import com.starrocks.thrift.TDistributionDesc;
-import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -906,10 +905,6 @@ public class MasterImpl {
 
     public TMasterResult report(TReportRequest request) throws TException {
         return reportHandler.handleReport(request);
-    }
-
-    public TFetchResourceResult fetchResource() {
-        return GlobalStateMgr.getCurrentState().getAuth().toResourceThrift();
     }
 
     private void finishAlterTask(AgentTask task) {
