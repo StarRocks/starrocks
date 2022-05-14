@@ -6,13 +6,13 @@
 
 namespace starrocks::vectorized {
 
-class VectorizedCloneExpr final : public Expr {
+class CloneExpr final : public Expr {
 public:
-    VectorizedCloneExpr(const TExprNode& node) : Expr(node){};
+    CloneExpr(const TExprNode& node) : Expr(node){};
 
-    ~VectorizedCloneExpr() override = default;
+    ~CloneExpr() override = default;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCloneExpr(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CloneExpr(*this)); }
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = get_child(0)->evaluate(context, ptr);

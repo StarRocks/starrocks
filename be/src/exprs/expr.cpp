@@ -329,7 +329,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:
-        *expr = pool->add(new vectorized::VectorizedCloneExpr(texpr_node));
+        *expr = pool->add(new vectorized::CloneExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
