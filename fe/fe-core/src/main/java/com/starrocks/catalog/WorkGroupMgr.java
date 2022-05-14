@@ -240,9 +240,9 @@ public class WorkGroupMgr implements Writable {
                     wg.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 }
 
-                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuCoreSecondLimit();
+                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuSecondLimit();
                 if (bigQueryCpuCoreSecondLimit != null) {
-                    wg.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
+                    wg.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 }
 
                 Integer concurrentLimit = changedProperties.getConcurrencyLimit();

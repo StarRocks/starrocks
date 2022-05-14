@@ -169,12 +169,12 @@ public class WorkGroupAnalyzer {
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_CORE_SECOND_LIMIT)) {
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
                 long bigQueryCpuCoreSecondLimit = Long.parseLong(value);
                 if (bigQueryCpuCoreSecondLimit < 0) {
-                    throw new SemanticException("big_query_cpu_core_second_limit should greater than 0 or equal to 0");
+                    throw new SemanticException("big_query_cpu_second_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
+                workgroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 continue;
             }
 

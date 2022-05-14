@@ -96,7 +96,7 @@ public class WorkGroupStmtTest {
             "    'concurrency_limit' = '10',\n" +
             "   'big_query_mem_limit'='1024',\n" +
             "   'big_query_scan_rows_limit'='1024',\n" +
-            "   'big_query_cpu_core_second_limit'='1024',\n" +
+            "   'big_query_cpu_second_limit'='1024',\n" +
             "    'type' = 'normal'\n" +
             ");";
     private String createRg5Sql = "create resource_group rg5\n" +
@@ -431,7 +431,7 @@ public class WorkGroupStmtTest {
                 "   'concurrency_limit'='23',\n" +
                 "   'big_query_mem_limit'='1024',\n" +
                 "   'big_query_scan_rows_limit'='1024',\n" +
-                "   'big_query_cpu_core_second_limit'='1024',\n" +
+                "   'big_query_cpu_second_limit'='1024',\n" +
                 "   'cpu_core_limit'='13'\n" +
                 ")";
         String[] sqls = new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql};
