@@ -1,24 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -232,5 +215,14 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
+        @Override
+        public Void visitGrantPrivilegeStmt(GrantStmt statement, ConnectContext context) {
+            if (statement.getPrivileges().size() == 0){
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NONEXISTING_GRANT, "GRANT");
+            }
+            return null;
+        }
+
     }
 }

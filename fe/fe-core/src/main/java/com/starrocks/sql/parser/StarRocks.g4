@@ -73,6 +73,7 @@ statement
     | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
+    | grantPrivilegeStatement                                                               #grantPrivilege
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -255,6 +256,18 @@ dropAnalyzeJobStatement
 
 showAnalyzeStatement
     : SHOW ANALYZE
+    ;
+
+items
+    : identifier (',' identifier)*
+    ;
+
+dbTabString
+    : IDENTIFIER | ASTERISK_SYMBOL
+    ;
+
+grantPrivilegeStatement
+    : GRANT items ON (( dbTabString (DOT dbTabString)?) | (RESOURCE SINGLE_QUOTED_TEXT)) TO SINGLE_QUOTED_TEXT AT SINGLE_QUOTED_TEXT (ROLE qualifiedName)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
