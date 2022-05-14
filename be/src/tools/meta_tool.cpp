@@ -36,6 +36,7 @@
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
 #include "storage/data_dir.h"
+#include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -43,10 +44,12 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/file_utils.h"
+#include "util/path_util.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -73,9 +76,10 @@ const std::string HEADER_PREFIX = "tabletmeta_";
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta");
+              "show_meta, check_table_meta_consistency");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
+DEFINE_int64(table_id, 0, "table id for table meta");
 DEFINE_string(rowset_id, "", "rowset_id");
 DEFINE_int32(schema_hash, 0, "schema_hash for tablet meta");
 DEFINE_string(json_meta_path, "", "absolute json meta file path");
@@ -104,6 +108,8 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
+    ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
+          "--table_id=tableid";
     return ss.str();
 }
 
@@ -438,6 +444,90 @@ void show_segment_footer(const std::string& file_name) {
     std::cout << json_footer << std::endl;
 }
 
+// This function will check the consistency of tablet meta and segment_footer
+// #issue 5415
+void check_meta_consistency(DataDir* data_dir) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>();
+    starrocks::GlobalTabletSchemaMap::Instance()->set_mem_tracker(mem_tracker.get());
+    std::vector<int64_t> tablet_ids;
+    int64_t table_id = FLAGS_table_id;
+    auto check_meta_func = [data_dir, &tablet_ids, table_id](int64_t tablet_id, int32_t schema_hash,
+                                                             const std::string& value) -> bool {
+        starrocks::TabletMetaSharedPtr tablet_meta(new TabletMeta());
+        // if deserialize failed, skip it
+        if (Status st = tablet_meta->deserialize(value); !st.ok()) {
+            return true;
+        }
+        // tablet is not belong to the table, skip it
+        if (tablet_meta->table_id() != table_id) {
+            return true;
+        }
+        std::string tablet_path = data_dir->path() + starrocks::DATA_PREFIX;
+        tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->shard_id()));
+        tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->tablet_id()));
+        tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->schema_hash()));
+
+        auto& tablet_schema = tablet_meta->tablet_schema();
+        const std::vector<starrocks::TabletColumn>& columns = tablet_schema.columns();
+
+        for (const auto& rs : tablet_meta->all_rs_metas()) {
+            for (int64_t seg_id = 0; seg_id < rs->num_segments(); ++seg_id) {
+                std::string seg_path =
+                        strings::Substitute("$0/$1_$2.dat", tablet_path, rs->rowset_id().to_string(), seg_id);
+                std::unique_ptr<RandomAccessFile> seg_file;
+                auto res = starrocks::Env::Default()->new_random_access_file(seg_path, &seg_file);
+                if (!res.ok()) {
+                    continue;
+                }
+                starrocks::SegmentFooterPB footer;
+                res = get_segment_footer(seg_file.get(), &footer);
+                if (!res.ok()) {
+                    continue;
+                }
+
+                // unique_id: ordinal: column_type
+                std::unordered_map<uint32_t, std::pair<uint32_t, int32_t>> columns_in_footer;
+                for (uint32_t ordinal = 0; ordinal < footer.columns().size(); ++ordinal) {
+                    const auto& column_pb = footer.columns(ordinal);
+                    columns_in_footer.emplace(column_pb.unique_id(), std::make_pair(ordinal, column_pb.type()));
+                }
+                for (uint32_t col_id = 0; col_id < columns.size(); ++col_id) {
+                    uint32_t unique_id = columns[col_id].unique_id();
+                    starrocks::FieldType type = columns[col_id].type();
+                    auto iter = columns_in_footer.find(unique_id);
+                    if (iter == columns_in_footer.end()) {
+                        continue;
+                    }
+
+                    // find a segment inconsistency, return directly
+                    if (iter->second.second != type) {
+                        tablet_ids.emplace_back(tablet_id);
+                        return true;
+                    }
+
+                    // if type is varchar, check length
+                    if (type == starrocks::FieldType::OLAP_FIELD_TYPE_VARCHAR) {
+                        const auto& column_pb = footer.columns(iter->second.first);
+                        if (columns[col_id].length() != column_pb.length()) {
+                            tablet_ids.emplace_back(tablet_id);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    };
+    Status load_tablet_status = TabletMetaManager::traverse_headers(data_dir->get_meta(), check_meta_func);
+    if (tablet_ids.size() > 0) {
+        std::cout << "inconsistency tablet:";
+    }
+    for (size_t i = 0; i < tablet_ids.size(); ++i) {
+        std::cout << "," << tablet_ids[i];
+    }
+    return;
+}
+
 int meta_tool_main(int argc, char** argv) {
     std::string usage = get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
@@ -462,15 +552,17 @@ int meta_tool_main(int argc, char** argv) {
         show_segment_footer(FLAGS_file);
     } else {
         // operations that need root path should be written here
-        std::set<std::string> valid_operations = {"get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
-                                                  "compact_meta", "get_meta_stats", "ls"};
+        std::set<std::string> valid_operations = {
+                "get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
+                "compact_meta", "get_meta_stats", "ls",          "check_table_meta_consistency"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
         }
 
         bool read_only = false;
-        if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls") {
+        if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
+            FLAGS_operation == "check_table_meta_consistency") {
             read_only = true;
         }
 
@@ -495,6 +587,8 @@ int meta_tool_main(int argc, char** argv) {
             get_meta_stats(data_dir.get());
         } else if (FLAGS_operation == "ls") {
             list_meta(data_dir.get());
+        } else if (FLAGS_operation == "check_table_meta_consistency") {
+            check_meta_consistency(data_dir.get());
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
             return -1;
