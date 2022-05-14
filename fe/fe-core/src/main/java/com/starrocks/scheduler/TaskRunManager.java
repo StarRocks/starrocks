@@ -6,7 +6,6 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.statistic.Constants;
 
 import java.util.Iterator;
 import java.util.List;
