@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -24,7 +25,6 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule JDBC_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_JDBC_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
-    public static final MergeLimitDirectRule JOIN = new MergeLimitDirectRule(OperatorType.LOGICAL_JOIN);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);
     public static final MergeLimitDirectRule VALUES = new MergeLimitDirectRule(OperatorType.LOGICAL_VALUES);
@@ -38,8 +38,15 @@ public class MergeLimitDirectRule extends TransformationRule {
     }
 
     @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        return limit.isLocal();
+    }
+
+    @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
+        Preconditions.checkState(!limit.hasOffset());
         LogicalOperator op = (LogicalOperator) input.getInputs().get(0).getOp();
         op.setLimit(limit.getLimit());
 

@@ -109,7 +109,7 @@ public class ExistentialApply2JoinRule extends TransformationRule {
     //                \
     //            Filter(UnCorrelation)
     private List<OptExpression> transformUnCorrelationExists(OptExpression input, LogicalApplyOperator apply) {
-        OptExpression limitExpression = new OptExpression(new LogicalLimitOperator(1));
+        OptExpression limitExpression = new OptExpression(LogicalLimitOperator.init(1));
         limitExpression.getInputs().add(input.getInputs().get(1));
 
         OptExpression joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null));

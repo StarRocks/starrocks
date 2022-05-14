@@ -55,7 +55,7 @@ public class JoinAssociativityRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        if (!joinOperator.getJoinHint().isEmpty() || input.inputAt(0).getOp().hasLimit() ||
+        if (!joinOperator.getJoinHint().isEmpty() ||
                 !((LogicalJoinOperator) input.inputAt(0).getOp()).getJoinHint().isEmpty()) {
             return false;
         }

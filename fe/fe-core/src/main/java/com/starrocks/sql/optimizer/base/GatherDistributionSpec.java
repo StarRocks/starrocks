@@ -27,6 +27,11 @@ public class GatherDistributionSpec extends DistributionSpec {
             return true;
         }
 
+        if (spec.type.equals(DistributionType.SHUFFLE) &&
+                ((HashDistributionSpec) spec).getHashDistributionDesc().isAggShuffle()) {
+            return true;
+        }
+
         return spec instanceof GatherDistributionSpec;
     }
 

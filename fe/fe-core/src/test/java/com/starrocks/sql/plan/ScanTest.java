@@ -89,10 +89,10 @@ public class ScanTest extends PlanTestBase {
     public void testInformationSchema() throws Exception {
         String sql = "select column_name from information_schema.columns limit 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+        assertContains(plan, "  RESULT SINK\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
-                "     limit: 1\n"));
+                "     limit: 1\n");;
     }
 
     @Test
@@ -337,16 +337,18 @@ public class ScanTest extends PlanTestBase {
         String sql = "select case when v1 then 2 else 2 end from (select v1, case when true then v1 else v1 end as c2"
                 + " from t0 limit 1) as x where c2 > 2 limit 2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Project\n"
-                + "  |  <slot 4> : 2\n"
-                + "  |  limit: 2\n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: 1: v1 > 2\n"
-                + "  |  limit: 2\n"
-                + "  |  \n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0"));
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 4> : 2\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  2:SELECT\n" +
+                "  |  predicates: 1: v1 > 2\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1");
     }
 
     @Test
