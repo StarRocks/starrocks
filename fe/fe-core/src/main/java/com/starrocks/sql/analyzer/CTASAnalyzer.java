@@ -125,14 +125,15 @@ public class CTASAnalyzer {
     }
 
     // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise use the longest varchar value.
+    // otherwise (include null type) use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
     private static Type transformType(Type srcType) {
         Type newType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.CHAR == srcType.getPrimitiveType()) {
+                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
                 int len = ScalarType.MAX_VARCHAR_LENGTH;
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
@@ -151,8 +152,6 @@ public class CTASAnalyzer {
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
-            } else if (PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                throw new SemanticException("Unsupported CTAS transform type: null");
             } else {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }
