@@ -24,9 +24,11 @@ package com.starrocks.mysql.privilege;
 import com.starrocks.common.io.Text;
 
 import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
 
+@Deprecated
+// Keep it for serialization compatibility
 // Resource belong to one user
 public class UserResource {
 
@@ -40,8 +42,15 @@ public class UserResource {
 
         int numGroup = in.readInt();
         for (int i = 0; i < numGroup; ++i) {
-            String name = Text.readString(in);
-            AtomicInteger value = new AtomicInteger(in.readInt());
+            Text.readString(in);
+            in.readInt();
         }
+    }
+
+    public static void write(DataOutput out) throws IOException {
+        // Num resources
+        out.write(0);
+        // Num groups
+        out.write(0);
     }
 }

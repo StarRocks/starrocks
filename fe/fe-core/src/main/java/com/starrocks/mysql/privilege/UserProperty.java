@@ -331,6 +331,8 @@ public class UserProperty implements Writable {
         Text.writeString(out, qualifiedUser);
         out.writeLong(maxConn);
 
+        UserResource.write(out);
+
         // load cluster
         if (defaultLoadCluster == null) {
             out.writeBoolean(false);
