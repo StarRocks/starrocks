@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -11,49 +10,48 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Sets.powerSet;
-import static java.util.stream.Collectors.toCollection;
 
 public class JoinReorderDP extends JoinOrder {
     public JoinReorderDP(OptimizerContext context) {
         super(context);
     }
 
-    private final Map<Set<OptExpression>, GroupInfo> bestPlanMemo = new HashMap<>();
+    private final Map<BitSet, GroupInfo> bestPlanMemo = new HashMap<>();
+    List<GroupInfo> groups = new ArrayList<>();
 
     @Override
     protected void enumerate() {
-        Set<OptExpression> joinKeys = new HashSet<>();
-        for (GroupInfo groupInfo : joinLevels.get(1).groups) {
-            joinKeys.add(groupInfo.bestExprInfo.expr);
-        }
-
-        getBestExpr(joinKeys, joinLevels.get(1).groups);
+        groups = joinLevels.get(1).groups;
+        BitSet joinKeys = new BitSet();
+        joinKeys.set(0, groups.size(), true);
+        getBestExpr(joinKeys);
     }
 
     @Override
     public List<OptExpression> getResult() {
-        Set<OptExpression> joinKeys = new HashSet<>();
-        for (GroupInfo groupInfo : joinLevels.get(1).groups) {
-            joinKeys.add(groupInfo.bestExprInfo.expr);
-        }
+        groups = joinLevels.get(1).groups;
+        BitSet joinKeys = new BitSet();
+        joinKeys.set(0, groups.size(), true);
 
-        GroupInfo g = getBestExpr(joinKeys, joinLevels.get(1).groups);
+        GroupInfo g = getBestExpr(joinKeys);
         return Lists.newArrayList(g.bestExprInfo.expr);
     }
 
-    private GroupInfo getBestExpr(Set<OptExpression> joinKeys, List<GroupInfo> groups) {
-        if (groups.size() == 1) {
-            return groups.get(0);
+    private GroupInfo getBestExpr(BitSet joinKeys) {
+        if (joinKeys.cardinality() == 1) {
+            int index = 0;
+            while (!joinKeys.get(index)) {
+                index++;
+            }
+
+            return groups.get(index);
         }
 
         GroupInfo bestPlan = bestPlanMemo.get(joinKeys);
@@ -61,29 +59,21 @@ public class JoinReorderDP extends JoinOrder {
             Ordering<ExpressionInfo> resultComparator = Ordering.from(Comparator.comparing(ExpressionInfo::getCost));
 
             List<ExpressionInfo> results = new ArrayList<>();
-            Set<Set<Integer>> partitions = generatePartitions(groups.size());
-            for (Set<Integer> partition : partitions) {
-                List<GroupInfo> sourceList = ImmutableList.copyOf(groups);
-                ArrayList<GroupInfo> leftSources = partition.stream()
-                        .map(sourceList::get)
-                        .collect(toCollection(ArrayList::new));
-                Set<OptExpression> leftJoinKeys =
-                        leftSources.stream().map(g -> g.bestExprInfo.expr).collect(Collectors.toSet());
-
-                ArrayList<GroupInfo> rightSources = groups.stream()
-                        .filter(g -> !leftSources.contains(g))
-                        .collect(toCollection(ArrayList::new));
-                Set<OptExpression> rightJoinKeys =
-                        rightSources.stream().map(g -> g.bestExprInfo.expr).collect(Collectors.toSet());
-
-                GroupInfo leftGroup = getBestExpr(leftJoinKeys, leftSources);
+            List<BitSet> partitions = generatePartitions(joinKeys);
+            for (BitSet partition : partitions) {
+                GroupInfo leftGroup = getBestExpr(partition);
                 if (!results.isEmpty() && leftGroup.bestExprInfo.cost > resultComparator.min(results).cost) {
                     continue;
                 }
-                GroupInfo rightGroup = getBestExpr(rightJoinKeys, rightSources);
+
+                BitSet otherPartition = (BitSet) joinKeys.clone();
+                otherPartition.andNot(partition);
+
+                GroupInfo rightGroup = getBestExpr(otherPartition);
                 if (!results.isEmpty() && rightGroup.bestExprInfo.cost > resultComparator.min(results).cost) {
                     continue;
                 }
+
                 ExpressionInfo joinExpr = buildJoinExpr(leftGroup, rightGroup);
 
                 joinExpr.expr.deriveLogicalPropertyItself();
@@ -107,12 +97,32 @@ public class JoinReorderDP extends JoinOrder {
         return bestPlan;
     }
 
-    private Set<Set<Integer>> generatePartitions(int totalNodes) {
-        checkArgument(totalNodes > 1, "totalNodes must be greater than 1");
-        Set<Integer> numbers = IntStream.range(0, totalNodes).boxed().collect(toImmutableSet());
-        return powerSet(numbers).stream()
+    private List<BitSet> generatePartitions(BitSet totalNodes) {
+        Set<Integer> numbers = IntStream.range(0, totalNodes.cardinality()).boxed().collect(toImmutableSet());
+        Set<Set<Integer>> sets = powerSet(numbers).stream()
                 .filter(subSet -> subSet.size() > 0)
                 .filter(subSet -> subSet.size() < numbers.size())
                 .collect(toImmutableSet());
+
+        List<Integer> l = bitSet2Array(totalNodes);
+        List<BitSet> partitions = new ArrayList<>();
+        for (Set<Integer> s : sets) {
+            BitSet b = new BitSet();
+            for (Integer i : s) {
+                b.set(l.get(i));
+            }
+            partitions.add(b);
+        }
+        return partitions;
+    }
+
+    List<Integer> bitSet2Array(BitSet bitSet) {
+        List<Integer> l = Lists.newArrayList();
+        for (int i = 0; i < bitSet.size(); ++i) {
+            if (bitSet.get(i)) {
+                l.add(i);
+            }
+        }
+        return l;
     }
 }
