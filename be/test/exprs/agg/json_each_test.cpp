@@ -20,8 +20,15 @@ public:
         RuntimeState* rt_state = nullptr;
         // input
         auto json_column = JsonColumn::create();
-        json_column->append(JsonValue::parse(input).value());
-        Columns input_columns{json_column};
+        if (input != "null" && input != "empty") {
+            json_column->append(JsonValue::parse(input).value());
+        } else {
+            json_column->append_nulls(1);
+        }
+        Columns input_columns;
+        if (input != "empty") {
+            input_columns.push_back(json_column);
+        }
         TableFunctionState* func_state;
         bool eos;
 
@@ -33,7 +40,11 @@ public:
 
         // check
         ASSERT_TRUE(eos);
-        ASSERT_EQ(2, offset_column->size());
+        if (input == "empty" || input == "null") {
+            ASSERT_EQ(1, offset_column->size());
+        } else {
+            ASSERT_EQ(2, offset_column->size());
+        }
         ASSERT_EQ(2, result_columns.size());
         ASSERT_EQ(expected.size(), result_columns[0]->size());
         auto result_key = ColumnHelper::cast_to<TYPE_VARCHAR>(result_columns[0]);
@@ -59,6 +70,24 @@ TEST_F(JsonEachTest, json_each_object) {
         {"k3", "[1,2,3]"},
         {"k4", "null"},
         {"k5", "{}"},
+    };
+    // clang-format on
+    test_impl(input, expect);
+}
+
+TEST_F(JsonEachTest, json_each_object_null) {
+    std::string input = R"(null)";
+    // clang-format off
+    std::vector<std::tuple<std::string, std::string>> expect = {
+    };
+    // clang-format on
+    test_impl(input, expect);
+}
+
+TEST_F(JsonEachTest, json_each_object_empty) {
+    std::string input = R"(empty)";
+    // clang-format off
+    std::vector<std::tuple<std::string, std::string>> expect = {
     };
     // clang-format on
     test_impl(input, expect);
