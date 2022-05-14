@@ -50,6 +50,7 @@ under the License.
         <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.0</hudi.version>
+        <awssdk.version>1.11.563</awssdk.version>
     </properties>
 
     <profiles>
@@ -704,6 +705,13 @@ under the License.
                 <groupId>org.apache.hudi</groupId>
                 <artifactId>hudi-hadoop-mr</artifactId>
                 <version>${hudi.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk -->
+            <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-java-sdk</artifactId>
+                <version>${awssdk.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
