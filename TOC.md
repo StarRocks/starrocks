@@ -297,7 +297,7 @@
   + [Build in Docker](/administration/Build_in_docker.md)
   + [Cluster Administration](/administration/Cluster_administration.md)
   + [Configuration](/administration/Configuration.md)
-  + [Scale Up and Down](/administration/Scale_up_down.md)
+  + [Scale In and Out](/administration/Scale_up_down.md)
   + [Backup and Restore](/administration/Backup_and_restore.md)
   + Data Recovery
     + [Data Recovery](/administration/Data_recovery.md)
