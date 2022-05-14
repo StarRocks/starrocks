@@ -4,10 +4,14 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.CreateCatalogLog;
@@ -16,7 +20,6 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,8 +30,16 @@ public class CatalogMgr {
     private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
     private final ConnectorMgr connectorMgr;
 
+    public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("Catalog").add("Type").add("Comment")
+            .build();
+
+    private final CatalogProcNode procNode = new CatalogProcNode();
+
     public CatalogMgr(ConnectorMgr connectorMgr) {
         this.connectorMgr = connectorMgr;
+        InternalCatalog internalCatalog = new InternalCatalog();
+        catalogs.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, internalCatalog);
     }
 
     public synchronized void createCatalog(CreateCatalogStmt stmt) throws DdlException {
@@ -78,22 +89,27 @@ public class CatalogMgr {
         dropCatalog(catalogName);
     }
 
-    public List<List<String>> showCatalogs() {
-        List<List<String>> rows = Lists.newArrayList();
-        for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-            List<String> catalog = Lists.newArrayList();
-            catalog.add(entry.getKey());
-            Catalog value = entry.getValue();
-            catalog.add(((ExternalCatalog) value).getType());
-            catalog.add(value.getComment());
-            rows.add(catalog);
-        }
-        rows.sort(new Comparator<List<String>>() {
-            @Override
-            public int compare(List<String> o1, List<String> o2) {
-                return o1.get(0).compareTo(o2.get(0));
+    public List<List<String>> getCatalogsInfo() {
+        return procNode.fetchResult().getRows();
+    }
+
+    public CatalogProcNode getProcNode() {
+        return procNode;
+    }
+
+    public class CatalogProcNode implements ProcNodeInterface {
+        @Override
+        public ProcResult fetchResult() {
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
+            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                Catalog catalog = entry.getValue();
+                if (catalog == null) {
+                    continue;
+                }
+                catalog.getProcNodeData(result);
             }
-        });
-        return rows;
+            return result;
+        }
     }
 }

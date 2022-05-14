@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.BaseProcResult;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -32,4 +33,11 @@ public abstract class Catalog implements Writable {
 
     public void readFields(DataInput in) throws IOException {
     }
+
+    /**
+     * Fill BaseProcResult with different properties in child resources
+     * CatalogMgr.CATALOG_PROC_NODE_TITLE_NAMES format:
+     * | Name | Type | Comment |
+     */
+    public abstract void getProcNodeData(BaseProcResult result);
 }

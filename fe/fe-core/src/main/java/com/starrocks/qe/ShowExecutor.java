@@ -137,7 +137,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -1554,13 +1553,15 @@ public class ShowExecutor {
 
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
-        List<List<String>> rows = new ArrayList<>();
-        rows.add(Arrays.asList("default", "default", "internal catalog"));
-        List<List<String>> externalCatalog = GlobalStateMgr.getCurrentState().getCatalogMgr().showCatalogs();
-        for (List<String> val : externalCatalog) {
-            rows.add(val);
-        }
-        resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rows);
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
+        rowSet.sort(new Comparator<List<String>>() {
+            @Override
+            public int compare(List<String> o1, List<String> o2) {
+                return o1.get(0).compareTo(o2.get(0));
+            }
+        });
+        // Only success
+        resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 
 }
