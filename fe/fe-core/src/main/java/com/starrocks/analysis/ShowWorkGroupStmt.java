@@ -5,7 +5,6 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.Relation;
 
 // Show WorkGroups
 // 1. Show WorkGroup specified by name
@@ -35,10 +34,6 @@ public class ShowWorkGroupStmt extends ShowStmt {
 
     public String getName() {
         return name;
-    }
-
-    public Relation analyze() {
-        return null;
     }
 
     @Override
