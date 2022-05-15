@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/phmap_bits.h
-
 #pragma once
 
 // ---------------------------------------------------------------------------
