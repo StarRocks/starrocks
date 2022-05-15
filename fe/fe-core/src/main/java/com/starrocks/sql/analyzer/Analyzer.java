@@ -88,7 +88,7 @@ public class Analyzer {
         public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, ConnectContext session) {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
-            CTASAnalyzer.transformCTASStmt((CreateTableAsSelectStmt) statement, session);
+            CTASAnalyzer.analyze(statement, session);
             return null;
         }
 
