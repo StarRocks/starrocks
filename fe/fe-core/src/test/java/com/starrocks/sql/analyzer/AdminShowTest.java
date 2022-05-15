@@ -32,6 +32,8 @@ public class AdminShowTest {
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM db1.tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2)\n" +
                 "WHERE STATUS = \"VERSION_ERROR\";");
+        analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITIONs (p1, p2)\n" +
+                "WHERE STATUS = \"VERSION_ERROR\";");
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM tbl1\n" +
                 "WHERE STATUS != \"OK\";");
 
