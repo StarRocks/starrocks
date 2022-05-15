@@ -276,9 +276,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (null != context.aggDesc()) {
                 aggregateType = AggregateType.valueOf(context.aggDesc().getText().toUpperCase());
             }
-            Boolean isAllowNull = false;
-            if (context.NOT() == null && context.NULL() != null) {
-                isAllowNull = true;
+            Boolean isAllowNull = true;
+            if (context.NOT() != null && context.NULL() != null) {
+                isAllowNull = false;
             }
             ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
             if (context.defaultDesc() != null) {

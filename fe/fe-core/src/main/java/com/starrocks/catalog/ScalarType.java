@@ -153,7 +153,7 @@ public class ScalarType extends Type implements Cloneable {
                 return ScalarType.createDecimalV3Type(primitive, precision, scale);
             }
         } else {
-            return createType(typeName);
+            return createType(typeName).clone();
         }
 
         throw new IllegalArgumentException("Unsupported type: " + typeName);
@@ -162,8 +162,7 @@ public class ScalarType extends Type implements Cloneable {
     private static ScalarType createIntType(String typeName) {
         final String type = typeName.split("\\(")[0];
         final PrimitiveType primitiveType = PrimitiveType.valueOf(type.toUpperCase());
-        final ScalarType scalarType = new ScalarType(primitiveType);
-        return scalarType;
+        return new ScalarType(primitiveType);
     }
 
     public static ScalarType createCharType(int len) {
