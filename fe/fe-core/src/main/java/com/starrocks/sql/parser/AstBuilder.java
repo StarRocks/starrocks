@@ -100,7 +100,7 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.analysis.UserIdentity
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.AccessPrivilege;
