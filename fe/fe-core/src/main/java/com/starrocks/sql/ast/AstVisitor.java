@@ -60,8 +60,8 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
 
 public abstract class AstVisitor<R, C> {
