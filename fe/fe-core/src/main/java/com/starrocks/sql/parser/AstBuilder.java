@@ -308,6 +308,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     }
 
+    private QualifiedName getItems(StarRocksParser.ItemsContext context) {
+        List<String> parts = visit(context.identifier(), Identifier.class).stream()
+                .map(Identifier::getValue)
+                .collect(Collectors.toList());
+
+        return QualifiedName.of(parts);
+    }
+
     public List<AccessPrivilege> convertToPrivilege(List<String> privilegesNames) {
         List<AccessPrivilege> accessPrivileges = new ArrayList<>();
         for (String name : privilegesNames) {
