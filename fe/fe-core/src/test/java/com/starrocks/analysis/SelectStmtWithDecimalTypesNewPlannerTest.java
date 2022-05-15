@@ -118,10 +118,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString =
                 "TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR," +
                         " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), opcode:MULTIPLY, num_children:2, " +
-                        "output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true), " +
+                        "output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true), " +
                         "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:" +
                         "DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:5, tuple_id:0), " +
-                        "output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true), " +
+                        "output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true), " +
                         "TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
                         "(type:DECIMAL128, precision:3, scale:2))]), num_children:0, decimal_literal:TDecimalLiteral(value:3.14, " +
                         "integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, " +
@@ -204,7 +204,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select sum(col_decimal128p20s3) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet =
-                "sum[([5: col_decimal128p20s3, DECIMAL128(20,3), false]); args: DECIMAL128; result: DECIMAL128(38,3)";
+                "sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,3)";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -231,7 +231,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select avg(col_decimal128p20s3) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet =
-                "avg[([5: col_decimal128p20s3, DECIMAL128(20,3), false]); args: DECIMAL128; result: DECIMAL128(38,9)";
+                "avg[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,9)";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -258,7 +258,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select multi_distinct_sum(col_decimal128p20s3) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet =
-                "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), false]); args: DECIMAL128; result: DECIMAL128(38,3)";
+                "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,3)";
         Assert.assertTrue(plan.contains(snippet));
     }
 

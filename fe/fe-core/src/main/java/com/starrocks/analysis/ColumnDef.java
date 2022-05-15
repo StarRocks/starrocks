@@ -30,7 +30,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
-import org.apache.spark.annotation.Private;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -203,7 +202,7 @@ public class ColumnDef {
         if (typeDef.getType().isScalarType()) {
             final ScalarType targetType = (ScalarType) typeDef.getType();
             if (targetType.getPrimitiveType().isStringType()) {
-                if (!targetType.isAssignedStrLenInColDefinition()) {
+                if (!targetType.isAssignedStrLenInColDefinition() && targetType.getLength() < 1) {
                     targetType.setLength(1);
                 }
             }else{
