@@ -14,6 +14,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -30,9 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CTASAnalyzer {
-
-    @Deprecated
-    public static void transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
+    public static void analyze(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
         List<String> columnNames = createTableAsSelectStmt.getColumnNames();
         QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
         CreateTableStmt createTableStmt = createTableAsSelectStmt.getCreateTableStmt();
@@ -79,6 +78,9 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
+                if (!(table instanceof OlapTable)) {
+                    continue;
+                }
                 columnNameToTable.put(new Pair<>(tableName,
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }

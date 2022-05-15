@@ -588,6 +588,7 @@ specialFunctionExpression
     | MONTH '(' expression ')'
     | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
+    | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'
