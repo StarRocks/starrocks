@@ -236,6 +236,6 @@ public class GrantStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        visitor.visitGrantPrivilegeStmt(this, context);
+        return visitor.visitGrantPrivilegeStmt(this, context);
     }
 }
