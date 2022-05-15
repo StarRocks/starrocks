@@ -136,6 +136,7 @@ aggDesc
     |HLL_UNION
     |BITMAP_UNION
     |PERCENTILE_UNION
+    |REPLACE_IF_NOT_NULL
     ;
 
 rollupDesc
@@ -661,6 +662,8 @@ specialFunctionExpression
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
     | PASSWORD '(' string ')'
+    | BITMAP_UNION '(' expression ')'
+    | HLL_UNION '(' expression ')'
     ;
 
 windowFunction

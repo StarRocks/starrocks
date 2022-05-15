@@ -1840,6 +1840,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
         } else if (context.PASSWORD() != null) {
             return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(context.string().getText())));
+        } else if (context.BITMAP_UNION() != null) {
+            return new FunctionCallExpr("bitmap_union", visit(context.expression(), Expr.class));
+        } else if (context.HLL_UNION() != null) {
+            return new FunctionCallExpr("hll_union", visit(context.expression(), Expr.class));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {

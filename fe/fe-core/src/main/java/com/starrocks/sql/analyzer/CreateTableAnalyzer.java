@@ -48,7 +48,6 @@ import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 public class CreateTableAnalyzer {
     private static final Set<String> engineNames;
     private static Set<String> charsetNames;
-    private static final String DEFAULT_ENGINE_NAME = "olap";
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     static {
