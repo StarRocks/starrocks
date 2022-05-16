@@ -35,7 +35,7 @@ public:
     OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                      OlapScanContextPtr ctx);
 
-    ~OlapScanOperator() override = default;
+    ~OlapScanOperator() override;
 
     bool has_output() const override;
     bool is_finished() const override;

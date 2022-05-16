@@ -27,6 +27,20 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
     }
 }
 
+ScanOperator::~ScanOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
+        }
+    }
+}
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
@@ -50,9 +64,7 @@ void ScanOperator::close(RuntimeState* state) {
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    // for the running io task, we can't close its chunk sources.
-    // After ScanOperator::close, these chunk sources are no longer meaningful,
-    // just release resources by their default destructor
+    // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
             _chunk_sources[i]->close(state);
