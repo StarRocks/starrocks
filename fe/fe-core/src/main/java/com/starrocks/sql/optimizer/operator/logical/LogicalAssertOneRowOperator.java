@@ -11,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.ArrayList;
-import java.util.Objects;
 
 public class LogicalAssertOneRowOperator extends LogicalOperator {
 
@@ -68,7 +67,7 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), assertion, checkRows, tips);
+        return System.identityHashCode(this);
     }
 
     @Override
