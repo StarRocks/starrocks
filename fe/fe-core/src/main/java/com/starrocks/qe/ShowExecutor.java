@@ -1562,7 +1562,6 @@ public class ShowExecutor {
                 return o1.get(0).compareTo(o2.get(0));
             }
         });
-        // Only success
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 

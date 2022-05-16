@@ -35,7 +35,6 @@ public abstract class Catalog implements Writable {
     }
 
     /**
-     * Fill BaseProcResult with different properties in child resources
      * CatalogMgr.CATALOG_PROC_NODE_TITLE_NAMES format:
      * | Name | Type | Comment |
      */
