@@ -520,15 +520,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     edit_version_info->rowsets.swap(nrs);
     edit_version_info->deltas.push_back(rowsetid);
     _edit_version_infos.emplace_back(std::move(edit_version_info));
-    if (_edit_version_infos.size() >= 2) {
-        auto l1 = _edit_version_infos[_edit_version_infos.size() - 2].get();
-        auto l2 = _edit_version_infos[_edit_version_infos.size() - 1].get();
-        if (l1->creation_time > l2->creation_time) {
-            LOG(ERROR) << Substitute("creation_time decreased tablet:$0 $1:$2 > $3:$4", _tablet.tablet_id(),
-                                     l1->version.to_string(), l1->creation_time, l2->version.to_string(),
-                                     l2->creation_time);
-        }
-    }
+    _check_creation_time_increasing();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
@@ -547,6 +539,17 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     }
     VLOG(1) << "rowset commit finished: " << _debug_string(false, true);
     return Status::OK();
+}
+void TabletUpdates::_check_creation_time_increasing() {
+    if (_edit_version_infos.size() >= 2) {
+        auto last2 = _edit_version_infos[_edit_version_infos.size() - 2].get();
+        auto last1 = _edit_version_infos[_edit_version_infos.size() - 1].get();
+        if (last2->creation_time > last1->creation_time) {
+            LOG(ERROR) << Substitute("creation_time decreased tablet:$0 $1:$2 > $3:$4", _tablet.tablet_id(),
+                                     last2->version.to_string(), last2->creation_time, last1->version.to_string(),
+                                     last1->creation_time);
+        }
+    }
 }
 
 void TabletUpdates::_try_commit_pendings_unlocked() {
@@ -1142,15 +1145,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     edit_version_info->rowsets.swap(nrs);
     edit_version_info->compaction.swap(*pinfo);
     _edit_version_infos.emplace_back(std::move(edit_version_info));
-    if (_edit_version_infos.size() >= 2) {
-        auto l1 = _edit_version_infos[_edit_version_infos.size() - 2].get();
-        auto l2 = _edit_version_infos[_edit_version_infos.size() - 1].get();
-        if (l1->creation_time > l2->creation_time) {
-            LOG(ERROR) << Substitute("creation_time decreased tablet:$0 $1:$2 > $3:$4", _tablet.tablet_id(),
-                                     l1->version.to_string(), l1->creation_time, l2->version.to_string(),
-                                     l2->creation_time);
-        }
-    }
+    _check_creation_time_increasing();
     auto edit_version_info_ptr = _edit_version_infos.back().get();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
