@@ -106,7 +106,7 @@ indexDesc
     ;
 
 engineDesc
-    : ENGINE '=' engineName
+    : ENGINE EQ engineName
     ;
 engineName
     : OLAP
@@ -120,6 +120,10 @@ engineName
     ;
 
 charsetDesc
+    : CHARSET EQ charsetName
+    ;
+
+charsetName
     : UTF8
     | GBK
     ;

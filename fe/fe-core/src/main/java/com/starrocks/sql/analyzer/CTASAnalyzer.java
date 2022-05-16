@@ -120,7 +120,7 @@ public class CTASAnalyzer {
             createTableStmt.setDistributionDesc(distributionDesc);
         }
 
-        CreateTableAnalyzer.transformCreateTableStmt(createTableStmt, session);
+        Analyzer.analyze(createTableStmt, session);
 
         InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
         insertStmt.setQueryStatement(queryStatement);

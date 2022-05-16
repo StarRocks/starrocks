@@ -199,7 +199,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 context.engineDesc() == null ? "olap" : context.engineDesc().engineName().getText(),
-                context.charsetDesc() == null ? "utf8" : context.charsetDesc().getText(),
+                context.charsetDesc() == null ? "utf8" : context.charsetDesc().charsetName().getText(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
