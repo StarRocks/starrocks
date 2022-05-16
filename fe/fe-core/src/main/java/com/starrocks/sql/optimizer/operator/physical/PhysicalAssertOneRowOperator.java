@@ -60,6 +60,6 @@ public class PhysicalAssertOneRowOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(assertion, checkRows, tips);
+        return System.identityHashCode(this);
     }
 }

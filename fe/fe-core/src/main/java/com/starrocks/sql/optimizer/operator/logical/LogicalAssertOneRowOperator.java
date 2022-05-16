@@ -68,7 +68,7 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), assertion, checkRows, tips);
+        return System.identityHashCode(this);
     }
 
     @Override
