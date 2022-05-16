@@ -147,6 +147,7 @@ import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
+import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -161,7 +162,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -724,6 +724,12 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
+    public void alterCatalog(String s, Catalog catalog) throws NoSuchObjectException, InvalidObjectException,
+            MetaException, TException {
+        throw new TException("method not implemented");
+    }
+
+    @Override
     public Catalog getCatalog(String catName) throws NoSuchObjectException, MetaException, TException {
         throw new TException("method not implemented");
     }
@@ -928,8 +934,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
-    public Map<String, Materialization> getMaterializationsInvalidationInfo(String dbName, List<String> viewNames)
-            throws MetaException, InvalidOperationException, UnknownDBException, TException {
+    public Materialization getMaterializationInvalidationInfo(CreationMetadata creationMetadata, String s) throws MetaException, InvalidOperationException, UnknownDBException, TException {
         throw new TException("method not implemented");
     }
 
@@ -1579,8 +1584,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     }
 
     @Override
-    public boolean refresh_privileges(HiveObjectRef objToRefresh, PrivilegeBag grantPrivileges)
-            throws MetaException, TException {
+    public boolean refresh_privileges(HiveObjectRef hiveObjectRef, String s, PrivilegeBag privilegeBag) throws MetaException, TException {
         throw new TException("method not implemented");
     }
 

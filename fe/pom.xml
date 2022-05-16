@@ -570,12 +570,20 @@ under the License.
                 <scope>provided</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.facebook.presto.hive/hive-apache -->
+            <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
             <dependency>
-                <groupId>com.facebook.presto.hive</groupId>
+                <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.0.0-7</version>
+                <version>3.1.2-13</version>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
+            <dependency>
+                <groupId>com.aliyun.datalake</groupId>
+                <artifactId>metastore-client-hive3</artifactId>
+                <version>0.2.14</version>
+            </dependency>
+
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
             <dependency>
