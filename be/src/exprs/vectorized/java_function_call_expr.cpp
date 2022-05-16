@@ -72,8 +72,7 @@ struct UDFFunctionCallHelper {
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
                                                       &input_col_objs);
         // call UDF method
-        jobject res = helper.batch_call(ctx, fn_desc->udf_handle.handle(), fn_desc->evaluate->method.handle(),
-                                        input_col_objs.data(), input_col_objs.size(), size);
+        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
 
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
@@ -166,7 +165,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(std::move(child_col));
         }
     }
-    auto open_state = [this, scope]() {
+    auto open_state = [this, scope, context]() {
         // init class loader and analyzer
         std::string libpath;
         auto function_cache = UserFunctionCache::instance();
@@ -204,6 +203,21 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
 
         // create UDF function instance
         ASSIGN_OR_RETURN(_func_desc->udf_handle, _func_desc->udf_class.newInstance());
+        // BatchEvaluateStub
+        auto* stub_clazz = BatchEvaluateStub::stub_clazz_name;
+        auto* stub_method_name = BatchEvaluateStub::batch_evaluate_method_name;
+        auto udf_clazz = _func_desc->udf_class.clazz();
+        auto update_method = _func_desc->evaluate->method.handle();
+
+        ASSIGN_OR_RETURN(auto update_stub_clazz,
+                         _func_desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                                  ClassLoader::BATCH_EVALUATE));
+        ASSIGN_OR_RETURN(auto method,
+                         _func_desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
+        auto function_ctx = context->fn_context(_fn_context_index);
+        _func_desc->call_stub =
+                std::make_unique<BatchEvaluateStub>(function_ctx, _func_desc->udf_handle.handle(),
+                                                    std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
 
         _call_helper = std::make_shared<UDFFunctionCallHelper>();
         _call_helper->fn_desc = _func_desc.get();

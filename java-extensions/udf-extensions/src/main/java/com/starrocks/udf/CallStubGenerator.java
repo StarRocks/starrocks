@@ -11,9 +11,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
 import static org.objectweb.asm.Opcodes.AALOAD;
+import static org.objectweb.asm.Opcodes.AASTORE;
 import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
 import static org.objectweb.asm.Opcodes.ACC_STATIC;
 import static org.objectweb.asm.Opcodes.ALOAD;
+import static org.objectweb.asm.Opcodes.ANEWARRAY;
+import static org.objectweb.asm.Opcodes.ARETURN;
+import static org.objectweb.asm.Opcodes.ASTORE;
 import static org.objectweb.asm.Opcodes.F_APPEND;
 import static org.objectweb.asm.Opcodes.F_CHOP;
 import static org.objectweb.asm.Opcodes.GOTO;
@@ -127,15 +131,6 @@ public class CallStubGenerator {
             // define local variables
             final Label l5 = new Label();
             batchCall.visitLabel(l5);
-            batchCall.visitLocalVariable("i", "I", null, l1, l2, iIdx);
-            batchCall.visitLocalVariable("rows", "I", null, l1, l5, 0);
-            batchCall.visitLocalVariable("obj", "L" + Type.getInternalName(udafClazz) + ";", null, l0, l5, 1);
-            int padding = 2;
-            for (int i = 0; i < parameters.length; ++i) {
-                final Class<?> type = parameters[i].getType();
-                batchCall.visitLocalVariable("var" + i, "L" + Type.getInternalName(type) + ";", null, l1, l5,
-                        i + padding);
-            }
             int callStubInputParameters = 3 + parameters.length;
             batchCall.visitMaxs(callStubInputParameters, callStubInputParameters + 1);
             batchCall.visitEnd();
@@ -157,4 +152,139 @@ public class CallStubGenerator {
         generator.finish();
         return generator.getByteCode();
     }
+
+
+//    public class CallStub {
+//        public static void batchCallV(int rows, UDF obj, TYPE[] var1, Integer[] var2) throws Exception {
+//            for(int var = 0; var < rows; ++var) {
+//                obj.update(var0, var1[var8], var2[var8]);
+//            }
+//        }
+//    }
+    private static class BatchCallEvaluateGenerator {
+        BatchCallEvaluateGenerator(Class<?> clazz, Method update) {
+            this.UDFClazz = clazz;
+            this.UDFEvaluate = update;
+        }
+
+        private final ClassWriter writer = new ClassWriter(0);
+
+        private void declareCallStubClazz() {
+            writer.visit(V1_8, ACC_PUBLIC, CLAZZ_NAME, null, "java/lang/Object", null);
+        }
+
+        private void genBatchUpdateSingle() {
+            final Parameter[] parameters = UDFEvaluate.getParameters();
+            StringBuilder desc = new StringBuilder("(");
+            desc.append("I");
+            desc.append(Type.getDescriptor(UDFClazz));
+            for (Parameter parameter : parameters) {
+                final Class<?> type = parameter.getType();
+                if (type.isPrimitive()) {
+                    throw new UnsupportedOperationException("Unsupported Primitive Type:" + type.getTypeName());
+                }
+                desc.append("[");
+                desc.append(Type.getDescriptor(type));
+            }
+
+            final Class<?> returnType = UDFEvaluate.getReturnType();
+            if (returnType.isPrimitive()) {
+                throw new UnsupportedOperationException("Unsupported return Type:" + returnType.getTypeName());
+            }
+            desc.append(")");
+            desc.append("[").append(Type.getDescriptor(returnType));
+
+            final MethodVisitor batchCall =
+                    writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "batchCallV", desc.toString(), null,
+                            new String[] {"java/lang/Exception"});
+
+            batchCall.visitCode();
+
+            // local var1: rows
+            // local var2: UDAF handle
+            // local var3...varn: left paramters
+
+            // RET_TYPE[] res;
+            int resIndex = 2 + parameters.length;
+            // int i;
+            int iIndex = resIndex + 1;
+
+            final Label l0 = new Label();
+            batchCall.visitLabel(l0);
+            // RETURN_TYPE[] = new RETURN_TYPE[num_rows]
+            batchCall.visitVarInsn(ILOAD, 0);
+            batchCall.visitTypeInsn(ANEWARRAY, Type.getInternalName(returnType));
+            batchCall.visitVarInsn(ASTORE, resIndex);
+
+            // PUSH FRAME
+            final Label l1 = new Label();
+            batchCall.visitLabel(l1);
+            batchCall.visitInsn(ICONST_0);
+            batchCall.visitVarInsn(ISTORE, iIndex);
+
+            final Label l2 = new Label();
+            batchCall.visitLabel(l2);
+            batchCall.visitFrame(F_APPEND, 2, new Object[] {"[" + Type.getDescriptor(returnType), INTEGER}, 0, null);
+            batchCall.visitVarInsn(ILOAD, iIndex);
+            batchCall.visitVarInsn(ILOAD, 0);
+
+            final Label l3 = new Label();
+            batchCall.visitJumpInsn(IF_ICMPGE, l3);
+
+            final Label l4 = new Label();
+            batchCall.visitLabel(l4);
+            // load res[i]
+            batchCall.visitVarInsn(ALOAD, resIndex);
+            batchCall.visitVarInsn(ILOAD, iIndex);
+            // load obj
+            batchCall.visitVarInsn(ALOAD, 1);
+            int padding = 2;
+            for (int i = 0; i < parameters.length; i++) {
+                batchCall.visitVarInsn(ALOAD, i + padding);
+                batchCall.visitVarInsn(ILOAD, iIndex);
+                batchCall.visitInsn(AALOAD);
+            }
+
+            batchCall.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(UDFClazz), UDFEvaluate.getName(),
+                    Type.getMethodDescriptor(UDFEvaluate), false);
+            batchCall.visitInsn(AASTORE);
+
+            final Label l5 = new Label();
+            batchCall.visitLabel(l5);
+            batchCall.visitIincInsn(iIndex, 1);
+            batchCall.visitJumpInsn(GOTO, l2);
+
+            batchCall.visitLabel(l3);
+            batchCall.visitFrame(F_CHOP, 1, new Object[] {INTEGER}, 0, null);
+            batchCall.visitVarInsn(ALOAD, resIndex);
+            batchCall.visitInsn(ARETURN);
+
+            final Label l6 = new Label();
+            batchCall.visitLabel(l6);
+            batchCall.visitLocalVariable("i", "I", null, l2, l3, iIndex);
+            batchCall.visitLocalVariable("res", Type.getDescriptor(returnType), null, l1, l6, resIndex);
+            batchCall.visitMaxs(iIndex +1 ,iIndex + 1);
+            batchCall.visitEnd();
+        }
+
+        private void finish() {
+            writer.visitEnd();
+        }
+
+        private byte[] getByteCode() {
+            return writer.toByteArray();
+        }
+
+        private final Class<?> UDFClazz;
+        private final Method UDFEvaluate;
+    }
+
+    public static byte[] generateScalarCallStub(Class<?> clazz, Method method) {
+        final BatchCallEvaluateGenerator generator = new BatchCallEvaluateGenerator(clazz, method);
+        generator.declareCallStubClazz();
+        generator.genBatchUpdateSingle();
+        generator.finish();
+        return generator.getByteCode();
+    }
+
 }
