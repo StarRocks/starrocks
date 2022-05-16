@@ -58,8 +58,7 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
         use_decimal_v3 = false
         # file to save the converted DDL SQL
         output_dir = ./result
-
-
+        
         [table-rule.1]
         # pattern to match databases for setting properties
         database = ^console_19321.*$
