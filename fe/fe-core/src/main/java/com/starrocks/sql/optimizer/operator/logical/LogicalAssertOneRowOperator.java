@@ -11,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.ArrayList;
-import java.util.Objects;
 
 public class LogicalAssertOneRowOperator extends LogicalOperator {
 
