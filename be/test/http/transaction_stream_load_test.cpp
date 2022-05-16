@@ -13,8 +13,8 @@
 #include "http/http_request.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -131,7 +131,6 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_invalid) {
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
     }
-
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_normal) {

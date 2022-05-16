@@ -116,7 +116,6 @@ public class MasterOpExecutor {
         params.setUser(ctx.getQualifiedUser());
         params.setDb(ctx.getDatabase());
         params.setSqlMode(ctx.getSessionVariable().getSqlMode());
-        params.setResourceInfo(ctx.toResourceCtx());
         params.setUser_ip(ctx.getRemoteIP());
         params.setTime_zone(ctx.getSessionVariable().getTimeZone());
         params.setStmt_id(ctx.getStmtId());

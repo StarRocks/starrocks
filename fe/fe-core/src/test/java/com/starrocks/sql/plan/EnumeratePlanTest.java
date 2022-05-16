@@ -227,7 +227,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(43, planCount);
+        Assert.assertEquals(22, planCount);
     }
 
     @Test

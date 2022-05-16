@@ -14,6 +14,7 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -32,6 +33,7 @@ import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
@@ -43,6 +45,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -73,13 +76,18 @@ import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -263,6 +271,54 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new AlterTableStmt(targetTableName, Lists.newArrayList(dropIndexClause));
+    }
+
+    @Override
+    public ParseNode visitShowColumnStatement(StarRocksParser.ShowColumnStatementContext context) {
+        QualifiedName tableName = getQualifiedName(context.table);
+
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowColumnStmt(qualifiedNameToTableName(tableName),
+                dbName == null ? null : dbName.toString(),
+                pattern,
+                context.FULL() != null,
+                where);
+    }
+
+    @Override
+    public ParseNode visitShowTableStatusStatement(StarRocksParser.ShowTableStatusStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.qualifiedName() != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowTableStatusStmt(dbName == null ? null : dbName.toString(), pattern, where);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -623,6 +679,78 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         return new ShowAnalyzeStmt();
+    }
+
+    // ------------------------------------------- Work Group Statement -------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateWorkGroupStatement(StarRocksParser.CreateWorkGroupStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        String name = identifier.getValue();
+
+        List<List<Predicate>> predicatesList = new ArrayList<>();
+        for (StarRocksParser.ClassifierContext classifierContext : context.classifier()) {
+            List<Predicate> p = visit(classifierContext.expression(), Predicate.class);
+            predicatesList.add(p);
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+
+        return new CreateWorkGroupStmt(name,
+                context.EXISTS() != null,
+                context.REPLACE() != null,
+                predicatesList,
+                properties);
+    }
+
+    @Override
+    public ParseNode visitDropWorkGroupStatement(StarRocksParser.DropWorkGroupStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new DropWorkGroupStmt(identifier.getValue());
+    }
+
+    @Override
+    public ParseNode visitAlterWorkGroupStatement(StarRocksParser.AlterWorkGroupStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        String name = identifier.getValue();
+        if (context.ADD() != null) {
+            List<List<Predicate>> predicatesList = new ArrayList<>();
+            for (StarRocksParser.ClassifierContext classifierContext : context.classifier()) {
+                List<Predicate> p = visit(classifierContext.expression(), Predicate.class);
+                predicatesList.add(p);
+            }
+
+            return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AddClassifiers(predicatesList));
+        } else if (context.DROP() != null) {
+            if (context.ALL() != null) {
+                return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropAllClassifiers());
+            } else {
+                return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                        .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
+            }
+        } else {
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+
+            return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AlterProperties(properties));
+        }
+    }
+
+    @Override
+    public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
+        if (context.RESOURCE_GROUPS() != null) {
+            return new ShowWorkGroupStmt(null, context.ALL() != null);
+        } else {
+            Identifier identifier = (Identifier) visit(context.identifier());
+            return new ShowWorkGroupStmt(identifier.getValue(), false);
+        }
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
@@ -1201,6 +1329,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
+    @Override
+    public ParseNode visitShowVariablesStatement(StarRocksParser.ShowVariablesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -1585,6 +1729,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("quarter", visit(context.expression(), Expr.class));
         } else if (context.REGEXP() != null) {
             return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
+        } else if (context.REPLACE() != null) {
+            return new FunctionCallExpr("replace", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
             return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
         } else if (context.RLIKE() != null) {
@@ -1887,6 +2033,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.COST;
         }
         return explainLevel;
+    }
+
+    public static SetType getVariableType(StarRocksParser.VarTypeContext context) {
+        if (context == null) {
+            return SetType.DEFAULT;
+        }
+
+        if (context.GLOBAL() != null) {
+            return SetType.GLOBAL;
+        } else if (context.LOCAL() != null || context.SESSION() != null) {
+            return SetType.SESSION;
+        } else {
+            return SetType.DEFAULT;
+        }
     }
 
     @Override

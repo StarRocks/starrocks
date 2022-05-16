@@ -13,6 +13,7 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -42,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -485,5 +487,9 @@ public class ScalarOperatorToExpr {
             return result;
         }
 
+        @Override
+        public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
+            return new CloneExpr(buildExecExpression(operator.getChild(0), context));
+        }
     }
 }

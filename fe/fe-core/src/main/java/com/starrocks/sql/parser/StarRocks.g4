@@ -20,6 +20,8 @@ statement
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showColumnStatement                                                                   #showColumn
+    | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
 
@@ -58,8 +60,15 @@ statement
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | showAnalyzeStatement                                                                  #showAnalyze
 
+    // Work Group Statement
+    | createWorkGroupStatement                                                              #createWorkGroup
+    | dropWorkGroupStatement                                                                #dropWorkGroup
+    | alterWorkGroupStatement                                                               #alterWorkGroup
+    | showWorkGroupStatement                                                                #showWorkGroup
+
     // Other statement
     | USE schema=identifier                                                                 #use
+    | showVariablesStatement                                                                #showVariables
     | showDatabasesStatement                                                                #showDatabases
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
@@ -100,6 +109,15 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showColumnStatement
+    : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTableStatusStatement
+    : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -235,9 +253,43 @@ showAnalyzeStatement
     : SHOW ANALYZE
     ;
 
+// ------------------------------------------- Work Group Statement ----------------------------------------------------
+
+createWorkGroupStatement
+    : CREATE RESOURCE_GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
+        TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
+    ;
+
+dropWorkGroupStatement
+    : DROP RESOURCE_GROUP identifier
+    ;
+
+alterWorkGroupStatement
+    : ALTER RESOURCE_GROUP identifier ADD classifier (',' classifier)*
+    | ALTER RESOURCE_GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | ALTER RESOURCE_GROUP identifier DROP ALL
+    | ALTER RESOURCE_GROUP identifier WITH '(' property (',' property)* ')'
+    ;
+
+showWorkGroupStatement
+    : SHOW RESOURCE_GROUP identifier
+    | SHOW RESOURCE_GROUPS ALL?
+    ;
+
+classifier
+    : '(' expression (',' expression)* ')'
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
-showDatabasesStatement
-    : SHOW DATABASES ((LIKE pattern=string) | (WHERE expression) | (FROM catalogName=identifierOrString))?
+
+showVariablesStatement
+    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -532,6 +584,7 @@ specialFunctionExpression
     | MONTH '(' expression ')'
     | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
+    | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'
@@ -747,7 +800,7 @@ number
 nonReserved
     : AVG | ADMIN
     | BUCKETS | BACKEND
-    | CAST | CATALOG | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
+    | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COLUMNS | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTERNAL | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
@@ -760,11 +813,11 @@ nonReserved
     | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
-    | ROLLUP | ROLLBACK | REPLICA
+    | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
     | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
-    | VIEW | VERBOSE
+    | VARIABLES | VIEW | VERBOSE
     | WEEK
     | YEAR
     ;

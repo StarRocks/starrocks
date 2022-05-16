@@ -2331,7 +2331,7 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
             compaction_pb->add_outputs(cp->output);
             auto svpb = compaction_pb->mutable_start_version();
             svpb->set_major(cp->start_version.major());
-            svpb->set_major(cp->start_version.minor());
+            svpb->set_minor(cp->start_version.minor());
         }
         // rowsetid_add is only useful in meta log, and it's a bit harder to construct it
         // so do not set it here
@@ -2640,7 +2640,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             }
         }
     }
-    std::shared_ptr<fs::BlockManager> block_mgr;
+    std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         --iter;
@@ -2654,13 +2654,13 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             _set_error(msg);
             return Status::InternalError(msg);
         }
-        // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same block_mgr
-        if (block_mgr == nullptr) {
-            ASSIGN_OR_RETURN(block_mgr, fs::fs_util::block_manager(rowset->rowset_path()));
+        // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same fs
+        if (fs == nullptr) {
+            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
         }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path,
+        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
                                      rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
@@ -2672,9 +2672,8 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(block_mgr->open_block((*segment)->file_name(), &rblock));
-        iter_opts.rblock = rblock.get();
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
+        iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             ColumnIterator* col_iter_raw_ptr = nullptr;
             RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter_raw_ptr));

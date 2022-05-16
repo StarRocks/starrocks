@@ -168,7 +168,8 @@ Status ESDataSource::_create_scanner() {
         _properties[ESScanReader::KEY_TYPE] = es_scan_range.type;
     }
     _properties[ESScanReader::KEY_SHARD] = std::to_string(es_scan_range.shard_id);
-    _properties[ESScanReader::KEY_BATCH_SIZE] = std::to_string(_runtime_state->chunk_size());
+    _properties[ESScanReader::KEY_BATCH_SIZE] =
+            std::to_string(std::min(config::es_index_max_result_window, _runtime_state->chunk_size()));
     _properties[ESScanReader::KEY_HOST_PORT] = get_host_port(es_scan_range.es_hosts);
     // push down limit to Elasticsearch
     if (_read_limit != -1 && _read_limit <= _runtime_state->chunk_size()) {

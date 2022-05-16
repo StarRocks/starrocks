@@ -44,7 +44,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        boolean hasNoGroup = agg.getGroupingKeys().size()  == 0 ? true : false;
+        boolean hasNoGroup = agg.getGroupingKeys().isEmpty();
         // check cbo is enabled and hasNoGroup is true
         if (context.getSessionVariable().isCboCteReuse() && hasNoGroup) {
             return false;
@@ -53,14 +53,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
-        boolean hasMultiColumns = false;
-        for (CallOperator callOperator : distinctAggOperatorList) {
-            if (callOperator.getChildren().size() > 1) {
-                hasMultiColumns = true;
-                break;
-            }
-        }
-
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
         return (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }

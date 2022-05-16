@@ -35,7 +35,7 @@ column statistics:
 * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+* sum-->[810.9, 2231876.076030606, 0.0, 8.0, 932377.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -52,7 +52,7 @@ OutPut Exchange Id: 13
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 2231876.076030606, 0.0, 8.0, 932377.0] ESTIMATE
 |
 11:AGGREGATE (update finalize)
 |  aggregate: sum[([37: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
@@ -62,7 +62,7 @@ OutPut Exchange Id: 13
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0] ESTIMATE
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2.1799208766687468E7] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 2231876.076030606, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:Project
 |  output columns:
@@ -112,7 +112,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [30: L_SHIPDATE, DATE, false] > '1995-03-11'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=28.0
 cardinality: 323405941
 probe runtime filters:
@@ -162,7 +161,6 @@ table: orders, rollup: orders
 preAggregation: on
 Predicates: [14: O_ORDERDATE, DATE, false] < '1995-03-11'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 actualRows=0, avgRowSize=24.0
 cardinality: 72661123
 probe runtime filters:
@@ -191,7 +189,6 @@ table: customer, rollup: customer
 preAggregation: on
 Predicates: [7: C_MKTSEGMENT, CHAR, false] = 'HOUSEHOLD'
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 actualRows=0, avgRowSize=18.0
 cardinality: 3000000
 column statistics:

@@ -35,14 +35,12 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.persist.ConsistencyCheckInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CheckConsistencyTask;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,12 +119,6 @@ public class CheckConsistencyJob {
             return false;
         }
 
-        // get user resource info
-        TResourceInfo resourceInfo = null;
-        if (ConnectContext.get() != null) {
-            resourceInfo = ConnectContext.get().toResourceCtx();
-        }
-
         LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -180,7 +172,7 @@ public class CheckConsistencyJob {
                     maxDataSize = replica.getDataSize();
                 }
 
-                CheckConsistencyTask task = new CheckConsistencyTask(resourceInfo, replica.getBackendId(),
+                CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getBackendId(),
                         tabletMeta.getDbId(),
                         tabletMeta.getTableId(),
                         tabletMeta.getPartitionId(),
