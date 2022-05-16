@@ -146,6 +146,8 @@ public:
         return growth_time;
     }
 
+    RuntimeState* runtime_state();
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

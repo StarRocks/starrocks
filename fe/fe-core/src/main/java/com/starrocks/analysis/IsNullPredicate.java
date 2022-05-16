@@ -22,13 +22,25 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TFunctionBinaryType;
 
 public class IsNullPredicate extends Predicate {
+
+    static Function isNullFN = new Function(new FunctionName("is_null_pred"),
+            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+    static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
+            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+    {
+        isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+        isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+    }
 
     private final boolean isNotNull;
 
@@ -78,6 +90,12 @@ public class IsNullPredicate extends Predicate {
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         super.analyzeImpl(analyzer);
+
+        if (isNotNull) {
+            fn = isNullFN;
+        } else {
+            fn = isNotNullFN;
+        }
 
         // determine selectivity
         selectivity = 0.1;

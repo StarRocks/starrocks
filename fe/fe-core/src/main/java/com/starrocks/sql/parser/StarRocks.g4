@@ -35,6 +35,7 @@ statement
     | submitTaskStatement                                                                   #submitTask
 
     // Materialized View Statement
+    | createMaterializedViewStatement                                                       #createMaterializedView
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
 
@@ -217,6 +218,16 @@ submitTaskStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
+
+createMaterializedViewStatement
+    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    comment?
+    (PARTITION BY primaryExpression)?
+    distributionDesc?
+    refreshSchemeDesc?
+    properties?
+    AS queryStatement
+    ;
 
 showMaterializedViewStatement
     : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
@@ -748,6 +759,12 @@ distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     ;
 
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | MANUAL)
+    ;
+
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
@@ -874,7 +891,7 @@ number
     ;
 
 nonReserved
-    : AVG | ADMIN
+    : AVG | ADMIN | ASYNC
     | BUCKETS | BACKEND
     | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COLUMNS | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
@@ -884,13 +901,13 @@ nonReserved
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MATERIALIZED | MAX | MIN | MINUTE | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MONTH | MERGE
     | NONE | NULLS
     | OFFSET | OBSERVER
     | PASSWORD | PRECEDING | PROPERTIES
     | QUARTER
-    | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
-    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
+    | REFRESH | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
+    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VARIABLES | VIEW | VERBOSE
