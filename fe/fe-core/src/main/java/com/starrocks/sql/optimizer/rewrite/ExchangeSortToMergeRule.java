@@ -33,17 +33,15 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
 
             if (topN.getSortPhase().isFinal() && !topN.isSplit() && topN.getLimit() == Operator.DEFAULT_LIMIT) {
                 OptExpression child = OptExpression.create(new PhysicalTopNOperator(
-                        topN.getOrderSpec(),
-                        topN.getLimit(), topN.getOffset(), SortPhase.PARTIAL, false, false, null, null
+                        topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
+                        SortPhase.PARTIAL, false, false, null, null
                 ), optExpr.inputAt(0).getInputs());
                 child.setLogicalProperty(optExpr.inputAt(0).getLogicalProperty());
                 child.setStatistics(optExpr.getStatistics());
 
                 OptExpression newOpt = OptExpression.create(new PhysicalTopNOperator(
-                                topN.getOrderSpec(),
-                                topN.getLimit(), topN.getOffset(),
-                                SortPhase.FINAL, true, false, null,
-                                topN.getProjection()),
+                                topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
+                                SortPhase.FINAL, true, false, null, topN.getProjection()),
                         Lists.newArrayList(child));
                 newOpt.setLogicalProperty(optExpr.getLogicalProperty());
                 newOpt.setStatistics(optExpr.getStatistics());

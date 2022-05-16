@@ -28,6 +28,7 @@ public class TopNImplementationRule extends ImplementationRule {
                 new PhysicalTopNOperator(new OrderSpec(logicalTopN.getOrderByElements()),
                         logicalTopN.getLimit(),
                         logicalTopN.getOffset(),
+                        logicalTopN.getPartitionByColumns(),
                         logicalTopN.getSortPhase(),
                         logicalTopN.isSplit(),
                         false,

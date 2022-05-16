@@ -485,6 +485,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(),
                     operator.getOffset(),
+                    null,
                     operator.getSortPhase(),
                     operator.isSplit(),
                     operator.isEnforced(),

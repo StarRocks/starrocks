@@ -290,7 +290,7 @@ public abstract class QueryStmt extends StatementBase {
                     " in nested queries.");
         }
 
-        sortInfo = new SortInfo(orderingExprs, isAscOrder, nullsFirstParams);
+        sortInfo = new SortInfo(null, orderingExprs, isAscOrder, nullsFirstParams);
         // order by w/o limit and offset in inline views, set operands and insert statements
         // are ignored.
         if (!hasLimit() && !hasOffset() && !analyzer.isRootAnalyzer()) {

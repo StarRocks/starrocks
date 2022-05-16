@@ -52,11 +52,14 @@ class DataSink;
 
 namespace pipeline {
 class OperatorFactory;
+class SourceOperatorFactory;
 class PipelineBuilderContext;
 class RefCountedRuntimeFilterProbeCollector;
 } // namespace pipeline
 using OperatorFactory = starrocks::pipeline::OperatorFactory;
 using OperatorFactoryPtr = std::shared_ptr<OperatorFactory>;
+using SourceOperatorFactory = starrocks::pipeline::SourceOperatorFactory;
+using SourceOperatorFactoryPtr = std::shared_ptr<SourceOperatorFactory>;
 using OpFactories = std::vector<OperatorFactoryPtr>;
 using RcRfProbeCollector = starrocks::pipeline::RefCountedRuntimeFilterProbeCollector;
 using RcRfProbeCollectorPtr = std::shared_ptr<RcRfProbeCollector>;

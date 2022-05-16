@@ -119,6 +119,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1412,9 +1413,8 @@ public class PlanFragmentBuilder {
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
-                return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
-                        topN.getOffset(),
-                        inputFragment);
+                return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(), topN.getOrderSpec(),
+                        topN.getLimit(), topN.getOffset(), inputFragment);
             } else {
                 return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
             }
@@ -1447,11 +1447,21 @@ public class PlanFragmentBuilder {
         }
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
+                                                      List<ColumnRefOperator> partitionByColumns,
                                                       OrderSpec orderSpec, long limit, long offset,
                                                       PlanFragment inputFragment) {
-            List<Expr> resolvedTupleExprs = new ArrayList<>();
-            List<Expr> sortExprs = new ArrayList<>();
+            List<Expr> resolvedTupleExprs = Lists.newArrayList();
+            List<Expr> partitionExprs = Lists.newArrayList();
+            List<Expr> sortExprs = Lists.newArrayList();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
+
+            if (CollectionUtils.isNotEmpty(partitionByColumns)) {
+                for (ColumnRefOperator partitionByColumn : partitionByColumns) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(partitionByColumn,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    partitionExprs.add(expr);
+                }
+            }
 
             for (Ordering ordering : orderSpec.getOrderDescs()) {
                 Expr sortExpr = ScalarOperatorToExpr.buildExecExpression(ordering.getColumnRef(),
@@ -1494,8 +1504,7 @@ public class PlanFragmentBuilder {
             }
 
             sortTuple.computeMemLayout();
-            SortInfo sortInfo = new SortInfo(
-                    sortExprs,
+            SortInfo sortInfo = new SortInfo(partitionExprs, sortExprs,
                     orderSpec.getOrderDescs().stream().map(Ordering::isAscending).collect(Collectors.toList()),
                     orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
             sortInfo.setMaterializedTupleInfo(sortTuple, resolvedTupleExprs);

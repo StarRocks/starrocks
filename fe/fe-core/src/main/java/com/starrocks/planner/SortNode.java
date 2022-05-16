@@ -49,6 +49,7 @@ import java.util.List;
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortNode extends PlanNode {
+
     private static final Logger LOG = LogManager.getLogger(SortNode.class);
     private final SortInfo info;
     private final boolean useTopN;
@@ -172,6 +173,9 @@ public class SortNode extends PlanNode {
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
 
+        if (info.getPartitionExprs() != null) {
+            msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
+        }
         // TODO(lingbin): remove blew codes, because it is duplicate with TSortInfo
         msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
@@ -200,20 +204,38 @@ public class SortNode extends PlanNode {
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(detailPrefix).append("order by: ");
-        Iterator<Expr> expr = info.getOrderingExprs().iterator();
-        Iterator<Boolean> isAsc = info.getIsAscOrder().iterator();
+        Iterator<Expr> partitionExpr = info.getPartitionExprs().iterator();
         boolean start = true;
-        while (expr.hasNext()) {
+        while (partitionExpr.hasNext()) {
+            if (start) {
+                start = false;
+                output.append(detailPrefix).append("partition by: ");
+            } else {
+                output.append(", ");
+            }
+            if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                output.append(partitionExpr.next().toSql()).append(" ");
+            } else {
+                output.append(partitionExpr.next().explain()).append(" ");
+            }
+        }
+        if (!start) {
+            output.append("\n");
+        }
+        output.append(detailPrefix).append("order by: ");
+        Iterator<Expr> orderExpr = info.getOrderingExprs().iterator();
+        Iterator<Boolean> isAsc = info.getIsAscOrder().iterator();
+        start = true;
+        while (orderExpr.hasNext()) {
             if (start) {
                 start = false;
             } else {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(expr.next().toSql()).append(" ");
+                output.append(orderExpr.next().toSql()).append(" ");
             } else {
-                output.append(expr.next().explain()).append(" ");
+                output.append(orderExpr.next().explain()).append(" ");
             }
             output.append(isAsc.next() ? "ASC" : "DESC");
         }

@@ -12,20 +12,23 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalTopNOperator extends PhysicalOperator {
     private final long offset;
+    private final List<ColumnRefOperator> partitionByColumns;
     private final SortPhase sortPhase;
     private final boolean isSplit;
-
-    private boolean isEnforced;
+    private final boolean isEnforced;
 
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
+                                List<ColumnRefOperator> partitionByColumns,
                                 SortPhase sortPhase,
                                 boolean isSplit,
                                 boolean isEnforced,
@@ -34,11 +37,16 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
+        this.partitionByColumns = partitionByColumns;
         this.sortPhase = sortPhase;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
+    }
+
+    public List<ColumnRefOperator> getPartitionByColumns() {
+        return partitionByColumns;
     }
 
     public SortPhase getSortPhase() {
