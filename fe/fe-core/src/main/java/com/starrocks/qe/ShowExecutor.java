@@ -121,6 +121,7 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -131,6 +132,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.statistic.AnalyzeJob;
@@ -145,6 +147,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -164,7 +167,7 @@ public class ShowExecutor {
         resultSet = null;
     }
 
-    public ShowResultSet execute() throws AnalysisException {
+    public ShowResultSet execute() throws AnalysisException, DdlException {
         if (stmt instanceof ShowMaterializedViewStmt) {
             handleShowMaterializedView();
         } else if (stmt instanceof ShowAuthorStmt) {
@@ -491,7 +494,7 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb() throws AnalysisException {
+    private void handleShowDb() throws AnalysisException, DdlException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
@@ -512,12 +515,31 @@ public class ShowExecutor {
                     PrivPredicate.SHOW)) {
                 continue;
             }
-
             dbNameSet.add(db);
         }
 
         for (String dbName : dbNameSet) {
             rows.add(Lists.newArrayList(dbName));
+        }
+
+        if (showDbStmt.getDb() != null) {
+            rows.clear();
+            String db = showDbStmt.getDb();
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            // get databases from external catalog
+            // eg: for hive, get db info from hms
+            // if fe can't connect to hms, would throw DdlException
+            try {
+                Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
+                if (connectorMetadata != null) {
+                    List<String> externalDbNames = connectorMetadata.get().listDatabaseNames();
+                    for (String dbName : externalDbNames) {
+                        rows.add(Lists.newArrayList(dbName));
+                    }
+                }
+            } catch (NullPointerException e) {
+                throw new DdlException("Can not acquire databases from " + db + ", please check catalog config!");
+            }
         }
 
         resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);

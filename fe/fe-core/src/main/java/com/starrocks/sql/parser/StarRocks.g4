@@ -41,7 +41,6 @@ statement
     | createExternalCatalogStatement                                                        #createCatalog
     | dropExternalCatalogStatement                                                          #dropCatalog
     | showCatalogStatement                                                                  #showCatalogs
-    | showDbFromCatalogStatement                                                            #showDbFromCatalog
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -69,7 +68,7 @@ statement
 
     // Other statement
     | USE schema=identifier                                                                 #use
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
@@ -285,6 +284,10 @@ classifier
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?

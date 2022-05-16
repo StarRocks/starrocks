@@ -1271,14 +1271,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
+    public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowDbStmt(stringLiteral.getValue());
         } else if (context.expression() != null) {
             return new ShowDbStmt(null, (Expr) visit(context.expression()));
+        } else if (context.db != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.db);
+            return new ShowDbStmt(null, qualifiedName.toString());
         } else {
-            return new ShowDbStmt(null, null);
+            return new ShowDbStmt((String) null, (String) null);
         }
     }
 
