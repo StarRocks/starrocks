@@ -321,7 +321,7 @@ private:
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
-    
+
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
 
