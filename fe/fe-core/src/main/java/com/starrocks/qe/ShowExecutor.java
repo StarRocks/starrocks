@@ -521,6 +521,9 @@ public class ShowExecutor {
         if (showDbStmt.getDb() != null) {
             String db = showDbStmt.getDb();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getConnectorMgr().getMetadataMgr();
+            // get databases from external catalog
+            // eg: for hive, get db info from hms
+            // if fe can't connect to hms, would throw DdlException
             List<String> externalDbNames = metadataMgr.getOptionalMetadata(db).get().listDatabaseNames();
             rows.clear();
             for (String dbName : externalDbNames) {
