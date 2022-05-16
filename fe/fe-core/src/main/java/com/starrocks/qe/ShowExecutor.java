@@ -518,10 +518,10 @@ public class ShowExecutor {
             rows.add(Lists.newArrayList(dbName));
         }
 
-        if (showDbStmt.getCatalogName() != null) {
-            String catalogName = showDbStmt.getCatalogName();
+        if (showDbStmt.getDb() != null) {
+            String db = showDbStmt.getDb();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getConnectorMgr().getMetadataMgr();
-            List<String> externalDbNames = metadataMgr.getOptionalMetadata(catalogName).get().listDatabaseNames();
+            List<String> externalDbNames = metadataMgr.getOptionalMetadata(db).get().listDatabaseNames();
             rows.clear();
             for (String dbName : externalDbNames) {
                 rows.add(Lists.newArrayList(dbName));

@@ -68,8 +68,8 @@ statement
 
     // Other statement
     | USE schema=identifier                                                                 #use
-    | showVariablesStatement                                                                #showVariables
     | showDatabasesStatement                                                                #showDatabases
+    | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     ;
@@ -281,6 +281,10 @@ classifier
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showDatabasesStatement
+    : SHOW  DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
@@ -584,7 +588,6 @@ specialFunctionExpression
     | MONTH '(' expression ')'
     | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
-    | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'

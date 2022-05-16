@@ -39,37 +39,29 @@ public class ShowDbStmt extends ShowStmt {
                     .addColumn(new Column(DB_COL, ScalarType.createVarchar(20)))
                     .build();
     private final String pattern;
+    private String db;
     private Expr where;
-
-    private String catalogName;
 
     public ShowDbStmt(String pattern) {
         this.pattern = pattern;
     }
 
-    public ShowDbStmt(String pattern, String catalogName) {
-        this.pattern = pattern;
-        this.catalogName = catalogName;
-    }
-
     public ShowDbStmt(String pattern, Expr where) {
         this.pattern = pattern;
         this.where = where;
-        this.catalogName = null;
     }
 
-    public ShowDbStmt(String pattern, Expr where, String catalogName) {
+    public ShowDbStmt(String pattern, String db) {
         this.pattern = pattern;
-        this.where = where;
-        this.catalogName = catalogName;
+        this.db = db;
     }
 
     public String getPattern() {
         return pattern;
     }
 
-    public String getCatalogName() {
-        return catalogName;
+    public String getDb() {
+        return db;
     }
 
     @Override
@@ -95,6 +87,9 @@ public class ShowDbStmt extends ShowStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder("SHOW DATABASES");
+        if (db != null) {
+            sb.append(" FROM ").append(db);
+        }
         if (pattern != null) {
             sb.append(" LIKE '").append(pattern).append("'");
         }

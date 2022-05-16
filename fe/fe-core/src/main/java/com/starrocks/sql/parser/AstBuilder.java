@@ -1270,32 +1270,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
-    @Override
     public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
-        String catalogName = null;
-        if (context.catalogName != null) {
-            Identifier identifier = (Identifier) visit(context.catalogName);
-            catalogName = identifier.getValue();
-        }
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            if (catalogName == null) {
-                return new ShowDbStmt(stringLiteral.getValue());
-            } else {
-                return new ShowDbStmt(stringLiteral.getValue(), catalogName);
-            }
+            return new ShowDbStmt(stringLiteral.getValue());
         } else if (context.expression() != null) {
-            if (catalogName == null) {
-                return new ShowDbStmt(null, (Expr) visit(context.expression()));
-            } else {
-                return new ShowDbStmt(null, (Expr) visit(context.expression()), catalogName);
-            }
+            return new ShowDbStmt(null, (Expr) visit(context.expression()));
+        } else if (context.db != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.db);
+            return new ShowDbStmt(null, qualifiedName.toString());
         } else {
-            if (catalogName == null) {
-                return new ShowDbStmt(null, null, null);
-            } else {
-                return new ShowDbStmt(null, null, catalogName);
-            }
+            return new ShowDbStmt((String) null, (String) null);
         }
     }
 
@@ -1729,8 +1714,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("quarter", visit(context.expression(), Expr.class));
         } else if (context.REGEXP() != null) {
             return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
-        } else if (context.REPLACE() != null) {
-            return new FunctionCallExpr("replace", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
             return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
         } else if (context.RLIKE() != null) {
