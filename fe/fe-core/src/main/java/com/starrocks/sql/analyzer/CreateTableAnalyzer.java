@@ -234,10 +234,6 @@ public class CreateTableAnalyzer {
                     + Config.max_layout_length_per_row);
         }
 
-        if (keysDesc == null) {
-            throw new SemanticException("keysDesc should not be null");
-        }
-
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
             throw new SemanticException("HLL must be used in AGG_KEYS");
         }
