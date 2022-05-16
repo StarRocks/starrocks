@@ -1712,7 +1712,7 @@ drop_stmt ::=
     :}
     | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
-        RESULT = new DropDbStmt(ifExists, db, !force);
+        RESULT = new DropDbStmt(ifExists, db, force);
     :}
     /* cluster */
     | KW_DROP KW_CLUSTER opt_if_exists:ifExists ident:cluster
@@ -1772,6 +1772,10 @@ drop_stmt ::=
 // Recover statement
 recover_stmt ::=
     KW_RECOVER KW_DATABASE ident:dbName
+    {:
+        RESULT = new RecoverDbStmt(dbName);
+    :}
+    | KW_RECOVER KW_SCHEMA ident:dbName
     {:
         RESULT = new RecoverDbStmt(dbName);
     :}
