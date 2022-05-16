@@ -1461,4 +1461,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
+
+    /**
+     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     */
+    @ConfField(mutable = true)
+    public static int quorom_publish_wait_time_ms = 500;
 }
