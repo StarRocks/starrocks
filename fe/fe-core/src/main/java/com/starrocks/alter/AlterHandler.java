@@ -21,27 +21,21 @@
 
 package com.starrocks.alter;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
-import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AlterReplicaTask;
@@ -56,6 +50,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class AlterHandler extends MasterDaemon {
@@ -79,6 +75,8 @@ public abstract class AlterHandler extends MasterDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
+    protected ThreadPoolExecutor executor;
+
     protected void lock() {
         lock.lock();
     }
@@ -89,6 +87,9 @@ public abstract class AlterHandler extends MasterDaemon {
 
     public AlterHandler(String name) {
         super(name, FeConstants.default_scheduler_interval_millisecond);
+        executor = ThreadPoolManager
+                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                        name + "_pool", true);
     }
 
     protected void addAlterJobV2(AlterJobV2 alterJob) {
@@ -400,85 +401,8 @@ public abstract class AlterHandler extends MasterDaemon {
         return jobNum;
     }
 
-    /*
-     * Handle the finish report of alter task.
-     * If task is success, which means the history data before specified version has been transformed successfully.
-     * So here we should modify the replica's version.
-     * We assume that the specified version is X.
-     * Case 1:
-     *      After alter table process starts, there is no new load job being submitted. So the new replica
-     *      should be with version (1-0). So we just modify the replica's version to partition's visible version, which is X.
-     * Case 2:
-     *      After alter table process starts, there are some load job being processed.
-     * Case 2.1:
-     *      Only one new load job, and it failed on this replica. so the replica's last failed version should be X + 1
-     *      and version is still 1. We should modify the replica's version to (last failed version - 1)
-     * Case 2.2
-     *      There are new load jobs after alter task, and at least one of them is succeed on this replica.
-     *      So the replica's version should be larger than X. So we don't need to modify the replica version
-     *      because its already looks like normal.
-     */
-    public void handleFinishAlterTask(AlterReplicaTask task) throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(task.getDbId());
-        if (db == null) {
-            throw new MetaNotFoundException("database " + task.getDbId() + " does not exist");
-        }
-
-        db.writeLock();
-        try {
-            OlapTable tbl = (OlapTable) db.getTable(task.getTableId());
-            if (tbl == null) {
-                throw new MetaNotFoundException("tbl " + task.getTableId() + " does not exist");
-            }
-            Partition partition = tbl.getPartition(task.getPartitionId());
-            if (partition == null) {
-                throw new MetaNotFoundException("partition " + task.getPartitionId() + " does not exist");
-            }
-            MaterializedIndex index = partition.getIndex(task.getIndexId());
-            if (index == null) {
-                throw new MetaNotFoundException("index " + task.getIndexId() + " does not exist");
-            }
-            Tablet tablet = index.getTablet(task.getTabletId());
-            Preconditions.checkNotNull(tablet, task.getTabletId());
-            Replica replica = ((LocalTablet) tablet).getReplicaById(task.getNewReplicaId());
-            if (replica == null) {
-                throw new MetaNotFoundException("replica " + task.getNewReplicaId() + " does not exist");
-            }
-
-            LOG.info("before handle alter task tablet {}, replica: {}, task version: {}-{}",
-                    task.getSignature(), replica, task.getVersion());
-            boolean versionChanged = false;
-            if (replica.getVersion() > task.getVersion()) {
-                // Case 2.2, do nothing
-            } else {
-                if (replica.getLastFailedVersion() > task.getVersion()) {
-                    // Case 2.1
-                    replica.updateRowCount(task.getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                } else {
-                    // Case 1
-                    Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
-                    replica.updateRowCount(task.getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                }
-            }
-
-            if (versionChanged) {
-                ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(task.getDbId(), task.getTableId(),
-                        task.getPartitionId(), task.getIndexId(), task.getTabletId(), task.getBackendId(),
-                        replica.getId(), replica.getVersion(), -1,
-                        replica.getDataSize(), replica.getRowCount(),
-                        replica.getLastFailedVersion(),
-                        replica.getLastSuccessVersion());
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
-            }
-
-            LOG.info("after handle alter task tablet: {}, replica: {}", task.getSignature(), replica);
-        } finally {
-            db.writeUnlock();
-        }
+    public void handleFinishAlterTask(AlterReplicaTask task) throws RejectedExecutionException {
+        executor.submit(task);
     }
 
     // replay the alter job v2
