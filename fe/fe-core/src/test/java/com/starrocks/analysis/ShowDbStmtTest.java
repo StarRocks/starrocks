@@ -43,5 +43,9 @@ public class ShowDbStmtTest {
         Assert.assertEquals("SHOW DATABASES LIKE 'abc'", stmt.toString());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+
+        stmt = new ShowDbStmt(null, "hive_catalog_1");
+        stmt.analyze(analyzer);
+        Assert.assertEquals("hive_catalog_1", stmt.getDb());
     }
 }
