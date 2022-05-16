@@ -123,14 +123,14 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
         ColumnRefSet rightColumns = joinOpt.getInputs().get(1).getOutputColumns();
 
         if (join.getJoinType().isLeftOuterJoin()) {
-            if (canEliminateNull(rightColumns, filter.getPredicate().clone())) {
+            if (canEliminateNull(rightColumns, filter.getPredicate())) {
                 input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                                 .setJoinType(JoinOperator.INNER_JOIN)
                                 .build(),
                         input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
-            if (canEliminateNull(leftColumns, filter.getPredicate().clone())) {
+            if (canEliminateNull(leftColumns, filter.getPredicate())) {
                 input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                         .setJoinType(JoinOperator.INNER_JOIN).build(), input.inputAt(0).getInputs()));
             }
@@ -138,10 +138,10 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
             boolean canConvertLeft = false;
             boolean canConvertRight = false;
 
-            if (canEliminateNull(leftColumns, filter.getPredicate().clone())) {
+            if (canEliminateNull(leftColumns, filter.getPredicate())) {
                 canConvertLeft = true;
             }
-            if (canEliminateNull(rightColumns, filter.getPredicate().clone())) {
+            if (canEliminateNull(rightColumns, filter.getPredicate())) {
                 canConvertRight = true;
             }
 
@@ -176,7 +176,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
                 .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
 
         for (ScalarOperator e : Utils.extractConjuncts(expression)) {
-            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).visit(e, null);
+            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
 
             ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
             //The calculation of the null value is in the constant fold

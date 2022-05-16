@@ -115,7 +115,7 @@ public class ReorderJoinRule extends Rule {
                     ReplaceColumnRefRewriter replaceColumnRefRewriter =
                             new ReplaceColumnRefRewriter(multiJoinNode.getExpressionMap(), true);
                     projectMap.put(context.getColumnRefFactory().getColumnRef(id),
-                            scalarOperator.clone().accept(replaceColumnRefRewriter, null));
+                            replaceColumnRefRewriter.rewrite(scalarOperator));
                 }
             }
             joinExpr.getOp().setProjection(new Projection(projectMap, commonProjectMap));
