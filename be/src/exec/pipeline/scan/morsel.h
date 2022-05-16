@@ -77,6 +77,7 @@ public:
     virtual std::string name() const = 0;
 };
 
+// The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
     explicit FixedMorselQueue(Morsels&& morsels)
