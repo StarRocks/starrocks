@@ -55,14 +55,7 @@ public class PhysicalAssertOneRowOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        PhysicalAssertOneRowOperator that = (PhysicalAssertOneRowOperator) o;
-        return checkRows == that.checkRows && assertion == that.assertion && Objects.equal(tips, that.tips);
+        return this == o;
     }
 
     @Override
