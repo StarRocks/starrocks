@@ -101,7 +101,7 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg5Sql = "create resource_group rg5\n" +
             "to\n" +
-            "     (database='db1')\n" +
+            "     (`database`='db1')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '25',\n" +
             "    'mem_limit' = '80%',\n" +
