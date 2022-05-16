@@ -1,59 +1,96 @@
 # array_position
 
-## description
+## Description
 
-### Syntax
+Obtain the position of an element in an array.
 
-```Haskell
+## Syntax
+
+```SQL
 array_position(any_array, any_element)
 ```
 
-Get the position of the certain element in the array. If yes, it returns position; otherwise, it returns 0.
+## Parameters
 
-## example
+- `any_array`: the array to be searched.
+- `any_element`: an expression that matches the element in an array.
 
-```plain text
+## Return value
+
+Returns the position of the specified element if the element can be found in the specified array and returns 0 if the element cannot be found in the array.
+
+## Examples
+
+- Example 1: Obtain the position of an element in an array.
+
+```Plain%20Text
 mysql> select array_position(["apple","orange","pear"], "orange");
+
 +-----------------------------------------------------+
+
 | array_position(['apple','orange','pear'], 'orange') |
+
 +-----------------------------------------------------+
+
 |                                                   2 |
+
 +-----------------------------------------------------+
+
 1 row in set (0.01 sec)
 ```
 
-You can also get position whether the array contains NULL.
+- Example 2: Obtain the position of `NULL` in an array.
 
-```plain text
+```VBScript
 mysql> select array_position([1, NULL], NULL);
+
 +--------------------------------+
+
 | array_position([1,NULL], NULL) |
+
 +--------------------------------+
+
 |                              2 |
+
 +--------------------------------+
+
 1 row in set (0.00 sec)
 ```
 
-You can also get position whether it's multi-dimensional array. At this time, you need to ensure that the subarray elements match exactly, including the element arrangement order.
+- Example 3: Obtain the position of a sub-array in a multi-dimensional array. A position can be returned only when a sub-array that consists of the same elements in the same order as the specified sub-array can be found in the multi-dimensional array.
 
-```plain text
+```Lua
 mysql> select array_position([[1,2,3], [4,5,6]], [4,5,6]);
+
 +--------------------------------------------+
+
 | array_position([[1,2,3],[4,5,6]], [4,5,6]) |
+
 +--------------------------------------------+
+
 |                                          2 |
+
 +--------------------------------------------+
+
 1 row in set (0.00 sec)
+
+
 
 mysql> select array_position([[1,2,3], [4,5,6]], [4,6,5]);
+
 +--------------------------------------------+
+
 | array_position([[1,2,3],[4,5,6]], [4,6,5]) |
+
 +--------------------------------------------+
+
 |                                          0 |
+
 +--------------------------------------------+
+
 1 row in set (0.00 sec)
 ```
 
-## keyword
+## Keywords
 
-ARRAY_POSITION,ARRAY
+ARRAY_POSITION, ARRAY

@@ -1,121 +1,143 @@
-# Deploy FAQ
+# Deployment FAQ
 
-## **How to bind priority_networks parameters in fe.conf configuration file to a fixed IP?**
+This topic provides answers to some frequently asked questions about deployment.
 
-**Description of the problem：**
+## How do I bind a fixed IP address with the `priority_networks` parameter in the `fe.conf` file?
 
-For  example, the client has 2 ip, namely, 192.168.108.23, 192.168.108.43. If you write data to 192.168.108.23/24, the system automatically identifies 43. If you write data to 192.168.108.23/32, it may cause error and the system automatically identifies 127.0.0.1.
+### Problem description
 
-**Solution:**
+For example, if you have two IP addresses: 192.168.108.23 and 192.168.108.43. You might provide IP addresses as follows:
 
-Drop 32 and only write the ip; or just write a relatively longer one, such as 28.
+- If you specify the addresses as 192.168.108.23/24, StarRocks will recognize them as 192.168.108.43.
+- If you specify the addresses as 192.168.108.23/32, StarRocks will recognize them as 127.0.0.1.
 
-Note: (The error of 32 indicates the current version is old, but the new version has fixed the problem.)
+### Solution
 
-## **be http_service didn't start correctly**
+There are the following two ways to solve this problem:
 
-**Description of the problem:**
+- Do not add "32" at the end of an IP address or change "32" to "28".
+- You can also upgrade to StarRocks 2.1 or later.
 
-When installing "be", the system reports a startup error: StarRocks Be http service did not start correctly,exiting
+## Why does the error "StarRocks BE http service did not start correctly, exiting" occur when I start a backend (BE) after installation?
 
-**Solution:**
+When installing a BE, the system reports a startup error: StarRocks Be http service did not start correctly, exiting.
 
-The problem is that 'be webservice' port is occupied. You can modify the port in 'be.conf' and restart it. If  the error message is reported repeatedly on the port which is not occupied after several modifications, check whether the program, such as yarn, is installed and modify the listening rule on listening port, or bypass the port selection range of 'be'.
+This error occurs because the web services port of the BE is occupied. Try to modify the ports in the `be.conf` file and restart the BE.
 
-## **Whether OS in SUSE 12SPS is supported?**
+## Can StarRocks run on SUSE 12SPS?
 
-Can be supported. No problem is identified in testing.
+Yes.
 
-ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy
+## What do I do when the error occurs: ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy?
 
-Check whether 'jre' is used. If so, change 'jre' to 'jdk'. Oraclejdk version 1.8 plus is recommended.
+This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 1.8 or later.
 
-## **[Enterprise deployment] An error occurs in node configuration during installation and deployment: Failed to Distribute files to node**
+## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
 
-This error is due to the wrong version of setuptools. The following commands need to be executed in each computer because root permissions are needed:
+This error occurs when Setuptools versions installed on multiple frontends (FEs) are inconsistent. To solve this problem, you can execute the following command as a root user.
 
-```palin text
+```Plain%20Text
 yum remove python-setuptools
 
+
+
 rm /usr/lib/python2.7/site-packages/setuptool* -rf
+
+
 
 wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 ```
 
-## **Can StarRocks temporarily modify the FE and BE configurations to make the modification take effect without restarting, for the production environment cannot be restarted unless it's necessary?**
+## Can FE and BE configurations of StarRocks be modified and then take effect without restarting the cluster?
 
-Temporary modification of FE configuration:
+Yes. Perform the following steps to complete the modifications for an FE and a BE:
 
-SQL mode:
+- FE: You can complete the modification for an FE in one of the following ways:
+  - SQL
 
-```sql
+```Plain%20Text
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
-```sql
---Eg：
+Example:
+
+```Plain%20Text
 ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
 ```
 
-Command mode:
+- Shell
 
-```plain text
+```Plain%20Text
 curl --location-trusted -u username:password http://ip:fe_http_port/api/_set_config?key=value
 ```
 
-E.g.：
+Example:
 
-```plain text
+```Plain%20Text
 curl --location-trusted -u root:root  http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
 ```
 
-Temporary modification of bE configuration:
+- BE: You can complete the modification for a BE in the following way:
 
-Command mode:
-
-```plain text
+```Plain%20Text
 curl -XPOST -u username:password http://ip:be_http_port/api/update_config?key=value
-
-Is the user not authorized to log on remotely:
-
-CREATE USER 'test'@'%' IDENTIFIED BY '123456';
-GRANT SELECT_PRIV ON . TO 'test'@'%';
-
-Create user test and grant it permissions to log in again.
 ```
 
-## **[Disk expansion problem] The disk space of BE is insufficient. After disks are added, load balancing fails on the data storage and an error occurs: Failed to get scan range, no queryable replica found in tablet: 11903**
+> Note: Make sure that the user has permission to log in remotely. If not, you can grant the permission to the user in the following way:
 
-**Description of the problem:**
+```Plain%20Text
+CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 
-A Flink import error occurs, indicating that the disk is insufficient. After disk expansion, load balancing of stored data cannot be performed, but the data is stored randomly.
+GRANT SELECT_PRIV ON . TO 'test'@'%';
+```
 
-**Solution:**
+## What do I do if the following error occurs: Failed to get scan range, no queryable replica found in tablet:11903
 
-It's under repair. If the data is not important, the testing clients are advised to delete the disk directly. If the data is important or for the online clients, manual operation is recommended.
+### Problem description
 
-But one problem following the deletion of the disc is that an error message is displayed after the disk directory is changed:
+This error occurs when a BE does not have enough disk space to load data from Flink. The data cannot be distributed evenly to all disks after disk expansion.
 
-`Failed to get scan range, no queryable replica found in tablet: 11903`，
+### Solution
 
-The solution is to truncate table 11903.
+Patches to this bug is still under active development. Currently, you can troubleshoot it in the following two ways:
 
-## **During the cluster restart, a startup error of fe occors: Fe type:unknown ,is ready :false**
+- Manually distributing data on all disks.
+- If the data on these disks is not important, we recommend deleting the disks. After you delete the disks and switch the disk directory, this error occurs again. You can then truncate the 11903 table  to solve it.
 
-Confirm whether master is started, or try to restart the machine one by one.
+## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 
-## Error Installing Cluster：failed to get service info err
+Check if the master FE is running. If not, restart the FE nodes in your cluster one by one.
 
-Check whether sshd is enabled on the machine. Check the status of sshd using /etc/init.d/sshd status.
+## Why does the error "failed to get service info err." occur when I deploy the cluster?
 
-## **Fail to start Be and the log reports an error: Fail to get master client from cache. host= port=0 code=THRIFT_RPC_ERROR**
+Check if OpenSSH Daemon (sshd) is enabled. If not, run the `/etc/init.d/sshd`` status` command to enable it.
 
-Check whether be.conf port is occupied using `netstat  -anp  |grep  port`. If so, use another idle port and restart it.
+## Why does the error "Fail to get master client from `cache. ``host= port=0 code=THRIFT_RPC_ERROR`" occur when I start a BE?
 
-## **When upgrading Manager in the expertise system, a prompt occurs: Failed to transport upgrade files to agent host. src:**…
+Run the `netstat -anp |grep port` command to check whether the ports in the `be.conf` file are occupied. If so, replace the occupied port with a free port and then restart the BE.
 
-Check whether the disk space is insufficient. During the cluster upgrade, the Manager distributes the binary file of the new version to each node. If the disk space of the deployment directory is insufficient, the file cannot be distributed, causing the aforementioned error.
+## Why does the error "Failed to transport upgrade files to agent host. src:…" occur when I upgrade a cluster of the Enterprise Edition?
 
-## **The FE status of the newly added node is normal. However, an error occurs in the FE node logs displayed on the Diagnosis page of the Manager: "Failed to search log.**"
+This error occurs when the disk space specified in the deployment directory is insufficient. During the cluster upgrade, the StarRocks Manager distributes the binary file of the new version to each node. If the disk space specified in the deployment directory is insufficient, the file cannot be distributed to each node. To solve this problem, add data disks.
 
-Manager obtains the path configuration of the newly deployed FE within 30 seconds by default. This problem occurs if the FE starts slowly or does not respond within 30 seconds due to other reasons. Check the log of Manager Web, and herein lies the log directory:`/starrocks-manager-xxx/center/log/webcenter/log/web/drms.INFO`, and search for the log to see whether there is the message: `Failed to update fe configurations`. If so, restart the corresponding FE service and the new path configuration will be obtained again.
+## Why does the FE node log on the diagnostics page of StarRocks Manager display "Search log failed." for a newly deployed FE node that is running properly?
+
+ By default, StarRocks Manager obtains the path configuration of the newly deployed FE within 30 seconds. This error occurs when the FE starts slowly or does not respond within 30 seconds due to other reasons. Check the log of Manager Web via the path:
+
+`/starrocks-manager-xxx/center/log/webcenter/log/web/``drms.INFO`(you can customize the path). Then find that whether the message "Failed to update FE configurations" display in the log. If so, restart the corresponding FE to obtain the new path configuration.
+
+## Why does the error "exceeds max permissable delta:5000ms." occur when I start an FE?
+
+This error occurs when the time difference between two machines is more than 5s. To solve this problem, align the time of these two machines.
+
+## How do I set the `storage_root_path` parameter if there are multiple disks in a BE for data storage?
+
+Configure the `storage_root_path` parameter in the `be.conf` file and separate values of this parameter with `;`. For example: `storage_root_path=/the/path/to/storage1;/the/path/to/storage2;/the/path/to/storage3;`
+
+## Why does the error "invalid cluster id: 209721925." occur after an FE is added to my cluster?
+
+If you do not add the `--helper` option for this FE when starting your cluster for the first time, the metadata between two machines is inconsistent, thus this error occurs. To solve this problem, you need to   clear all metadata under the meta directory and then add an FE with the `--helper` option.
+
+## Why Alive is `false` when an FE is running and prints log `transfer: follower`?
+
+This issue occurs when more than half of memory of Java Virtual Machine (JVM) is used and no checkpoint is marked. In general, a checkpoint will be marked after the system accumulates 50,000 pieces of log. We recommend that you modify the JVM's parameters of each FE and restarting these FEs when they are not heavily loaded.

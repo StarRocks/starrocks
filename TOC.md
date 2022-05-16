@@ -32,6 +32,7 @@
 + Data Export
   + [Export](/unloading/Export.md)
   + [Spark Connector](/unloading/Spark_connector.md)
+  + [Flink Connector](/unloading/Flink_connector.md)
 + Using StarRocks
   + [Precise De-duplication with Bitmap](/using_starrocks/Using_bitmap.md)
   + [Approximate De-duplication with HLL](/using_starrocks/Using_HLL.md)
@@ -264,6 +265,7 @@
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
       + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
+      + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
     + Bitmap Functions
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
@@ -288,8 +290,12 @@
       + [array_min](/sql-reference/sql-functions/array-functions/array_min.md)
       + [array_position](/sql-reference/sql-functions/array-functions/array_position.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
+      + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
     + [cast function](/sql-reference/sql-functions/cast.md)
     + [hash function](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+    + Crytographic Functions
+      + [md5](/sql-reference/sql-functions/crytographic-functions/md5.md)
+      + [sha2](/sql-reference/sql-functions/crytographic-functions/sha2.md)
   + [System Variable](/reference/System_variable.md)
   + [Error Code](/reference/Error_code.md)
   + [System Limit](/reference/System_limit.md)
