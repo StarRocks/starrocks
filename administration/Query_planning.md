@@ -192,3 +192,37 @@ Fragment 1 uses the `BROADCAST` method to perform `Order/Aggregation/Join` opera
 By removing the specific expressions (only keep the operators), the query plan can be presented in a more macroscopic view, as shown in the following figure.
 
 ![8-5](../assets/8-5.png)
+
+## SQL fingerprint
+
+SQL fingerprint is used to optimize slow queries and improve system resource utilization. StarRocks uses the SQL fingerprint feature to normalize SQL statements in the slow query log (`fe.audit.log.slow_query`), categorizes the SQL statements into different types, and calculates the MD5 hash value of each SQL type to identify slow queries. The MD5 hash value is specified by the field `Digest`.
+
+~~~SQL
+2021-12-27 15:13:39,108 [slow_query] |Client=172.26.xx.xxx:54956|User=root|Db=default_cluster:test|State=EOF|Time=2469|ScanBytes=0|ScanRows=0|ReturnRows=6|StmtId=3|QueryId=824d8dc0-66e4-11ec-9fdc-00163e04d4c2|IsQuery=true|feIp=172.26.92.195|Stmt=select count(*) from test_basic group by id_bigint|Digest=51390da6b57461f571f0712d527320f4
+~~~
+
+SQL statement normalization transforms a statement text into a more normalized format and preserves only important statement structure.
+
+- Preserves object identifiers, such as database and table names.
+
+- Converts constants into a question mark (?).
+
+- Deletes comments and formats spaces.
+
+For example, the following two SQL statements belong to the same type after normalization.
+
+- SQL statements before normalization
+
+~~~SQL
+SELECT * FROM orders WHERE customer_id=10 AND quantity>20
+
+
+
+SELECT * FROM orders WHERE customer_id = 20 AND quantity > 100
+~~~
+
+- SQL statement after normalization
+
+~~~SQL
+SELECT * FROM orders WHERE customer_id=? AND quantity>?
+~~~
