@@ -202,6 +202,49 @@ int QuerySharedDriverQueueWithoutLock::_compute_driver_level(const DriverRawPtr 
     return QUEUE_SIZE - 1;
 }
 
+<<<<<<< HEAD
+=======
+void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
+    if (driver->driver_state() == DriverState::CANCELED) {
+        queue.emplace_front(driver);
+    } else {
+        queue.emplace_back(driver);
+    }
+    driver_number++;
+}
+
+void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
+    if (cancelled_set.count(driver) == 0) {
+        DCHECK(driver->is_in_ready_queue());
+        pending_cancel_queue.emplace(driver);
+    }
+}
+
+DriverRawPtr SubQuerySharedDriverQueue::take() {
+    DCHECK(!empty());
+    if (!pending_cancel_queue.empty()) {
+        DriverRawPtr driver = pending_cancel_queue.front();
+        pending_cancel_queue.pop();
+        cancelled_set.insert(driver);
+        --driver_number;
+        return driver;
+    }
+
+    while (!queue.empty()) {
+        DriverRawPtr driver = queue.front();
+        queue.pop_front();
+        auto iter = cancelled_set.find(driver);
+        if (iter != cancelled_set.end()) {
+            cancelled_set.erase(iter);
+        } else {
+            --driver_number;
+            return driver;
+        }
+    }
+    return nullptr;
+}
+
+>>>>>>> 4c524c3cd ([Bug] fix cancel multi times cause pipeline hang (#6161))
 void DriverQueueWithWorkGroup::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _is_closed = true;
