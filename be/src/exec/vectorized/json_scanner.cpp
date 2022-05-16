@@ -78,7 +78,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     try {
         status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Unrecognized json format, stop json loader.");
+        auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
         return Status::DataQualityError(err_msg);
     }
