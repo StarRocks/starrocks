@@ -8,12 +8,12 @@
 
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/morsel.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
@@ -163,7 +163,7 @@ public:
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
-    void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
+    void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
     StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
@@ -389,7 +389,7 @@ private:
     int32_t _driver_id;
     DriverAcct _driver_acct;
     // The first one is source operator
-    MorselQueuePtr _morsel_queue = nullptr;
+    MorselQueue* _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
