@@ -97,7 +97,11 @@ public class SemiReorderRule extends TransformationRule {
         if (leftChildJoinProjection != null) {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
-                boolean isProjectToColumnRef = entry.getValue().isColumnRef();
+                // To handle mappings of expressions in projection, special processing is needed like
+                // ColumnRefOperator -> ColumnRefOperator mappings with name ("expr" -> column_name), it need to be handled
+                // like expression mapping.
+                boolean isProjectToColumnRef = entry.getValue().isColumnRef() &&
+                        entry.getKey().getName().equals(((ColumnRefOperator) entry.getValue()).getName());
                 if (!isProjectToColumnRef &&
                         leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
                     rightExpression.put(entry.getKey(), entry.getValue());
