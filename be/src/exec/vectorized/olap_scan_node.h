@@ -20,6 +20,8 @@ class TupleDescriptor;
 
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
+class Tablet;
+using TabletSharedPtr = std::shared_ptr<Tablet>;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -64,6 +66,8 @@ public:
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
+    static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
+
 private:
     friend class TabletScanner;
 
@@ -99,6 +103,7 @@ private:
         std::vector<T> _items;
     };
 
+private:
     Status _start_scan(RuntimeState* state);
     Status _start_scan_thread(RuntimeState* state);
     void _scanner_thread(TabletScanner* scanner);

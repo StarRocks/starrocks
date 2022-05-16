@@ -153,18 +153,17 @@ public class CallStubGenerator {
         return generator.getByteCode();
     }
 
-
-//    public class CallStub {
-//        public static void batchCallV(int rows, UDF obj, TYPE[] var1, Integer[] var2) throws Exception {
-//            for(int var = 0; var < rows; ++var) {
-//                obj.update(var0, var1[var8], var2[var8]);
-//            }
-//        }
-//    }
+    //    public class CallStub {
+    //        public static void batchCallV(int rows, UDF obj, TYPE[] var1, Integer[] var2) throws Exception {
+    //            for(int var = 0; var < rows; ++var) {
+    //                obj.update(var0, var1[var8], var2[var8]);
+    //            }
+    //        }
+    //    }
     private static class BatchCallEvaluateGenerator {
         BatchCallEvaluateGenerator(Class<?> clazz, Method update) {
-            this.UDFClazz = clazz;
-            this.UDFEvaluate = update;
+            this.udfClazz = clazz;
+            this.udfEvaluate = update;
         }
 
         private final ClassWriter writer = new ClassWriter(0);
@@ -174,10 +173,10 @@ public class CallStubGenerator {
         }
 
         private void genBatchUpdateSingle() {
-            final Parameter[] parameters = UDFEvaluate.getParameters();
+            final Parameter[] parameters = udfEvaluate.getParameters();
             StringBuilder desc = new StringBuilder("(");
             desc.append("I");
-            desc.append(Type.getDescriptor(UDFClazz));
+            desc.append(Type.getDescriptor(udfClazz));
             for (Parameter parameter : parameters) {
                 final Class<?> type = parameter.getType();
                 if (type.isPrimitive()) {
@@ -187,7 +186,7 @@ public class CallStubGenerator {
                 desc.append(Type.getDescriptor(type));
             }
 
-            final Class<?> returnType = UDFEvaluate.getReturnType();
+            final Class<?> returnType = udfEvaluate.getReturnType();
             if (returnType.isPrimitive()) {
                 throw new UnsupportedOperationException("Unsupported return Type:" + returnType.getTypeName());
             }
@@ -245,8 +244,8 @@ public class CallStubGenerator {
                 batchCall.visitInsn(AALOAD);
             }
 
-            batchCall.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(UDFClazz), UDFEvaluate.getName(),
-                    Type.getMethodDescriptor(UDFEvaluate), false);
+            batchCall.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(udfClazz), udfEvaluate.getName(),
+                    Type.getMethodDescriptor(udfEvaluate), false);
             batchCall.visitInsn(AASTORE);
 
             final Label l5 = new Label();
@@ -263,7 +262,7 @@ public class CallStubGenerator {
             batchCall.visitLabel(l6);
             batchCall.visitLocalVariable("i", "I", null, l2, l3, iIndex);
             batchCall.visitLocalVariable("res", Type.getDescriptor(returnType), null, l1, l6, resIndex);
-            batchCall.visitMaxs(iIndex +1 ,iIndex + 1);
+            batchCall.visitMaxs(iIndex + 1, iIndex + 1);
             batchCall.visitEnd();
         }
 
@@ -275,8 +274,8 @@ public class CallStubGenerator {
             return writer.toByteArray();
         }
 
-        private final Class<?> UDFClazz;
-        private final Method UDFEvaluate;
+        private final Class<?> udfClazz;
+        private final Method udfEvaluate;
     }
 
     public static byte[] generateScalarCallStub(Class<?> clazz, Method method) {
