@@ -206,7 +206,7 @@ Status MySQLDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chun
         return Status::EndOfFile("finished!");
     }
 
-    *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, state->chunk_size());
+    *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, 0);
     // indicates whether there are more rows to process. Set in _hbase_scanner.next().
     bool mysql_eos = false;
     int row_num = 0;
