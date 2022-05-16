@@ -76,15 +76,15 @@ public class PreAggregateTurnOnRule {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
 
             context.aggregations = context.aggregations.stream()
-                    .map(d -> d.accept(rewriter, null))
+                    .map(d -> rewriter.rewrite(d))
                     .collect(Collectors.toList());
 
             context.groupings = context.groupings.stream()
-                    .map(d -> d.accept(rewriter, null))
+                    .map(d -> rewriter.rewrite(d))
                     .collect(Collectors.toList());
 
             context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
-                    .map(d -> d.accept(rewriter, null))
+                    .map(d -> rewriter.rewrite(d))
                     .collect(Collectors.toList());
         }
 
@@ -127,7 +127,7 @@ public class PreAggregateTurnOnRule {
             // check has value conjunct
             boolean allKeyConjunct =
                     Utils.extractColumnRef(
-                            Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
+                                    Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
                             .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {

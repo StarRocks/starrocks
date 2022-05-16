@@ -578,7 +578,8 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 21> : 37\n" +
+                "  |  <slot 40> : CAST(37 AS INT");
     }
 
     @Test

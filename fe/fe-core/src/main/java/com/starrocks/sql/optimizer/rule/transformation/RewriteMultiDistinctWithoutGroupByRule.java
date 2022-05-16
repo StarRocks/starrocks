@@ -144,8 +144,7 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
         for (ColumnRefOperator otherRef : otherAggregateRef) {
-            CallOperator otherAggFn =
-                    (CallOperator) aggregate.getAggregations().get(otherRef).accept(rewriter, null);
+            CallOperator otherAggFn = (CallOperator) rewriter.rewrite(aggregate.getAggregations().get(otherRef));
             aggregateFn.put(otherRef, otherAggFn);
         }
         LogicalAggregationOperator newAggregate =
@@ -173,7 +172,7 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
         CallOperator countDistinctFn =
-                (CallOperator) aggregate.getAggregations().get(countDistinctRef).accept(rewriter, null);
+                (CallOperator) rewriter.rewrite(aggregate.getAggregations().get(countDistinctRef));
 
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
         aggregateFn.put(countDistinctRef, countDistinctFn);
