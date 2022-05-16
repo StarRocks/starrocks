@@ -182,7 +182,7 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowCatalogsStmt(ShowCatalogsStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitShowStatement(statement, context);
     }
 
     public R visitDropTableStmt(DropTableStmt statement, C context) {

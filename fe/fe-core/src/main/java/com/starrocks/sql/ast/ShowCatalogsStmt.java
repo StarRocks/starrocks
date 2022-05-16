@@ -27,7 +27,7 @@ public class ShowCatalogsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCatalogsStatement(this, context);
+        return visitor.visitShowCatalogsStmt(this, context);
     }
 
 }

@@ -2,7 +2,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.*;
@@ -13,7 +12,6 @@ import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.utframe.StarRocksAssert;
 
 import com.starrocks.utframe.UtFrameUtils;
-import java.util.List;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -51,11 +49,13 @@ public class ShowCatalogsStmtTest {
     }
 
     @Test
-    public void testShowCatalogs() throws AnalysisException {
+    public void testShowCatalogsNormal() throws AnalysisException {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Catalog");
+        Assert.assertEquals(metaData.getColumn(1).getName(), "Type");
+        Assert.assertEquals(metaData.getColumn(2).getName(), "Comment");
     }
 }

@@ -283,7 +283,7 @@ classifier
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
-    : SHOW DATABASES ((LIKE pattern=string) | (WHERE expression) | (FROM catalogName=identifierOrString))?
+    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showVariablesStatement
