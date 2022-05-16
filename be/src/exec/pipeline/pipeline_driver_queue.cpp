@@ -246,8 +246,10 @@ void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
 }
 
 void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
-    DCHECK(driver->is_in_ready_queue());
-    pending_cancel_queue.emplace(driver);
+    if (cancelled_set.count(driver) == 0) {
+        DCHECK(driver->is_in_ready_queue());
+        pending_cancel_queue.emplace(driver);
+    }
 }
 
 DriverRawPtr SubQuerySharedDriverQueue::take() {
