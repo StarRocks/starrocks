@@ -1,6 +1,6 @@
 # Spark Load
 
-Spark load uses external Spark resources to pre-process      imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
+This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
 
@@ -17,8 +17,8 @@ The user submits a Spark type import job through the MySQL client;the FE records
 The execution of the spark load task is divided into the following main phases.
 
 1. The user submits the spark load job to the FE.
-2. The FE schedules the submission of the ETL task to the Spark cluster for execution.
-3. The Spark cluster executes the ETL task that includes global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
+2. The FE schedules the submission of the ETL task to the Apache Spark™ cluster for execution.
+3. The Apache Spark™ cluster executes the ETL task that includes global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
 4. After the ETL task is completed, the FE gets the data path of each preprocessed slice and schedules the relevant BE to execute the Push task.
 5. The BE reads the data through the Broker and converts it into StarRocks storage format.
 6. The FE schedules the effective version and completes the import job.
@@ -61,12 +61,12 @@ The basic process of data pre-processing is as follows:
 
 ### Configuring ETL Clusters
 
-Spark is used as an external computational resource in StarRocks for ETL work. There may be other external resources added to StarRocks, such as Spark/GPU for query, HDFS/S3 for external storage, MapReduce for ETL, etc. Therefore, we introduce `Resource Management` to manage these external resources used by StarRocks.
+Apache Spark™ is used as an external computational resource in StarRocks for ETL work. There may be other external resources added to StarRocks, such as Spark/GPU for query, HDFS/S3 for external storage, MapReduce for ETL, etc. Therefore, we introduce `Resource Management` to manage these external resources used by StarRocks.
 
-Before submitting a Spark import job, configure the Spark cluster for performing ETL tasks. The syntax for operation is as follows:
+Before submitting a Apache Spark™ import job, configure the Apache Spark™ cluster for performing ETL tasks. The syntax for operation is as follows:
 
 ~~~sql
--- create spark resource
+-- create Apache Spark™ resource
 CREATE EXTERNAL RESOURCE resource_name
 PROPERTIES
 (
@@ -77,7 +77,7 @@ PROPERTIES
  broker.property_key = property_value
 );
 
--- drop spark resource
+-- drop Apache Spark™ resource
 DROP RESOURCE resource_name;
 
 -- show resources
@@ -91,14 +91,14 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 
 * Create resource
 
-`resource-name` is the name of the Spark resource configured in StarRocks.
+`resource-name` is the name of the Apache Spark™ resource configured in StarRocks.
 
-`PROPERTIES` are parameters relating to the Spark resource, as follows:
+`PROPERTIES` are parameters relating to the Apache Spark™ resource, as follows:
   
 * **type**: Resource type, required, currently only supports S     park     .
 * **spark** Related parameters are as follows.
 * `spark.master`: Required, currently supports yarn.
-* `spark.submit.deployMode`: The deployment mode of the Spark program, required, currently supports both cluster and client.
+* `spark.submit.deployMode`: The deployment mode of the Apache Spark™ program, required, currently supports both cluster and client.
 * `spark.hadoop.fs.defaultFS`: Required if master is yarn.
 * Parameters related to yarn resource manager, required if      master is yarn.
 * Single point resource manager required
@@ -109,8 +109,8 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 * `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: For each rm-id, specify the hostname corresponding to the resource manager.
 * `spark.hadoop.yarn.resourcemanager.address.rm-id`: For each rm-id, specify `host:port` for the client to submit jobs to.
 * Other parameters are optional, refer to [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
-* **working_dir**: The directory used by ETL. Required if      Spark is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
-* **broker**: Broker name. Required if Spark is used as an ETL resource. You need to use the `ALTER SYSTEM ADD BROKER` command to complete the configuration in advance.
+* **working_dir**: The directory used by ETL. Required if      Apache Spark™ is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
+* **broker**: Broker name. Required if Apache Spark™ is used as an ETL resource. You need to use the `ALTER SYSTEM ADD BROKER` command to complete the configuration in advance.
 * `broker.property_key`: Information (e.g.authentication information) to be specified when the broker reads the intermediate file generated by the ETL.
 
 **For example**：
@@ -451,9 +451,9 @@ Displays the detailed running status of the job, including the number of importe
 
 You can copy the input to your browser to access  the web interface of the corresponding application.
 
-### View Spark Launcher commit logs
+### View Apache Spark™ Launcher commit logs
 
-Sometimes users need to view the detailed logs generated during a spark job commit. By  default, the logs are saved in the path `log/spark_launcher_log` in the FE root directory      named as `spark-launcher-{load-job-id}-{label}.log`. The logs are      saved in this directory for a period of time and will be erased when the import information in FE metadata is cleaned up. The default retention time is 3 days.
+Sometimes users need to view the detailed logs generated during a Apache Spark™ job commit. By  default, the logs are saved in the path `log/spark_launcher_log` in the FE root directory      named as `spark-launcher-{load-job-id}-{label}.log`. The logs are      saved in this directory for a period of time and will be erased when the import information in FE metadata is cleaned up. The default retention time is 3 days.
 
 ### Cancel Import
 
