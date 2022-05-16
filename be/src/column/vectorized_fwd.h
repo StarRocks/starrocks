@@ -90,6 +90,7 @@ class JsonColumn;
 
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
+using Chunks = std::vector<ChunkPtr>;
 
 using SchemaPtr = std::shared_ptr<Schema>;
 
