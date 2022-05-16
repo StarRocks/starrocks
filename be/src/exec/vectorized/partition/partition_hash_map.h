@@ -64,8 +64,14 @@ struct PartitionHashMapBase {
 
 protected:
     void alloc_new_buffer(PartitionChunks& value, const ChunkPtr& chunk) {
-        value.chunks.push_back(chunk->clone_empty());
+        static size_t reserve_size = 1;
+        // Cause we don't know the cardinality of the partition columns, so we
+        // shouldn't reserve too much space for the buffered chunk
+        // Now the reserve size is set to 1, advanced mechanism may be introduced later
+        ChunkPtr new_chunk = chunk->clone_empty_with_slot(reserve_size);
         value.select_indexes.clear();
+        value.select_indexes.reserve(reserve_size);
+        value.chunks.push_back(std::move(new_chunk));
         value.remain_size = chunk_size;
     }
 

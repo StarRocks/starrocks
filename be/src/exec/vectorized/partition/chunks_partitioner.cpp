@@ -52,7 +52,7 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 
 Status ChunksPartitioner::prepare(RuntimeState* state) {
     _state = state;
-    _pool = state->instance_mem_pool();
+    _mem_pool = std::make_unique<MemPool>();
     _init_hash_map_variant();
     return Status::OK();
 }

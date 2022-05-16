@@ -47,31 +47,9 @@ private:
                                           bool* has_null);
     void _init_hash_map_variant();
 
-private:
-    const bool _has_nullable_partition_column;
-    const std::vector<ExprContext*> _partition_exprs;
-    const std::vector<PartitionColumnType> _partition_types;
-
-    RuntimeState* _state = nullptr;
-    MemPool* _pool = nullptr;
-
-    Columns _partition_columns;
-    // Hash map which holds chunks of different partitions
-    PartitionHashMapVariant _hash_map_variant;
-
-    // Iterator of partitions
-    std::any _partition_it;
-    // Iterator of chunks of current partition
-    std::any _chunk_it;
-    // Offset of current consuming partition
-    int32_t _partition_idx = -1;
-    bool _hash_map_eos = false;
-    bool _null_key_eos = false;
-
-private:
     template <typename HashMapWithKey>
     void split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk) {
-        hash_map_with_key.append_chunk(chunk, _partition_columns, _pool);
+        hash_map_with_key.append_chunk(chunk, _partition_columns, _mem_pool.get());
     }
 
     // Fetch chunks from hash map, return true if reaches eos
@@ -161,6 +139,25 @@ private:
         }
         return true;
     }
-};
 
+    const bool _has_nullable_partition_column;
+    const std::vector<ExprContext*> _partition_exprs;
+    const std::vector<PartitionColumnType> _partition_types;
+
+    RuntimeState* _state = nullptr;
+    std::unique_ptr<MemPool> _mem_pool = nullptr;
+
+    Columns _partition_columns;
+    // Hash map which holds chunks of different partitions
+    PartitionHashMapVariant _hash_map_variant;
+
+    // Iterator of partitions
+    std::any _partition_it;
+    // Iterator of chunks of current partition
+    std::any _chunk_it;
+    // Offset of current consuming partition
+    int32_t _partition_idx = -1;
+    bool _hash_map_eos = false;
+    bool _null_key_eos = false;
+};
 } // namespace starrocks::vectorized
