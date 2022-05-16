@@ -264,6 +264,7 @@
       + [stddev_samp](/sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
       + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
+      + [square](/sql-reference/sql-functions/aggregate-functions/square.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
     + Bitmap Functions
