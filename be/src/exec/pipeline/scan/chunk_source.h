@@ -6,7 +6,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/pipeline/morsel.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/exclusive_ptr.h"
 

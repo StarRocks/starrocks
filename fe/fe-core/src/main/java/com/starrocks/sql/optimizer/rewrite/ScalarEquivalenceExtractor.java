@@ -113,7 +113,7 @@ public class ScalarEquivalenceExtractor {
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
 
                 // will modify the operator, must use clone
-                ScalarOperator r = operator.clone().accept(rewriter, null);
+                ScalarOperator r = rewriter.rewrite(operator);
                 tempResult.add(r);
             }
         }
@@ -154,7 +154,7 @@ public class ScalarEquivalenceExtractor {
             Set<ScalarOperator> values =
                     columnValuesMap.getOrDefault((ColumnRefOperator) operator, Collections.emptySet());
             // avoid use Collection::toSet
-            values.stream().map(d -> d.clone().accept(rewriter, null)).forEach(result::add);
+            values.stream().map(rewriter::rewrite).forEach(result::add);
         }
 
         return result;

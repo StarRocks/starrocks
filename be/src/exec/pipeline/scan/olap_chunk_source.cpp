@@ -130,7 +130,7 @@ void OlapChunkSource::_decide_chunk_size() {
     }
 }
 
-Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
+Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -247,6 +247,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
+
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
@@ -266,6 +267,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
+
     return Status::OK();
 }
 
@@ -381,11 +383,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
+
     SCOPED_TIMER(_scan_timer);
     do {
-        if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
-            return status;
-        }
+        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+
         TRY_CATCH_ALLOC_SCOPE_START()
 
         for (auto slot : _query_slots) {

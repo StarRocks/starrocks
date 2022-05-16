@@ -11,7 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 // Replace the corresponding ColumnRef with ScalarOperator
-public class ReplaceColumnRefRewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
+public class ReplaceColumnRefRewriter {
+    private final Rewriter rewriter = new Rewriter();
     private final Map<ColumnRefOperator, ScalarOperator> operatorMap;
 
     private final boolean isRecursively;
@@ -26,28 +27,34 @@ public class ReplaceColumnRefRewriter extends ScalarOperatorVisitor<ScalarOperat
         this.isRecursively = isRecursively;
     }
 
-    @Override
-    public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
-        List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
-        for (int i = 0; i < children.size(); ++i) {
-            scalarOperator.setChild(i, scalarOperator.getChild(i).accept(this, null));
-        }
-        return scalarOperator;
+    public ScalarOperator rewrite(ScalarOperator origin) {
+        return origin.clone().accept(rewriter, null);
     }
 
-    @Override
-    public ScalarOperator visitVariableReference(ColumnRefOperator column, Void context) {
-        if (!operatorMap.containsKey(column)) {
-            return column;
+    private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
+        @Override
+        public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+            List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
+            for (int i = 0; i < children.size(); ++i) {
+                scalarOperator.setChild(i, scalarOperator.getChild(i).accept(this, null));
+            }
+            return scalarOperator;
         }
-        // Must clone here because
-        // The rewritten predicate will be rewritten continually,
-        // Rewiring predicate shouldn't change the origin project columnRefMap
 
-        ScalarOperator mapperOperator = operatorMap.get(column).clone();
-        for (int i = 0; i < mapperOperator.getChildren().size() && isRecursively; ++i) {
-            mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+        @Override
+        public ScalarOperator visitVariableReference(ColumnRefOperator column, Void context) {
+            if (!operatorMap.containsKey(column)) {
+                return column;
+            }
+            // Must clone here because
+            // The rewritten predicate will be rewritten continually,
+            // Rewiring predicate shouldn't change the origin project columnRefMap
+
+            ScalarOperator mapperOperator = operatorMap.get(column).clone();
+            for (int i = 0; i < mapperOperator.getChildren().size() && isRecursively; ++i) {
+                mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+            }
+            return mapperOperator;
         }
-        return mapperOperator;
     }
 }
