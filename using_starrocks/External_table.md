@@ -364,7 +364,7 @@ PROPERTIES (
 | --- |   ---  |
 |   type  |   The resource type. Set the value to `iceberg`.    |
 |   starrocks.catalog-type  |  The catalog type. Only the Hive catalog is supported. The value is `HIVE`.    |
-|   iceberg.catalog.hive.metastore.uris  |  The thrift URI of the Hive metastore. Apache Iceberg uses the Hive catalog to access the Hive metastore and create and manage tables. You must pass in the thrift URI of the Hive metastore. The parameter value is in the following format: thrift://<Hive metadata IP address>:<Port number>. The port number defaults to 9083.   |
+|   iceberg.catalog.hive.metastore.uris  |  The thrift URI of the Hive metastore. Apache Iceberg uses the Hive catalog to access the Hive metastore and create and manage tables. You must pass in the thrift URI of the Hive metastore. The parameter value is in the following format: thrift://< Hive metadata IP address >:< Port number >. The port number defaults to 9083.   |
 
 Run the following command to query Iceberg resources in StarRocks.
 
