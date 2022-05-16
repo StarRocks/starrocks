@@ -7,7 +7,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -35,8 +34,6 @@ public class CatalogMgr {
 
     public CatalogMgr(ConnectorMgr connectorMgr) {
         this.connectorMgr = connectorMgr;
-        InternalCatalog internalCatalog = new InternalCatalog();
-        catalogs.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, internalCatalog);
     }
 
     public synchronized void createCatalog(CreateCatalogStmt stmt) throws DdlException {
