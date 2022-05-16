@@ -1352,4 +1352,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int heartbeat_retry_times = 3;
+
+    /**
+     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     */
+    @ConfField(mutable = true)
+    public static int quorom_publish_wait_time_ms = 500;
 }
