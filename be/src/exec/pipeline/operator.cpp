@@ -134,6 +134,10 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
+RuntimeState* Operator::runtime_state() {
+    return _factory->runtime_state();
+}
+
 void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
         _runtime_in_filter_num_counter = ADD_COUNTER(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT);

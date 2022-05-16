@@ -17,10 +17,14 @@ class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
-    ~ScanOperator() override = default;
+    ~ScanOperator() override;
 
     Status prepare(RuntimeState* state) override;
 
+    // The running I/O task committed by ScanOperator holds the reference of query context,
+    // so it can prevent the scan operator from deconstructored, but cannot prevent it from closed.
+    // Therefore, release resources used by the I/O task in ~ScanOperator and ScanOperatorFactory::close,
+    // **NOT** in ScanOperator::close.
     void close(RuntimeState* state) override;
 
     bool has_output() const override;

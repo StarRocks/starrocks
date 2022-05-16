@@ -14,6 +14,15 @@ OlapScanPrepareOperator::OlapScanPrepareOperator(OperatorFactory* factory, int32
     _ctx->ref();
 }
 
+OlapScanPrepareOperator::~OlapScanPrepareOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    _ctx->unref(state);
+}
+
 Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
@@ -22,7 +31,6 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
 }
 
 void OlapScanPrepareOperator::close(RuntimeState* state) {
-    _ctx->unref(state);
     SourceOperator::close(state);
 }
 
