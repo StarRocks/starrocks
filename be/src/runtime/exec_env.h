@@ -180,6 +180,7 @@ private:
 
     Status _init_storage_page_cache();
 
+private:
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;

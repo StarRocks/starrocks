@@ -36,7 +36,7 @@ public:
     vectorized::OlapScanNode* scan_node() const { return _scan_node; }
     vectorized::OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
-    const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
+    std::vector<OlapScanRange*> key_ranges() const;
 
 private:
     vectorized::OlapScanNode* _scan_node;
