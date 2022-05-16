@@ -52,6 +52,7 @@ public:
     Status close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
     }

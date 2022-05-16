@@ -156,6 +156,15 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     return nullptr;
 }
 
+int64_t ScanOperator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
+}
+
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
         return Status::OK();
