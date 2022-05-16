@@ -1565,15 +1565,19 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 
+
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
-        List<List<String>> rows = new ArrayList<>();
-        rows.add(Arrays.asList("default", "default", "internal catalog"));
-        List<List<String>> externalCatalog = GlobalStateMgr.getCurrentState().getCatalogMgr().showCatalogs();
-        for (List<String> val : externalCatalog) {
-            rows.add(val);
+        ConcurrentHashMap<String, Catalog> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs();
+        List<List<String>> rows = Lists.newArrayList();
+        for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+            List<String> catalog = Lists.newArrayList();
+            catalog.add(entry.getKey());
+            Catalog value = entry.getValue();
+            catalog.add(((ExternalCatalog) value).getType());
+            catalog.add(value.getComment());
+            rows.add(catalog);
         }
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rows);
     }
-
 }
