@@ -104,9 +104,9 @@ Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
             std::vector<InetAddress> hosts;
             Status status = get_hosts_v4(&hosts);
             if (!status.ok() || hosts.empty()) {
-                LOG(FATAL) << status.get_error_msg();
                 std::stringstream ss;
-                ss << "the status was not ok when get_hosts_v4";
+                ss << "the status was not ok when get_hosts_v4, error is " << status.get_error_msg();
+                LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
 
@@ -122,11 +122,13 @@ Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
 
             if (!set_new_localhost) {
                 std::stringstream ss;
-                ss << "actual backend local ip: " << BackendOptions::get_localhost();
+                ss << "the host recorded in master is " << master_info.backend_ip
+                   << ", but we cannot found the local ip that mapped to that host." << BackendOptions::get_localhost();
+                LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
 
-            LOG(INFO) << "handle localhost process done, localhost now is " << BackendOptions::get_localhost();
+            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost();
         }
     }
 
