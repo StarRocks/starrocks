@@ -636,7 +636,7 @@ public class DatabaseTransactionMgr {
             return true;
         }
         db.readLock();
-
+        long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
@@ -661,6 +661,7 @@ public class DatabaseTransactionMgr {
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
+                    int replicaNum = partitionInfo.getReplicationNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int healthReplicaNum = 0;
@@ -677,6 +678,15 @@ public class DatabaseTransactionMgr {
                                 }
                             }
                             if (healthReplicaNum < quorumNum) {
+                                return false;
+                            }
+                            // quorum publish will make table unstable
+                            // so that we wait quorom_publish_wait_time_ms util all backend publish finish
+                            // before quorum publish
+                            if (successHealthyReplicaNum != replicaNum
+                                    && !unfinishedBackends.isEmpty()
+                                    && currentTs
+                                            - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
                                 return false;
                             }
                         }
