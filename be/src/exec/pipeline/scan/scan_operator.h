@@ -61,6 +61,8 @@ protected:
     // And all these parallel profiles will be merged to ScanOperator's profile at the end.
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
+    bool _is_finished = false;
+
 private:
     inline void set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
@@ -77,8 +79,6 @@ private:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
-
-    bool _is_finished = false;
 
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;

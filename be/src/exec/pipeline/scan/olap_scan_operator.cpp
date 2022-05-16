@@ -57,7 +57,7 @@ bool OlapScanOperator::has_output() const {
 }
 
 bool OlapScanOperator::is_finished() const {
-    if (_ctx->is_finished()) {
+    if (_ctx->is_finished() || _is_finished) {
         return true;
     }
 
