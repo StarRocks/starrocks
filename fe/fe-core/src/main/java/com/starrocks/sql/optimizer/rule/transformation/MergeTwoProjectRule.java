@@ -31,7 +31,7 @@ public class MergeTwoProjectRule extends TransformationRule {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(secondProject.getColumnRefMap());
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
-            resultMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
+            resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
         }
 
         OptExpression optExpression = new OptExpression(

@@ -46,7 +46,7 @@ public class PushDownPredicateProjectRule extends TransformationRule {
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-        ScalarOperator newPredicate = filter.getPredicate().clone().accept(rewriter, null);
+        ScalarOperator newPredicate = rewriter.rewrite(filter.getPredicate());
 
         // try rewrite new predicate
         // e.g. : select 1 as b, MIN(v1) from t0 having (b + 1) != b;

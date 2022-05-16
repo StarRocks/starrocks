@@ -279,7 +279,7 @@ public class MaterializedViewRule extends Rule {
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOperator.getColumnRefMap());
                 List<ScalarOperator> newGroupBys = Lists.newArrayList();
                 for (ColumnRefOperator groupBy : aggOperator.getGroupingKeys()) {
-                    newGroupBys.add(groupBy.accept(rewriter, null));
+                    newGroupBys.add(rewriter.rewrite(groupBy));
                 }
 
                 List<CallOperator> newAggs = Lists.newArrayList();
@@ -290,7 +290,7 @@ public class MaterializedViewRule extends Rule {
                         disableSPJGMaterializedView();
                         break;
                     }
-                    newAggs.add((CallOperator) agg.clone().accept(rewriter, null));
+                    newAggs.add((CallOperator) rewriter.rewrite(agg));
                 }
                 collectGroupByAndAggFunction(newGroupBys, newAggs);
             } else {

@@ -86,7 +86,7 @@ public class MVProjectAggProjectScanRewrite {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : project.getColumnRefMap().entrySet()) {
-            kv.setValue(kv.getValue().accept(rewriter, null));
+            kv.setValue(rewriter.rewrite(kv.getValue()));
         }
     }
 

@@ -42,10 +42,10 @@ public class PushDownApplyProjectRule extends TransformationRule {
 
         LogicalProjectOperator project = (LogicalProjectOperator) child.getOp();
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-        ScalarOperator newScalarOperator = apply.getSubqueryOperator().accept(rewriter, null);
+        ScalarOperator newScalarOperator = rewriter.rewrite(apply.getSubqueryOperator());
         ScalarOperator newPredicate = null;
         if (null != apply.getPredicate()) {
-            newPredicate = apply.getPredicate().accept(rewriter, null);
+            newPredicate = rewriter.rewrite(apply.getPredicate());
         }
 
         OptExpression newApply = new OptExpression(
