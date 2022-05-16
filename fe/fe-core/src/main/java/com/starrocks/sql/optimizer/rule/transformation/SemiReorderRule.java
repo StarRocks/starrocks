@@ -160,7 +160,7 @@ public class SemiReorderRule extends TransformationRule {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rightExpression.entrySet()) {
-                rewriteMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
+                rewriteMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
             }
 
             Operator.Builder builder = OperatorBuilderFactory.build(leftChildJoinRightChild.getOp());

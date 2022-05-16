@@ -127,8 +127,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                             kv.getValue().getChildren(),
                             Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
 
-                    newAggMap.put(kv.getKey(),
-                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 } else if (
                         ((functionName.equals(FunctionSet.COUNT) && kv.getValue().isDistinct())
@@ -139,8 +138,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                             kv.getValue().getChildren(),
                             Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                                     IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(),
-                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 } else if (
                         (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
@@ -149,8 +147,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
                             Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(),
-                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
                         context.mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
@@ -165,8 +162,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                             Lists.newArrayList(child),
                             Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
                                     new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(),
-                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 }
             }

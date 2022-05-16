@@ -46,7 +46,7 @@ public class CollectCTEConsumeRule extends TransformationRule {
         if (null != consume.getPredicate()) {
             Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap(consume.getCteOutputColumnRefMap());
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(mapping);
-            ScalarOperator predicate = consume.getPredicate().clone().accept(rewriter, null);
+            ScalarOperator predicate = rewriter.rewrite(consume.getPredicate());
 
             if (cteContext.getConsumePredicates().containsKey(consume.getCteId())) {
                 cteContext.getConsumePredicates().get(consume.getCteId()).add(predicate);
