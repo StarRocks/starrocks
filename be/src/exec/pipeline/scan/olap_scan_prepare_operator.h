@@ -18,6 +18,7 @@ class OlapScanPrepareOperator final : public SourceOperator {
 public:
     OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
                             int32_t driver_sequence, OlapScanContextPtr ctx);
+    ~OlapScanPrepareOperator() override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

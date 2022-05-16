@@ -39,6 +39,15 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
     _ctx->ref();
 }
 
+OlapScanOperator::~OlapScanOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    _ctx->unref(state);
+}
+
 bool OlapScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished() || _ctx->is_finished()) {
         return false;
@@ -48,10 +57,13 @@ bool OlapScanOperator::has_output() const {
 }
 
 bool OlapScanOperator::is_finished() const {
-    if (_ctx->is_finished()) {
+    if (_ctx->is_finished() || _is_finished) {
         return true;
     }
 
+    // ScanOperator::is_finished() will check whether the morsel queue has more morsels,
+    // and some kinds of morsel queue will be ready after the scan context prepares ready.
+    // Therefore, return false when the context is not ready.
     if (!_ctx->is_prepare_finished()) {
         return false;
     }
@@ -63,9 +75,7 @@ Status OlapScanOperator::do_prepare(RuntimeState*) {
     return Status::OK();
 }
 
-void OlapScanOperator::do_close(RuntimeState* state) {
-    _ctx->unref(state);
-}
+void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
