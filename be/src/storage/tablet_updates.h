@@ -330,6 +330,8 @@ private:
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
+    void _check_creation_time_increasing();
+
 private:
     Tablet& _tablet;
 
