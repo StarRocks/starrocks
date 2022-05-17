@@ -56,9 +56,7 @@ public:
         this->scan_bytes += scan_bytes;
     }
 
-    void add_cpu_costs(int64_t cpu_ns) {
-        this->cpu_ns += cpu_ns;
-    }
+    void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
 
     void merge(QueryStatisticsRecvr* recvr);
 
@@ -74,6 +72,7 @@ public:
         statistics->set_scan_rows(scan_rows);
         statistics->set_scan_bytes(scan_bytes);
         statistics->set_returned_rows(returned_rows);
+        statistics->set_cpu_cost_ns(cpu_ns);
         *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
     }
 
