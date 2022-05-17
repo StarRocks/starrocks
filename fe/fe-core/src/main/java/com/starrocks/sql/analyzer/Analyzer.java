@@ -190,7 +190,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+        public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
             ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }
