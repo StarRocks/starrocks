@@ -30,4 +30,13 @@ public class Constants {
         FINISH,
     }
 
+    // PENDING -> RUNNING -> FAILED
+    //                    -> SUCCESS
+    public enum TaskRunState {
+        PENDING,
+        RUNNING,
+        FAILED,
+        SUCCESS,
+    }
+
 }
