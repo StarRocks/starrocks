@@ -12,24 +12,44 @@ import java.util.ArrayList;
 import java.util.Objects;
 
 public class LogicalLimitOperator extends LogicalOperator {
-    private final long offset;
-
-    public LogicalLimitOperator(long limit) {
-        super(OperatorType.LOGICAL_LIMIT);
-        this.limit = limit;
-        offset = DEFAULT_OFFSET;
+    public enum Phase {
+        INIT, // Init will split to LOCAL/GLOBAL
+        LOCAL,  // Only push down LOCAL limit
+        GLOBAL, // GLOBAL limit will gather child
     }
 
-    public LogicalLimitOperator(long limit, long offset) {
+    private final long offset;
+
+    private final Phase phase;
+
+    public LogicalLimitOperator(long limit, long offset, Phase phase) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
         this.offset = offset;
+        this.phase = phase;
     }
 
-    public LogicalLimitOperator(Builder builder) {
+    public static LogicalLimitOperator init(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.INIT);
+    }
+
+    public static LogicalLimitOperator init(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.INIT);
+    }
+
+    public static LogicalLimitOperator global(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.GLOBAL);
+    }
+
+    public static LogicalLimitOperator local(long limit) {
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.LOCAL);
+    }
+
+    private LogicalLimitOperator(Builder builder) {
         super(OperatorType.LOGICAL_LIMIT, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.limit = builder.getLimit();
         this.offset = builder.offset;
+        this.phase = builder.phase;
     }
 
     public boolean hasOffset() {
@@ -38,6 +58,22 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     public long getOffset() {
         return offset;
+    }
+
+    public Phase getPhase() {
+        return phase;
+    }
+
+    public boolean isInit() {
+        return phase == Phase.INIT;
+    }
+
+    public boolean isLocal() {
+        return phase == Phase.LOCAL;
+    }
+
+    public boolean isGlobal() {
+        return phase == Phase.GLOBAL;
     }
 
     @Override
@@ -60,27 +96,18 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        LogicalLimitOperator that = (LogicalLimitOperator) o;
-        return offset == that.offset;
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), offset);
+        return Objects.hash(super.hashCode(), offset, phase);
     }
 
-    public static class Builder
-            extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
+    public static class Builder extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
         private long offset = DEFAULT_OFFSET;
+
+        private Phase phase = Phase.INIT;
 
         @Override
         public LogicalLimitOperator build() {
@@ -91,7 +118,12 @@ public class LogicalLimitOperator extends LogicalOperator {
         public LogicalLimitOperator.Builder withOperator(LogicalLimitOperator operator) {
             super.withOperator(operator);
             this.offset = operator.offset;
+            this.phase = operator.phase;
             return this;
+        }
+
+        public void setPhase(Phase phase) {
+            this.phase = phase;
         }
 
         public Builder setOffset(long offset) {

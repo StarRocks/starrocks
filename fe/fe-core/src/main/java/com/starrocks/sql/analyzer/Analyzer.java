@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -81,7 +82,7 @@ public class Analyzer {
         public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, ConnectContext session) {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
-            CTASAnalyzer.transformCTASStmt((CreateTableAsSelectStmt) statement, session);
+            CTASAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -155,6 +156,12 @@ public class Analyzer {
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             GrantRevokeRoleAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
 

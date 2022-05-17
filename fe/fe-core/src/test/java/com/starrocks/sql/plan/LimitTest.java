@@ -13,23 +13,34 @@ public class LimitTest extends PlanTestBase {
     public void testLimit() throws Exception {
         String sql = "select v1 from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
-                + " OUTPUT EXPRS:1: v1\n"
-                + "  PARTITION: RANDOM\n"
-                + "\n"
-                + "  RESULT SINK\n"
-                + "\n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     partitions=0/1\n"
-                + "     rollup: t0\n"
-                + "     tabletRatio=0/0\n"
-                + "     tabletList=\n"
-                + "     cardinality=1\n"
-                + "     avgRowSize=1.0\n"
-                + "     numNodes=0\n"
-                + "     limit: 1"));
+        assertContains(planFragment, ("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 1"));
     }
 
     @Test
@@ -239,10 +250,10 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [shuffle] " +
                 "(select v1, v2 from t0 limit 1) b on a.v1 = b.v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
-        Assert.assertTrue(plan.contains("  |----5:EXCHANGE\n" +
+        assertContains(plan, ("join op: INNER JOIN (PARTITIONED)"));
+        assertContains(plan, ("  |----5:EXCHANGE\n" +
                 "  |       limit: 1"));
-        Assert.assertTrue(plan.contains("  2:EXCHANGE\n" +
+        assertContains(plan, ("  2:EXCHANGE\n" +
                 "     limit: 10"));
     }
 
@@ -267,15 +278,15 @@ public class LimitTest extends PlanTestBase {
         String sql = "select v1, v2 from t0 union all " +
                 "select v1, v2 from t0 limit 1 ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED"));
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 05\n" +
+        assertContains(plan, ("    EXCHANGE ID: 02\n" +
+                "    RANDOM"));
+        assertContains(plan, ("    EXCHANGE ID: 05\n" +
                 "    UNPARTITIONED"));
 
         sql = "select v1, v2 from t0 union all " +
                 "select a.v1, a.v2 from (select v1, v2 from t0 limit 1) a ";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 04\n" +
+        assertContains(plan, ("    EXCHANGE ID: 04\n" +
                 "    UNPARTITIONED"));
     }
 
@@ -475,7 +486,7 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select v1 from (select * from t0 limit 10) x0 left outer join[shuffle] t1 on x0.v1 = t1.v4 limit 100";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("5:HASH JOIN\n" +
+        assertContains(plan, "5:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -485,8 +496,8 @@ public class LimitTest extends PlanTestBase {
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
-                "     limit: 10"));
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+                "     limit: 10");
+        assertContains(plan, ("PLAN FRAGMENT 3\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
@@ -512,7 +523,7 @@ public class LimitTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
                 "     limit: 5"));
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+        assertContains(plan, ("PLAN FRAGMENT 3\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
@@ -600,9 +611,7 @@ public class LimitTest extends PlanTestBase {
     public void testMergeLimitForFilterNode() throws Exception {
         String sql =
                 "SELECT CAST(nullif(subq_0.c1, subq_0.c1) AS INTEGER) AS c0, subq_0.c0 AS c1, 42 AS c2, subq_0.c0 AS "
-                        + "c3, subq_0.c1 AS c4\n"
-                        +
-                        "\t, subq_0.c0 AS c5, subq_0.c0 AS c6\n" +
+                        + "c3, subq_0.c1 AS c4, subq_0.c0 AS c5, subq_0.c0 AS c6\n" +
                         "FROM (\n" +
                         "\tSELECT ref_2.v8 AS c0, ref_2.v8 AS c1\n" +
                         "\tFROM t2 ref_0\n" +
@@ -614,7 +623,7 @@ public class LimitTest extends PlanTestBase {
                         "WHERE CAST(coalesce(true, true) AS BOOLEAN) < true\n" +
                         "LIMIT 157";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("10:SELECT\n" +
+        assertContains(plan, ("11:SELECT\n" +
                 "  |  predicates: coalesce(TRUE, TRUE) < TRUE\n" +
                 "  |  limit: 157"));
     }

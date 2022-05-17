@@ -1,5 +1,5 @@
-jdbc_bridge.iml
 .idea/
 target/
+*/*.iml
 checkstyle.xml
 checkstyle-header.txt

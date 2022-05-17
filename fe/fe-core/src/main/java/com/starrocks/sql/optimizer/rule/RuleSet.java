@@ -110,6 +110,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctWithoutGroupByRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
 import java.util.List;
@@ -152,13 +153,16 @@ public class RuleSet {
 
     static {
         rewriteRules.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
-                new EliminateLimitZeroRule(),
-                new MergeLimitWithLimitRule(),
                 new MergeLimitWithSortRule(),
-                new PushDownLimitDirectRule(),
-                new PushDownLimitUnionRule(),
+                new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
                 new PushDownLimitCTEAnchor(),
+                new PushDownLimitUnionRule(),
+                new MergeLimitWithLimitRule(),
+                new EliminateLimitZeroRule(),
+                PushDownLimitDirectRule.PROJECT,
+                PushDownLimitDirectRule.ASSERT_ONE_ROW,
+                PushDownLimitDirectRule.CTE_CONSUME,
                 MergeLimitDirectRule.AGGREGATE,
                 MergeLimitDirectRule.OLAP_SCAN,
                 MergeLimitDirectRule.HIVE_SCAN,
@@ -169,7 +173,6 @@ public class RuleSet {
                 MergeLimitDirectRule.ES_SCAN,
                 MergeLimitDirectRule.JDBC_SCAN,
                 MergeLimitDirectRule.WINDOW,
-                MergeLimitDirectRule.JOIN,
                 MergeLimitDirectRule.INTERSECT,
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,

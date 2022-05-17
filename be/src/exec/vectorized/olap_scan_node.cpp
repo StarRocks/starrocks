@@ -538,26 +538,29 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
+StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* scan_range) {
+    TTabletId tablet_id = scan_range->tablet_id;
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
+           << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    return tablet;
+}
+
 Status OlapScanNode::_capture_tablet_rowsets() {
     _tablet_rowsets.resize(_scan_ranges.size());
     for (int i = 0; i < _scan_ranges.size(); ++i) {
         const auto& scan_range = _scan_ranges[i];
 
-        // Get version.
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(scan_range.get()));
 
         // Capture row sets of this version tablet.
         {

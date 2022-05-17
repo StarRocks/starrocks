@@ -16,10 +16,17 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
         : ScanOperatorFactory(id, scan_node) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+
     return Status::OK();
 }
 
-void ConnectorScanOperatorFactory::do_close(RuntimeState*) {}
+void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
+    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    Expr::close(conjunct_ctxs, state);
+}
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
     return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node);
@@ -32,17 +39,10 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
         : ScanOperator(factory, id, driver_sequence, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
-
     return Status::OK();
 }
 
-void ConnectorScanOperator::do_close(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
-}
+void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.analysis.AssertNumRowsElement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -55,18 +54,11 @@ public class PhysicalAssertOneRowOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        PhysicalAssertOneRowOperator that = (PhysicalAssertOneRowOperator) o;
-        return checkRows == that.checkRows && assertion == that.assertion && Objects.equal(tips, that.tips);
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(assertion, checkRows, tips);
+        return System.identityHashCode(this);
     }
 }

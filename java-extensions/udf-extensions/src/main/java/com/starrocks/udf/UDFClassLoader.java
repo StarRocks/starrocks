@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.udf;
 
@@ -17,9 +17,11 @@ import java.util.Map;
 public class UDFClassLoader extends URLClassLoader {
 
     private Map<String, Class<?>> genClazzMap = new HashMap<>();
+    private static final int SINGLE_BATCH_UPDATE = 1;
+    private static final int BATCH_EVALUATE = 2; 
 
-    public UDFClassLoader(String UDFPath) throws IOException {
-        super(new URL[] {new URL("file://" + UDFPath)});
+    public UDFClassLoader(String udfPath) throws IOException {
+        super(new URL[] {new URL("file://" + udfPath)});
     }
 
     @Override
@@ -31,14 +33,21 @@ public class UDFClassLoader extends URLClassLoader {
         return super.findClass(clazzName);
     }
 
-    // (Boxed[]...)V update
-    public Class<?> generateCallStubV(String name, Class<?> clazz, Method method) {
+
+    public Class<?> generateCallStubV(String name, Class<?> clazz, Method method, int genType) {
         String clazzName = name.replace("/", ".");
         if (!clazzName.startsWith(CallStubGenerator.GEN_KEYWORD)) {
             throw new UnsupportedOperationException(
                     "generate class name should start with " + CallStubGenerator.GEN_KEYWORD);
         }
-        final byte[] bytes = CallStubGenerator.generateCallStubV(clazz, method);
+        byte[] bytes = null;
+        if (genType == SINGLE_BATCH_UPDATE) {
+            bytes = CallStubGenerator.generateCallStubV(clazz, method);
+        } else if (genType == BATCH_EVALUATE) {
+            bytes = CallStubGenerator.generateScalarCallStub(clazz, method);
+        } else {
+            throw new UnsupportedOperationException("Unsupported generate stub type:" + genType);
+        }
         final Class<?> genClazz = defineClass(clazzName, bytes, 0, bytes.length);
         genClazzMap.put(name, genClazz);
         return genClazz;

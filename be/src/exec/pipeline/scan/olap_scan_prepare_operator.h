@@ -18,6 +18,7 @@ class OlapScanPrepareOperator final : public SourceOperator {
 public:
     OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name, int32_t plan_node_id,
                             int32_t driver_sequence, OlapScanContextPtr ctx);
+    ~OlapScanPrepareOperator() override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -28,6 +29,16 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    Status _capture_tablet_rowsets();
+
+private:
+    // The row sets of tablets will become stale and be deleted, if compaction occurs
+    // and these row sets aren't referenced, which will typically happen when the tablets
+    // of the left table are compacted at building the right hash table. Therefore, reference
+    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
+    std::vector<TabletSharedPtr> _tablets;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+
     OlapScanContextPtr _ctx;
 };
 
@@ -35,6 +46,8 @@ class OlapScanPrepareOperatorFactory final : public SourceOperatorFactory {
 public:
     OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, OlapScanContextPtr ctx);
     ~OlapScanPrepareOperatorFactory() override = default;
+
+    bool with_morsels() const { return true; }
 
     Status prepare(RuntimeState* state) override;
 
