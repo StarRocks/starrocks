@@ -20,8 +20,10 @@
 // under the License.
 
 #include "util/system_metrics.h"
-
+#ifdef USE_JEMALLOC
+#else
 #include <gperftools/malloc_extension.h>
+#endif
 #include <runtime/exec_env.h>
 #include <runtime/mem_tracker.h>
 
@@ -181,7 +183,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
 
 void SystemMetrics::update() {
     _update_cpu_metrics();
-    _update_memory_metrics();
+    // _update_memory_metrics();
     _update_disk_metrics();
     _update_net_metrics();
     _update_fd_metrics();
@@ -280,7 +282,8 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 }
 
 void SystemMetrics::_update_memory_metrics() {
-#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER) || defined(USE_JEMALLOC)
+    // @TODO support mem metrics for jemalloc
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
     MallocExtension* ext = MallocExtension::instance();

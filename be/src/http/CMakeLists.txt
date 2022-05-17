@@ -25,7 +25,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-add_library(Webserver STATIC
+set(SOURCES
   download_action.cpp
   http_headers.cpp
   http_method.cpp
@@ -44,7 +44,6 @@ add_library(Webserver STATIC
   action/snapshot_action.cpp
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
-  action/pprof_actions.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp
@@ -52,11 +51,14 @@ add_library(Webserver STATIC
   action/compaction_action.cpp
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
-  #  action/multi_start.cpp
-  #  action/multi_show.cpp
-  #  action/multi_commit.cpp
-  #  action/multi_unload.cpp
 )
+
+if (NOT USE_JEMALLOC)
+  # pprof is only available under tcmalloc
+  list(APPEND SOURCES action/pprof_actions.cpp)
+endif()
+
+add_library(Webserver STATIC ${SOURCES})
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)
