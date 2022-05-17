@@ -60,14 +60,15 @@ protected:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
     SegmentWriterOptions _writer_options;
 
-    int _num_segment;
-    vector<bool> _segment_has_deletes;
+    int _num_segment{0};
+    int _num_delfile{0};
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 
     // counters and statistics maintained during data write
     int64_t _num_rows_written;
+    int64_t _num_rows_del;
     int64_t _total_row_size;
     int64_t _total_data_size;
     int64_t _total_index_size;
@@ -109,6 +110,8 @@ private:
     Status _final_merge();
 
     Status _flush_chunk(const vectorized::Chunk& chunk);
+
+    Status _mixed_segment_delfile_not_supported();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
 };
