@@ -153,11 +153,11 @@ public class GlobalTransactionMgr implements Writable {
             throw new BeginTransactionException(errStr);
         } else {
             if (response.getTxn_id() <= 0) {
-                LOG.warn("beginRemoteTransaction returns invalid txn id: {}, label: {}",
+                LOG.warn("beginRemoteTransaction returns invalid txn_id: {}, label: {}",
                         response.getTxn_id(), label);
                 throw new BeginTransactionException("beginRemoteTransaction returns invalid txn id");
             }
-            LOG.info("begin remote txn, label: {}, txn id: {}", label, response.getTxn_id());
+            LOG.info("begin remote txn, label: {}, txn_id: {}", label, response.getTxn_id());
             return response.getTxn_id();
         }
     }
@@ -178,7 +178,7 @@ public class GlobalTransactionMgr implements Writable {
                     .call(addr, 10000,
                             client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}", addr, transactionId, e);
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new TransactionCommitFailedException(e.getMessage());
         }
         if (response.status.getStatus_code() != TStatusCode.OK) {
@@ -188,10 +188,11 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}, error: {}", addr, transactionId, errStr);
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
+                    errStr);
             throw new TransactionCommitFailedException(errStr);
         } else {
-            LOG.info("commit remote, txn id: {}", transactionId);
+            LOG.info("commit remote, txn_id: {}", transactionId);
             return true;
         }
     }
@@ -212,7 +213,7 @@ public class GlobalTransactionMgr implements Writable {
                     .call(addr, 10000,
                             client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}", addr, transactionId, e);
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new AbortTransactionException(e.getMessage());
         }
         if (response.status.getStatus_code() != TStatusCode.OK) {
@@ -222,10 +223,11 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}, error: {}", addr, transactionId, errStr);
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
+                    errStr);
             throw new AbortTransactionException(errStr);
         } else {
-            LOG.info("abort remote, txn id: {}", transactionId);
+            LOG.info("abort remote, txn_id: {}", transactionId);
         }
     }
 
@@ -573,7 +575,7 @@ public class GlobalTransactionMgr implements Writable {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
-                LOG.warn("failed to get db transaction manager for txn: {}", transactionState);
+                LOG.warn("failed to get db transaction manager for {}", transactionState);
                 throw new IOException("Read transaction states failed", e);
             }
         }

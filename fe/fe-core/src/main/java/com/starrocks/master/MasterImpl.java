@@ -1280,7 +1280,7 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
-            LOG.warn("commit remote txn failed, db: {} not exist, txn id: {}",
+            LOG.warn("commit remote txn failed, db: {} not exist, txn_id: {}",
                     request.getDb_id(), request.getTxn_id());
             return response;
         }
@@ -1303,7 +1303,7 @@ public class MasterImpl {
                 return response;
             }
         } catch (UserException e) {
-            LOG.warn("commit remote txn failed, txn id {}", request.getTxn_id(), e);
+            LOG.warn("commit remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1346,7 +1346,7 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
-            LOG.warn("abort remote txn failed, db: {} not exist, txn id: {}",
+            LOG.warn("abort remote txn failed, db: {} not exist, txn_id: {}",
                     request.getDb_id(), request.getTxn_id());
             return response;
         }
@@ -1355,7 +1355,7 @@ public class MasterImpl {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
-            LOG.warn("abort remote txn failed, txn id {}", request.getTxn_id(), e);
+            LOG.warn("abort remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);

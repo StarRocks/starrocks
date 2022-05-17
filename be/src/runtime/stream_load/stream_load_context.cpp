@@ -95,7 +95,7 @@ std::string StreamLoadContext::to_json() const {
 
 std::string StreamLoadContext::brief(bool detail) const {
     std::stringstream ss;
-    ss << "id=" << id << ", job_id=" << job_id << ", txn_id=" << txn_id << ", label=" << label;
+    ss << "id=" << id << ", job_id=" << job_id << ", txn_id: " << txn_id << ", label=" << label << ", db=" << db;
     if (detail) {
         switch (load_src_type) {
         case TLoadSourceType::KAFKA:
