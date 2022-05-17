@@ -39,6 +39,8 @@ public:
 
     void set_io_threads(PriorityThreadPool* io_threads) override { _io_threads = io_threads; }
 
+    int64_t global_rf_wait_timeout_ns() const override;
+
     /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;

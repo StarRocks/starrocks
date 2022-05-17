@@ -53,21 +53,6 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
-                                            int node_id) {
-    Morsels morsels;
-
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
-        }
-    }
-    return morsels;
-}
-
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
@@ -259,8 +244,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
-        morsel_queues.emplace(scan_node->id(), std::make_unique<FixedMorselQueue>(std::move(morsels)));
+        ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
+                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
+        morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
     return Status::OK();
