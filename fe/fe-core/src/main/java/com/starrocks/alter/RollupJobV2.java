@@ -306,7 +306,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // write edit log
         Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
-        LOG.info("transfer rollup job {} state to {}, watershed txn id: {}", jobId, this.jobState, watershedTxnId);
+        LOG.info("transfer rollup job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
     private void addRollupIndexToCatalog(OlapTable tbl) {

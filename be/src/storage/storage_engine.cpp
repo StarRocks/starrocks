@@ -544,7 +544,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) 
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                                            const std::vector<TPartitionId>& partition_ids) {
-    LOG(INFO) << "Clearing transaction task transaction_id=" << transaction_id;
+    LOG(INFO) << "Clearing transaction task txn_id: " << transaction_id;
 
     for (const TPartitionId& partition_id : partition_ids) {
         std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
@@ -565,7 +565,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
             StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
-    LOG(INFO) << "Cleared transaction task transaction_id=" << transaction_id;
+    LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
 }
 
 void StorageEngine::_start_clean_fd_cache() {
