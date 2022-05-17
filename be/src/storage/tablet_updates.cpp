@@ -527,6 +527,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     newversion->rowsets.swap(nrs);
     newversion->deltas.push_back(rowsetid);
     _versions.emplace_back(std::move(newversion));
+    _check_creation_time_increasing();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
@@ -545,6 +546,17 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     }
     VLOG(1) << "rowset commit finished: " << _debug_string(false, true);
     return Status::OK();
+}
+void TabletUpdates::_check_creation_time_increasing() {
+    if (_versions.size() >= 2) {
+        auto last2 = _versions[_versions.size() - 2].get();
+        auto last1 = _versions[_versions.size() - 1].get();
+        if (last2->creation_time > last1->creation_time) {
+            LOG(ERROR) << Substitute("creation_time decreased tablet:$0 $1:$2 > $3:$4", _tablet.tablet_id(),
+                                     last2->version.to_string(), last2->creation_time, last1->version.to_string(),
+                                     last1->creation_time);
+        }
+    }
 }
 
 void TabletUpdates::_try_commit_pendings_unlocked() {
@@ -1060,6 +1072,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     newversion->rowsets.swap(nrs);
     newversion->compaction.swap(*pinfo);
     _versions.emplace_back(std::move(newversion));
+    _check_creation_time_increasing();
     auto newversion_ptr = _versions.back().get();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
