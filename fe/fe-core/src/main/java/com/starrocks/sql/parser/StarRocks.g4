@@ -271,24 +271,24 @@ showAnalyzeStatement
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createWorkGroupStatement
-    : CREATE RESOURCE_GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
+    : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
         TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
     ;
 
 dropWorkGroupStatement
-    : DROP RESOURCE_GROUP identifier
+    : DROP RESOURCE GROUP identifier
     ;
 
 alterWorkGroupStatement
-    : ALTER RESOURCE_GROUP identifier ADD classifier (',' classifier)*
-    | ALTER RESOURCE_GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
-    | ALTER RESOURCE_GROUP identifier DROP ALL
-    | ALTER RESOURCE_GROUP identifier WITH '(' property (',' property)* ')'
+    : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
+    | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | ALTER RESOURCE GROUP identifier DROP ALL
+    | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
     ;
 
 showWorkGroupStatement
-    : SHOW RESOURCE_GROUP identifier
-    | SHOW RESOURCE_GROUPS ALL?
+    : SHOW RESOURCE GROUP identifier
+    | SHOW RESOURCE GROUPS ALL?
     ;
 
 classifier
@@ -837,7 +837,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE_GROUP | RESOURCE_GROUPS | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
     | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
