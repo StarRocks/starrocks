@@ -202,6 +202,7 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
@@ -2756,7 +2757,7 @@ public class GlobalStateMgr {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public String alterCluster(AlterSystemStmt stmt) throws UserException {
+    public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
         return this.alter.processAlterCluster(stmt);
     }
 

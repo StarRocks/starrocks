@@ -31,10 +31,12 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
@@ -46,6 +48,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
@@ -60,6 +64,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -172,7 +177,7 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public String modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+    public ShowResultSet modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
         String willBeModifiedHost = modifyBackendAddressClause.getToBeModifyHost();
         String fqdn = modifyBackendAddressClause.getFqdn();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
@@ -189,7 +194,28 @@ public class SystemInfoService {
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
-        return String.format("%s:%d's host has been modified to %s", willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
+
+        // Message
+        StringBuffer formatSb = new StringBuffer();
+        String opMessage;
+        formatSb.append("%s:%d's host has been modified to %s");
+        if (candidateBackends.size() >= 2) {
+            formatSb.append("\nplease exectue %d times, to modify the remaining backends\n");
+            for (int i = 1; i < candidateBackends.size(); i++) {
+                Backend be = candidateBackends.get(i);
+                formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
+            }
+            opMessage = String.format(
+                formatSb.toString(), willBeModifiedHost, 
+                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+        } else {
+            opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
+        }
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        List<List<String>> messageResult = new ArrayList<>();
+        messageResult.add(Arrays.asList(opMessage));
+        return new ShowResultSet(builder.build(), messageResult);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
