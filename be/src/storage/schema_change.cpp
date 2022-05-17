@@ -653,6 +653,7 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
     _swap_chunk = chunk->clone_empty_with_schema();
     _swap_chunk->append_selective(*chunk, selective.data(), 0, chunk->num_rows());
 
+    chunk->swap_chunk(*_swap_chunk);
     return true;
 }
 
@@ -1050,7 +1051,12 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
             }
         }
 
-        if (!_chunk_allocator->is_memory_enough_to_sort(2 * base_chunk->num_rows(), chunk_sorter.allocated_rows()) ||
+        // Check if internal sorting needs to be performed
+        // There are two places that may need to allocate memory
+        //   1. We need to allocate a new chunk to save the data after convert
+        //   2. We maybe need to allocate a new swap_chunk to save the sort result
+        // So we should check that both of the above conditions are met
+        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), chunk_sorter.allocated_rows()) ||
             !_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), 0)) {
             VLOG(3) << "do internal sorting because of memory limit";
             if (chunk_arr.size() < 1) {
