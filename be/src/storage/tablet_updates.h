@@ -265,6 +265,8 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets);
 
+    void _check_creation_time_increasing();
+
 private:
     Tablet& _tablet;
 
