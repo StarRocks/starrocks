@@ -1,4 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/ConnectProcessor.java
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
 
 package com.starrocks.server;
 
@@ -269,6 +288,23 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
+    }
+
+    public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
+            recycleBin.readFields(dis);
+            if (!isCheckpointThread()) {
+                // add tablet in Recycle bin to TabletInvertedIndex
+                recycleBin.addTabletToInvertedIndex();
+            }
+            // create DatabaseTransactionMgr for db in recycle bin.
+            // these dbs do not exist in `idToDb` of the globalStateMgr.
+            for (Long dbId : recycleBin.getAllDbIds()) {
+                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+            }
+        }
+        LOG.info("finished replay recycleBin from image");
+        return checksum;
     }
 
     public long saveDb(DataOutputStream dos, long checksum) throws IOException {
@@ -620,6 +656,10 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    public void replayEraseDatabase(long dbId) {
+        GlobalStateMgr.getCurrentRecycleBin().replayEraseDatabase(dbId);
     }
 
     public void replayRecoverDatabase(RecoverInfo info) {
@@ -3918,6 +3958,15 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void onEraseDatabase(long dbId) {
+        // remove jobs
+        stateMgr.getRollupHandler().removeDbAlterJob(dbId);
+        stateMgr.getSchemaChangeHandler().removeDbAlterJob(dbId);
+
+        // remove database transaction manager
+        stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
+    }
+
     public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -3969,5 +4018,15 @@ public class LocalMetastore implements ConnectorMetadata {
         // colocation
         colocateTableIndex.removeTable(olapTable.getId());
         return batchTaskMap;
+    }
+
+    public void onErasePartition(Partition partition) {
+        // remove tablet in inverted index
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                invertedIndex.deleteTablet(tablet.getId());
+            }
+        }
     }
 }
