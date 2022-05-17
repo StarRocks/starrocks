@@ -33,9 +33,15 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
             _process_by_partition_if_necessary = &AnalyticSinkOperator::_process_by_partition_if_necessary_for_other;
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
         } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
-            _process_by_partition_if_necessary =
-                    &AnalyticSinkOperator::
-                            _process_by_partition_if_necessary_for_rows_between_unbounded_preceding_and_following;
+            if (!_analytor->need_partition_boundary_for_unbounded_preceding_rows_frame()) {
+                _process_by_partition_if_necessary =
+                        &AnalyticSinkOperator::
+                                _process_by_partition_if_necessary_for_rows_between_unbounded_preceding_and_following;
+            } else {
+                _process_by_partition_if_necessary =
+                        &AnalyticSinkOperator::_process_by_partition_if_necessary_for_other;
+                _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame;
+            }
         } else {
             _process_by_partition_if_necessary = &AnalyticSinkOperator::_process_by_partition_if_necessary_for_other;
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_sliding_frame;
@@ -200,6 +206,23 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_f
 
         _analytor->get_window_function_result(get_value_start, _analytor->window_result_position());
         _analytor->update_current_row_position(_analytor->window_result_position() - get_value_start);
+    }
+}
+
+void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size,
+                                                                                    bool is_new_partition) {
+    while (_analytor->current_row_position() < _analytor->partition_end() &&
+           _analytor->window_result_position() < chunk_size) {
+        _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
+                                       _analytor->current_row_position(), _analytor->current_row_position() + 1);
+
+        _analytor->update_window_result_position(1);
+        int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
+                              _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
+
+        DCHECK_GE(frame_start, 0);
+        _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+        _analytor->update_current_row_position(1);
     }
 }
 

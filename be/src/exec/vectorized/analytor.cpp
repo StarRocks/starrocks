@@ -130,9 +130,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
+        if (fn.name.function_name == "ntile") {
+            _need_partition_boundary_for_unbounded_preceding_rows_frame = true;
+        }
+
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
-            fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
+            fn.name.function_name == "rank" || fn.name.function_name == "dense_rank" ||
+            fn.name.function_name == "ntile") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
             auto* func = vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
                                                          is_input_nullable, fn.binary_type, state->func_version());

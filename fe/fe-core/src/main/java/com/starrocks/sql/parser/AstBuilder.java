@@ -1728,7 +1728,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
-            "row_number", "rank", "dense_rank", "lead", "lag", "first_value", "last_value");
+            "row_number", "rank", "dense_rank", "ntile", "lead", "lag", "first_value", "last_value");
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {

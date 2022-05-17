@@ -214,6 +214,70 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     std::string get_name() const override { return "dense_rank"; }
 };
 
+// The NTILE window function divides ordered rows in the partition into `num_buckets` ranked groups
+// of as equal size as possible and returns the group id of each row starting from 1.
+//
+// It can not been used with the windowing clause.
+// And for the implementation, it uses `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`.
+//
+// The size of buckets could be `num_partition_rows/num_buckets` (small bucket)
+// or `num_partition_rows/num_buckets` (large bucket).
+// The top `num_partition_rows%num_buckets` buckets are the large buckets.
+struct NtileState {
+    int64_t num_buckets = 0;
+
+    int64_t large_bucket_size = -1;
+    int64_t small_bucket_size = -1;
+
+    int64_t num_large_buckets = -1;
+    int64_t num_large_bucket_rows = -1;
+
+    // Start from 0.
+    int64_t cur_position = -1;
+};
+
+class NtileWindowFunction final : public WindowFunction<NtileState> {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).num_buckets = args[0].get()->get(0).get_int64();
+
+        this->data(state).cur_position = -1;
+        this->data(state).large_bucket_size = -1;
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                   int64_t frame_end) const override {
+        auto& s = this->data(state);
+
+        s.cur_position++;
+        if (s.large_bucket_size == -1) {
+            int64_t num_rows = peer_group_end - peer_group_start;
+
+            s.small_bucket_size = num_rows / s.num_buckets;
+            s.large_bucket_size = s.small_bucket_size + 1;
+
+            s.num_large_buckets = num_rows % s.num_buckets;
+            s.num_large_bucket_rows = s.num_large_buckets * s.large_bucket_size;
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_EQ(end, start + 1);
+        auto* column = down_cast<Int64Column*>(dst);
+        const auto& s = this->data(state);
+
+        if (s.cur_position < s.num_large_bucket_rows) {
+            column->get_data()[start] = s.cur_position / s.large_bucket_size + 1;
+        } else {
+            column->get_data()[start] =
+                    (s.cur_position - s.num_large_bucket_rows) / s.small_bucket_size + s.num_large_buckets + 1;
+        }
+    }
+
+    std::string get_name() const override { return "ntile"; }
+};
+
 template <PrimitiveType PT, typename = guard::Guard>
 struct FirstValueState {
     using T = RunTimeCppType<PT>;

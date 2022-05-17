@@ -103,6 +103,8 @@ public:
 
     static AggregateFunctionPtr MakeRowNumberWindowFunction();
 
+    static AggregateFunctionPtr MakeNtileWindowFunction();
+
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeFirstValueWindowFunction();
 

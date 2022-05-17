@@ -206,6 +206,10 @@ AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
     return std::make_shared<RowNumberWindowFunction>();
 }
 
+AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
+    return std::make_shared<NtileWindowFunction>();
+}
+
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeFirstValueWindowFunction() {
     return std::make_shared<FirstValueWindowFunction<PT>>();
@@ -517,6 +521,8 @@ public:
             return AggregateFactory::MakeRankWindowFunction();
         } else if (name == "row_number") {
             return AggregateFactory::MakeRowNumberWindowFunction();
+        } else if (name == "ntile") {
+            return AggregateFactory::MakeNtileWindowFunction();
         }
         return nullptr;
     }
@@ -827,6 +833,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("dense_rank");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("rank");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("row_number");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("ntile");
 
     add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
