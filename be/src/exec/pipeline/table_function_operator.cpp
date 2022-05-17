@@ -104,6 +104,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
         bool has_remain_repeat_times = _remain_repeat_times > 0;
 
         if (!has_remain_repeat_times) {
+            DCHECK_LT(_input_chunk_index + 1, _table_function_result.second->size());
             _remain_repeat_times = _table_function_result.second->get(_input_chunk_index + 1).get_int32() -
                                    _table_function_result.second->get(_input_chunk_index).get_int32();
         }
@@ -192,6 +193,7 @@ void TableFunctionOperator::_process_table_function() {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
     }
 }
 } // namespace starrocks::pipeline
