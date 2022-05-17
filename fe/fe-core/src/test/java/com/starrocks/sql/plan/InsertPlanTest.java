@@ -566,4 +566,101 @@ public class InsertPlanTest extends PlanTestBase {
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
         Assert.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
+
+    @Test
+    public void testInsertExchange() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            // keysType is DUP_KEYS
+            String sql = "explain insert into t0 select * from t0";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+        }
+        {
+            // KesType is PRIMARY_KEYS
+            String sql = "explain insert into tprimary select * from tprimary";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: tprimary");
+
+            // Group by columns is different from the key columns, so extra exchange is needed
+            sql = "explain insert into tprimary select min(pk), v1, max(v2) from tprimary group by v1";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 04\n" +
+                    "    HASH_PARTITIONED: 4: min\n" +
+                    "\n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: min(4: min), max(5: max)\n" +
+                    "  |  group by: 2: v1");
+
+            // Group by columns are compatible with the key columns, so there is no need to add extra exchange node
+            sql = "explain insert into tprimary select pk, min(v1), max(v2) from tprimary group by pk";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 2\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: min(2: v1), max(3: v2)\n" +
+                    "  |  group by: 1: pk");
+        }
+        {
+            // KesType is AGG_KEYS
+            String sql = "explain insert into baseall select * from baseall";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: baseall");
+
+            // Group by columns is different from the key columns, so extra exchange is needed
+            sql =
+                    "explain insert into baseall select min(k1), max(k2), min(k3), max(k4), min(k5), max(k6), min(k10), max(k11), min(k7), k8, k9 from baseall group by k8, k9";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 04\n" +
+                    "    HASH_PARTITIONED: 12: min, 13: max, 14: min, 15: max, 16: min, 17: max, 18: min, 19: max, 20: min\n" +
+                    "\n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: max(17: max), min(18: min), max(19: max), min(20: min), min(12: min), max(13: max), min(14: min), max(15: max), min(16: min)\n" +
+                    "  |  group by: 10: k8, 11: k9");
+
+            // Group by columns are compatible with the key columns, so there is no need to add extra exchange node
+            sql =
+                    "explain insert into baseall select k1, k2, min(k3), max(k4), min(k5), max(k6), min(k10), max(k11), min(k7), min(k8), max(k9) from baseall group by k1, k2";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 2\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: max(8: k11), min(9: k7), min(10: k8), max(11: k9), min(3: k3), max(4: k4), min(5: k5), max(6: k6), min(7: k10)\n" +
+                    "  |  group by: 1: k1, 2: k2");
+
+            // Group by columns are compatible with the key columns, so there is no need to add extra exchange node
+            sql =
+                    "explain insert into baseall select k1, k2, k3, k4, k5, k6, k10, k11, k7, min(k8), max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 2\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: min(10: k8), max(11: k9)\n" +
+                    "  |  group by: 1: k1, 2: k2, 3: k3, 4: k4, 5: k5, 6: k6, 7: k10, 8: k11, 9: k7");
+        }
+        FeConstants.runningUnitTest = false;
+    }
 }
