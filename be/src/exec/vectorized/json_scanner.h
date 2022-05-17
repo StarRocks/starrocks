@@ -94,7 +94,7 @@ private:
                              const std::string& col_name);
 
     // _build_slot_descs builds _slot_descs as the order of first json object and builds _slot_desc_dict;
-    void _build_slot_descs();
+    Status _build_slot_descs();
 
 private:
     RuntimeState* _state = nullptr;
