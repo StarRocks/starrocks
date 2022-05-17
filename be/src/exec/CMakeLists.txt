@@ -110,6 +110,8 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_triggers_scanner.cpp
     vectorized/schema_scanner/schema_events_scanner.cpp
     vectorized/schema_scanner/schema_views_scanner.cpp
+    vectorized/schema_scanner/schema_tasks_scanner.cpp
+    vectorized/schema_scanner/schema_task_runs_scanner.cpp
     vectorized/schema_scanner/schema_user_privileges_scanner.cpp
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp

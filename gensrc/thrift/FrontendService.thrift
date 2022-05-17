@@ -330,6 +330,40 @@ struct TListTableStatusResult {
     1: required list<TTableStatus> tables
 }
 
+// Arguments to showTasks/ShowTaskRuns
+struct TShowTasksParams {
+    1: optional string db
+    2: optional Types.TUserIdentity current_user_ident
+}
+
+struct TTaskInfo {
+    1: required string task_name
+    2: optional i64 create_time
+    3: optional string schedule
+    4: optional string database_name
+    5: optional string definition
+}
+
+struct TListTaskInfoResult {
+    1: required list<TTaskInfo> tables
+}
+
+struct TTaskRunInfo {
+    1: required string query_id
+    2: required string task_name
+    3: optional i64 create_time
+    4: optional i64 complete_time
+    5: optional string status
+    6: optional string database_name
+    7: optional string definition
+    8: optional i32 error_code
+    9: optional string error_msg
+}
+
+struct TListTaskRunInfoResult {
+    1: required list<TTaskRunInfo> tables
+}
+
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -938,6 +972,9 @@ service FrontendService {
     TMasterOpResult forward(TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
+
+    TListTaskInfoResult showTasks(1:TShowTasksParams params)
+    TListTaskRunInfoResult showTaskRuns(1:TShowTasksParams params)
 
     TFeResult updateExportTaskStatus(1:TUpdateExportTaskStatusRequest request)
 

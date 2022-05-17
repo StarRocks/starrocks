@@ -101,7 +101,9 @@ enum TSchemaTableType {
     SCH_USER_PRIVILEGES,
     SCH_VARIABLES,
     SCH_VIEWS,
-    SCH_INVALID
+    SCH_INVALID,
+    SCH_TASKS,
+    SCH_TASK_RUNS
 }
 
 enum THdfsCompression {

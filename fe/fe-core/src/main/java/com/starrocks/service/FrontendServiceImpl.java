@@ -66,6 +66,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -101,6 +104,8 @@ import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TListTaskInfoResult;
+import com.starrocks.thrift.TListTaskRunInfoResult;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
@@ -118,6 +123,7 @@ import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
+import com.starrocks.thrift.TShowTasksParams;
 import com.starrocks.thrift.TShowVariableRequest;
 import com.starrocks.thrift.TShowVariableResult;
 import com.starrocks.thrift.TSnapshotLoaderReportRequest;
@@ -128,6 +134,8 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -319,6 +327,53 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return result;
     }
+
+    @Override
+    public TListTaskInfoResult showTasks(TShowTasksParams params) throws TException {
+        LOG.debug("get show task request: {}", params);
+        TListTaskInfoResult result = new TListTaskInfoResult();
+        List<TTaskInfo> tasksResult = Lists.newArrayList();
+        result.setTables(tasksResult);
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Task> taskList = taskManager.showTask().stream()
+                .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
+        for (Task task : taskList) {
+            TTaskInfo info = new TTaskInfo();
+            info.setTask_name(task.getName());
+            info.setCreate_time(task.getCreateTime() / 1000);
+            info.setSchedule("MANUAL");
+            info.setDatabase_name(task.getDbName());
+            info.setDefinition(task.getDefinition());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+
+    @Override
+    public TListTaskRunInfoResult showTaskRuns(TShowTasksParams params) throws TException {
+        LOG.debug("get show task run request: {}", params);
+        TListTaskRunInfoResult result = new TListTaskRunInfoResult();
+        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
+        result.setTables(tasksResult);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus().stream()
+                .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
+        for (TaskRunStatus status : taskRunList) {
+            TTaskRunInfo info = new TTaskRunInfo();
+            info.setQuery_id(status.getQueryId());
+            info.setTask_name(status.getTaskName());
+            info.setCreate_time(status.getCreateTime() / 1000);
+            info.setComplete_time(status.getCompleteTime() / 1000);
+            info.setStatus(status.getState().toString());
+            info.setDefinition(status.getDefinition());
+            info.setError_code(status.getErrorCode());
+            info.setError_msg(status.getErrorMsg());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+
 
     @Override
     public TGetDBPrivsResult getDBPrivs(TGetDBPrivsParams params) throws TException {

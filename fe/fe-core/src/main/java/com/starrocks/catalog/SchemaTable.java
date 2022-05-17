@@ -415,6 +415,35 @@ public class SchemaTable extends Table {
                                             .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
                                             .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
                                             .build()))
+                    // for task
+                    .put("tasks",
+                            new SchemaTable(
+                                    SystemIdGenerator.getNextId(),
+                                    "tasks",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("TASK_NAME", ScalarType.createVarchar(64))
+                                            .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                            .column("SCHEDULE", ScalarType.createVarchar(64))
+                                            .column("DATABASE_NAME", ScalarType.createVarchar(64))
+                                            .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .build()))
+                    .put("task_runs",
+                            new SchemaTable(
+                                    SystemIdGenerator.getNextId(),
+                                    "task_runs",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("QUERY_ID", ScalarType.createVarchar(64))
+                                            .column("TASK_NAME", ScalarType.createVarchar(64))
+                                            .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                            .column("COMPLETE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                            .column("STATUS", ScalarType.createVarchar(16))
+                                            .column("DATABASE_NAME", ScalarType.createVarchar(64))
+                                            .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
+                                            .column("ERROR_MSG", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .build()))
                     .build();
 
     public static class Builder {
