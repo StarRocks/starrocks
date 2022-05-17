@@ -389,6 +389,16 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
+    public WorkGroup chooseWorkGroupByName(String wgName) {
+        readLock();
+        try {
+            WorkGroup wg = workGroupMap.get(wgName);
+            return wg;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
         String user = getUnqualifiedUser(ctx);
         String role = getUnqualifiedRole(ctx);
