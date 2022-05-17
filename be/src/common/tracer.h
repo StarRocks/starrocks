@@ -8,14 +8,15 @@
 #include <opentelemetry/trace/provider.h>
 
 namespace starrocks {
-
-using Span = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
-using SpanContext = opentelemetry::trace::SpanContext;
+namespace trace = opentelemetry::trace;
+using Span = opentelemetry::nostd::shared_ptr<trace::Span>;
+using SpanContext = trace::SpanContext;
 
 // The tracer options.
 struct TracerOptions {
     std::string jaeger_endpoint;
     int jaeger_server_port;
+    bool enabled_tracer;
 };
 
 /**
@@ -27,13 +28,13 @@ struct TracerOptions {
  *
  * Here is an example on how to create spans and retrieve traces:
  * ```
- * std::shared_ptr<Tracer> tracer;
+ * const Tracer& tracer = Tracer::Instance();
  *
- * void f1(std::shared_ptr<Tracer> tracer) {
- *     auto root = tracer->start_trace("root");
+ * void f1(const Tracer& tracer) {
+ *     auto root = tracer.start_trace("root");
  *     sleepFor(Milliseconds(1));
  *     {
- *         auto child = tracer->add_span("child");
+ *         auto child = tracer.add_span("child", root);
  *         sleepFor(Milliseconds(2));
  *     }
  * }
@@ -42,10 +43,13 @@ struct TracerOptions {
  */
 class Tracer {
 public:
-    Tracer(const std::string& service_name, const TracerOptions& tracer_opts = {"localhost", 6381});
+    ~Tracer();
 
-    // Shutdown the tracer.
-    void shutdown();
+    // Get the global tracer instance.
+    static Tracer& Instance();
+
+    // Return true if trace is enabled.
+    bool is_enabled() const;
 
     // Creates and returns a new span with `trace_name`
     // this span represents a trace, since it has no parent.
@@ -62,9 +66,11 @@ public:
 private:
     // Init the tracer.
     void init(const std::string& service_name);
+    // Shutdown the tracer.
+    void shutdown();
 
+    // The global tracer.
     opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> _tracer;
-    TracerOptions _tracer_options;
 };
 
 } // namespace starrocks
