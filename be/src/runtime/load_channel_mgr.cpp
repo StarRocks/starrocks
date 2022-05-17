@@ -96,8 +96,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
             response->mutable_status()->add_error_msgs(
                     "memory limit exceeded, please reduce load frequency or increase config "
-                    "`load_process_max_memory_limit_percent` or config"
-                    "`load_process_max_memory_limit_bytes`or add more BE nodes");
+                    "`load_process_max_memory_limit_percent` or `load_process_max_memory_limit_bytes` "
+                    "or add more BE nodes");
             return;
         }
     }
