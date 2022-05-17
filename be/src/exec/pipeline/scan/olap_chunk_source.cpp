@@ -386,6 +386,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 
     SCOPED_TIMER(_scan_timer);
     do {
+        RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));
 
         TRY_CATCH_ALLOC_SCOPE_START()
