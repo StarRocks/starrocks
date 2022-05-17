@@ -132,7 +132,6 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::unique_lock write_lock(_mutex);
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg);
-    add_metrics(wg);
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
         return _workgroups[unique_id];
     } else {
@@ -140,7 +139,7 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     }
 }
 
-void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
+void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg) {
     std::call_once(init_metrics_once_flag, []() {
         StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
                                                                [] { WorkGroupManager::instance()->update_metrics(); });
@@ -200,7 +199,7 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
         _wg_concurrency_overflow_count.emplace(wg->name(), std::move(resource_group_concurrency_overflow));
         _wg_bigquery_count.emplace(wg->name(), std::move(resource_group_bigquery_count));
     }
-    _wg_metrics.emplace(wg->name(), wg->unique_id());
+    _wg_metrics[wg->name()] = wg->unique_id();
 }
 
 void WorkGroupManager::update_metrics_unlocked() {
@@ -404,6 +403,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
     }
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
+    add_metrics_unlocked(wg);
 }
 
 void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
