@@ -37,6 +37,7 @@ Usage: $0 <options>
      --gtest_filter                 specify test cases
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     -j                             build parallel
 
   Eg.
     $0                              build ut
@@ -57,6 +58,7 @@ OPTS=$(getopt \
   -l "gtest_filter:" \
   -l 'with-aws' \
   -l 'with-bench' \
+  -o 'j:' \
   -l 'help' \
   -- "$@")
 
@@ -80,6 +82,7 @@ while true; do
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
         --with-bench) WITH_BENCH=ON; shift ;;
+        -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
