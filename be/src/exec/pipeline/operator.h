@@ -118,6 +118,9 @@ public:
     std::vector<ExprContext*>& runtime_in_filters();
 
     RuntimeFilterProbeCollector* runtime_bloom_filters();
+    const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
+
+    virtual int64_t global_rf_wait_timeout_ns() const;
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
@@ -245,12 +248,18 @@ public:
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
-        if (_runtime_filter_collector) {
-            return _runtime_filter_collector->get_rf_probe_collector();
-        } else {
+        if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
+        return _runtime_filter_collector->get_rf_probe_collector();
     }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
+        if (_runtime_filter_collector == nullptr) {
+            return nullptr;
+        }
+        return _runtime_filter_collector->get_rf_probe_collector();
+    }
+
     const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }

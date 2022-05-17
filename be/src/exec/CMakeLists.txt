@@ -143,6 +143,7 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/morsel.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

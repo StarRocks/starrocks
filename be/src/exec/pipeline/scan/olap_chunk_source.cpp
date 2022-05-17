@@ -100,19 +100,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
-    TTabletId tablet_id = scan_range->tablet_id;
-    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
-    std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-    if (!_tablet) {
-        std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-           << ", reason=" << err;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
+    ASSIGN_OR_RETURN(_tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+
     return Status::OK();
 }
 

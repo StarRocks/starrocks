@@ -37,6 +37,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
 
     DCHECK(_state == DriverState::NOT_READY);
+
+    source_operator()->add_morsel_queue(_morsel_queue);
+
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
@@ -50,15 +53,12 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
         const auto* global_rf_collector = op->runtime_bloom_filters();
-        auto is_scan_operator = dynamic_cast<ScanOperator*>(op.get()) != nullptr;
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 _global_rf_descriptors.emplace_back(desc);
             }
 
-            auto wait_time_ns = 1000'000L * (is_scan_operator ? global_rf_collector->scan_wait_timeout_ms()
-                                                              : global_rf_collector->wait_timeout_ms());
-            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, wait_time_ns);
+            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
         }
     }
     if (!all_local_rf_set.empty()) {
@@ -66,7 +66,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
