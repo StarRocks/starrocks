@@ -473,6 +473,16 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
         query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
         query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
     }
+
+    // Update cpu cost of this query
+    int64_t runtime_ns = driver_acct().get_last_time_spent();
+    int64_t source_operator_last_cpu_time_ns = 0;
+    if (SourceOperator* source = source_operator()) {
+        source_operator_last_cpu_time_ns = source->get_last_growth_cpu_time_ns();
+    }
+    int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
+    int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+    query_ctx()->incr_cpu_cost(accounted_cpu_cost);
 }
 
 } // namespace starrocks::pipeline
