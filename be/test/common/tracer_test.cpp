@@ -13,7 +13,7 @@ class TracerTest : public testing::Test {};
 TEST_F(TracerTest, BasicTest) {
     EXPECT_FALSE(Tracer::Instance().is_enabled());
     auto span = Tracer::Instance().start_trace("test");
-    EXPECT_TRUE(span->IsRecording());
+    EXPECT_FALSE(span->IsRecording());
     span->End();
     EXPECT_FALSE(span->IsRecording());
 }
