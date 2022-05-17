@@ -64,7 +64,7 @@ public:
         return scan_rows_num;
     }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) {}
+    virtual void set_workgroup(workgroup::WorkGroupPtr wg) {}
 
     // Some specific source operators need execute i/o tasks in io_threads.
     virtual void set_io_threads(PriorityThreadPool* io_threads) {}
