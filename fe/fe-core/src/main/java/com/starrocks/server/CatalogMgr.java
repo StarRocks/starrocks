@@ -101,7 +101,8 @@ public class CatalogMgr {
                 if (catalog == null) {
                     continue;
                 }
-                catalog.getProcNodeData(result);
+                ExternalCatalog externalCatalog = (ExternalCatalog) catalog;
+                externalCatalog.getProcNodeData(result);
             }
             return result;
         }
