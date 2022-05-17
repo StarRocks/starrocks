@@ -50,6 +50,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -129,11 +130,10 @@ public class SystemHandler extends AlterHandler {
 
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized String process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
+    public synchronized ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
                                      OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
-        String alterMessage = "";                                       
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
@@ -153,7 +153,7 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            alterMessage = GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
@@ -200,7 +200,7 @@ public class SystemHandler extends AlterHandler {
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }
-        return alterMessage;
+        return null;
     }
 
     private List<Backend> checkDecommission(DecommissionBackendClause decommissionBackendClause)
