@@ -383,8 +383,8 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet, const std::
         return {};
     }
 
-    bool inc_lower = range_start_op == "ge" || range_start_op == "eq";
-    bool inc_upper = range_end_op == "le" || range_end_op == "eq";
+    bool lower_inclusive = range_start_op == "ge" || range_start_op == "eq";
+    bool upper_inclusive = range_end_op == "le" || range_end_op == "eq";
 
     CHECK_EQ(range_start_key.size(), range_end_key.size());
     size_t n = range_start_key.size();
@@ -396,8 +396,8 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet, const std::
         RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
-        ranges->back().set_inclusive_lower(inc_lower);
-        ranges->back().set_inclusive_upper(inc_upper);
+        ranges->back().set_inclusive_lower(lower_inclusive);
+        ranges->back().set_inclusive_upper(upper_inclusive);
     }
     return Status::OK();
 }

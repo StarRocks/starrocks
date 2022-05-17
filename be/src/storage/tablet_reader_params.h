@@ -20,6 +20,7 @@ namespace vectorized {
 
 class ColumnPredicate;
 struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
@@ -56,7 +57,7 @@ struct TabletReaderParams {
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 
-    RowidRangeOption* rowid_range_option = nullptr;
+    RowidRangeOptionPtr rowid_range_option = nullptr;
 
 public:
     std::string to_string() const;

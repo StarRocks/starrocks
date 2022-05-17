@@ -23,6 +23,7 @@ namespace starrocks::vectorized {
 
 class ColumnPredicate;
 struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 class SegmentReadOptions {
 public:
@@ -59,7 +60,7 @@ public:
 
     bool has_delete_pred = false;
 
-    RowidRangeOption* rowid_range_option = nullptr;
+    RowidRangeOptionPtr rowid_range_option = nullptr;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;
