@@ -60,6 +60,7 @@ Usage: $0 <options>
      --clean            clean and build target
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
+     -j                 build Backend parallel
 
   Eg.
     $0                                      build all
@@ -81,6 +82,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
+  -o 'j:' \
   -l 'help' \
   -- "$@")
 
@@ -129,6 +131,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
+            -j) PARALLEL=$2; shift 2 ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
@@ -153,6 +156,7 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     USE_AVX2            -- $USE_AVX2
+    PARALLEL            -- $PARALLEL
 "
 
 # Clean and build generated code
