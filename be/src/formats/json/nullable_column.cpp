@@ -139,7 +139,7 @@ Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, cons
         }
 
         auto st = add_nullable_column(column, type_desc, name, value);
-        if (st.is_invalid_argument() && invalid_as_null) {
+        if (!st.ok() && invalid_as_null) {
             column->append_nulls(1);
             return Status::OK();
         }
