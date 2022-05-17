@@ -243,8 +243,8 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     DCHECK_EQ(_params->fields.size(), _params->cids.size());
     DCHECK_EQ(_params->fields.size(), _params->read_page.size());
 
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_segment->file_name()));
-    RETURN_IF_ERROR(block_mgr->open_block(_segment->file_name(), &_rblock));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
 
     _column_iterators.resize(_params->max_cid + 1, nullptr);
     for (int i = 0; i < _params->fields.size(); i++) {
@@ -256,7 +256,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
-                iter_opts.rblock = _rblock.get();
+                iter_opts.read_file = _read_file.get();
                 iter_opts.stats = &_stats;
                 RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
             }

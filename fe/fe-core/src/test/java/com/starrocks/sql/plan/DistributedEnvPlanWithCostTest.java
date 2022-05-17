@@ -1168,4 +1168,45 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testStringMinMaxPredicate() throws Exception {
+        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having min > '123'";
+        String costPlan = getCostExplain(sql);
+
+        assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE");
+
+        sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, " * min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE");
+
+        sql = "select Min(C_NAME) as min, Max(C_NAME) as max from customer having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE");
+        assertContains(costPlan, "having: [11: max, VARCHAR, true] < '1234'\n" +
+                "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testSQLSmithGenQuery() throws Exception {
+        String sql = "select * from " +
+                "  (select  \n" +
+                "          ref_0.id_decimal as c0, \n" +
+                "          ref_0.t1c as c1, \n" +
+                "          ref_0.id_datetime as c2\n" +
+                "        from \n" +
+                "          test_all_type as ref_0\n" +
+                "        where cast(null as DOUBLE) <= ref_0.t1f) as subq_0\n" +
+                "    left join part as ref_1\n" +
+                "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
+                "where subq_0.c1 <> subq_0.c1\n" +
+                "limit 63;";
+        String plan = getFragmentPlan(sql);
+        // check without error
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
+    }
 }

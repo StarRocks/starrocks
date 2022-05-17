@@ -27,6 +27,20 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
     }
 }
 
+ScanOperator::~ScanOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
+        }
+    }
+}
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
@@ -50,9 +64,7 @@ void ScanOperator::close(RuntimeState* state) {
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    // for the running io task, we can't close its chunk sources.
-    // After ScanOperator::close, these chunk sources are no longer meaningful,
-    // just release resources by their default destructor
+    // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
             _chunk_sources[i]->close(state);
@@ -68,6 +80,10 @@ void ScanOperator::close(RuntimeState* state) {
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
+    }
+    // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
+    if (!get_scan_status().ok()) {
+        return true;
     }
 
     for (const auto& chunk_source : _chunk_sources) {
@@ -107,6 +123,10 @@ bool ScanOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
+    // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
+    if (!get_scan_status().ok()) {
+        return false;
+    }
 
     // Any io task is running or needs to run.
     if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
@@ -130,6 +150,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(get_scan_status());
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -196,8 +217,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     size_t num_read_chunks = 0;
-                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
+                    Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                             _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                    if (!status.ok() && !status.is_end_of_file()) {
+                        set_scan_status(status);
+                    }
                     // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
@@ -225,7 +249,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             if (auto sp = wp.lock()) {
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                    Status status =
+                            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                    if (!status.ok() && !status.is_end_of_file()) {
+                        set_scan_status(status);
+                    }
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
@@ -256,10 +284,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
-    _workgroup = wg;
-}
-
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
     if (_chunk_sources[chunk_source_index] != nullptr) {
@@ -267,10 +291,8 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         _chunk_sources[chunk_source_index] = nullptr;
     }
 
-    auto maybe_morsel = _morsel_queue->try_get();
-    if (maybe_morsel.has_value()) {
-        auto morsel = std::move(maybe_morsel.value());
-        DCHECK(morsel);
+    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+    if (morsel != nullptr) {
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
@@ -323,7 +345,7 @@ void ScanOperatorFactory::close(RuntimeState* state) {
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
-    OpFactories operators;
+    OpFactories ops;
 
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
@@ -336,13 +358,14 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
             std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
     scan_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    operators.emplace_back(std::move(scan_operator));
+    ops.emplace_back(std::move(scan_operator));
 
     size_t limit = scan_node->limit();
     if (limit != -1) {
-        operators.emplace_back(
+        ops.emplace_back(
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
     }
-    return operators;
+
+    return ops;
 }
 } // namespace starrocks::pipeline

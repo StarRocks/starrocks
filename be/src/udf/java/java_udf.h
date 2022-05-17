@@ -29,6 +29,8 @@ extern "C" JNIEnv* getJNIEnv(void);
 
 namespace starrocks::vectorized {
 class DirectByteBuffer;
+class AggBatchCallStub;
+class BatchEvaluateStub;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -54,14 +56,15 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
-    // batch update input: col1 col2
-    void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
-                             int cols);
+
+    // batch update single
+    void batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows);
+
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute
-    jobject batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols, int rows);
+    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call no-args function
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
     // batch call int()
@@ -245,10 +248,50 @@ private:
     JavaGlobalRef _clazz;
 };
 
+class AggBatchCallStub {
+public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_update_method_name = "batchCallV";
+
+    AggBatchCallStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+
+    void batch_update_single(int num_rows, jobject state, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    // UDAF object handle, owned by FunctionContext
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
+class BatchEvaluateStub {
+public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_evaluate_method_name = "batchCallV";
+
+    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
 public:
+    static const inline int BATCH_SINGLE_UPDATE = 1;
+    static const inline int BATCH_EVALUATE = 2;
     // Handle
     ClassLoader(std::string path) : _path(std::move(path)) {}
     ~ClassLoader();
@@ -257,11 +300,15 @@ public:
     ClassLoader(const ClassLoader&) = delete;
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
+    // get batch call stub
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+
     Status init();
 
 private:
     std::string _path;
     jmethodID _get_class = nullptr;
+    jmethodID _get_call_stub = nullptr;
     JavaGlobalRef _handle = nullptr;
     JavaGlobalRef _clazz = nullptr;
 };
@@ -299,6 +346,8 @@ struct JavaUDFContext {
 
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
+    std::unique_ptr<BatchEvaluateStub> call_stub;
+
     JVMClass udf_class = nullptr;
     JavaGlobalRef udf_handle = nullptr;
 
@@ -349,6 +398,7 @@ struct JavaUDAFContext {
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
     std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;

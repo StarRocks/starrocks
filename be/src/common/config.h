@@ -505,6 +505,11 @@ CONF_String(es_scroll_keepalive, "5m");
 // HTTP connection timeout for es.
 CONF_Int32(es_http_timeout_ms, "5000");
 
+// es index max result window, and this value affects batch size.
+// if request batch size exceeds this value, ES will return bad request(400)
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html
+CONF_Int32(es_index_max_result_window, "10000");
+
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
 // same cache size configuration.
@@ -699,6 +704,16 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
+
+// Whether to enable segment overflow read
+// If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
+// after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
+// If false, segment will scan (remaining rows of chunk) rows each time, the final chunk after filtering
+// must be less than of equal to the capacity
+// default: true
+CONF_Bool(enable_segment_overflow_read_chunk, "true");
+
+CONF_Int32(max_batch_publish_latency_ms, "100");
 
 } // namespace config
 

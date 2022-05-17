@@ -27,7 +27,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     // delete predicates
     RETURN_IF_ERROR(delete_predicates.convert_to(&dst->delete_predicates, new_types, obj_pool));
 
-    dst->block_mgr = block_mgr;
+    dst->fs = fs;
     dst->stats = stats;
     dst->use_page_cache = use_page_cache;
     dst->profile = profile;

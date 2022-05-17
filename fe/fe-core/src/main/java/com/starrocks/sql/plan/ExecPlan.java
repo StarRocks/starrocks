@@ -13,6 +13,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -100,6 +101,10 @@ public class ExecPlan {
 
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
+    }
+
+    public CostEstimate getEstimatedCost() {
+        return Explain.buildCost(physicalPlan);
     }
 
     public String getExplainString(TExplainLevel level) {

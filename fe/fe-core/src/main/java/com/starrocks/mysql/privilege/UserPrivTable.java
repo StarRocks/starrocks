@@ -29,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.List;
 
 /*
@@ -40,35 +41,27 @@ public class UserPrivTable extends PrivTable {
     public UserPrivTable() {
     }
 
+    /**
+     * get privileges of specific user
+     */
     public void getPrivs(UserIdentity currentUser, PrivBitSet savedPrivs) {
-        GlobalPrivEntry matchedEntry = null;
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-
-            if (!globalPrivEntry.match(currentUser, true)) {
-                continue;
-            }
-
-            matchedEntry = globalPrivEntry;
-            break;
-        }
-        if (matchedEntry == null) {
+        List<PrivEntry> userPrivEntryList = map.get(currentUser);
+        if (userPrivEntryList == null) {
             return;
         }
-
-        savedPrivs.or(matchedEntry.getPrivSet());
+        savedPrivs.or(userPrivEntryList.get(0).getPrivSet());
     }
 
+    /**
+     * get password of specific user
+     */
     public Password getPassword(UserIdentity currentUser) {
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-
-            if (globalPrivEntry.match(currentUser, true)) {
-                return globalPrivEntry.getPassword();
-            }
+        List<PrivEntry> userPrivEntryList = map.get(currentUser);
+        if (userPrivEntryList == null) {
+            return null;
         }
-
-        return null;
+        GlobalPrivEntry entry = (GlobalPrivEntry) userPrivEntryList.get(0);
+        return entry.getPassword();
     }
 
     /**
@@ -77,39 +70,21 @@ public class UserPrivTable extends PrivTable {
      * before {@link Auth#checkPassword}. for sending handshake request.
      */
     public Password getPasswordByApproximate(String remoteUser, String remoteHost) {
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-
-            // check host
-            if (!globalPrivEntry.isAnyHost() && !globalPrivEntry.getHostPattern().match(remoteHost)) {
-                continue;
-            }
-
-            // check user
-            if (!globalPrivEntry.isAnyUser() && !globalPrivEntry.getUserPattern().match(remoteUser)) {
-                continue;
-            }
-
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(remoteUser, remoteHost);
+        while (iter.hasNext()) {
+            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) iter.next();
             return globalPrivEntry.getPassword();
         }
-
         return null;
     }
 
     /*
-     * Check if user@host has specified privilege
+     * Check if current user has specified privilege
      */
-    public boolean hasPriv(String host, String user, PrivPredicate wanted) {
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-            // check host
-            if (!globalPrivEntry.isAnyHost() && !globalPrivEntry.getHostPattern().match(host)) {
-                continue;
-            }
-            // check user
-            if (!globalPrivEntry.isAnyUser() && !globalPrivEntry.getUserPattern().match(user)) {
-                continue;
-            }
+    public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) iter.next();
             if (globalPrivEntry.getPrivSet().satisfy(wanted)) {
                 return true;
             }
@@ -119,26 +94,15 @@ public class UserPrivTable extends PrivTable {
 
     // validate the connection by host, user and password.
     // return true if this connection is valid, and 'savedPrivs' save all global privs got from user table.
-    // if currentUser is not null, save the current user identity
+    // if currentUser is not null, save ALL matching user identity
     public boolean checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString,
                                  List<UserIdentity> currentUser) {
         LOG.debug("check password for user: {} from {}, password: {}, random string: {}",
                 remoteUser, remoteHost, remotePasswd, randomString);
 
-        // TODO(cmy): for now, we check user table from first entry to last,
-        // This may not efficient, but works.
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-
-            // check host
-            if (!globalPrivEntry.isAnyHost() && !globalPrivEntry.getHostPattern().match(remoteHost)) {
-                continue;
-            }
-
-            // check user
-            if (!globalPrivEntry.isAnyUser() && !globalPrivEntry.getUserPattern().match(remoteUser)) {
-                continue;
-            }
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(remoteUser, remoteHost);
+        while (iter.hasNext()) {
+            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) iter.next();
 
             Password password = globalPrivEntry.getPassword();
             if (password == null) {
@@ -166,18 +130,9 @@ public class UserPrivTable extends PrivTable {
 
     public boolean checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd,
                                       List<UserIdentity> currentUser) {
-        for (PrivEntry entry : entries) {
-            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) entry;
-
-            // check host
-            if (!globalPrivEntry.isAnyHost() && !globalPrivEntry.getHostPattern().match(remoteHost)) {
-                continue;
-            }
-
-            // check user
-            if (!globalPrivEntry.isAnyUser() && !globalPrivEntry.getUserPattern().match(remoteUser)) {
-                continue;
-            }
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(remoteUser, remoteHost);
+        while (iter.hasNext()) {
+            GlobalPrivEntry globalPrivEntry = (GlobalPrivEntry) iter.next();
 
             Password password = globalPrivEntry.getPassword();
             if (password == null) {
@@ -209,8 +164,11 @@ public class UserPrivTable extends PrivTable {
     // return true only if user exist and not set by domain
     // user set by domain should be checked in property manager
     public boolean doesUserExist(UserIdentity userIdent) {
-        for (PrivEntry privEntry : entries) {
-            if (privEntry.match(userIdent, true /* exact match */) && !privEntry.isSetByDomainResolver()) {
+        if (!map.containsKey(userIdent)) {
+            return false;
+        }
+        for (PrivEntry privEntry : map.get(userIdent)) {
+            if (!privEntry.isSetByDomainResolver()) {
                 return true;
             }
         }

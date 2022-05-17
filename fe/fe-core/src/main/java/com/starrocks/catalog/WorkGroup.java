@@ -23,26 +23,27 @@ public class WorkGroup implements Writable {
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
     public static final String SOURCE_IP = "source_ip";
+    public static final String DATABASES = "database";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
-    public static final String BIG_QUERY_CPU_CORE_SECOND_LIMIT = "big_query_cpu_core_second_limit";
+    public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("Id", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("MemLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryMemLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryScanRowsLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryCpuCoreSecondLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("ConcurrencyLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Classifiers", ScalarType.createVarchar(1024)))
-                    .build();
+                    .addColumn(new Column("name", ScalarType.createVarchar(100)))
+                    .addColumn(new Column("id", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("type", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
+                   .build();
     @SerializedName(value = "classifiers")
     List<WorkGroupClassifier> classifiers;
     @SerializedName(value = "name")
@@ -57,8 +58,8 @@ public class WorkGroup implements Writable {
     private Long bigQueryMemLimit;
     @SerializedName(value = "bigQueryScanRowsLimit")
     private Long bigQueryScanRowsLimit;
-    @SerializedName(value = "bigQueryCpuCoreSecondLimit")
-    private Long bigQueryCpuCoreSecondLimit;
+    @SerializedName(value = "bigQueryCpuSecondLimit")
+    private Long bigQueryCpuSecondLimit;
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
     @SerializedName(value = "workGroupType")
@@ -80,8 +81,8 @@ public class WorkGroup implements Writable {
         row.add("" + this.id);
         row.add("" + cpuCoreLimit);
         row.add("" + (memLimit * 100) + "%");
-        if (bigQueryMemLimit != null) {
-            row.add("" + bigQueryMemLimit);
+        if (bigQueryCpuSecondLimit != null) {
+            row.add("" + bigQueryCpuSecondLimit);
         } else {
             row.add("" + 0);
         }
@@ -90,8 +91,8 @@ public class WorkGroup implements Writable {
         } else {
             row.add("" + 0);
         }
-        if (bigQueryCpuCoreSecondLimit != null) {
-            row.add("" + bigQueryCpuCoreSecondLimit);
+        if (bigQueryMemLimit != null) {
+            row.add("" + bigQueryMemLimit);
         } else {
             row.add("" + 0);
         }
@@ -103,7 +104,7 @@ public class WorkGroup implements Writable {
 
     public List<List<String>> showVisible(String user, String roleName, String ip) {
         return classifiers.stream().filter(c -> c.isVisible(user, roleName, ip))
-                .map(c -> this.showClassifier(c)).collect(Collectors.toList());
+                .map(this::showClassifier).collect(Collectors.toList());
     }
 
     public long getVersion() {
@@ -158,8 +159,8 @@ public class WorkGroup implements Writable {
             twg.setBig_query_scan_rows_limit(bigQueryScanRowsLimit);
         }
 
-        if (bigQueryCpuCoreSecondLimit != null) {
-            twg.setBig_query_cpu_core_second_limit(bigQueryCpuCoreSecondLimit);
+        if (bigQueryCpuSecondLimit != null) {
+            twg.setBig_query_cpu_second_limit(bigQueryCpuSecondLimit);
         }
 
         if (concurrencyLimit != null) {
@@ -204,12 +205,12 @@ public class WorkGroup implements Writable {
         bigQueryScanRowsLimit = limit;
     }
 
-    public Long getBigQueryCpuCoreSecondLimit() {
-        return bigQueryCpuCoreSecondLimit;
+    public Long getBigQueryCpuSecondLimit() {
+        return bigQueryCpuSecondLimit;
     }
 
-    public void setBigQueryCpuCoreSecondLimit(long limit) {
-        bigQueryCpuCoreSecondLimit = limit;
+    public void setBigQueryCpuSecondLimit(long limit) {
+        bigQueryCpuSecondLimit = limit;
     }
 
     public Integer getConcurrencyLimit() {

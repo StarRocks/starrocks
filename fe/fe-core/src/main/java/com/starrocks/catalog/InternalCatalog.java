@@ -6,6 +6,10 @@ public class InternalCatalog extends Catalog {
     public static final String DEFAULT_INTERNAL_CATALOG_NAME = "default";
 
     public InternalCatalog() {
-        super(DEFAULT_INTERNAL_CATALOG_NAME);
+        super(DEFAULT_INTERNAL_CATALOG_NAME, "");
+    }
+
+    public InternalCatalog(String comment) {
+        super(DEFAULT_INTERNAL_CATALOG_NAME, comment);
     }
 }

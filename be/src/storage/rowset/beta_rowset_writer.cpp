@@ -35,8 +35,6 @@
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/fs/file_block_manager.h"
-#include "storage/fs/fs_util.h"
 #include "storage/merge_iterator.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
@@ -102,7 +100,6 @@ Status BetaRowsetWriter::init() {
     }
 
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
-    _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
     return Status::OK();
 }
 
@@ -125,7 +122,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         _rowset_meta->set_num_delete_files(_segment_has_deletes.size());
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
-        if (_context.partial_update_tablet_schema) {
+        // if load only has delete, we can skip the partial update logic
+        if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
@@ -154,12 +152,9 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
 Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
     auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
                                                        static_cast<int>(segment_id));
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions opts({path});
-    RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
-    RETURN_IF_ERROR(wblock->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t))));
-    RETURN_IF_ERROR(wblock->finalize());
-    RETURN_IF_ERROR(wblock->close());
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    RETURN_IF_ERROR(wfile->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t))));
+    RETURN_IF_ERROR(wfile->close());
     _src_rssids->clear();
     _src_rssids.reset();
     return Status::OK();
@@ -245,12 +240,9 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
         // temporary segment files.
         path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions opts({path});
-    RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
-    DCHECK(wblock != nullptr);
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
     return std::move(segment_writer);
@@ -329,17 +321,14 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     auto flush_del_file = [&](const vectorized::Column& deletes) {
         auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id,
                                                       _segment_has_deletes.size());
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions opts({path});
-        RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
         if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
             return Status::InternalError("deletes column serialize failed");
         }
-        RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
-        RETURN_IF_ERROR(wblock->finalize());
-        RETURN_IF_ERROR(wblock->close());
+        RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+        RETURN_IF_ERROR(wfile->close());
         _segment_has_deletes.push_back(true);
         return Status::OK();
     };
@@ -454,7 +443,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     seg_iterators.reserve(_num_segment);
 
     vectorized::SegmentReadOptions seg_options;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
 
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
@@ -463,8 +452,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
 
-        auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _block_mgr,
-                                         tmp_segment_file, seg_id, _context.tablet_schema);
+        auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
+                                         seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
@@ -748,13 +737,9 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segme
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
     std::string path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions opts({path});
-    RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
-
-    DCHECK(wblock != nullptr);
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wblock), _num_segment, schema, _writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;
     return std::move(segment_writer);

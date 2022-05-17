@@ -181,9 +181,9 @@ struct RandomAccessFileOptions {
 // Creation-time options for WritableFile
 struct WritableFileOptions {
     // Call Sync() during Close().
-    bool sync_on_close = false;
+    bool sync_on_close = true;
     // See OpenMode for details.
-    FileSystem::OpenMode mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.

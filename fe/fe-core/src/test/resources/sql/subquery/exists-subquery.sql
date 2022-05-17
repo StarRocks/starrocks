@@ -349,9 +349,8 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{6: count=count(6: count)}] group by [[]] having [6: count = 0]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{6: count=count(1)}] group by [[]] having [null]
-                    VALUES (2),(3)
+            AGGREGATE ([LOCAL] aggregate [{6: count=count(1)}] group by [[]] having [null]
+                VALUES (2),(3)
 [end]
 
 [sql]

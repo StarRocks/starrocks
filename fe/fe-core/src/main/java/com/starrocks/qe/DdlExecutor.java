@@ -87,6 +87,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -94,7 +95,7 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
-    public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
+    public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
         if (ddlStmt instanceof CreateDbStmt) {
             globalStateMgr.createDb((CreateDbStmt) ddlStmt);
         } else if (ddlStmt instanceof DropDbStmt) {
@@ -111,6 +112,8 @@ public class DdlExecutor {
             globalStateMgr.dropTable((DropTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
             globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
+            globalStateMgr.createMaterializedView((CreateMaterializedViewStatement) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
             globalStateMgr.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterTableStmt) {
@@ -199,7 +202,7 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropRepositoryStmt) {
             globalStateMgr.getBackupHandler().dropRepository((DropRepositoryStmt) ddlStmt);
         } else if (ddlStmt instanceof SyncStmt) {
-            return;
+            return null;
         } else if (ddlStmt instanceof TruncateTableStmt) {
             globalStateMgr.truncateTable((TruncateTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminRepairTableStmt) {
@@ -245,9 +248,10 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropCatalogStmt) {
             globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getName());
         } else if (ddlStmt instanceof SubmitTaskStmt) {
-            throw new DdlException("SubmitTaskStmt is unsupported.");
+            return globalStateMgr.getTaskManager().handleSubmitTaskStmt((SubmitTaskStmt) ddlStmt);
         } else {
             throw new DdlException("Unknown statement.");
         }
+        return null;
     }
 }

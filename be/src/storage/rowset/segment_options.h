@@ -6,9 +6,9 @@
 #include <vector>
 
 #include "column/datum.h"
+#include "fs/fs.h"
 #include "runtime/global_dicts.h"
 #include "storage/disjunctive_predicates.h"
-#include "storage/fs/fs_util.h"
 #include "storage/seek_range.h"
 
 namespace starrocks {
@@ -27,7 +27,7 @@ class SegmentReadOptions {
 public:
     using PredicateList = std::vector<const ColumnPredicate*>;
 
-    std::shared_ptr<fs::BlockManager> block_mgr;
+    std::shared_ptr<FileSystem> fs;
 
     std::vector<SeekRange> ranges;
 

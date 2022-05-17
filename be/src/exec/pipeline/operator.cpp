@@ -40,7 +40,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = state->instance_mem_tracker();
+    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -132,6 +132,10 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     }
 
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+}
+
+RuntimeState* Operator::runtime_state() {
+    return _factory->runtime_state();
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {

@@ -1261,6 +1261,11 @@ Status TabletMetaManager::delete_pending_rowset(DataDir* store, WriteBatch* batc
     return to_status(batch->Delete(h, pkey));
 }
 
+Status TabletMetaManager::delete_pending_rowset(DataDir* store, TTabletId tablet_id, int64_t version) {
+    auto pkey = encode_meta_pending_rowset_key(tablet_id, version);
+    return store->get_meta()->remove(META_COLUMN_FAMILY_INDEX, pkey);
+}
+
 Status TabletMetaManager::clear_pending_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_meta_pending_rowset_key(tablet_id, 0);
     auto upper = encode_meta_pending_rowset_key(tablet_id, INT64_MAX);

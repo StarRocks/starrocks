@@ -66,7 +66,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    source_operator()->add_morsel_queue(_morsel_queue.get());
+    source_operator()->add_morsel_queue(_morsel_queue);
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
@@ -317,12 +317,21 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            if (_fragment_ctx->enable_resource_group()) {
-                if (_workgroup) {
-                    _workgroup->decr_num_queries();
+
+            auto frag_id = _fragment_ctx->fragment_instance_id();
+            int active_fragments = _query_ctx->num_active_fragments();
+            int active_drivers = _fragment_ctx->num_drivers();
+            // Acquire the pointer to avoid be released when removing query
+            auto wg = _workgroup;
+            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
+                if (wg) {
+                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
+                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
+                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
+                             << ", query_ctx address=" << _query_ctx;
+                    wg->decr_num_queries();
                 }
             }
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
@@ -357,7 +366,6 @@ std::string PipelineDriver::to_readable_string() const {
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
-    DCHECK(_workgroup != nullptr);
     return _workgroup.get();
 }
 

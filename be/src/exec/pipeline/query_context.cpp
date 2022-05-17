@@ -79,18 +79,17 @@ void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     });
 }
 
-bool QueryContext::init_query(workgroup::WorkGroup* wg) {
-    bool res = false;
-    if (wg == nullptr) {
-        return res;
+Status QueryContext::init_query(workgroup::WorkGroup* wg) {
+    Status st = Status::OK();
+    if (wg != nullptr) {
+        std::call_once(_init_query_once, [this, &st, wg]() {
+            this->set_init_wg_cpu_cost(wg->total_cpu_cost());
+            this->init_query_begin_time();
+            st = wg->try_incr_num_queries();
+        });
     }
-    std::call_once(_init_query_once, [this, &res, wg]() {
-        this->set_init_wg_cpu_cost(wg->total_cpu_cost());
-        this->init_query_begin_time();
-        wg->incr_num_queries();
-        res = true;
-    });
-    return res;
+
+    return st;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
@@ -234,7 +233,7 @@ size_t QueryContextManager::size() {
     return sz;
 }
 
-void QueryContextManager::remove(const TUniqueId& query_id) {
+bool QueryContextManager::remove(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -245,12 +244,13 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
-        return;
+        return false;
     }
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
+        return true;
     } else if (it->second->has_no_active_instances()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
@@ -259,7 +259,9 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
         ctx->extend_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
+        return false;
     }
+    return false;
 }
 
 void QueryContextManager::clear() {

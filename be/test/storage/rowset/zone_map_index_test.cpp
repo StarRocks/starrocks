@@ -27,7 +27,6 @@
 #include <string>
 
 #include "fs/fs_memory.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/page_cache.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
@@ -42,7 +41,6 @@ protected:
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_fs, fs::BlockManagerOptions());
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
 
@@ -72,16 +70,14 @@ protected:
         // write out zone map index
         ColumnIndexMetaPB index_meta;
         {
-            std::unique_ptr<fs::WritableBlock> wblock;
-            fs::CreateBlockOptions opts({filename});
-            ASSERT_TRUE(_block_mgr->create_block(opts, &wblock).ok());
-            ASSERT_TRUE(builder->finish(wblock.get(), &index_meta).ok());
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+            ASSERT_TRUE(builder->finish(wfile.get(), &index_meta).ok());
             ASSERT_EQ(ZONE_MAP_INDEX, index_meta.type());
-            ASSERT_TRUE(wblock->close().ok());
+            ASSERT_OK(wfile->close());
         }
 
         ZoneMapIndexReader column_zone_map;
-        ASSERT_OK(column_zone_map.load(_block_mgr.get(), filename, &index_meta.zone_map_index(), true, false));
+        ASSERT_OK(column_zone_map.load(_fs.get(), filename, &index_meta.zone_map_index(), true, false));
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
@@ -100,7 +96,6 @@ protected:
     }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
@@ -128,16 +123,14 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     // write out zone map index
     ColumnIndexMetaPB index_meta;
     {
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions opts({filename});
-        ASSERT_TRUE(_block_mgr->create_block(opts, &wblock).ok());
-        ASSERT_TRUE(builder->finish(wblock.get(), &index_meta).ok());
+        ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(filename));
+        ASSERT_TRUE(builder->finish(file.get(), &index_meta).ok());
         ASSERT_EQ(ZONE_MAP_INDEX, index_meta.type());
-        ASSERT_TRUE(wblock->close().ok());
+        ASSERT_OK(file->close());
     }
 
     ZoneMapIndexReader column_zone_map;
-    ASSERT_OK(column_zone_map.load(_block_mgr.get(), filename, &index_meta.zone_map_index(), true, false));
+    ASSERT_OK(column_zone_map.load(_fs.get(), filename, &index_meta.zone_map_index(), true, false));
     ASSERT_EQ(3, column_zone_map.num_pages());
     const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
     ASSERT_EQ(3, zone_maps.size());

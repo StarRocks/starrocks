@@ -14,6 +14,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -30,9 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CTASAnalyzer {
-
-    @Deprecated
-    public static void transformCTASStmt(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
+    public static void analyze(CreateTableAsSelectStmt createTableAsSelectStmt, ConnectContext session) {
         List<String> columnNames = createTableAsSelectStmt.getColumnNames();
         QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
         CreateTableStmt createTableStmt = createTableAsSelectStmt.getCreateTableStmt();
@@ -79,6 +78,9 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
+                if (!(table instanceof OlapTable)) {
+                    continue;
+                }
                 columnNameToTable.put(new Pair<>(tableName,
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
@@ -125,14 +127,15 @@ public class CTASAnalyzer {
     }
 
     // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise use the longest varchar value.
+    // otherwise (include null type) use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
     private static Type transformType(Type srcType) {
         Type newType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.CHAR == srcType.getPrimitiveType()) {
+                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
                 int len = ScalarType.MAX_VARCHAR_LENGTH;
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
@@ -151,8 +154,6 @@ public class CTASAnalyzer {
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
-            } else if (PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                throw new SemanticException("Unsupported CTAS transform type: null");
             } else {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }

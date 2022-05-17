@@ -22,6 +22,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -148,6 +149,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
@@ -196,6 +201,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowCatalogsStmt(ShowCatalogsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitDropTableStmt(DropTableStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -222,6 +231,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropCatalogStatement(DropCatalogStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitShowCatalogStatement(ShowCatalogsStmt stmt, C context) {
         return visitStatement(stmt, context);
     }
 
@@ -409,6 +422,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
 

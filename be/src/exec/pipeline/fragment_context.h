@@ -6,11 +6,11 @@
 
 #include "exec/exec_node.h"
 #include "exec/pipeline/driver_limiter.h"
-#include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -65,6 +65,7 @@ public:
         _final_status.store(nullptr);
     }
 
+    int num_drivers() const { return _num_drivers.load(); }
     bool count_down_drivers() { return _num_drivers.fetch_sub(1) == 1; }
 
     void set_final_status(const Status& status);

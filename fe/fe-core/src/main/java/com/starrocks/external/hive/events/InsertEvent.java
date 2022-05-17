@@ -74,12 +74,12 @@ public class InsertEvent extends MetastoreTableEvent {
     @Override
     protected boolean existInCache() {
         if (isPartitionTbl()) {
-            HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
-            return cache.tableExistInCache(tableKey);
-        } else {
             List<String> partVals = insertPartition.getValues();
             HivePartitionKey partitionKey = new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partVals);
             return cache.partitionExistInCache(partitionKey);
+        } else {
+            HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
+            return cache.tableExistInCache(tableKey);
         }
     }
 

@@ -33,6 +33,7 @@
 
 #include "common/status.h"
 #include "cumulative_compaction.h"
+#include "fs/fd_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
@@ -81,7 +82,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
 
-          _file_cache(nullptr),
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
@@ -153,8 +153,6 @@ Status StorageEngine::_open() {
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
     _index_stream_lru_cache = new_lru_cache(config::index_stream_cache_capacity);
-
-    _file_cache.reset(new_lru_cache(config::file_descriptor_cache_capacity));
 
     starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
@@ -518,7 +516,6 @@ void StorageEngine::stop() {
     }
 
     SAFE_DELETE(_index_stream_lru_cache);
-    _file_cache.reset();
 
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
@@ -561,7 +558,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
 
 void StorageEngine::_start_clean_fd_cache() {
     VLOG(10) << "Cleaning file descriptor cache";
-    _file_cache->prune();
+    FdCache::Instance()->prune();
     VLOG(10) << "Cleaned file descriptor cache";
 }
 

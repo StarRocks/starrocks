@@ -438,7 +438,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     priv -> {
                         boolean isGrantable =
                                 Privilege.NODE_PRIV != priv // NODE_PRIV counld not be granted event with GRANT_PRIV
-                                        && userPrivTable.hasPriv(userIdent.getHost(), userIdent.getQualifiedUser(),
+                                        && userPrivTable.hasPriv(userIdent,
                                         PrivPredicate.GRANT);
                         TUserPrivDesc privDesc = new TUserPrivDesc();
                         privDesc.setIs_grantable(isGrantable);
@@ -618,7 +618,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFetchResourceResult fetchResource() throws TException {
-        return masterImpl.fetchResource();
+        throw new TException("not supported");
     }
 
     @Override

@@ -10,10 +10,10 @@
 
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
@@ -68,7 +68,12 @@ public:
         for (int64_t key : keys) {
             cols[0]->append_datum(vectorized::Datum(key));
             cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            if (cols[2]->is_binary()) {
+                string v = fmt::to_string(key % 1000 + 2);
+                cols[2]->append_datum(vectorized::Datum(Slice(v)));
+            } else {
+                cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            }
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -232,7 +237,7 @@ public:
         TColumn k1;
         k1.column_name = "pk";
         k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::INT;
+        k1.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k1);
 
         TColumn k2;
@@ -247,12 +252,6 @@ public:
         k3.column_type.type = TPrimitiveType::VARCHAR;
         request.tablet_schema.columns.push_back(k3);
 
-        TColumn k4;
-        k4.column_name = "v3";
-        k4.__set_is_key(false);
-        k4.column_type.type = TPrimitiveType::INT;
-        k4.__set_default_value("1");
-        request.tablet_schema.columns.push_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -379,6 +378,7 @@ public:
     void test_vertical_compaction(bool enable_persistent_index);
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
+    void test_convert_from_with_pending(bool enable_persistent_index);
     void test_load_snapshot_incremental(bool enable_persistent_index);
     void test_load_snapshot_incremental_ignore_already_committed_version(bool enable_persistent_index);
     void test_load_snapshot_incremental_mismatched_tablet_id(bool enable_persistent_index);
@@ -528,10 +528,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum((int32_t)keys[i]));
+        cols[0]->append_datum(vectorized::Datum((int64_t)keys[i]));
         cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum(Slice{std::to_string((int64_t)(keys[i] % 1000 + 2))}));
-        cols[3]->append_datum(vectorized::Datum(1));
+        auto v = std::to_string((int64_t)(keys[i] % 1000 + 2));
+        cols[2]->append_datum(vectorized::Datum(Slice{v}));
     }
     auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -1207,12 +1207,70 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, keys));
 }
 
+void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_index) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
+    int N = 100;
+    std::vector<int64_t> keys2;   // [0, 100)
+    std::vector<int64_t> keys3;   // [50, 150)
+    std::vector<int64_t> keys4;   // [100, 200)
+    std::vector<int64_t> allkeys; // [0, 200)
+    for (int i = 0; i < N; i++) {
+        keys2.push_back(i);
+        keys3.push_back(N / 2 + i);
+        keys4.push_back(N + i);
+        allkeys.push_back(i * 2);
+        allkeys.push_back(i * 2 + 1);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys2)).ok());
+
+    tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
+    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+        } else {
+            column_mapping->default_value = WrapperField::create(new_column);
+
+            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
+
+            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
+                column_mapping->default_value->set_null();
+            } else {
+                column_mapping->default_value->from_string(new_column.default_value());
+            }
+        }
+    }
+    ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());
+    ASSERT_TRUE(tablet_to_schema_change->rowset_commit(4, create_rowset(tablet_to_schema_change, keys4)).ok());
+
+    ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 2, chunk_changer.get()).ok());
+
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys3)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys4)).ok());
+
+    ASSERT_EQ(2 * N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, allkeys));
+}
+
 TEST_F(TabletUpdatesTest, convert_from) {
     test_convert_from(false);
 }
 
 TEST_F(TabletUpdatesTest, convert_from_with_persistent_index) {
     test_convert_from(true);
+}
+
+TEST_F(TabletUpdatesTest, convert_from_with_pending) {
+    test_convert_from_with_pending(false);
+}
+
+TEST_F(TabletUpdatesTest, convert_from_with_pending_and_persistent_index) {
+    test_convert_from_with_pending(true);
 }
 
 // NOLINTNEXTLINE
@@ -1657,13 +1715,10 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     std::string rowset_path = last_rowset->rowset_path();
     std::string segment_path =
             strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    std::shared_ptr<fs::BlockManager> block_mgr;
-    ASSIGN_OR_ABORT(block_mgr, fs::fs_util::block_manager("posix://"));
-    ASSERT_TRUE(block_mgr->open_block(segment_path, &rblock).ok());
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(segment_path));
 
-    ASSERT_TRUE(Segment::parse_segment_footer(rblock.get(), footer, nullptr, nullptr).ok());
-    rblock->close();
+    ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());
 }
 
 void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(bool enable_persistent_index) {

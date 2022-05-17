@@ -120,7 +120,8 @@ Status ZipFile::extract_file(const std::string& target_path) {
     ZPOS64_T file_size = std::min(file_info_inzip.uncompressed_size, DEFAULT_UNZIP_BUFFER);
     std::unique_ptr<char[]> file_data(new char[file_size]);
 
-    ASSIGN_OR_RETURN(auto wfile, FileSystem::Default()->new_writable_file(path));
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto wfile, FileSystem::Default()->new_writable_file(opts, path));
 
     int size;
     do {

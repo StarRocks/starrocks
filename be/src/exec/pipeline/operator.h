@@ -146,6 +146,8 @@ public:
         return growth_time;
     }
 
+    RuntimeState* runtime_state();
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -161,7 +163,12 @@ protected:
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     std::shared_ptr<RuntimeProfile> _common_metrics;
     std::shared_ptr<RuntimeProfile> _unique_metrics;
-    MemTracker* _mem_tracker = nullptr;
+
+    // All the memory usage will be automatically added to the instance level MemTracker by memory allocate hook
+    // But for some special operators, we hope to see the memory usage of some special data structures,
+    // such as hash table of aggregate operators.
+    // So the following indenpendent MemTracker is introduced to record these memory usage
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 

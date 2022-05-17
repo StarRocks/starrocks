@@ -38,7 +38,6 @@
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -63,7 +62,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> blk_mgr,
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
@@ -76,15 +75,14 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::s
     return std::move(segment);
 }
 
-Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
+Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
                                      const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    uint64_t file_size;
-    RETURN_IF_ERROR(rblock->size(&file_size));
+    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
 
     if (file_size < 12) {
         return Status::Corruption(
-                strings::Substitute("Bad segment file $0: file size $1 < 12", rblock->path(), file_size));
+                strings::Substitute("Bad segment file $0: file size $1 < 12", read_file->filename(), file_size));
     }
 
     size_t hint_size = footer_length_hint ? *footer_length_hint : 4096;
@@ -93,8 +91,8 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     if (partial_rowset_footer != nullptr) {
         if (file_size < partial_rowset_footer->position() + partial_rowset_footer->size()) {
             return Status::Corruption(
-                    strings::Substitute("Bad partial segment file $0: file size $1 < $2", rblock->path(), file_size,
-                                        partial_rowset_footer->position() + partial_rowset_footer->size()));
+                    strings::Substitute("Bad partial segment file $0: file size $1 < $2", read_file->filename(),
+                                        file_size, partial_rowset_footer->position() + partial_rowset_footer->size()));
         }
         footer_read_size = partial_rowset_footer->size();
     }
@@ -102,7 +100,7 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
     size_t read_pos = partial_rowset_footer ? partial_rowset_footer->position() : file_size - buff.size();
 
-    RETURN_IF_ERROR(rblock->read(read_pos, buff));
+    RETURN_IF_ERROR(read_file->read_at_fully(read_pos, buff.data(), buff.size()));
 
     const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
     const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
@@ -110,11 +108,12 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
 
     // validate magic number
     if (magic_number != UNALIGNED_LOAD32(k_segment_magic)) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: magic number not match", rblock->path()));
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: magic number not match", read_file->filename()));
     }
 
     if (file_size < 12 + footer_length) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", rblock->path(),
+        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", read_file->filename(),
                                                       file_size, 12 + footer_length));
     }
 
@@ -133,7 +132,7 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
         actual_checksum = crc32c::Value(buf_footer.data(), buf_footer.size());
         if (!footer->ParseFromArray(buf_footer.data(), buf_footer.size())) {
             return Status::Corruption(
-                    strings::Substitute("Bad segment file $0: failed to parse footer", rblock->path()));
+                    strings::Substitute("Bad segment file $0: failed to parse footer", read_file->filename()));
         }
     } else { // Need read file again.
         g_open_segments << 1;
@@ -142,7 +141,7 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
         int left_size = (int)footer_length - buff.size();
         std::string buff_2;
         raw::stl_string_resize_uninitialized(&buff_2, left_size);
-        RETURN_IF_ERROR(rblock->read(file_size - footer_length - 12, buff_2));
+        RETURN_IF_ERROR(read_file->read_at_fully(file_size - footer_length - 12, buff_2.data(), buff_2.size()));
         actual_checksum = crc32c::Extend(actual_checksum, buff_2.data(), buff_2.size());
         actual_checksum = crc32c::Extend(actual_checksum, buff.data(), buff.size());
 
@@ -152,7 +151,7 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
         ::google::protobuf::io::ConcatenatingInputStream concatenating_stream(streams, 2);
         if (!footer->ParseFromZeroCopyStream(&concatenating_stream)) {
             return Status::Corruption(
-                    strings::Substitute("Bad segment file $0: failed to parse footer", rblock->path()));
+                    strings::Substitute("Bad segment file $0: failed to parse footer", read_file->filename()));
         }
     }
 
@@ -160,15 +159,15 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     if (actual_checksum != checksum) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2",
-                                    rblock->path(), actual_checksum, checksum));
+                                    read_file->filename(), actual_checksum, checksum));
     }
 
     return Status::OK();
 }
 
-Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
+Segment::Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
                  const TabletSchema* tablet_schema, MemTracker* mem_tracker)
-        : _block_mgr(std::move(blk_mgr)),
+        : _fs(std::move(blk_mgr)),
           _fname(std::move(fname)),
           _tablet_schema(tablet_schema),
           _segment_id(segment_id),
@@ -177,9 +176,8 @@ Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr,
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(rblock.get(), &footer, footer_length_hint, partial_rowset_footer));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
+    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
 
     RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
     _num_rows = footer.num_rows();
@@ -232,12 +230,11 @@ Status Segment::_load_index(MemTracker* mem_tracker) {
     return _load_index_once.call([this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
-        std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
+        ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
 
         PageReadOptions opts;
         opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.rblock = rblock.get();
+        opts.read_file = read_file.get();
         opts.page_pointer = _short_key_index_page;
         opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
         OlapReaderStatistics tmp_stats;

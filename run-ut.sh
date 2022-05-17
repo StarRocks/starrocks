@@ -37,6 +37,7 @@ Usage: $0 <options>
      --gtest_filter                 specify test cases
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     -j                             build parallel
 
   Eg.
     $0                              build ut
@@ -57,6 +58,7 @@ OPTS=$(getopt \
   -l "gtest_filter:" \
   -l 'with-aws' \
   -l 'with-bench' \
+  -o 'j:' \
   -l 'help' \
   -- "$@")
 
@@ -80,6 +82,7 @@ while true; do
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
         --with-bench) WITH_BENCH=ON; shift ;;
+        -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -111,12 +114,14 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
 fi
 
 cd ${CMAKE_BUILD_DIR}
-
-${CMAKE_CMD} ../ -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}
-
-time make -j${PARALLEL}
+${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+              -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
+              -DSTARROCKS_HOME=${STARROCKS_HOME} \
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+              -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
+time ${BUILD_SYSTEM} -j${PARALLEL}
 
 if [ ${RUN} -ne 1 ]; then
     echo "Finished"

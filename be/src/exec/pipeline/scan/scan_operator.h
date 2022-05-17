@@ -4,6 +4,7 @@
 
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -16,10 +17,14 @@ class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
-    ~ScanOperator() override = default;
+    ~ScanOperator() override;
 
     Status prepare(RuntimeState* state) override;
 
+    // The running I/O task committed by ScanOperator holds the reference of query context,
+    // so it can prevent the scan operator from deconstructored, but cannot prevent it from closed.
+    // Therefore, release resources used by the I/O task in ~ScanOperator and ScanOperatorFactory::close,
+    // **NOT** in ScanOperator::close.
     void close(RuntimeState* state) override;
 
     bool has_output() const override;
@@ -32,8 +37,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
-    void set_workgroup(workgroup::WorkGroupPtr wg);
+    void set_io_threads(PriorityThreadPool* io_threads) override { _io_threads = io_threads; }
 
     /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
@@ -57,18 +61,32 @@ protected:
     // And all these parallel profiles will be merged to ScanOperator's profile at the end.
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
+    bool _is_finished = false;
+
 private:
+    inline void set_scan_status(const Status& status) {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        if (_scan_status.ok()) {
+            _scan_status = status;
+        }
+    }
+
+    inline Status get_scan_status() const {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        return _scan_status;
+    }
+
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
-
-    bool _is_finished = false;
 
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    mutable SpinLock _scan_status_mutex;
+    Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
 

@@ -88,6 +88,10 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        tls_thread_status.set_query_id(query_ctx->query_id());
+        tls_thread_status.set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+        tls_thread_status.set_pipeline_driver_id(driver->driver_id());
+
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
@@ -111,30 +115,20 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
 
-            auto status = driver->process(runtime_state, worker_id);
+            auto maybe_state = driver->process(runtime_state, worker_id);
+            Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
-            // check If large query, if true, cancel it
-            bool is_big_query = false;
-            if (driver->fragment_ctx()->enable_resource_group()) {
-                auto wg = driver->workgroup();
-                if (wg) {
-                    is_big_query = wg->is_big_query(*query_ctx);
-                }
+            // Check big query
+            if (status.ok() && driver->workgroup()) {
+                status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
-            if (!status.ok() || is_big_query) {
-                if (is_big_query) {
-                    LOG(WARNING) << "[Driver] Process exceed limit, query_id="
-                                 << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                    query_ctx->cancel(Status::Cancelled("exceed big query limit"));
-                } else {
-                    LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                                 << ", error=" << status.status().to_string();
-                    query_ctx->cancel(status.status());
-                }
+            if (!status.ok()) {
+                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                             << ", status=" << status;
+                query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -144,7 +138,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 }
                 continue;
             }
-            auto driver_state = status.value();
+            auto driver_state = maybe_state.value();
             switch (driver_state) {
             case READY:
             case RUNNING: {
