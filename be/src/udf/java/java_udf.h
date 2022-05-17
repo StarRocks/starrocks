@@ -30,6 +30,7 @@ extern "C" JNIEnv* getJNIEnv(void);
 namespace starrocks::vectorized {
 class DirectByteBuffer;
 class AggBatchCallStub;
+class BatchEvaluateStub;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -63,7 +64,7 @@ public:
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute
-    jobject batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols, int rows);
+    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call no-args function
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
     // batch call int()
@@ -249,6 +250,9 @@ private:
 
 class AggBatchCallStub {
 public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_update_method_name = "batchCallV";
+
     AggBatchCallStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
             : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
 
@@ -264,10 +268,30 @@ private:
     JavaGlobalRef _stub_method;
 };
 
+class BatchEvaluateStub {
+public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_evaluate_method_name = "batchCallV";
+
+    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
 public:
+    static const inline int BATCH_SINGLE_UPDATE = 1;
+    static const inline int BATCH_EVALUATE = 2;
     // Handle
     ClassLoader(std::string path) : _path(std::move(path)) {}
     ~ClassLoader();
@@ -277,7 +301,7 @@ public:
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
     // get batch call stub
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method);
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
 
     Status init();
 
@@ -322,6 +346,8 @@ struct JavaUDFContext {
 
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
+    std::unique_ptr<BatchEvaluateStub> call_stub;
+
     JVMClass udf_class = nullptr;
     JavaGlobalRef udf_handle = nullptr;
 

@@ -34,6 +34,7 @@ statement
     | submitTaskStatement                                                                   #submitTask
 
     // Materialized View Statement
+    | createMaterializedViewStatement                                                       #createMaterializedView
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
 
@@ -147,6 +148,16 @@ submitTaskStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
+
+createMaterializedViewStatement
+    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    comment?
+    (PARTITION BY primaryExpression)?
+    distributionDesc?
+    refreshSchemeDesc?
+    properties?
+    AS queryStatement
+    ;
 
 showMaterializedViewStatement
     : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
@@ -676,6 +687,12 @@ distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     ;
 
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | MANUAL)
+    ;
+
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
@@ -802,7 +819,7 @@ number
     ;
 
 nonReserved
-    : AFTER | AGGREGATE | AUTHORS | AVG | ADMIN
+    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
@@ -813,7 +830,7 @@ nonReserved
     | HASH | HELP | HLL_UNION | HOUR
     | IDENTIFIED | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
@@ -821,7 +838,8 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE_GROUP | RESOURCE_GROUPS | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING | SUBMIT
+    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
+    | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

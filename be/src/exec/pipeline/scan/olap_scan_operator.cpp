@@ -39,6 +39,15 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t
     _ctx->ref();
 }
 
+OlapScanOperator::~OlapScanOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    _ctx->unref(state);
+}
+
 bool OlapScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished() || _ctx->is_finished()) {
         return false;
@@ -48,57 +57,28 @@ bool OlapScanOperator::has_output() const {
 }
 
 bool OlapScanOperator::is_finished() const {
-    if (_ctx->is_finished()) {
+    if (_ctx->is_finished() || _is_finished) {
         return true;
+    }
+
+    // ScanOperator::is_finished() will check whether the morsel queue has more morsels,
+    // and some kinds of morsel queue will be ready after the scan context prepares ready.
+    // Therefore, return false when the context is not ready.
+    if (!_ctx->is_prepare_finished()) {
+        return false;
     }
 
     return ScanOperator::is_finished();
 }
 
 Status OlapScanOperator::do_prepare(RuntimeState*) {
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
     return Status::OK();
 }
 
-void OlapScanOperator::do_close(RuntimeState* state) {
-    _ctx->unref(state);
-}
-
-Status OlapScanOperator::_capture_tablet_rowsets() {
-    const auto& morsels = this->morsel_queue()->morsels();
-    _tablet_rowsets.resize(morsels.size());
-    for (int i = 0; i < morsels.size(); ++i) {
-        ScanMorsel* scan_morsel = (ScanMorsel*)morsels[i].get();
-        auto* scan_range = scan_morsel->get_olap_scan_range();
-
-        // Get version.
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-
-        // Capture row sets of this version tablet.
-        {
-            std::shared_lock l(tablet->get_header_lock());
-            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
-        }
-    }
-
-    return Status::OK();
-}
+void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+    auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
     return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                              olap_scan_node, _ctx.get());
 }
