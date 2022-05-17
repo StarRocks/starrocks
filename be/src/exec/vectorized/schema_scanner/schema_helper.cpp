@@ -79,14 +79,13 @@ Status SchemaHelper::get_table_privs(const std::string& ip, const int32_t port, 
 }
 
 Status SchemaHelper::show_tasks(const std::string& ip, const int32_t port, const TShowTasksParams& request,
-                         TListTaskInfoResult* result){
+                                TListTaskInfoResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port,
-            [&request, &result](FrontendServiceConnection& client) { client->showTasks(*result, request); });
+            ip, port, [&request, &result](FrontendServiceConnection& client) { client->showTasks(*result, request); });
 }
 
 Status SchemaHelper::show_task_runs(const std::string& ip, const int32_t port, const TShowTasksParams& request,
-                             TListTaskRunInfoResult* result){
+                                    TListTaskRunInfoResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
             [&request, &result](FrontendServiceConnection& client) { client->showTaskRuns(*result, request); });

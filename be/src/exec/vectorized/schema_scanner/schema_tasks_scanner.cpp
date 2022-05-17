@@ -12,8 +12,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), false},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false}
-};
+        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false}};
 
 SchemaTasksScanner::SchemaTasksScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -154,4 +153,4 @@ Status SchemaTasksScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-}
+} // namespace starrocks::vectorized

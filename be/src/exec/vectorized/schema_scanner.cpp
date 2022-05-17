@@ -11,11 +11,11 @@
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_tables_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_tasks_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_tasks_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
 
 namespace starrocks::vectorized {
 

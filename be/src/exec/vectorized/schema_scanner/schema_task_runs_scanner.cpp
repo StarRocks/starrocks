@@ -16,8 +16,7 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true}
-};
+        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -211,4 +210,4 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-}
+} // namespace starrocks::vectorized

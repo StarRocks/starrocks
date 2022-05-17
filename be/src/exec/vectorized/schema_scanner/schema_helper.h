@@ -40,7 +40,7 @@ public:
                                   TGetTablePrivsResult* var_result);
 
     static Status show_tasks(const std::string& ip, const int32_t port, const TShowTasksParams& var_params,
-                                TListTaskInfoResult* var_result);
+                             TListTaskInfoResult* var_result);
 
     static Status show_task_runs(const std::string& ip, const int32_t port, const TShowTasksParams& var_params,
                                  TListTaskRunInfoResult* var_result);
