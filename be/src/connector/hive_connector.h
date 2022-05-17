@@ -56,7 +56,6 @@ private:
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
-    void _init_chunk(vectorized::ChunkPtr* chunk);
 
     // =====================================
     ObjectPool _obj_pool;
@@ -80,9 +79,6 @@ private:
     bool _has_partition_conjuncts = false;
     bool _filter_by_eval_partition_conjuncts = false;
     bool _no_data = false;
-
-    // ============ tuples and slots ==========
-    const TupleDescriptor* _tuple_desc = nullptr;
 
     int _min_max_tuple_id = 0;
     TupleDescriptor* _min_max_tuple_desc = nullptr;

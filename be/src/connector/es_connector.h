@@ -57,7 +57,6 @@ private:
 
     // =========================
     RuntimeState* _runtime_state = nullptr;
-    TupleDescriptor* _tuple_desc = nullptr;
     ObjectPool _obj_pool;
     ObjectPool* _pool = &_obj_pool;
 

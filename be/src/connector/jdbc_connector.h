@@ -58,7 +58,6 @@ private:
     ObjectPool _obj_pool;
     ObjectPool* _pool = &_obj_pool;
     RuntimeState* _runtime_state = nullptr;
-    const TupleDescriptor* _tuple_desc = nullptr;
     vectorized::JDBCScanner* _scanner = nullptr;
     int64_t _rows_read = 0;
 };
