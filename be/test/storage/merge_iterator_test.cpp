@@ -152,6 +152,67 @@ TEST_F(MergeIteratorTest, test_issue_DSDB_2715) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, test_issue_6167) {
+    std::vector<ChunkIteratorPtr> subs;
+    int chunk_size = 4096;
+    for (int i = 0; i < chunk_size; i++) {
+        subs.push_back(std::make_shared<VectorChunkIterator>(_schema, COL_INT({1, 1, 1, 3, 4, 5})));
+    }
+    auto iter = new_heap_merge_iterator(subs);
+
+    auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
+        auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
+        return c->get_data()[row];
+    };
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), chunk_size);
+    Status st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(1, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(1, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(1, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(3, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(4, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(chunk_size, chunk->num_rows());
+    for (int i = 0; i < chunk_size; i++) {
+        EXPECT_EQ(5, get_row(chunk, 1));
+    }
+    chunk->reset();
+    st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
+// NOLINTNEXTLINE
 TEST_F(MergeIteratorTest, mask_merge) {
     std::vector<int32_t> v1{1, 1, 2, 3, 4, 5};
     std::vector<int32_t> v2{10, 11, 13, 15, 15, 16, 17};
