@@ -13,6 +13,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -244,5 +245,14 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
+        @Override
+        public Void visitGrantPrivilegeStmt(GrantStmt statement, ConnectContext context) {
+            if (statement.getPrivileges().size() == 0) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NONEXISTING_GRANT, "GRANT");
+            }
+            return null;
+        }
+
     }
 }

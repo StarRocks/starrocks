@@ -217,6 +217,8 @@ WHERE: 'WHERE';
 WITH: 'WITH';
 YEAR: 'YEAR';
 FORCE: 'FORCE';
+ROLE: 'ROLE';
+RESOURCE: 'RESOURCE';
 
 
 EQ  : '=';
@@ -245,6 +247,7 @@ BITNOT: '~';
 
 ARROW: '->';
 AT: '@';
+DOT: '.';
 
 INTEGER_VALUE
     : DIGIT+

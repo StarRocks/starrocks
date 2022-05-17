@@ -12,6 +12,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
@@ -192,6 +193,12 @@ public class Analyzer {
         @Override
         public Void visitShowCatalogStatement(ShowCatalogsStmt statement, ConnectContext context) {
             ShowStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitGrantPrivilegeStmt(GrantStmt statement, ConnectContext context) {
+            GrantPrivilegeAnalyzer.analyze(statement, context);
             return null;
         }
 

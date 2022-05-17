@@ -52,6 +52,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
@@ -79,6 +80,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SelectStmt;
@@ -97,12 +99,15 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -284,6 +289,72 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new AlterTableStmt(targetTableName, Lists.newArrayList(dropIndexClause));
+    }
+
+    @Override
+    public ParseNode visitGrantPrivilegeStatement(StarRocksParser.GrantPrivilegeStatementContext context) {
+        List<String> privilegesNames = getItems(context.items()).getParts();
+        List<AccessPrivilege> accessPrivileges = convertToPrivilege(privilegesNames);
+
+        String role = null;
+        String user;
+        String host;
+        if (context.ROLE() != null) {
+            role = context.qualifiedName().getText();
+        }
+
+        if (null == context.RESOURCE()) {
+            String tbl = null;
+            String db = context.dbTabString().get(0).getText();
+            if (context.dbTabString().size() == 2) {
+                tbl = context.dbTabString(1).getText();
+            }
+            user = context.SINGLE_QUOTED_TEXT(0).getText();
+            host = context.SINGLE_QUOTED_TEXT(1).getText();
+            return new GrantStmt(new UserIdentity(user, host), role, new TablePattern(db, tbl), accessPrivileges);
+        }
+
+        String resource = context.SINGLE_QUOTED_TEXT(0).getText();
+        user = context.SINGLE_QUOTED_TEXT(1).getText();
+        host = context.SINGLE_QUOTED_TEXT(2).getText();
+        return new GrantStmt(new UserIdentity(user, host), role, new ResourcePattern(resource), accessPrivileges);
+
+    }
+
+    private QualifiedName getItems(StarRocksParser.ItemsContext context) {
+        List<String> parts = visit(context.identifier(), Identifier.class).stream()
+                .map(Identifier::getValue)
+                .collect(Collectors.toList());
+
+        return QualifiedName.of(parts);
+    }
+
+    public List<AccessPrivilege> convertToPrivilege(List<String> privilegesNames) {
+        List<AccessPrivilege> accessPrivileges = new ArrayList<>();
+        for (String name : privilegesNames) {
+            if (name.equals("SELECT_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.SELECT_PRIV);
+            }
+            if (name.equals("LOAD_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.LOAD_PRIV);
+            }
+            if (name.equals("ALTER_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.ALTER_PRIV);
+            }
+            if (name.equals("CREATE_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.CREATE_PRIV);
+            }
+            if (name.equals("DROP_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.DROP_PRIV);
+            }
+            if (name.equals("ADMIN_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.ADMIN_PRIV);
+            }
+            if (name.equals("USAGE_PRIV")) {
+                accessPrivileges.add(AccessPrivilege.USAGE_PRIV);
+            }
+        }
+        return accessPrivileges;
     }
 
     @Override
