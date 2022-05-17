@@ -545,7 +545,7 @@ public class GlobalStateMgr {
         return systemInfoService;
     }
 
-    private SystemInfoService getClusterInfo() {
+    public SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
 
@@ -566,7 +566,7 @@ public class GlobalStateMgr {
         return this.colocateTableIndex;
     }
 
-    private CatalogRecycleBin getRecycleBin() {
+    public CatalogRecycleBin getRecycleBin() {
         return this.recycleBin;
     }
 
@@ -847,7 +847,7 @@ public class GlobalStateMgr {
     }
 
     // Use tryLock to avoid potential dead lock
-    private boolean tryLock(boolean mustLock) {
+    public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
                 if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -875,7 +875,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private void unlock() {
+    public void unlock() {
         if (lock.isHeldByCurrentThread()) {
             this.lock.unlock();
         }
@@ -6672,6 +6672,10 @@ public class GlobalStateMgr {
         if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
             isDefaultClusterCreated = true;
         }
+    }
+
+    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
+        this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
     /**
