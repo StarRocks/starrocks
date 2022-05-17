@@ -22,6 +22,7 @@ class KVStore;
 namespace starrocks::vectorized {
 
 class ColumnPredicate;
+struct RowidRangeOption;
 
 class SegmentReadOptions {
 public:
@@ -50,11 +51,6 @@ public:
 
     bool use_page_cache = false;
 
-    Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;
-
-    // Only used for debugging
-    std::string debug_string() const;
-
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
@@ -62,6 +58,14 @@ public:
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     bool has_delete_pred = false;
+
+    RowidRangeOption* rowid_range_option = nullptr;
+
+public:
+    Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;
+
+    // Only used for debugging
+    std::string debug_string() const;
 };
 
 } // namespace starrocks::vectorized

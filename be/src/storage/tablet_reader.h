@@ -41,6 +41,11 @@ public:
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
+    static Status parse_seek_range(const TabletSharedPtr& tablet, const std::string& range_start_op,
+                                   const std::string& range_end_op, const std::vector<OlapTuple>& range_start_key,
+                                   const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
+                                   MemPool* mempool);
+
 public:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
@@ -49,11 +54,12 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
-    Status _parse_seek_range(const TabletReaderParams& read_params, std::vector<SeekRange>* ranges);
     Status _init_predicates(const TabletReaderParams& read_params);
     Status _init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
     Status _init_collector(const TabletReaderParams& read_params);
-    Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple);
+
+    static Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+                                 MemPool* mempool);
 
     TabletSharedPtr _tablet;
     Version _version;

@@ -14,6 +14,7 @@
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/types.h"
@@ -97,7 +98,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
-    RETURN_IF_ERROR(_parse_seek_range(params, &rs_opts.ranges));
+    RETURN_IF_ERROR(parse_seek_range(_tablet, params.range, params.end_range, params.start_key, params.end_key,
+                                     &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
                                                                      &rs_opts.predicates_for_zone_map));
@@ -117,9 +119,14 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.version = _version.second;
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
+    rs_opts.rowid_range_option = params.rowid_range_option;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->match_rowset(rowset.get())) {
+            continue;
+        }
+
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
     }
     return Status::OK();
@@ -341,7 +348,8 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 }
 
 // convert an OlapTuple to SeekTuple.
-Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple) {
+Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+                                    MemPool* mempool) {
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -357,9 +365,9 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
             RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
-                                              input.get_value(i), &_mempool));
+                                              input.get_value(i), mempool));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), &_mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));
@@ -367,23 +375,26 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status TabletReader::_parse_seek_range(const TabletReaderParams& read_params, std::vector<SeekRange>* ranges) {
-    if (read_params.start_key.empty()) {
+Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet, const std::string& range_start_op,
+                                      const std::string& range_end_op, const std::vector<OlapTuple>& range_start_key,
+                                      const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
+                                      MemPool* mempool) {
+    if (range_start_key.empty()) {
         return {};
     }
 
-    bool inc_lower = read_params.range == "ge" || read_params.range == "eq";
-    bool inc_upper = read_params.end_range == "le" || read_params.end_range == "eq";
+    bool inc_lower = range_start_op == "ge" || range_start_op == "eq";
+    bool inc_upper = range_end_op == "le" || range_end_op == "eq";
 
-    CHECK_EQ(read_params.start_key.size(), read_params.end_key.size());
-    size_t n = read_params.start_key.size();
+    CHECK_EQ(range_start_key.size(), range_end_key.size());
+    size_t n = range_start_key.size();
 
     ranges->reserve(n);
     for (size_t i = 0; i < n; i++) {
         SeekTuple lower;
         SeekTuple upper;
-        RETURN_IF_ERROR(_to_seek_tuple(_tablet->tablet_schema(), read_params.start_key[i], &lower));
-        RETURN_IF_ERROR(_to_seek_tuple(_tablet->tablet_schema(), read_params.end_key[i], &upper));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
         ranges->back().set_inclusive_lower(inc_lower);
         ranges->back().set_inclusive_upper(inc_upper);
