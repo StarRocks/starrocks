@@ -21,6 +21,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.EvictingQueue;
 import com.google.common.collect.ImmutableMap;
@@ -615,7 +616,7 @@ public class TabletScheduler extends MasterDaemon {
         }
     }
 
-    // 'public' for test only
+    @VisibleForTesting
     public void handleTabletByTypeAndStatus(TabletStatus status, TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         if (tabletCtx.getType() == Type.REPAIR) {
