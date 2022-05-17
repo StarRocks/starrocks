@@ -659,7 +659,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayEraseDatabase(long dbId) {
-        GlobalStateMgr.getCurrentRecycleBin().replayEraseDatabase(dbId);
+        recycleBin.replayEraseDatabase(dbId);
     }
 
     public void replayRecoverDatabase(RecoverInfo info) {
