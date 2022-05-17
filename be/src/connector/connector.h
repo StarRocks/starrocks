@@ -48,7 +48,7 @@ public:
     }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
     }
 
 protected:
