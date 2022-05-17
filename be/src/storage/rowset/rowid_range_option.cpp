@@ -7,11 +7,11 @@
 
 namespace starrocks::vectorized {
 
-RowidRangeOption::RowidRangeOption(const string& rowset_id, const uint64_t segment_id, const SparseRange& rowid_range)
+RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, const SparseRange& rowid_range)
         : rowset_id(rowset_id), segment_id(segment_id), rowid_range(rowid_range) {}
 
 bool RowidRangeOption::match_rowset(const Rowset* rowset) const {
-    return rowset->rowset_id().to_string() == rowset_id;
+    return rowset->rowset_id() == rowset_id;
 }
 
 bool RowidRangeOption::match_segment(const Segment* segment) const {
