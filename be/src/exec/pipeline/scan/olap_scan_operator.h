@@ -35,7 +35,7 @@ public:
     OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                      OlapScanContextPtr ctx);
 
-    ~OlapScanOperator() override = default;
+    ~OlapScanOperator() override;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -45,14 +45,6 @@ public:
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
 private:
-    Status _capture_tablet_rowsets();
-
-    // The row sets of tablets will become stale and be deleted, if compaction occurs
-    // and these row sets aren't referenced, which will typically happen when the tablets
-    // of the left table are compacted at building the right hash table. Therefore, reference
-    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
     OlapScanContextPtr _ctx;
 };
 

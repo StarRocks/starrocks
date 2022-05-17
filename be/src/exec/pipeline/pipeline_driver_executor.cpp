@@ -88,6 +88,10 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        tls_thread_status.set_query_id(query_ctx->query_id());
+        tls_thread_status.set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+        tls_thread_status.set_pipeline_driver_id(driver->driver_id());
+
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();

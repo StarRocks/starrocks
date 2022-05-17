@@ -55,7 +55,7 @@ public class AnalyzeShowTest {
     @Test
     public void testShowDatabases() throws AnalysisException {
         analyzeSuccess("show databases;");
-        ShowStmt statement = (ShowStmt) analyzeSuccess("show databases where database = 't1';");
+        ShowStmt statement = (ShowStmt) analyzeSuccess("show databases where `database` = 't1';");
         Assert.assertEquals("SELECT SCHEMA_NAME AS Database FROM information_schema.schemata WHERE SCHEMA_NAME = 't1'",
                 AST2SQL.toString(statement.toSelectStmt()));
     }

@@ -578,7 +578,8 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 21> : 37\n" +
+                "  |  <slot 40> : CAST(37 AS INT");
     }
 
     @Test
@@ -2589,5 +2590,57 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:EMPTYSET");
         assertContains(plan, "2:EMPTYSET");
+    }
+
+    @Test
+    public void testSemiJoinReorderProjections() throws Exception {
+        String sql = "WITH with_t_0 as (\n" +
+                "  SELECT \n" +
+                "    t1_3.t1b, \n" +
+                "    t1_3.t1d \n" +
+                "  FROM \n" +
+                "    test_all_type AS t1_3 \n" +
+                "  WHERE \n" +
+                "    (\n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          t1_3.t1a \n" +
+                "        FROM \n" +
+                "          test_all_type AS t1_3\n" +
+                "      )\n" +
+                "    ) < (\n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          11\n" +
+                "      )\n" +
+                "    )\n" +
+                ") \n" +
+                "SELECT \n" +
+                "  SUM(count) \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      CAST(false AS INT) as count \n" +
+                "    FROM \n" +
+                "      test_all_type AS t1_3 FULL \n" +
+                "      JOIN (\n" +
+                "        SELECT \n" +
+                "          with_t_0.t1b \n" +
+                "        FROM \n" +
+                "          with_t_0 AS with_t_0 \n" +
+                "        WHERE \n" +
+                "          (with_t_0.t1d) IN (\n" +
+                "            (\n" +
+                "              SELECT \n" +
+                "                t1_3.t1d \n" +
+                "              FROM \n" +
+                "                test_all_type AS t1_3\n" +
+                "            )\n" +
+                "          )\n" +
+                "      ) subwith_t_0 ON t1_3.id_decimal = subwith_t_0.t1b\n" +
+                "  ) t;";
+        String plan = getFragmentPlan(sql);
+        // check no error
+        assertContains(plan, "16:ASSERT NUMBER OF ROWS");
     }
 }

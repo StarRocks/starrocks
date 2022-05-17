@@ -10,11 +10,11 @@
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/workgroup/work_group.h"
@@ -51,21 +51,6 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
         auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
     }
-}
-
-static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
-                                            int node_id) {
-    Morsels morsels;
-
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
-        }
-    }
-    return morsels;
 }
 
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
@@ -259,8 +244,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
-        morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
+        ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
+                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
+        morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
     return Status::OK();
@@ -313,25 +299,24 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
             DCHECK(morsel_queue->num_morsels() == 0 || cur_pipeline_dop <= morsel_queue->num_morsels());
-            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(cur_pipeline_dop);
-            DCHECK(morsel_queue_per_driver.size() == cur_pipeline_dop);
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     _fragment_ctx.get(), driver_id++);
-                driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
-                auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
+                driver->set_morsel_queue(morsel_queue.get());
+                auto* source_operator = driver->source_operator();
                 if (_wg != nullptr) {
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    scan_operator->set_workgroup(_wg);
+                    source_operator->set_workgroup(_wg);
                 } else {
-                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                    if (dynamic_cast<ConnectorScanOperator*>(source_operator) != nullptr) {
+                        source_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
                     } else {
-                        scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        source_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                     }
                 }
+
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }

@@ -46,7 +46,7 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
 
         for (ScalarOperator predicate : predicates) {
             // push down predicate
-            if (canPushDownPredicate(predicate.clone(), repeatColumns)) {
+            if (canPushDownPredicate(predicate, repeatColumns)) {
                 pushDownPredicates.add(predicate);
             }
         }
@@ -80,7 +80,7 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
                 repeatColumns.stream().map(col -> new ColumnRefOperator(col.getId(), Type.INVALID, "", true))
                         .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
 
-        ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).visit(predicate, null);
+        ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(predicate);
 
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         // The calculation of the null value is in the constant fold

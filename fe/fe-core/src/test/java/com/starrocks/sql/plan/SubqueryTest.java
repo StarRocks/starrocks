@@ -78,14 +78,18 @@ public class SubqueryTest extends PlanTestBase {
         String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  5:EXCHANGE\n" +
+                "     limit: 10");
+        assertContains(plan, "  0:UNION\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----4:EXCHANGE\n" +
                 "  |       limit: 10\n" +
                 "  |    \n" +
-                "  3:EXCHANGE\n" +
-                "     limit: 10"));
+                "  2:EXCHANGE\n" +
+                "     limit: 10\n");
     }
 
     @Test
@@ -158,5 +162,14 @@ public class SubqueryTest extends PlanTestBase {
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1");
+    }
+
+    @Test
+    public void testCorrelatedComplexInSubQuery() throws Exception {
+        String sql = "SELECT v4  FROM t1\n" +
+                "WHERE ( (\"1969-12-09 14:18:03\") IN (\n" +
+                "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
+                "    ) IS NULL\n";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
 }

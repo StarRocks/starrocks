@@ -108,4 +108,40 @@ public class CallStubGeneratorTest {
         batchCall.invoke(null, testSize, concat, state, inputs1, inputs2);
         Assert.assertEquals(expect, state.val);
     }
+
+    public static class ScalarAdd {
+        public String evaluate(String v1, Integer v2) {
+            return v1 + v2;
+        }
+    }
+    @Test
+    public void testScalarCallStub()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = ScalarAdd.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        Method m = clazz.getMethod("evaluate", String.class, Integer.class);
+        final byte[] updates =
+                CallStubGenerator.generateScalarCallStub(clazz, m);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, updates);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        ScalarAdd concat = new ScalarAdd();
+        int testSize = 1000;
+        String[] inputs1 = new String[testSize];
+        Integer[] inputs2 = new Integer[testSize];
+        String[] expects = new String[testSize];
+
+        for (int i = 0; i < testSize; i++) {
+            inputs1[i] = i + "";
+            inputs2[i] = i;
+            expects[i] = inputs1[i] + inputs2[i];
+        }
+
+        final String[] res = (String[])batchCall.invoke(null, testSize, concat, inputs1, inputs2);
+        for (int i = 0; i < testSize; i++) {
+            Assert.assertEquals(expects[i], res[i]);
+        }
+    }
 }

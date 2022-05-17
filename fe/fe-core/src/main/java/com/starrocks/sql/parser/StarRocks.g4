@@ -34,6 +34,7 @@ statement
     | submitTaskStatement                                                                   #submitTask
 
     // Materialized View Statement
+    | createMaterializedViewStatement                                                       #createMaterializedView
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
 
@@ -146,6 +147,16 @@ submitTaskStatement
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
+
+createMaterializedViewStatement
+    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    comment?
+    (PARTITION BY primaryExpression)?
+    distributionDesc?
+    refreshSchemeDesc?
+    properties?
+    AS queryStatement
+    ;
 
 showMaterializedViewStatement
     : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
@@ -588,6 +599,7 @@ specialFunctionExpression
     | MONTH '(' expression ')'
     | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
+    | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'
@@ -673,6 +685,12 @@ partitionValue
 
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | MANUAL)
     ;
 
 properties
@@ -801,26 +819,31 @@ number
     ;
 
 nonReserved
-    : AVG | ADMIN
-    | BUCKETS | BACKEND
-    | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COLUMNS | COMMENT | COMMIT | COSTS | COUNT | CONFIG
-    | DATA | DATABASE | DATE | DATETIME | DAY
-    | END | EXTERNAL | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
-    | GLOBAL
-    | HASH | HOUR
-    | INTERVAL
-    | LAST | LESS | LOCAL | LOGICAL
-    | MATERIALIZED | MAX | MIN | MINUTE | MONTH | MERGE
-    | NONE | NULLS
-    | OFFSET | OBSERVER
-    | PASSWORD | PRECEDING | PROPERTIES
-    | QUARTER
-    | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
-    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT
-    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
-    | UNBOUNDED | USER
-    | VARIABLES | VIEW | VERBOSE
-    | WEEK
+    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
+    | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
+    | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | END | ENGINE | ENGINES | ERRORS | EVENTS | EXTERNAL | EXTRACT | EVERY
+    | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+    | GLOBAL | GRANTS
+    | HASH | HELP | HLL_UNION | HOUR
+    | IDENTIFIED | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | NAME | NAMES | NEGATIVE | NO | NULLS
+    | OBSERVER | OFFSET | ONLY | OPEN
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
+    | PROPERTIES | PROPERTY
+    | QUARTER | QUERY | QUOTA
+    | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | RESOURCE_GROUP | RESOURCE_GROUPS | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
+    | SUBMIT | SYNC
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
+    | TRIGGERS | TRUNCATE | TYPE | TYPES
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | VALUE | VARIABLES | VIEW | VERBOSE
+    | WARNINGS | WEEK | WORK | WRITE
     | YEAR
     ;

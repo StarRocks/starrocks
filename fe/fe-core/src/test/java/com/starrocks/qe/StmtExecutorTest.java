@@ -511,6 +511,7 @@ public class StmtExecutorTest {
             {
                 // Mock ddl
                 DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
+                result = null;
                 minTimes = 0;
             }
         };

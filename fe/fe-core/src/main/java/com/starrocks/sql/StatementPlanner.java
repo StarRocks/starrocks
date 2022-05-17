@@ -36,6 +36,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -181,6 +182,7 @@ public class StatementPlanner {
                 || statement instanceof CreateAnalyzeJobStmt
                 || statement instanceof CreateCatalogStmt
                 || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateMaterializedViewStatement
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt

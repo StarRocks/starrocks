@@ -51,8 +51,9 @@ PREDICATE 4: unnest = 1
 [sql]
 select v1 from tarray, unnest(v3) limit 5
 [result]
-TABLE FUNCTION (unnest) LIMIT 5
-    SCAN (columns[1: v1, 3: v3] predicate[null])
+EXCHANGE GATHER
+    TABLE FUNCTION (unnest) LIMIT 5
+        SCAN (columns[1: v1, 3: v3] predicate[null])
 [end]
 
 [sql]

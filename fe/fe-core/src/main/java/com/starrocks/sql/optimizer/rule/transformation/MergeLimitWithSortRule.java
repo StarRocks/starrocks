@@ -21,7 +21,10 @@ public class MergeLimitWithSortRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
-        return !topN.hasLimit();
+        LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
+
+        // only merge Init-Limit and Sort
+        return limit.isInit() && !topN.hasLimit();
     }
 
     @Override

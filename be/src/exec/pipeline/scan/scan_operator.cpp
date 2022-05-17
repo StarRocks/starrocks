@@ -27,6 +27,20 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
     }
 }
 
+ScanOperator::~ScanOperator() {
+    auto* state = runtime_state();
+    if (state == nullptr) {
+        return;
+    }
+
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
+        }
+    }
+}
+
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
@@ -50,9 +64,7 @@ void ScanOperator::close(RuntimeState* state) {
     if (_workgroup == nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
-    // for the running io task, we can't close its chunk sources.
-    // After ScanOperator::close, these chunk sources are no longer meaningful,
-    // just release resources by their default destructor
+    // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
             _chunk_sources[i]->close(state);
@@ -154,6 +166,15 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     return nullptr;
+}
+
+int64_t ScanOperator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
@@ -272,10 +293,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     return Status::OK();
 }
 
-void ScanOperator::set_workgroup(starrocks::workgroup::WorkGroupPtr wg) {
-    _workgroup = wg;
-}
-
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
     if (_chunk_sources[chunk_source_index] != nullptr) {
@@ -283,10 +300,8 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         _chunk_sources[chunk_source_index] = nullptr;
     }
 
-    auto maybe_morsel = _morsel_queue->try_get();
-    if (maybe_morsel.has_value()) {
-        auto morsel = std::move(maybe_morsel.value());
-        DCHECK(morsel);
+    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+    if (morsel != nullptr) {
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
@@ -339,7 +354,7 @@ void ScanOperatorFactory::close(RuntimeState* state) {
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> scan_operator,
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
-    OpFactories operators;
+    OpFactories ops;
 
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
@@ -352,13 +367,14 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
             std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
     scan_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    operators.emplace_back(std::move(scan_operator));
+    ops.emplace_back(std::move(scan_operator));
 
     size_t limit = scan_node->limit();
     if (limit != -1) {
-        operators.emplace_back(
+        ops.emplace_back(
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
     }
-    return operators;
+
+    return ops;
 }
 } // namespace starrocks::pipeline

@@ -55,6 +55,7 @@ set(EXEC_FILES
     vectorized/aggregate/distinct_blocking_node.cpp
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
+    vectorized/partition/chunks_partitioner.cpp
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
@@ -135,12 +136,14 @@ set(EXEC_FILES
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
+    pipeline/scan/morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
     pipeline/scan/olap_scan_operator.cpp
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/morsel.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

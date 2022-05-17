@@ -308,13 +308,8 @@ void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject
     check_call_exception(_env, ctx);
 }
 
-jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols,
-                                      int rows) {
-    jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
-    LOCAL_REF_GUARD(input_arr);
-    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, udf, evaluate, rows, input_arr);
-    check_call_exception(_env, ctx);
-    return res;
+jobject JVMFunctionHelper::batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows) {
+    return stub->batch_evaluate(rows, input, cols);
 }
 
 jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows) {
@@ -482,7 +477,7 @@ Status ClassLoader::init() {
     _get_class = env->GetMethodID((jclass)_clazz.handle(), "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
     _get_call_stub =
             env->GetMethodID((jclass)_clazz.handle(), "generateCallStubV",
-                             "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;)Ljava/lang/Class;");
+                             "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;I)Ljava/lang/Class;");
 
     // init method
     if (_get_class == nullptr || _get_call_stub == nullptr) {
@@ -515,7 +510,7 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     return res;
 }
 
-StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jclass clazz, jobject method) {
+StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
 
@@ -524,7 +519,7 @@ StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jc
     LOCAL_REF_GUARD(jstr_name);
 
     // generate call stub
-    auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_call_stub, jstr_name, clazz, method);
+    auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_call_stub, jstr_name, clazz, method, type);
     LOCAL_REF_GUARD(loaded_clazz);
     RETURN_ERROR_IF_EXCEPTION(env, "exception happened when gen call stub: {}");
 
@@ -757,6 +752,20 @@ void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject*
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     env->CallStaticVoidMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()), jni_inputs);
     JVMFunctionHelper::check_call_exception(env, this->_ctx);
+}
+
+jobject BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols) {
+    jvalue jni_inputs[2 + cols];
+    jni_inputs[0].i = num_rows;
+    jni_inputs[1].l = _caller;
+    for (int i = 0; i < cols; ++i) {
+        jni_inputs[2 + i].l = input[i];
+    }
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto res = env->CallStaticObjectMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()),
+                                            jni_inputs);
+    JVMFunctionHelper::check_call_exception(env, this->_ctx);
+    return res;
 }
 
 void UDAFFunction::update(jvalue* val) {

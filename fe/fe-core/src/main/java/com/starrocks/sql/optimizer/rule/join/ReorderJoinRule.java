@@ -75,7 +75,7 @@ public class ReorderJoinRule extends Rule {
         // Set limit to top join if needed
         if (oldRoot.hasLimit()) {
             for (OptExpression joinExpr : reorderTopKResult) {
-                ((LogicalOperator) joinExpr.getOp()).setLimit(oldRoot.getLimit());
+                joinExpr.getOp().setLimit(oldRoot.getLimit());
             }
         }
 
@@ -115,7 +115,7 @@ public class ReorderJoinRule extends Rule {
                     ReplaceColumnRefRewriter replaceColumnRefRewriter =
                             new ReplaceColumnRefRewriter(multiJoinNode.getExpressionMap(), true);
                     projectMap.put(context.getColumnRefFactory().getColumnRef(id),
-                            scalarOperator.clone().accept(replaceColumnRefRewriter, null));
+                            replaceColumnRefRewriter.rewrite(scalarOperator));
                 }
             }
             joinExpr.getOp().setProjection(new Projection(projectMap, commonProjectMap));
