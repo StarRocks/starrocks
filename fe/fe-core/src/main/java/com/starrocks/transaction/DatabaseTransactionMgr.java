@@ -297,7 +297,7 @@ public class DatabaseTransactionMgr {
             checkRunningTxnExceedLimit(sourceType);
 
             long tid = idGenerator.getNextTransactionId();
-            LOG.info("begin transaction: txn id {} with label {} from coordinator {}, listner id: {}",
+            LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
                     new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -572,7 +572,7 @@ public class DatabaseTransactionMgr {
             case VISIBLE:
                 break;
             default:
-                LOG.warn("transaction commit failed, db={}, txn={}", db.getFullName(), transactionId);
+                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getFullName(), transactionId);
                 throw new TransactionCommitFailedException("transaction commit failed");
         }
 
@@ -1423,7 +1423,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (entry.getKey() <= endTransactionId) {
-                    LOG.debug("find a running txn with txn_id={} on db: {}, less than watermark txn_id {}",
+                    LOG.debug("find a running txn with txn_id: {} on db: {}, less than watermark txn_id {}",
                             entry.getKey(), dbId, endTransactionId);
                     return false;
                 }

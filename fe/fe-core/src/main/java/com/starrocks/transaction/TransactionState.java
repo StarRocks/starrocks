@@ -540,7 +540,7 @@ public class TransactionState implements Writable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("TransactionState. ");
-        sb.append("transaction id: ").append(transactionId);
+        sb.append("txn_id: ").append(transactionId);
         sb.append(", label: ").append(label);
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
