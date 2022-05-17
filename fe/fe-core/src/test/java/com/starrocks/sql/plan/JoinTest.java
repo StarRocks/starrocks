@@ -148,6 +148,6 @@ public class JoinTest extends PlanTestBase {
                 "  ) t;";
         String plan = getFragmentPlan(sql);
         // check no error
-        assertContains(plan, "16:ASSERT NUMBER OF ROWS");
+        assertContains(plan, "17:ASSERT NUMBER OF ROWS");
     }
 }
