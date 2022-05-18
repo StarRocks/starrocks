@@ -589,6 +589,7 @@ informationFunctionExpression
 
 specialFunctionExpression
     : CHAR '(' expression ')'
+    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
