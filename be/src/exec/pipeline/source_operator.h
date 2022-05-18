@@ -64,7 +64,7 @@ public:
         return scan_rows_num;
     }
 
-    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
+    virtual void set_workgroup(workgroup::WorkGroupPtr wg) {}
 
     // Some specific source operators need execute i/o tasks in io_threads.
     virtual void set_io_threads(PriorityThreadPool* io_threads) {}
@@ -79,8 +79,6 @@ protected:
 
     int64_t _last_scan_rows_num = 0;
     int64_t _last_scan_bytes = 0;
-
-    workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 
 } // namespace pipeline

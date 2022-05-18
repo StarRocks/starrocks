@@ -41,6 +41,8 @@ public class ShowDbStmt extends ShowStmt {
     private final String pattern;
     private Expr where;
 
+    private String catalogName;
+
     public ShowDbStmt(String pattern) {
         this.pattern = pattern;
     }
@@ -52,6 +54,14 @@ public class ShowDbStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     @Override

@@ -38,6 +38,9 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void set_io_threads(PriorityThreadPool* io_threads) override { _io_threads = io_threads; }
+    void set_workgroup(workgroup::WorkGroupPtr wg) override { _workgroup = std::move(wg); }
+
+    int64_t global_rf_wait_timeout_ns() const override;
 
     /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;

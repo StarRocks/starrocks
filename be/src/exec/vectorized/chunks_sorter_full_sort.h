@@ -21,7 +21,7 @@ public:
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
-                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
+                         const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
                          const std::string& sort_keys);
     ~ChunksSorterFullSort() override;
 

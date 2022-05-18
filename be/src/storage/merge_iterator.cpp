@@ -67,16 +67,16 @@ public:
         return less_than(last_row, rhs);
     }
 
-    // return the last row whose key value is less than all values in |rhs|
+    // return the next row number of last row whose key value is less than all values in |rhs|
     size_t last_row_less_than(const ComparableChunk& rhs, size_t limit_num) {
         // As we previously pop this chunk from the heap top, `_compared_row` in this chunk
         // must be less than all rows in rhs, thus here we start comparision from _compared_row + 1;
-        size_t last_row = _compared_row + 1;
-        size_t upper_bound = std::min(_compared_row + limit_num, _chunk->num_rows() - 1);
-        while (last_row <= upper_bound && less_than(last_row, rhs)) {
-            last_row++;
+        size_t next_compare_row = _compared_row + 1;
+        size_t upper_bound = std::min(_compared_row + limit_num, _chunk->num_rows());
+        while (next_compare_row < upper_bound && less_than(next_compare_row, rhs)) {
+            next_compare_row++;
         }
-        return last_row;
+        return next_compare_row;
     }
 
     bool less_than(size_t lhs_row, const ComparableChunk& rhs) {

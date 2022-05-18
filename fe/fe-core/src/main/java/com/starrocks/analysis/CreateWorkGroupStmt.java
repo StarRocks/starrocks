@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 // WorkGroup create statement format
-// create resource_group [if not exists] [or replace] <name>
+// create resource group [if not exists] [or replace] <name>
 // to
 //  (user='foobar1', role='foo1', query_type in ('select'), source_ip='192.168.1.1/24'),
 //  (user='foobar2', role='foo2', query_type in ('insert'), source_ip='192.168.2.1/24')

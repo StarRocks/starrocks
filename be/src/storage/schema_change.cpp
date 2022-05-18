@@ -169,6 +169,12 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
         }                                                                           \
         break;                                                                      \
     }
+
+#define COLUMN_APPEND_DATUM()                                                     \
+    for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) { \
+        new_col->append_datum(dst_datum);                                         \
+    }
+
 struct ConvertTypeMapHash {
     size_t operator()(const std::pair<FieldType, FieldType>& pair) const { return (pair.first + 31) ^ pair.second; }
 };
@@ -410,6 +416,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             Datum dst_datum;
             if (_schema_mapping[i].default_value->is_null()) {
                 dst_datum.set_null();
+                COLUMN_APPEND_DATUM();
             } else {
                 Field new_field =
                         ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
@@ -421,16 +428,19 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     case OLAP_FIELD_TYPE_HLL: {
                         HyperLogLog hll(tmp);
                         dst_datum.set_hyperloglog(&hll);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     case OLAP_FIELD_TYPE_OBJECT: {
                         BitmapValue bitmap(tmp);
                         dst_datum.set_bitmap(&bitmap);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     case OLAP_FIELD_TYPE_PERCENTILE: {
                         PercentileValue percentile(tmp);
                         dst_datum.set_percentile(&percentile);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     default:
@@ -443,10 +453,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                         LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
+                    COLUMN_APPEND_DATUM();
                 }
-            }
-            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                new_col->append_datum(dst_datum);
             }
         }
     }
@@ -555,6 +563,7 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
             Datum dst_datum;
             if (_schema_mapping[i].default_value->is_null()) {
                 dst_datum.set_null();
+                COLUMN_APPEND_DATUM();
             } else {
                 TypeInfoPtr new_type_info = new_schema.field(i)->type();
                 const FieldType field_type = new_type_info->type();
@@ -565,16 +574,19 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                     case OLAP_FIELD_TYPE_HLL: {
                         HyperLogLog hll(tmp);
                         dst_datum.set_hyperloglog(&hll);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     case OLAP_FIELD_TYPE_OBJECT: {
                         BitmapValue bitmap(tmp);
                         dst_datum.set_bitmap(&bitmap);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     case OLAP_FIELD_TYPE_PERCENTILE: {
                         PercentileValue percentile(tmp);
                         dst_datum.set_percentile(&percentile);
+                        COLUMN_APPEND_DATUM();
                         break;
                     }
                     default:
@@ -587,10 +599,8 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                         LOG(WARNING) << "create datum from string failed: status=" << st;
                         return false;
                     }
+                    COLUMN_APPEND_DATUM();
                 }
-            }
-            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                new_col->append_datum(dst_datum);
             }
         }
     }
@@ -600,6 +610,7 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
 #undef CONVERT_FROM_TYPE
 #undef TYPE_REINTERPRET_CAST
 #undef ASSIGN_DEFAULT_VALUE
+#undef COLUMN_APPEND_DATUM
 
 ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
         : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
@@ -642,6 +653,7 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
     _swap_chunk = chunk->clone_empty_with_schema();
     _swap_chunk->append_selective(*chunk, selective.data(), 0, chunk->num_rows());
 
+    chunk->swap_chunk(*_swap_chunk);
     return true;
 }
 
@@ -1039,7 +1051,13 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
             }
         }
 
-        if (!_chunk_allocator->is_memory_enough_to_sort(2 * base_chunk->num_rows(), chunk_sorter.allocated_rows())) {
+        // Check if internal sorting needs to be performed
+        // There are two places that may need to allocate memory
+        //   1. We need to allocate a new chunk to save the data after convert
+        //   2. We maybe need to allocate a new swap_chunk to save the sort result
+        // So we should check that both of the above conditions are met
+        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), chunk_sorter.allocated_rows()) ||
+            !_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), 0)) {
             VLOG(3) << "do internal sorting because of memory limit";
             if (chunk_arr.size() < 1) {
                 LOG(WARNING) << "Memory limitation is too small for Schema Change."

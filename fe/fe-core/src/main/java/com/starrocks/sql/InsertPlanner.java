@@ -14,6 +14,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
@@ -36,6 +37,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -60,6 +64,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class InsertPlanner {
+    // Only for unit test
+    public static boolean enableSingleReplicationShuffle = false;
+
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -89,10 +96,11 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         Optimizer optimizer = new Optimizer();
+        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
         OptExpression optimizedPlan = optimizer.optimize(
                 session,
                 logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
+                requiredPropertySet,
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
 
@@ -144,7 +152,7 @@ public class InsertPlanner {
         return execPlan;
     }
 
-    void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
+    private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
                 "must values");
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
@@ -175,8 +183,8 @@ public class InsertPlanner {
         }
     }
 
-    OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                    InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
+    private OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+                                            InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         List<Column> baseSchema = insertStatement.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -217,9 +225,9 @@ public class InsertPlanner {
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
-    OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
-                                     List<ColumnRefOperator> outputColumns, OptExprBuilder root,
-                                     ConnectContext session) {
+    private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
+                                             List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                             ConnectContext session) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -291,9 +299,10 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
-    OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
-                                                        InsertStmt insertStatement,
-                                                        List<ColumnRefOperator> outputColumns, OptExprBuilder root) {
+    private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
+                                                                InsertStmt insertStatement,
+                                                                List<ColumnRefOperator> outputColumns,
+                                                                OptExprBuilder root) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -309,5 +318,47 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    /**
+     * OlapTableSink may be executed in multiply fragment instances of different machines
+     * For non-duplicate key types, we must guarantee that the orders of the same key are
+     * exactly the same. In order to achieve this goal, we can perform shuffle before TableSink
+     * so that the same key will be sent to the same fragment instance
+     */
+    private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
+                                                          List<ColumnRefOperator> outputColumns) {
+        if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
+            return new PhysicalPropertySet();
+        }
+
+        OlapTable table = (OlapTable) insertStmt.getTargetTable();
+
+        if (KeysType.DUP_KEYS.equals(table.getKeysType())) {
+            return new PhysicalPropertySet();
+        }
+
+        // No extra distribution property is needed if replication num is 1
+        if (!enableSingleReplicationShuffle && table.getDefaultReplicationNum() <= 1) {
+            return new PhysicalPropertySet();
+        }
+
+        List<Column> columns = table.getFullSchema();
+        Preconditions.checkState(columns.size() == outputColumns.size(),
+                "outputColumn's size must equal with table's column size");
+
+        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexId());
+        List<Integer> keyColumnIds = Lists.newArrayList();
+        keyColumns.forEach(column -> {
+            int index = columns.indexOf(column);
+            Preconditions.checkState(index >= 0);
+            keyColumnIds.add(outputColumns.get(index).getId());
+        });
+
+        HashDistributionDesc desc =
+                new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        DistributionProperty property = new DistributionProperty(spec);
+        return new PhysicalPropertySet(property);
     }
 }

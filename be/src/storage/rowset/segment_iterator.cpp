@@ -36,6 +36,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
@@ -180,6 +181,7 @@ private:
     Status _get_row_ranges_by_keys();
     Status _get_row_ranges_by_zone_map();
     Status _get_row_ranges_by_bloom_filter();
+    Status _get_row_ranges_by_rowid_range();
 
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
@@ -339,6 +341,7 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     _rewrite_predicates();
@@ -436,7 +439,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->_load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -1431,6 +1434,15 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
         RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
     }
     _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_rowid_range() {
+    if (_opts.rowid_range_option == nullptr) {
+        return Status::OK();
+    }
+
+    _scan_range = _scan_range.intersection(_opts.rowid_range_option->rowid_range);
     return Status::OK();
 }
 

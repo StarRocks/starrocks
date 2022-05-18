@@ -8,6 +8,7 @@
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -52,6 +53,11 @@ protected:
     std::vector<ExprContext*> _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
+    const TupleDescriptor* _tuple_desc = nullptr;
+
+    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
+        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
+    }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
