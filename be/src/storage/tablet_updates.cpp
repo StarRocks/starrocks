@@ -460,7 +460,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
             LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
                       << " txn:" << rowset->txn_id() << " " << rowset->rowset_id().to_string()
                       << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
-                      << " #row:" << rowset->num_rows()
+                      << " #delfile:" << rowset->num_delete_files() << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
@@ -730,11 +730,23 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
-    st = index.load(&_tablet);
-    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    // empty rowset does not need to load in-memory primary index, so skip it
+    if (rowset->has_data_files() || enable_persistent_index) {
+        auto st = index.load(&_tablet);
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+        if (!st.ok()) {
+            manager->index_cache().remove(index_entry);
+            std::string msg = Substitute("_apply_rowset_commit error: load primary index failed: $0 $1", st.to_string(),
+                                         debug_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
+    }
+    st = index.prepare(version);
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
-        std::string msg = Substitute("_apply_rowset_commit error: load primary index failed: $0 $1", st.to_string(),
+        std::string msg = Substitute("_apply_rowset_commit error: primary index prepare failed: $0 $1", st.to_string(),
                                      debug_string());
         LOG(ERROR) << msg;
         _set_error(msg);
@@ -762,7 +774,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
-    index.prepare(version);
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
@@ -777,12 +788,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
 
     PersistentIndexMetaPB index_meta;
-    st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
-    if (!st.ok() && !st.is_not_found()) {
-        std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
+    if (enable_persistent_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
     }
     st = index.commit(&index_meta);
     if (!st.ok()) {
