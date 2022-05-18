@@ -514,8 +514,8 @@ insert into external_t select * from other_table;
 其中：
 
 * **EXTERNAL**：该关键字指定创建的是 StarRocks 外表
-* **host**：该属性描述目标表所属 StarRocks 集群 Master FE 的 IP 地址
-* **port**：该属性描述目标表所属 StarRocks 集群 Master FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值
+* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址
+* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值
 * **user**：该属性描述目标表所属 StarRocks 集群的访问用户名
 * **password**：该属性描述目标表所属 StarRocks 集群的访问密码
 * **database**：该属性描述目标表所属数据库名称
