@@ -16,7 +16,7 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
-    Status get_new_task();
+    Status get_new_tasks();
     Status fill_chunk(ChunkPtr* chunk);
 
     int _db_index{0};

@@ -65,7 +65,7 @@ Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
             // CREATE_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
-                NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_info.__isset.create_time) {
                     int64_t create_time = task_info.create_time;
                     if (create_time <= 0) {
@@ -119,8 +119,8 @@ Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status SchemaTasksScanner::get_new_task() {
-    TShowTasksParams task_params;
+Status SchemaTasksScanner::get_new_tasks() {
+    TGetTasksParams task_params;
     task_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
@@ -143,7 +143,7 @@ Status SchemaTasksScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
     while (_task_index >= _task_result.tasks.size()) {
         if (_db_index < _db_result.dbs.size()) {
-            RETURN_IF_ERROR(get_new_task());
+            RETURN_IF_ERROR(get_new_tasks());
         } else {
             *eos = true;
             return Status::OK();

@@ -331,7 +331,7 @@ struct TListTableStatusResult {
 }
 
 // Arguments to showTasks/ShowTaskRuns
-struct TShowTasksParams {
+struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
 }
@@ -973,8 +973,8 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
 
-    TListTaskInfoResult showTasks(1:TShowTasksParams params)
-    TListTaskRunInfoResult showTaskRuns(1:TShowTasksParams params)
+    TListTaskInfoResult getTasks(1:TGetTasksParams params)
+    TListTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
 
     TFeResult updateExportTaskStatus(1:TUpdateExportTaskStatusRequest request)
 

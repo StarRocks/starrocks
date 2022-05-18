@@ -79,7 +79,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // CREATE_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_run_info.__isset.create_time) {
                     int64_t create_time = task_run_info.create_time;
                     if (create_time <= 0) {
@@ -99,7 +99,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // FINISH_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_run_info.__isset.finish_time) {
                     int64_t complete_time = task_run_info.finish_time;
                     if (complete_time <= 0) {
@@ -162,9 +162,14 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // ERROR_MESSAGE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                const std::string* str = &task_run_info.error_message;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                if (task_run_info.__isset.error_message) {
+                    const std::string* str = &task_run_info.error_message;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
             }
             break;
         }
@@ -177,7 +182,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
 }
 
 Status SchemaTaskRunsScanner::get_new_task_run() {
-    TShowTasksParams task_params;
+    TGetTasksParams task_params;
     task_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));

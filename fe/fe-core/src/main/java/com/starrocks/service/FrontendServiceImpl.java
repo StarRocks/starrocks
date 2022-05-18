@@ -100,6 +100,7 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
@@ -123,7 +124,6 @@ import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
-import com.starrocks.thrift.TShowTasksParams;
 import com.starrocks.thrift.TShowVariableRequest;
 import com.starrocks.thrift.TShowVariableResult;
 import com.starrocks.thrift.TSnapshotLoaderReportRequest;
@@ -329,7 +329,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TListTaskInfoResult showTasks(TShowTasksParams params) throws TException {
+    public TListTaskInfoResult getTasks(TGetTasksParams params) throws TException {
         LOG.debug("get show task request: {}", params);
         TListTaskInfoResult result = new TListTaskInfoResult();
         List<TTaskInfo> tasksResult = Lists.newArrayList();
@@ -346,8 +346,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<Task> taskList = taskManager.showTasks().stream()
-                .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
+        List<Task> taskList = taskManager.showTasks(params.db);
 
         for (Task task : taskList) {
             TTaskInfo info = new TTaskInfo();
@@ -364,7 +363,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TListTaskRunInfoResult showTaskRuns(TShowTasksParams params) throws TException {
+    public TListTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
         LOG.debug("get show task run request: {}", params);
         TListTaskRunInfoResult result = new TListTaskRunInfoResult();
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
@@ -381,8 +380,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus().stream()
-                .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
+        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());

@@ -78,17 +78,17 @@ Status SchemaHelper::get_table_privs(const std::string& ip, const int32_t port, 
             [&request, &result](FrontendServiceConnection& client) { client->getTablePrivs(*result, request); });
 }
 
-Status SchemaHelper::show_tasks(const std::string& ip, const int32_t port, const TShowTasksParams& request,
+Status SchemaHelper::show_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& request,
                                 TListTaskInfoResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&request, &result](FrontendServiceConnection& client) { client->showTasks(*result, request); });
+            ip, port, [&request, &result](FrontendServiceConnection& client) { client->getTasks(*result, request); });
 }
 
-Status SchemaHelper::show_task_runs(const std::string& ip, const int32_t port, const TShowTasksParams& request,
+Status SchemaHelper::show_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& request,
                                     TListTaskRunInfoResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &result](FrontendServiceConnection& client) { client->showTaskRuns(*result, request); });
+            [&request, &result](FrontendServiceConnection& client) { client->getTaskRuns(*result, request); });
 }
 
 void fill_data_column_with_null(vectorized::Column* data_column) {
