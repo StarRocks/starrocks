@@ -8,8 +8,8 @@ namespace starrocks::vectorized {
 
 SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), false},
+        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false}};
@@ -47,7 +47,7 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
 }
 
 Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
-    const TTaskInfo& task_info = _task_result.tables[_table_index];
+    const TTaskInfo& task_info = _task_result.tasks[_task_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
@@ -115,11 +115,11 @@ Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
     }
-    _table_index++;
+    _task_index++;
     return Status::OK();
 }
 
-Status SchemaTasksScanner::get_new_table() {
+Status SchemaTasksScanner::get_new_task() {
     TShowTasksParams task_params;
     task_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->current_user_ident) {
@@ -130,7 +130,7 @@ Status SchemaTasksScanner::get_new_table() {
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
-    _table_index = 0;
+    _task_index = 0;
     return Status::OK();
 }
 
@@ -141,9 +141,9 @@ Status SchemaTasksScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
-    while (_table_index >= _task_result.tables.size()) {
+    while (_task_index >= _task_result.tasks.size()) {
         if (_db_index < _db_result.dbs.size()) {
-            RETURN_IF_ERROR(get_new_table());
+            RETURN_IF_ERROR(get_new_task());
         } else {
             *eos = true;
             return Status::OK();

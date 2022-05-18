@@ -437,7 +437,7 @@ public class SchemaTable extends Table {
                                             .column("QUERY_ID", ScalarType.createVarchar(64))
                                             .column("TASK_NAME", ScalarType.createVarchar(64))
                                             .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                                            .column("COMPLETE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                            .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("STATE", ScalarType.createVarchar(16))
                                             .column("DATABASE", ScalarType.createVarchar(64))
                                             .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))

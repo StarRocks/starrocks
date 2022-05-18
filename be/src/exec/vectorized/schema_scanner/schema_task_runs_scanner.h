@@ -16,13 +16,13 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
-    Status get_new_table();
+    Status get_new_task_run();
     Status fill_chunk(ChunkPtr* chunk);
 
     int _db_index{0};
-    int _table_index{0};
+    int _task_run_index{0};
     TGetDbsResult _db_result;
-    TListTaskRunInfoResult _task_result;
+    TListTaskRunInfoResult _task_run_result;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

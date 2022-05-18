@@ -111,7 +111,7 @@ public class TaskManager {
         // GlobalStateMgr.getCurrentState().getEditLog().logDropTask(taskName);
     }
 
-    public List<Task> showTask() {
+    public List<Task> showTasks() {
         List<Task> taskList = Lists.newArrayList();
         taskList.addAll(manualTaskMap.values());
         return taskList;

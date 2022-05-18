@@ -345,14 +345,14 @@ struct TTaskInfo {
 }
 
 struct TListTaskInfoResult {
-    1: required list<TTaskInfo> tables
+    1: required list<TTaskInfo> tasks
 }
 
 struct TTaskRunInfo {
     1: optional string query_id
     2: optional string task_name
     3: optional i64 create_time
-    4: optional i64 complete_time
+    4: optional i64 finish_time
     5: optional string state
     6: optional string database
     7: optional string definition
@@ -361,7 +361,7 @@ struct TTaskRunInfo {
 }
 
 struct TListTaskRunInfoResult {
-    1: optional list<TTaskRunInfo> tables
+    1: optional list<TTaskRunInfo> task_runs
 }
 
 // getTableNames returns a list of unqualified table names

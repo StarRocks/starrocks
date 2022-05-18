@@ -23,8 +23,8 @@ public class TaskRunStatus implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
-    @SerializedName("completeTime")
-    private long completeTime;
+    @SerializedName("finishTime")
+    private long finishTime;
 
     @SerializedName("state")
     private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
@@ -65,12 +65,12 @@ public class TaskRunStatus implements Writable {
         this.createTime = createTime;
     }
 
-    public long getCompleteTime() {
-        return completeTime;
+    public long getFinishTime() {
+        return finishTime;
     }
 
-    public void setCompleteTime(long completeTime) {
-        this.completeTime = completeTime;
+    public void setFinishTime(long finishTime) {
+        this.finishTime = finishTime;
     }
 
     public Constants.TaskRunState getState() {

@@ -11,7 +11,7 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"QUERY_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"COMPLETE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -51,7 +51,7 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
-    const TTaskRunInfo& task_run_info = _task_result.tables[_table_index];
+    const TTaskRunInfo& task_run_info = _task_run_result.task_runs[_task_run_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
@@ -96,12 +96,12 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 4: {
-            // COMPLETE_TIME
+            // FINISH_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
                 NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
-                if (task_run_info.__isset.complete_time) {
-                    int64_t complete_time = task_run_info.complete_time;
+                if (task_run_info.__isset.finish_time) {
+                    int64_t complete_time = task_run_info.finish_time;
                     if (complete_time <= 0) {
                         nullable_column->append_nulls(1);
                     } else {
@@ -172,22 +172,22 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
     }
-    _table_index++;
+    _task_run_index++;
     return Status::OK();
 }
 
-Status SchemaTaskRunsScanner::get_new_table() {
+Status SchemaTaskRunsScanner::get_new_task_run() {
     TShowTasksParams task_params;
     task_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::show_task_runs(*(_param->ip), _param->port, task_params, &_task_result));
+        RETURN_IF_ERROR(SchemaHelper::show_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
-    _table_index = 0;
+    _task_run_index = 0;
     return Status::OK();
 }
 
@@ -198,9 +198,9 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
-    while (_table_index >= _task_result.tables.size()) {
+    while (_task_run_index >= _task_run_result.task_runs.size()) {
         if (_db_index < _db_result.dbs.size()) {
-            RETURN_IF_ERROR(get_new_table());
+            RETURN_IF_ERROR(get_new_task_run());
         } else {
             *eos = true;
             return Status::OK();

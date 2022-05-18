@@ -333,20 +333,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get show task request: {}", params);
         TListTaskInfoResult result = new TListTaskInfoResult();
         List<TTaskInfo> tasksResult = Lists.newArrayList();
-        result.setTables(tasksResult);
+        result.setTasks(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<Task> taskList = taskManager.showTask().stream()
+        List<Task> taskList = taskManager.showTasks().stream()
                 .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
+
         for (Task task : taskList) {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
+            // Now there are only MANUAL types of Tasks
             info.setSchedule("MANUAL");
             info.setDatabase(task.getDbName());
             info.setDefinition(task.getDefinition());
             tasksResult.add(info);
         }
+
         return result;
     }
 
@@ -355,7 +368,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get show task run request: {}", params);
         TListTaskRunInfoResult result = new TListTaskRunInfoResult();
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
-        result.setTables(tasksResult);
+        result.setTask_runs(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus().stream()
                 .filter(u -> u.getDbName().equals(params.db)).collect(Collectors.toList());
@@ -364,7 +388,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setQuery_id(status.getQueryId());
             info.setTask_name(status.getTaskName());
             info.setCreate_time(status.getCreateTime() / 1000);
-            info.setComplete_time(status.getCompleteTime() / 1000);
+            info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());

@@ -44,7 +44,7 @@ public class TaskRunExecutor {
                 status.setErrorCode(-1);
                 status.setErrorMessage(ex.toString());
             } finally {
-                status.setCompleteTime(System.currentTimeMillis());
+                status.setFinishTime(System.currentTimeMillis());
             }
         });
         taskRun.setFuture(future);
