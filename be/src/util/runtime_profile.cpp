@@ -1095,7 +1095,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             for (auto j = 1; j < profiles.size(); j++) {
                 auto* profile = profiles[j];
                 if (i >= profile->num_children()) {
-                    LOG(WARNING) << "find non-isomorphic children, profile_name" << profile0->name()
+                    LOG(WARNING) << "find non-isomorphic children, profile_name=" << profile0->name()
                                  << ", another profile_name=" << profile->name();
                     return;
                 }

@@ -4,7 +4,6 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -79,33 +78,6 @@ Status ChunksPartitioner::offer(const ChunkPtr& chunk) {
 
 int32_t ChunksPartitioner::num_partitions() {
     return _hash_map_variant.size();
-}
-
-template <typename Consumer>
-Status ChunksPartitioner::accept(Consumer&& consumer) {
-    // First, fetch chunks from hash map
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                           \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                           \
-        TRY_CATCH_BAD_ALLOC(fetch_chunks_from_hash_map<decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, consumer));                                                    \
-    }
-    APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
-    // Second, fetch chunks from null_key_value if any
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                 \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                 \
-        TRY_CATCH_BAD_ALLOC(fetch_chunks_from_null_key_value<decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, consumer));                                                          \
-    }
-    APPLY_FOR_PARTITION_VARIANT_NULL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
-    return Status::OK();
 }
 
 bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,
