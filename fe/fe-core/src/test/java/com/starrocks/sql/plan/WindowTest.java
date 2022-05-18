@@ -154,4 +154,56 @@ public class WindowTest extends PlanTestBase {
                 + "join t1 on x0.v3 = t1.v4 order by x0.v3, t1.v4 limit 100;";
         getFragmentPlan(sql);
     }
+
+    @Test
+    public void testNtileWindowFunction() throws Exception {
+        // Must have exactly one positive bigint integer parameter.
+        String sql = "select v1, v2, NTILE(v2) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(1.1) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(0) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(-1) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE('abc') over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(null) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(1 + 2) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(9223372036854775808) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("Number out of range");
+
+        sql = "select v1, v2, NTILE((select v1 from t0)) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE() over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("No matching function with signature: ntile()");
+
+        // Windowing clause not allowed with NTILE.
+        sql = "select v1, v2, NTILE(2) over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("Windowing clause not allowed");
+
+        // Normal case.
+        sql = "select v1, v2, NTILE(2) over (partition by v1 order by v2) as j1 from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, ntile(2), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC\n" +
+                "  |  offset: 0");
+    }
 }

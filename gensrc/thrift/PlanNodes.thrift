@@ -457,7 +457,8 @@ enum TAggregationOp {
   LAG,
   HLL_C,
   BITMAP_UNION,
-  ANY_VALUE
+  ANY_VALUE,
+  NTILE
 }
 
 //struct TAggregateFunctionCall {
