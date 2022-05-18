@@ -1,4 +1,4 @@
-# array_overlap
+# arrays_overlap
 
 ## 功能
 
@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-output array_overlap(input0, input1)
+output arrays_overlap(input0, input1)
 ```
 
 ## 参数说明
@@ -24,9 +24,9 @@ output array_overlap(input0, input1)
 **示例一**:
 
 ```plain text
-mysql> select array_overlap([11, 9, 3, 2], [null, 11]);
+mysql> select arrays_overlap([11, 9, 3, 2], [null, 11]);
 +--------------------------------------+
-| array_overlap([11,9,3,2], [NULL,11]) |
+| arrays_overlap([11,9,3,2], [NULL,11]) |
 +--------------------------------------+
 |                                    1 |
 +--------------------------------------+
@@ -35,9 +35,9 @@ mysql> select array_overlap([11, 9, 3, 2], [null, 11]);
 **示例二**:
 
 ```plain text
-mysql> select array_overlap([9, 3, 2], [null, 11]);
+mysql> select arrays_overlap([9, 3, 2], [null, 11]);
 +-----------------------------------+
-| array_overlap([9,3,2], [NULL,11]) |
+| arrays_overlap([9,3,2], [NULL,11]) |
 +-----------------------------------+
 |                                 0 |
 +-----------------------------------+
@@ -46,9 +46,9 @@ mysql> select array_overlap([9, 3, 2], [null, 11]);
 **示例 三**:
 
 ```plain text
-mysql> select array_overlap([9, 3, null, 2], [null, 11]);
+mysql> select arrays_overlap([9, 3, null, 2], [null, 11]);
 +----------------------------------------+
-| array_overlap([9,3,NULL,2], [NULL,11]) |
+| arrays_overlap([9,3,NULL,2], [NULL,11]) |
 +----------------------------------------+
 |                                      1 |
 +----------------------------------------+
@@ -57,9 +57,9 @@ mysql> select array_overlap([9, 3, null, 2], [null, 11]);
 **示例 四**:
 
 ```plain text
-mysql> select array_overlap([9, 3, "SQL", 2], [null, "SQL"]);
+mysql> select arrays_overlap([9, 3, "SQL", 2], [null, "SQL"]);
 +--------------------------------------------+
-| array_overlap([9,3,'SQL',2], [NULL,'SQL']) |
+| arrays_overlap([9,3,'SQL',2], [NULL,'SQL']) |
 +--------------------------------------------+
 |                                          1 |
 +--------------------------------------------+
@@ -67,4 +67,4 @@ mysql> select array_overlap([9, 3, "SQL", 2], [null, "SQL"]);
 
 ## 关键字
 
-ARRAY_OVERLAP
+ARRAYS_OVERLAP
