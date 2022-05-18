@@ -1113,10 +1113,13 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
     vectorized::Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(vectorized::ChunkHelper::get_char_field_indexes(new_schema));
 
-    // memtable max buffer size set 80% of memory limit so that it will do _merge() if reach 80%
-    // do finialize() and flush() if reach 90%
-    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+    // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
+    // set max memtable size to 4G since large buffer will make large segment & decrease sort performace
+    // TODO: try to use accurate memory limit
+    int64_t max_buffer_size =
+            std::min<int64_t>(4096 * 1024 * 1024, _memory_limitation * config::memory_ratio_for_sorting_schema_change);
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer, max_buffer_size,
+                                                tls_thread_status.mem_tracker());
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -1137,7 +1140,7 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.9, tls_thread_status.mem_tracker());
+                                                   max_buffer_size, tls_thread_status.mem_tracker());
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << tls_thread_status.mem_tracker()->consumption();
         }
@@ -1170,7 +1173,7 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+                                                   max_buffer_size, tls_thread_status.mem_tracker());
         }
 
         mem_pool->clear();
