@@ -1779,6 +1779,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
+        } else if (context.CURRENT_TIMESTAMP() != null) {
+            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {

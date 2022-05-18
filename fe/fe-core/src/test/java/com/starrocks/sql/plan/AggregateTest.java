@@ -1078,6 +1078,27 @@ public class AggregateTest extends PlanTestBase {
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0"));
 
+        sql = "select lead(v2) over(partition by v1) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v1 order by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
 
