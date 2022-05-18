@@ -1175,4 +1175,11 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 2");
         connectContext.getSessionVariable().setCboCteReuse(false);
     }
+
+    @Test
+    public void testSumString() throws Exception {
+        String sql = "select sum(N_COMMENT) from nation";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(CAST(4: N_COMMENT AS DOUBLE))");
+    }
 }
