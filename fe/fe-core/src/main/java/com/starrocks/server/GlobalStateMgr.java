@@ -550,7 +550,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
-        this.localMetastore = new LocalMetastore(this);
+        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
     }
 
     public static void destroyCheckpoint() {

@@ -209,11 +209,12 @@ public class LocalMetastore implements ConnectorMetadata {
     private final ColocateTableIndex colocateTableIndex;
     private final SystemInfoService systemInfoService;
 
-    public LocalMetastore(GlobalStateMgr globalStateMgr) {
+    public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
+                          ColocateTableIndex colocateTableIndex, SystemInfoService systemInfoService) {
         this.stateMgr = globalStateMgr;
-        this.recycleBin = globalStateMgr.getRecycleBin();
-        this.colocateTableIndex = globalStateMgr.getColocateTableIndex();
-        this.systemInfoService = globalStateMgr.getClusterInfo();
+        this.recycleBin = recycleBin;
+        this.colocateTableIndex = colocateTableIndex;
+        this.systemInfoService = systemInfoService;
     }
 
     private boolean tryLock(boolean mustLock) {
