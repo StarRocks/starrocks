@@ -2,7 +2,10 @@
 
 ## 索引
 
-+ [StarRocks介绍](/introduction/StarRocks_intro.md)
++ 产品简介
+  + [什么是 StarRocks](/introduction/StarRocks_intro.md)
+  + [系统架构](/introduction/system_architecture.md)
+  + [产品特性](/introduction/features.md)
 + 快速开始
   + [StarRocks基本概念及系统架构](/quick_start/Architecture.md)
   + [StarRocks手动部署](/quick_start/Deploy.md)
