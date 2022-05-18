@@ -2,6 +2,7 @@
 - [ ] bug
 - [ ] feature
 - [ ] enhancement
+- [ ] refactor
 - [ ] others
 
 ## Which issues of this PR fixes ：
