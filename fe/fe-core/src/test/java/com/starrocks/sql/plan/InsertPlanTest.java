@@ -4,6 +4,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -570,6 +571,7 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertExchange() throws Exception {
         FeConstants.runningUnitTest = true;
+        InsertPlanner.enableSingleReplicationShuffle = true;
         {
             // keysType is DUP_KEYS
             String sql = "explain insert into t0 select * from t0";
@@ -676,6 +678,7 @@ public class InsertPlanTest extends PlanTestBase {
                     "  |  output: min(10: k8), max(11: k9)\n" +
                     "  |  group by: 1: k1, 2: k2, 3: k3, 4: k4, 5: k5, 6: k6, 7: k10, 8: k11, 9: k7");
         }
+        InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
     }
 }

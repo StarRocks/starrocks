@@ -64,6 +64,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class InsertPlanner {
+    // Only for unit test
+    public static boolean enableSingleReplicationShuffle = false;
+
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -332,6 +335,11 @@ public class InsertPlanner {
         OlapTable table = (OlapTable) insertStmt.getTargetTable();
 
         if (KeysType.DUP_KEYS.equals(table.getKeysType())) {
+            return new PhysicalPropertySet();
+        }
+
+        // No extra distribution property is needed if replication num is 1
+        if (!enableSingleReplicationShuffle && table.getDefaultReplicationNum() <= 1) {
             return new PhysicalPropertySet();
         }
 
