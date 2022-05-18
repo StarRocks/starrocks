@@ -1376,4 +1376,68 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long min_routine_load_lag_for_metrics = 10000;
+<<<<<<< HEAD
+=======
+
+    /**
+     * The heartbeat timeout of be/broker/fe.
+     * the default is 5 seconds
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_timeout_second = 5;
+
+    /**
+     * The heartbeat retry times of be/broker/fe.
+     * the default is 3
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_retry_times = 3;
+
+    /**
+     * Temporary use, it will be removed later.
+     * Set true if using StarOS to manage tablets, such as storage medium is S3.
+     */
+    @ConfField
+    public static boolean use_staros = false;
+    /**
+     * default bucket number when create OLAP table without buckets info
+     */
+    @ConfField(mutable = true)
+    public static int default_bucket_num = 10;
+
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_mv = false;
+  
+    @ConfField
+    public static boolean enable_dict_optimize_routine_load = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_dict_optimize_stream_load = true;
+
+    /**
+     * If set to true, the following rules will apply to see if the password is secure upon the creation of a user.
+     * 1. The length of the password should be no less than 8.
+     * 2. The password should contain at least one digit, one lowercase letter, one uppercase letter
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_validate_password = false;
+
+    /**
+     * If set to false, changing the password to the previous one is not allowed.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_password_reuse = true;
+    /**
+     * If set to false, when the load is empty, success is returned.
+     * Otherwise, `all partitions have no load data` is returned.
+     */
+    @ConfField(mutable = true)
+    public static boolean empty_load_as_error = true;
+
+    /**
+     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     */
+    @ConfField(mutable = true)
+    public static int quorom_publish_wait_time_ms = 500;
+>>>>>>> cb1ac57b6 ([Enhancement] Optimize quorum publish, wait some time util all backends finish (#6170))
 }
