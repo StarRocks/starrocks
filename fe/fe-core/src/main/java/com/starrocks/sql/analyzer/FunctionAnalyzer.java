@@ -121,13 +121,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.DENSE_RANK)
-                || fnName.getFunction().equals(FunctionSet.RANK)
-                || fnName.getFunction().equals(FunctionSet.NTILE)
-                || fnName.getFunction().equals(FunctionSet.ROW_NUMBER)
-                || fnName.getFunction().equals(FunctionSet.FIRST_VALUE)
-                || fnName.getFunction().equals(FunctionSet.LAST_VALUE)
-                || fnName.getFunction().equals(FunctionSet.FIRST_VALUE_REWRITE)) {
+        if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function");
             }

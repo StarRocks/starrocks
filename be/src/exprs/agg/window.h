@@ -238,7 +238,7 @@ struct NtileState {
 
 class NtileWindowFunction final : public WindowFunction<NtileState> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).num_buckets = args[0].get()->get(0).get_int64();
+        this->data(state).num_buckets = args[0]->get(0).get_int64();
 
         this->data(state).cur_position = -1;
         this->data(state).large_bucket_size = -1;

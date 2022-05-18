@@ -614,7 +614,7 @@ windowFunction
     : name = ROW_NUMBER '(' ')'
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
-    | name = NTILE  '(' (expression)? ')'
+    | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
     | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'

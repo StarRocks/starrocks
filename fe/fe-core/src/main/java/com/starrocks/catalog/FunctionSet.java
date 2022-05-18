@@ -256,6 +256,16 @@ public class FunctionSet {
                     .add("sleep")
                     .build();
 
+    public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.DENSE_RANK)
+            .add(FunctionSet.RANK)
+            .add(FunctionSet.NTILE)
+            .add(FunctionSet.ROW_NUMBER)
+            .add(FunctionSet.FIRST_VALUE)
+            .add(FunctionSet.LAST_VALUE)
+            .add(FunctionSet.FIRST_VALUE_REWRITE)
+            .build();
+
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }

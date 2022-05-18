@@ -63,7 +63,7 @@ public class AnalyticAnalyzer {
 
         if (isOffsetFn(analyticFunction.getFn()) && analyticFunction.getChildren().size() > 1) {
             Expr offset = analyticFunction.getChild(1);
-            if (!isConstantInteger(offset)) {
+            if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
                                 analyticFunction.toSql());
@@ -82,7 +82,7 @@ public class AnalyticAnalyzer {
 
         if (isNtileFn(analyticFunction.getFn())) {
             Expr numBuckets = analyticFunction.getChild(0);
-            if (!isConstantInteger(numBuckets)) {
+            if (!isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
                         "The num_buckets parameter of NTILE must be a constant positive integer: " +
                                 analyticFunction.toSql());
@@ -99,7 +99,7 @@ public class AnalyticAnalyzer {
         }
     }
 
-    private static boolean isConstantInteger(Expr expr) {
+    private static boolean isPositiveConstantInteger(Expr expr) {
         if (!expr.isConstant()) {
             return false;
         }
