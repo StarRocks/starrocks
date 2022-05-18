@@ -157,7 +157,7 @@ public class WindowTest extends PlanTestBase {
 
     @Test
     public void testNtileWindowFunction() throws Exception {
-        // Must have exactly one positive integer parameter.
+        // Must have exactly one positive bigint integer parameter.
         String sql = "select v1, v2, NTILE(v2) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
@@ -178,6 +178,9 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select v1, v2, NTILE(1 + 2) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
+
+        sql = "select v1, v2, NTILE(9223372036854775808) over (partition by v1 order by v2) as j1 from t0";
+        starRocksAssert.query(sql).analysisError("Number out of range");
 
         sql = "select v1, v2, NTILE((select v1 from t0)) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");

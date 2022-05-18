@@ -139,6 +139,12 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
+            try {
+                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
