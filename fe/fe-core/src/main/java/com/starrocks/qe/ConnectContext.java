@@ -93,6 +93,7 @@ public class ConnectContext {
     protected boolean isKilled;
     // Db
     protected String currentDb = "";
+
     // cluster name
     protected String clusterName = "";
     // username@host of current login user

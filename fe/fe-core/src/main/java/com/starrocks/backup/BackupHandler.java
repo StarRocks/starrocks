@@ -64,6 +64,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -600,6 +601,11 @@ public class BackupHandler extends MasterDaemon implements Writable {
             AbstractJob job = AbstractJob.read(in);
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
         }
+    }
+
+    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 }
 
