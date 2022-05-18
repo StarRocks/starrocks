@@ -847,6 +847,97 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     return true;
 }
 
+<<<<<<< HEAD
+=======
+Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
+                                          TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
+                                          RowsetSharedPtr rowset) {
+    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
+    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
+    auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
+
+    // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
+    // set max memtable size to 4G since some column has limit size, it will make invalid data
+    size_t max_buffer_size = std::min<size_t>(
+            4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer, max_buffer_size,
+                                                CurrentThread::mem_tracker());
+
+    auto selective = std::make_unique<std::vector<uint32_t>>();
+    selective->resize(config::vector_chunk_size);
+    for (uint32_t i = 0; i < config::vector_chunk_size; i++) {
+        (*selective)[i] = i;
+    }
+
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
+
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+    while (!bg_worker_stopped) {
+#ifndef BE_TEST
+        auto cur_usage = CurrentThread::mem_tracker()->consumption();
+        // we check memory usage exceeds 90% since tablet reader use some memory
+        // it will return fail if memory is exhausted
+        if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
+            RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
+            VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
+                    << CurrentThread::mem_tracker()->consumption();
+        }
+#endif
+        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+        Status status = reader->do_get_next(base_chunk.get());
+        if (!status.ok()) {
+            if (!status.is_end_of_file()) {
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
+                return status;
+            } else if (base_chunk->num_rows() <= 0) {
+                break;
+            }
+        }
+
+        ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, base_chunk->num_rows());
+
+        if (!_chunk_changer->change_chunkV2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
+            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            LOG(WARNING) << err_msg;
+            return Status::InternalError(err_msg);
+        }
+
+        ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
+
+        bool full = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        if (full) {
+            RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
+        }
+
+        mem_pool->clear();
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+
+    RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
+    RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
+
+    if (bg_worker_stopped) {
+        return Status::InternalError("bg_worker_stopped");
+    }
+
+    if (auto st = new_rowset_writer->flush(); !st.ok()) {
+        LOG(WARNING) << "failed to flush rowset writer: " << st;
+        return st;
+    }
+
+    return Status::OK();
+}
+
+>>>>>>> 3ca2f92e ([Enhancement] Add memory limit for sorting schema change)
 bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                                 TabletSharedPtr tablet) {
     if (chunk_arr.size() == 1) {
@@ -1206,6 +1297,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << " version=" << sc_params.version.first << "-" << sc_params.version.second;
             return Status::InternalError("process failed");
         }
+<<<<<<< HEAD
+=======
+        // Add the new version of the data to the header,
+        // To prevent deadlocks, be sure to lock the old table first and then the new one
+        sc_params.new_tablet->obtain_push_lock();
+        DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
+        sc_params.rowset_readers[i]->close();
+>>>>>>> 3ca2f92e ([Enhancement] Add memory limit for sorting schema change)
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
