@@ -6,12 +6,9 @@
 #include "gtest/gtest.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
-<<<<<<< HEAD:be/test/storage/vectorized/schema_change_test.cpp
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/convert_helper.h"
-=======
 #include "storage/wrapper_field.h"
->>>>>>> d44327c3e ([BugFix] Dangling ptr in schema change (#5868)):be/test/storage/schema_change_test.cpp
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
