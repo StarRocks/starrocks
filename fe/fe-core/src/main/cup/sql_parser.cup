@@ -5254,8 +5254,6 @@ keyword ::=
     {: RESULT = id; :}
     | KW_RESOURCES:id
     {: RESULT = id; :}
-    | KW_RESOURCE_GROUP:id
-    {: RESULT = id; :}
     | KW_RESTORE:id
     {: RESULT = id; :}
     | KW_RETURNS:id
