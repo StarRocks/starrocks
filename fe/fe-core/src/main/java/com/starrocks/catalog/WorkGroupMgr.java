@@ -392,8 +392,7 @@ public class WorkGroupMgr implements Writable {
     public WorkGroup chooseWorkGroupByName(String wgName) {
         readLock();
         try {
-            WorkGroup wg = workGroupMap.get(wgName);
-            return wg;
+            return workGroupMap.get(wgName);
         } finally {
             readUnlock();
         }
