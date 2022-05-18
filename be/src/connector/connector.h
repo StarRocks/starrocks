@@ -47,16 +47,17 @@ public:
         _runtime_filters = runtime_filters;
     }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
-    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
-        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
-    }
 
 protected:
     int64_t _read_limit = -1; // no limit
     std::vector<ExprContext*> _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
-    TupleDescriptor* _tuple_desc = nullptr;
+    const TupleDescriptor* _tuple_desc = nullptr;
+    
+    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
+        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
+    }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
