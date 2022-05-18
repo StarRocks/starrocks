@@ -348,7 +348,7 @@ public class InsertPlanner {
         });
 
         HashDistributionDesc desc =
-                new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_JOIN);
+                new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
         return new PhysicalPropertySet(property);

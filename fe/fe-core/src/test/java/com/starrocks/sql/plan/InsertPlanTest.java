@@ -580,6 +580,21 @@ public class InsertPlanTest extends PlanTestBase {
                     "\n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: t0");
+
+            // Specify only part of the columns
+            sql = "explain insert into t0(v1, v2) select v1, v2 from t0;";
+            plan = getInsertExecPlan(sql);
+            assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TUPLE ID: 2\n" +
+                    "    RANDOM\n" +
+                    "\n" +
+                    "  1:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 4> : NULL\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
         }
         {
             // KesType is PRIMARY_KEYS
