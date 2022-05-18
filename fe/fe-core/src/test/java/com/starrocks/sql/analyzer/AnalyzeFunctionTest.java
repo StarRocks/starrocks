@@ -172,6 +172,7 @@ public class AnalyzeFunctionTest {
     @Test
     public void testSpecialFunction() {
         analyzeSuccess("select char('A')");
+        analyzeSuccess("select CURRENT_TIMESTAMP()");
         analyzeSuccess("select day('2022-01-01 00:00:00')");
         analyzeSuccess("select hour('2022-01-01 00:00:00')");
         analyzeSuccess("select minute('2022-01-01 00:00:00')");
