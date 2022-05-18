@@ -7,8 +7,7 @@
   + [系统架构](/introduction/system_architecture.md)
   + [产品特性](/introduction/features.md)
 + 快速开始
-  + [StarRocks基本概念及系统架构](/quick_start/Architecture.md)
-  + [StarRocks手动部署](/quick_start/Deploy.md)
+  + [StarRocks 部署](/quick_start/Deploy.md)
   + [表创建](/quick_start/Create_table.md)
   + [数据导入和查询](/quick_start/Import_and_query.md)
 + 表设计
