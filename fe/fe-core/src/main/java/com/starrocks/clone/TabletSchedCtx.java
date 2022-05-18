@@ -21,6 +21,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -230,7 +231,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.state = State.PENDING;
     }
 
-    // for test only
+    @VisibleForTesting
     public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
                           long idxId, long tabletId, long createTime, SystemInfoService infoService) {
         this.type = type;

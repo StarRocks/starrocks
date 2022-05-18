@@ -21,6 +21,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -699,7 +700,7 @@ public class GlobalStateMgr {
         }
     }
 
-    // for test only
+    @VisibleForTesting
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return idToDb;
     }
