@@ -536,7 +536,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCatalogStatement(StarRocksParser.ShowCatalogStatementContext context) {
+    public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt();
     }
 
@@ -1358,7 +1358,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
+    public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowDbStmt(stringLiteral.getValue());

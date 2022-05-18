@@ -41,8 +41,7 @@ statement
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
     | dropExternalCatalogStatement                                                          #dropCatalog
-    | showCatalogStatement                                                                  #showCatalogs
-    | showDbFromCatalogStatement                                                            #showDbFromCatalog
+    | showCatalogsStatement                                                                 #showCatalogs
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -70,7 +69,7 @@ statement
 
     // Other statement
     | USE schema=identifier                                                                 #use
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
@@ -183,13 +182,10 @@ dropExternalCatalogStatement
     : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
-showCatalogStatement
+showCatalogsStatement
     : SHOW CATALOGS
     ;
 
-showDbFromCatalogStatement
-    : SHOW DATABASES FROM catalogName=identifierOrString
-    ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
@@ -296,6 +292,10 @@ classifier
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
