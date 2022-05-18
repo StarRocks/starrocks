@@ -226,11 +226,11 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
 struct NtileState {
     int64_t num_buckets = 0;
 
-    int64_t large_bucket_size = -1;
-    int64_t small_bucket_size = -1;
+    int64_t large_bucket_size = 0;
+    int64_t small_bucket_size = 0;
 
-    int64_t num_large_buckets = -1;
-    int64_t num_large_bucket_rows = -1;
+    int64_t num_large_buckets = 0;
+    int64_t num_large_bucket_rows = 0;
 
     // Start from 0.
     int64_t cur_position = -1;
@@ -240,8 +240,8 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).num_buckets = args[0]->get(0).get_int64();
 
+        // Start from 0 and used after increment, so set -1 before the first increment.
         this->data(state).cur_position = -1;
-        this->data(state).large_bucket_size = -1;
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -249,8 +249,7 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
                                    int64_t frame_end) const override {
         auto& s = this->data(state);
 
-        s.cur_position++;
-        if (-1 == s.large_bucket_size) {
+        if (-1 == s.cur_position) {
             int64_t num_rows = peer_group_end - peer_group_start;
 
             s.small_bucket_size = num_rows / s.num_buckets;
@@ -259,6 +258,8 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
             s.num_large_buckets = num_rows % s.num_buckets;
             s.num_large_bucket_rows = s.num_large_buckets * s.large_bucket_size;
         }
+
+        ++s.cur_position;
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
