@@ -67,15 +67,13 @@ public class CreateTableTest {
     @Test
     public void testNormal() throws DdlException {
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "mismatched input 'list' expecting 'RANGE'",
-                () -> createTable(
-                        "create table test.lp_tbl0\n" + "(k1 bigint, k2 varchar(16))\n" + "duplicate key(k1)\n"
-                                + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
-                                + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.lp_tbl0\n" + "(k1 bigint, k2 varchar(16))\n" + "duplicate key(k1)\n"
+                        + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
+                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "mismatched input 'list' expecting 'RANGE'",
-                () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" +
-                        "duplicate key(k1)\n"
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" + "duplicate key(k1)\n"
                         + "partition by list(k2,dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 

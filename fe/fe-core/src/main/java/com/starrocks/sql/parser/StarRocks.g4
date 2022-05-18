@@ -92,14 +92,20 @@ createTableStatement
           distributionDesc?
           rollupDesc?
           properties?
+          extProperties?
      ;
 
 columnDesc
-    : identifier type aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    ;
+
+charsetName
+    : CHAR SET identifier
+    | CHARSET identifier
     ;
 
 defaultDesc
-    : DEFAULT primaryExpression
+    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
     ;
 
 indexDesc
@@ -107,27 +113,13 @@ indexDesc
     ;
 
 engineDesc
-    : ENGINE EQ engineName
-    ;
-engineName
-    : OLAP
-    | MYSQL
-    | BROKER
-    | HIVE
-    | ELASTICSEARCH
-    | ICEBERG
-    | HUDI
-    | JDBC
+    : ENGINE EQ identifier
     ;
 
 charsetDesc
-    : CHARSET EQ charsetName
+    : (DEFAULT)? CHARSET (EQ)? identifier
     ;
 
-charsetName
-    : UTF8
-    | GBK
-    ;
 
 keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
@@ -145,7 +137,19 @@ aggDesc
     ;
 
 rollupDesc
-    : ROLLUP '(' rollupName=identifier identifierList (',' rollupName=identifier identifierList)* ')'
+    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    ;
+
+addRollupClause
+    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    ;
+
+dupKeys
+    : DUPLICATE KEY identifierList
+    ;
+
+fromRollup
+    : FROM identifier
     ;
 
 createTableAsSelectStatement
@@ -726,6 +730,24 @@ explainDesc
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    ;
+
+listPartitionDesc
+    : singleItemListPartitionDesc
+    | multiItemListPartitionDesc
+    ;
+
+singleItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    ;
+
+multiItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    ;
+
+stringList
+    : '(' string (',' string)* ')'
     ;
 
 rangePartitionDesc
@@ -734,7 +756,7 @@ rangePartitionDesc
     ;
 
 singleRangePartition
-    : PARTITION identifier VALUES partitionKeyDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc
     ;
 
 multiRangePartition
@@ -767,6 +789,14 @@ refreshSchemeDesc
 
 properties
     : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+extProperties
+    : BROKER properties
+    ;
+
+propertyList
+    : '(' property (',' property)* ')'
     ;
 
 property

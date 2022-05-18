@@ -69,7 +69,9 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
@@ -93,6 +95,7 @@ import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -205,44 +208,83 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        CreateTableStmt createTableStmt = new CreateTableStmt(
+        Map<String, String> extProperties = null;
+        if (context.extProperties() != null) {
+            extProperties = new HashMap<>();
+            List<Property> propertyList = visit(context.extProperties().properties().property(), Property.class);
+            for (Property property : propertyList) {
+                extProperties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? "olap" : context.engineDesc().engineName().getText(),
-                context.charsetDesc() == null ? "utf8" : context.charsetDesc().charsetName().getText(),
+                context.engineDesc() == null ? "olap" :
+                        ((Identifier) visit(context.engineDesc().identifier())).getValue(),
+                context.charsetDesc() == null ? "utf8" :
+                        ((Identifier) visit(context.charsetDesc().identifier())).getValue(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
-                null,
+                extProperties,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
-        return createTableStmt;
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
         final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
         final List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
         List<PartitionDesc> partitionDescList = new ArrayList<>();
-        for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
-            final PartitionDesc partitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
-            partitionDescList.add(partitionDesc);
+        PartitionDesc partitionDesc = null;
+        if (context.RANGE() != null) {
+            for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+                final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                partitionDescList.add(rangePartitionDesc);
+            }
+            partitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+        } else if (context.LIST() != null) {
+            for (StarRocksParser.ListPartitionDescContext listPartitionDescContext : context.listPartitionDesc()) {
+                final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
+                partitionDescList.add(listPartitionDesc);
+            }
+            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
-        return new RangePartitionDesc(columnList, partitionDescList);
+        return partitionDesc;
     }
 
     private List<AlterClause> getRollupDesc(StarRocksParser.RollupDescContext context) {
         List<AlterClause> rollupList = new ArrayList<>();
-        for (int i = 0; i < context.identifier().size(); i++) {
-            String rollupName = ((Identifier) visit(context.identifier(i))).getValue();
-            List<Identifier> columnList = visit(context.identifierList(i).identifier(), Identifier.class);
+        for (StarRocksParser.AddRollupClauseContext addRollupClauseContext : context.addRollupClause()) {
+            String rollupName = ((Identifier) visit(addRollupClauseContext.identifier())).getValue();
+            List<Identifier> columnList =
+                    visit(addRollupClauseContext.identifierList().identifier(), Identifier.class);
+            List<String> dupKeys = null;
+            if (addRollupClauseContext.dupKeys() != null) {
+                final List<Identifier> identifierList =
+                        visit(addRollupClauseContext.dupKeys().identifierList().identifier(), Identifier.class);
+                dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
+            }
+            String baseRollupName = null;
+            if (addRollupClauseContext.fromRollup() != null) {
+                baseRollupName = ((Identifier) visit(addRollupClauseContext.fromRollup().identifier())).getValue();
+            }
+            Map<String, String> properties = null;
+            if (addRollupClauseContext.properties() != null) {
+                properties = new HashMap<>();
+                List<Property> propertyList = visit(addRollupClauseContext.properties().property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+            }
             final AddRollupClause addRollupClause =
                     new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            null, null,
-                            null);
+                            dupKeys, baseRollupName,
+                            properties);
             rollupList.add(addRollupClause);
         }
         return rollupList;
@@ -285,6 +327,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (StarRocksParser.ColumnDescContext context : columnDesc) {
             String columnName = ((Identifier) visit(context.identifier())).getValue();
             TypeDef typeDef = new TypeDef(getType(context.type()));
+            String charsetName = null;
+            if (null != context.charsetName()) {
+                charsetName = ((Identifier) visit(context.charsetName().identifier())).getValue();
+            }
+            boolean isKey = context.KEY() != null;
             AggregateType aggregateType = null;
             if (null != context.aggDesc()) {
                 aggregateType = AggregateType.valueOf(context.aggDesc().getText().toUpperCase());
@@ -296,14 +343,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 isAllowNull = true;
             }
             ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
-            if (context.defaultDesc() != null) {
-                Expr expr = (Expr) visit(context.defaultDesc().primaryExpression());
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, expr);
+            final StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
+            if (defaultDescContext != null) {
+                if (defaultDescContext.string() != null) {
+                    String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
+                    defaultValueDef =  new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
+                } else if (defaultDescContext.NULL() != null) {
+                    defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+                } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
+                    defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+                }
             }
             String comment = context.comment() == null ? "" :
                     ((StringLiteral) visit(context.comment().string())).getStringValue();
             ColumnDef columnDef =
-                    new ColumnDef(columnName, typeDef, false, aggregateType, isAllowNull, defaultValueDef, comment);
+                    new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
+                            comment);
             columnDefList.add(columnDef);
         }
         return columnDefList;
@@ -2262,7 +2317,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleRangePartition(StarRocksParser.SingleRangePartitionContext context) {
         PartitionKeyDesc partitionKeyDesc = (PartitionKeyDesc) visit(context.partitionKeyDesc());
-        return new SingleRangePartitionDesc(false, ((Identifier) visit(context.identifier())).getValue(),
+        boolean ifNotExists = context.IF() != null;
+        return new SingleRangePartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
                 partitionKeyDesc, null);
     }
 
@@ -2288,6 +2344,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
                     Long.parseLong(context.INTEGER_VALUE().getText()));
         }
+    }
+
+    @Override
+    public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {
+        List<String> values =
+                context.stringList().string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
+                        .collect(toList());
+        boolean ifNotExists = context.IF() != null;
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new SingleItemListPartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
+                values, properties);
+    }
+
+    @Override
+    public ParseNode visitMultiItemListPartitionDesc(StarRocksParser.MultiItemListPartitionDescContext context) {
+        boolean ifNotExists = context.IF() != null;
+        List<List<String>> multiValues = new ArrayList<>();
+        for (StarRocksParser.StringListContext stringListContext : context.stringList()) {
+            List<String> values =
+                    stringListContext.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
+                            .collect(toList());
+            multiValues.add(values);
+        }
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new MultiItemListPartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
+                multiValues, properties);
     }
 
     @Override

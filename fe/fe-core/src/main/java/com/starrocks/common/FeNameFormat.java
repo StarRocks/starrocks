@@ -66,13 +66,13 @@ public class FeNameFormat {
         }
     }
 
-    public static void checkPartitionName(String partitionName) {
+    public static void checkPartitionName(String partitionName) throws AnalysisException {
         if (Strings.isNullOrEmpty(partitionName) || !partitionName.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
         }
 
         if (partitionName.startsWith(FORBIDDEN_PARTITION_NAME)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
         }
     }
 

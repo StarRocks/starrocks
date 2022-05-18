@@ -33,6 +33,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -70,7 +71,11 @@ public class DynamicPartitionUtil {
     }
 
     private static void checkPrefix(String prefix) throws DdlException {
-        FeNameFormat.checkPartitionName(prefix);
+        try {
+            FeNameFormat.checkPartitionName(prefix);
+        } catch (AnalysisException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_PREFIX, prefix);
+        }
     }
 
     private static void checkStart(String start) throws DdlException {
