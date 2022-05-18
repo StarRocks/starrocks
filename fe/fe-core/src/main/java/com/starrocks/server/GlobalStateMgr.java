@@ -2478,6 +2478,7 @@ public class GlobalStateMgr {
 
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
+        localMetastore.setEditLog(editLog);
     }
 
     public void setNextId(long id) {
