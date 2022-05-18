@@ -42,7 +42,7 @@ public class TaskRunExecutor {
                 LOG.warn("failed to execute TaskRun.", ex);
                 status.setState(Constants.TaskRunState.FAILED);
                 status.setErrorCode(-1);
-                status.setErrorMsg(ex.toString());
+                status.setErrorMessage(ex.toString());
             } finally {
                 status.setCompleteTime(System.currentTimeMillis());
             }

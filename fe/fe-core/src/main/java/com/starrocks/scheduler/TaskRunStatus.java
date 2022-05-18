@@ -38,8 +38,8 @@ public class TaskRunStatus implements Writable {
     @SerializedName("errorCode")
     private int errorCode;
 
-    @SerializedName("errorMsg")
-    private String errorMsg;
+    @SerializedName("errorMessage")
+    private String errorMessage;
 
     public String getQueryId() {
         return queryId;
@@ -105,12 +105,12 @@ public class TaskRunStatus implements Writable {
         this.errorCode = errorCode;
     }
 
-    public String getErrorMsg() {
-        return errorMsg;
+    public String getErrorMessage() {
+        return errorMessage;
     }
 
-    public void setErrorMsg(String errorMsg) {
-        this.errorMsg = errorMsg;
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {

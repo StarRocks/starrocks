@@ -343,7 +343,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
             info.setSchedule("MANUAL");
-            info.setDatabase_name(task.getDbName());
+            info.setDatabase(task.getDbName());
             info.setDefinition(task.getDefinition());
             tasksResult.add(info);
         }
@@ -365,10 +365,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setTask_name(status.getTaskName());
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setComplete_time(status.getCompleteTime() / 1000);
-            info.setStatus(status.getState().toString());
+            info.setState(status.getState().toString());
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
-            info.setError_msg(status.getErrorMsg());
+            info.setError_message(status.getErrorMessage());
             tasksResult.add(info);
         }
         return result;

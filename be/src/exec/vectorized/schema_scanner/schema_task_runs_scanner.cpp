@@ -12,11 +12,11 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"COMPLETE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -116,17 +116,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 5: {
-            // STATUS
+            // STATE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
-                const std::string* str = &task_run_info.status;
+                const std::string* str = &task_run_info.state;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 6: {
-            // DATABASE_NAME
+            // DATABASE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
                 std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
@@ -159,10 +159,10 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 9: {
-            // ERROR_MSG
+            // ERROR_MESSAGE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                const std::string* str = &task_run_info.error_msg;
+                const std::string* str = &task_run_info.error_message;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }

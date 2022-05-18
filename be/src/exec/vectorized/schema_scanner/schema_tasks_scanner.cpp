@@ -11,7 +11,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), false},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false}};
 
 SchemaTasksScanner::SchemaTasksScanner()
@@ -92,7 +92,7 @@ Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 4: {
-            // DATABASE_NAME
+            // DATABASE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
                 std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
