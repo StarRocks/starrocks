@@ -1,4 +1,4 @@
-# Routine Load FAQ
+# Routine Load FAQs
 
 ## Does mysql binlog data produced by kafka count as text format data?
 

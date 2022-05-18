@@ -1,4 +1,4 @@
-# Other Frequently Asked Questions
+# Other FAQs
 
 ## When creating a table, do varchar (32) and string occupy the same storage space? Is the performance the same when querying？
 

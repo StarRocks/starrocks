@@ -1,4 +1,4 @@
-# Insert Into常见问题
+# Insert Into FAQs
 
 ## When performing data insert, each insert in SQL takes up 50 to 100ms. Is there any way to increase efficiency?
 

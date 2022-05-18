@@ -1,4 +1,4 @@
-# Query-related issues
+# Query FAQs
 
 ## Fail to create materialized view: fail to allocate memory
 
