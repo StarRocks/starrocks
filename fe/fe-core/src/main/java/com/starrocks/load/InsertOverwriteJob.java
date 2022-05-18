@@ -27,7 +27,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.stream.Collectors;
