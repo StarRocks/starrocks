@@ -57,6 +57,12 @@ public class ShowDbStmt extends ShowStmt {
         this.catalogName = catalogName;
     }
 
+    public ShowDbStmt(String pattern, Expr where, String catalogName) {
+        this.pattern = pattern;
+        this.where = where;
+        this.catalogName = catalogName;
+    }
+
     public String getPattern() {
         return pattern;
     }

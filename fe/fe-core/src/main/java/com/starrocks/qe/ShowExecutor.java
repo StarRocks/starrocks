@@ -496,7 +496,28 @@ public class ShowExecutor {
     private void handleShowDb() throws AnalysisException, DdlException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
+        List<String> dbNames = new ArrayList<>();
+
+        if (showDbStmt.getCatalogName() == null) {
+            dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
+        } else {
+            String db = showDbStmt.getCatalogName();
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            try {
+                Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
+                if (connectorMetadata != null) {
+                    // get databases from external catalog
+                    // eg: for hive, get db info from hms
+                    // if fe can't connect to hms, would throw DdlException
+                    if (connectorMetadata.get() instanceof HiveMetadata) {
+                        dbNames = connectorMetadata.get().listDbNames();
+                    }
+                }
+            } catch (NullPointerException e) {
+                throw new DdlException("Can not acquire databases from " + db + ", please check catalog config!");
+            }
+        }
+
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
             matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
@@ -519,29 +540,6 @@ public class ShowExecutor {
 
         for (String dbName : dbNameSet) {
             rows.add(Lists.newArrayList(dbName));
-        }
-
-        if (showDbStmt.getCatalogName() != null) {
-            rows.clear();
-            String db = showDbStmt.getCatalogName();
-            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            try {
-                Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
-                List<String> externalDbNames = new ArrayList<>();
-                if (connectorMetadata != null) {
-                    // get databases from external catalog
-                    // eg: for hive, get db info from hms
-                    // if fe can't connect to hms, would throw DdlException
-                    if (connectorMetadata.get() instanceof HiveMetadata) {
-                        externalDbNames = connectorMetadata.get().listDbNames();
-                    }
-                    for (String dbName : externalDbNames) {
-                        rows.add(Lists.newArrayList(dbName));
-                    }
-                }
-            } catch (NullPointerException e) {
-                throw new DdlException("Can not acquire databases from " + db + ", please check catalog config!");
-            }
         }
 
         resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
