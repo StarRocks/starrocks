@@ -46,7 +46,7 @@ enum PartialUpdateCloneCase {
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr) {
+                                  vectorized::Column* one_delete = nullptr, bool empty = false) {
         RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -62,6 +62,9 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        if (empty) {
+            return *writer->build();
+        }
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
@@ -568,7 +571,12 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys, NULL, true);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+
     // read
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
     ASSERT_EQ(N, read_tablet(_tablet, 3));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
 }
