@@ -174,7 +174,7 @@ public class StarRocksAssert {
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
         return this;

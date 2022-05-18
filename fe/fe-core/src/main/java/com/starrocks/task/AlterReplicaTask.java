@@ -116,7 +116,7 @@ public class AlterReplicaTask extends AgentTask {
                 List<SlotRef> slots = Lists.newArrayList();
                 entry.getValue().collect(SlotRef.class, slots);
                 TAlterMaterializedViewParam mvParam = new TAlterMaterializedViewParam(entry.getKey());
-                mvParam.setOrigin_column_name(slots.get(0).getColumn().getName());
+                mvParam.setOrigin_column_name(slots.get(0).getLabel());
                 mvParam.setMv_expr(entry.getValue().treeToThrift());
                 req.addToMaterialized_view_params(mvParam);
             }
