@@ -132,7 +132,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
         if (fn.name.function_name == "ntile") {
             if (!state->enable_pipeline_engine()) {
-                return Status::InvalidArgument("The NTILE window function is only supported by the pipeline engine.");
+                return Status::NotSupported("The NTILE window function is only supported by the pipeline engine.");
             }
 
             _need_partition_boundary_for_unbounded_preceding_rows_frame = true;
