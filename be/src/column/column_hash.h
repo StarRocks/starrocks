@@ -107,7 +107,7 @@ public:
     }
 };
 
-static uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
+inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
     return crc32(hash, (const unsigned char*)data, bytes);
 #else
@@ -145,7 +145,7 @@ static uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #endif
 }
 
-static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
+inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
     return crc32(hash, (const unsigned char*)data, length);
 #else
