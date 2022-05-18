@@ -167,7 +167,8 @@ public class FunctionAnalyzer {
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equals(FunctionSet.SUM)
                 || fnName.getFunction().equals(FunctionSet.AVG))
-                && ((!arg.getType().isNumericType() && !arg.getType().isBoolean() && !arg.getType().isNull() &&
+                && ((!arg.getType().isNumericType() && !arg.getType().isBoolean()
+                && !arg.getType().isStringType() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
