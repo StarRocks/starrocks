@@ -4,7 +4,11 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.qe.*;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.DdlExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -57,5 +61,7 @@ public class ShowCatalogsStmtTest {
         Assert.assertEquals(metaData.getColumn(0).getName(), "Catalog");
         Assert.assertEquals(metaData.getColumn(1).getName(), "Type");
         Assert.assertEquals(metaData.getColumn(2).getName(), "Comment");
+        Assert.assertEquals(resultSet.getResultRows().get(0).toString(), "[default, default, internal catalog]");
+        Assert.assertEquals(resultSet.getResultRows().get(1).toString(), "[hive_catalog_1, hive, hive_catalog]");
     }
 }
