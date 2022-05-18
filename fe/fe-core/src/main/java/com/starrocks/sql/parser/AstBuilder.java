@@ -832,7 +832,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
-        if (context.RESOURCE_GROUPS() != null) {
+        if (context.GROUPS() != null) {
             return new ShowWorkGroupStmt(null, context.ALL() != null);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
