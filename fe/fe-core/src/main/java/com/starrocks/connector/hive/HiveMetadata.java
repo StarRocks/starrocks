@@ -19,7 +19,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDatabaseNames() throws DdlException {
+    public List<String> listDbNames() throws DdlException {
         return metaCache.getAllDatabaseNames();
     }
 

@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
 
-    if (chunk->is_empty()) {
+    if (chunk->is_empty() || _number_of_rows_to_sort() == 0) {
         return Status::OK();
     }
 

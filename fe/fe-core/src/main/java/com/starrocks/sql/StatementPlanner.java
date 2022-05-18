@@ -36,6 +36,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -44,6 +45,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -180,6 +182,7 @@ public class StatementPlanner {
                 || statement instanceof CreateAnalyzeJobStmt
                 || statement instanceof CreateCatalogStmt
                 || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateMaterializedViewStatement
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
@@ -192,6 +195,7 @@ public class StatementPlanner {
                 || statement instanceof QueryStatement
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof ShowAnalyzeStmt
+                || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt

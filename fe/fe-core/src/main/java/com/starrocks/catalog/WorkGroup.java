@@ -81,8 +81,8 @@ public class WorkGroup implements Writable {
         row.add("" + this.id);
         row.add("" + cpuCoreLimit);
         row.add("" + (memLimit * 100) + "%");
-        if (bigQueryMemLimit != null) {
-            row.add("" + bigQueryMemLimit);
+        if (bigQueryCpuSecondLimit != null) {
+            row.add("" + bigQueryCpuSecondLimit);
         } else {
             row.add("" + 0);
         }
@@ -91,8 +91,8 @@ public class WorkGroup implements Writable {
         } else {
             row.add("" + 0);
         }
-        if (bigQueryCpuSecondLimit != null) {
-            row.add("" + bigQueryCpuSecondLimit);
+        if (bigQueryMemLimit != null) {
+            row.add("" + bigQueryMemLimit);
         } else {
             row.add("" + 0);
         }

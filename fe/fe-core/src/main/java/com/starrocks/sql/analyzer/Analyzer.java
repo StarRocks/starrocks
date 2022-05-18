@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -159,6 +160,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
@@ -183,7 +190,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitShowCatalogStatement(ShowCatalogsStmt statement, ConnectContext context) {
+        public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
             ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }

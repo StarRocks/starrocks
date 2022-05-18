@@ -105,7 +105,7 @@ public class Function implements Writable {
     protected String checksum = "";
 
     // for vectorized engine, function-id
-    private long functionId;
+    protected long functionId;
 
     private boolean isPolymorphic = false;
 
@@ -613,7 +613,7 @@ public class Function implements Writable {
     }
 
     protected void writeFields(DataOutput output) throws IOException {
-        output.writeLong(id);
+        output.writeLong(functionId);
         name.write(output);
         ColumnType.write(output, retType);
         output.writeInt(argTypes.length);
@@ -638,7 +638,8 @@ public class Function implements Writable {
     }
 
     public void readFields(DataInput input) throws IOException {
-        id = input.readLong();
+        id = 0;
+        functionId = input.readLong();
         name = FunctionName.read(input);
         retType = ColumnType.read(input);
         int numArgs = input.readInt();

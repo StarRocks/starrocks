@@ -47,6 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DdlExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -184,6 +185,13 @@ public class StarRocksAssert {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         checkAlterJob();
+        return this;
+    }
+
+    // With catalog
+    public StarRocksAssert withCatalog(String sql) throws Exception {
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
         return this;
     }
 

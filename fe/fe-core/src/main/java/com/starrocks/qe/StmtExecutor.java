@@ -472,7 +472,7 @@ public class StmtExecutor {
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
-                // So we should abort the transaction at this finally block if it encounter exception.
+                // So we should abort the transaction at this finally block if it encounters exception.
                 if (insertStmt.isTransactionBegin() && context.getState().getStateType() == MysqlStateType.ERR) {
                     try {
                         String errMsg = Strings.emptyToNull(context.getState().getErrorMessage());
@@ -910,8 +910,12 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) parsedStmt);
-            context.getState().setOk();
+            ShowResultSet resultSet = DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) parsedStmt);
+            if (resultSet == null) {
+                context.getState().setOk();
+            } else {
+                sendShowResult(resultSet);
+            }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
                 LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);

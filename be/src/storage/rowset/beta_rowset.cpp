@@ -37,6 +37,7 @@
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
@@ -257,6 +258,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         seg_options.version = options.version;
         seg_options.meta = options.meta;
     }
+    seg_options.rowid_range_option = options.rowid_range_option;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -279,6 +281,11 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+
+        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
+            continue;
+        }
+
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

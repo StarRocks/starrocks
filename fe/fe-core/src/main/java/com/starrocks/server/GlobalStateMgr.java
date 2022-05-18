@@ -265,7 +265,9 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -508,6 +510,8 @@ public class GlobalStateMgr {
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
 
+    private TaskManager taskManager;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -541,7 +545,7 @@ public class GlobalStateMgr {
         return systemInfoService;
     }
 
-    private SystemInfoService getClusterInfo() {
+    public SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
 
@@ -562,7 +566,7 @@ public class GlobalStateMgr {
         return this.colocateTableIndex;
     }
 
-    private CatalogRecycleBin getRecycleBin() {
+    public CatalogRecycleBin getRecycleBin() {
         return this.recycleBin;
     }
 
@@ -689,6 +693,7 @@ public class GlobalStateMgr {
         this.metadataMgr = new MetadataMgr();
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.taskManager = new TaskManager();
     }
 
     public static void destroyCheckpoint() {
@@ -837,8 +842,12 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+    public TaskManager getTaskManager() {
+        return taskManager;
+    }
+
     // Use tryLock to avoid potential dead lock
-    private boolean tryLock(boolean mustLock) {
+    public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
                 if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -866,7 +875,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private void unlock() {
+    public void unlock() {
         if (lock.isHeldByCurrentThread()) {
             this.lock.unlock();
         }
@@ -5387,7 +5396,7 @@ public class GlobalStateMgr {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
-            // This maybe a information_schema db request, and information_schema db name is case insensitive.
+            // This maybe an information_schema db request, and information_schema db name is case-insensitive.
             // So, we first extract db name to check if it is information_schema.
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
@@ -5879,6 +5888,33 @@ public class GlobalStateMgr {
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
         this.alter.processCreateMaterializedView(stmt);
+    }
+
+    public void createMaterializedView(CreateMaterializedViewStatement statement)
+            throws DdlException {
+        // check Mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = statement.getTableName().getTbl();
+        String dbName = statement.getTableName().getDb();
+        LOG.debug("Begin create materialized view: {}", mvName);
+        // check if db exists
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(mvName) != null) {
+                if (statement.isIfNotExists()) {
+                    LOG.info("Create materialized view [{}] which already exists", mvName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
@@ -6636,6 +6672,10 @@ public class GlobalStateMgr {
         if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
             isDefaultClusterCreated = true;
         }
+    }
+
+    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
+        this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
     /**

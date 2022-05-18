@@ -3,6 +3,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.common.proc.BaseProcResult;
 
 import java.util.Map;
 
@@ -19,5 +21,9 @@ public class ExternalCatalog extends Catalog {
 
     public String getType() {
         return type;
+    }
+
+    public void getProcNodeData(BaseProcResult result) {
+        result.addRow(Lists.newArrayList(this.getName(), type, this.getComment()));
     }
 }
