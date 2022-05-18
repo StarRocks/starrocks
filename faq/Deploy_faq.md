@@ -1,4 +1,4 @@
-# Deployment FAQ
+# Deployment FAQs
 
 This topic provides answers to some frequently asked questions about deployment.
 

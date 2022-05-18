@@ -1,4 +1,4 @@
-# Broker Load FAQ
+# Broker Load FAQs
 
 ## In Broker Load, can a task that has already been executed successfully (State: FINISHED) be executed again?
 

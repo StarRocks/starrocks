@@ -1,4 +1,4 @@
-# Flink Connector FAQ
+# Flink Connector FAQs
 
 ## flink-connector-jdbc_2.11sink is 8 hours late in StarRocks
 
