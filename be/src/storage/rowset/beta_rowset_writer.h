@@ -111,7 +111,7 @@ private:
 
     Status _flush_chunk(const vectorized::Chunk& chunk);
 
-    Status _mixed_segment_delfile_not_supported();
+    std::string _dump_mixed_segment_delfile_not_supported();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
 };

@@ -279,13 +279,13 @@ Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk&
     return Status::OK();
 }
 
-Status HorizontalBetaRowsetWriter::_mixed_segment_delfile_not_supported() {
+std::string HorizontalBetaRowsetWriter::_dump_mixed_segment_delfile_not_supported() {
     std::string msg = strings::Substitute(
             "multi-segment rowset do not support mixing upsert and delete tablet:$0 txn:$1 #seg:$2 #delfile:$3 "
             "#upsert:$4 #del:$5",
             _context.tablet_id, _context.txn_id, _num_segment, _num_delfile, _num_rows_written, _num_rows_del);
     LOG(WARNING) << msg;
-    return Status::Cancelled(msg);
+    return msg;
 }
 
 Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
@@ -298,7 +298,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
     case FlushChunkState::UPSERT:
         break;
     default:
-        return _mixed_segment_delfile_not_supported();
+        return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
     }
     return _flush_chunk(chunk);
 }
@@ -349,7 +349,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         case FlushChunkState::DELETE:
             break;
         default:
-            return _mixed_segment_delfile_not_supported();
+            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
         RETURN_IF_ERROR(flush_del_file(deletes));
         return Status::OK();
@@ -360,7 +360,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
             _flush_chunk_state = FlushChunkState::MIXED;
             break;
         default:
-            return _mixed_segment_delfile_not_supported();
+            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
         RETURN_IF_ERROR(flush_del_file(deletes));
         return _flush_chunk(upserts);
