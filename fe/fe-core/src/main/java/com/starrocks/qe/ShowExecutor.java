@@ -120,6 +120,7 @@ import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -520,17 +521,20 @@ public class ShowExecutor {
             rows.add(Lists.newArrayList(dbName));
         }
 
-        if (showDbStmt.getDb() != null) {
+        if (showDbStmt.getCatalogName() != null) {
             rows.clear();
-            String db = showDbStmt.getDb();
+            String db = showDbStmt.getCatalogName();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            // get databases from external catalog
-            // eg: for hive, get db info from hms
-            // if fe can't connect to hms, would throw DdlException
             try {
                 Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
+                List<String> externalDbNames = new ArrayList<>();
                 if (connectorMetadata != null) {
-                    List<String> externalDbNames = connectorMetadata.get().listDatabaseNames();
+                    // get databases from external catalog
+                    // eg: for hive, get db info from hms
+                    // if fe can't connect to hms, would throw DdlException
+                    if (connectorMetadata.get() instanceof HiveMetadata) {
+                        externalDbNames = connectorMetadata.get().listDbNames();
+                    }
                     for (String dbName : externalDbNames) {
                         rows.add(Lists.newArrayList(dbName));
                     }

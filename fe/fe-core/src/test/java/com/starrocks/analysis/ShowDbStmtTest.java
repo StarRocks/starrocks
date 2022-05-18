@@ -46,6 +46,6 @@ public class ShowDbStmtTest {
 
         stmt = new ShowDbStmt(null, "hive_catalog_1");
         stmt.analyze(analyzer);
-        Assert.assertEquals("hive_catalog_1", stmt.getDb());
+        Assert.assertEquals("hive_catalog_1", stmt.getCatalogName());
     }
 }
