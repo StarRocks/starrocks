@@ -250,7 +250,7 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
         auto& s = this->data(state);
 
         s.cur_position++;
-        if (s.large_bucket_size == -1) {
+        if (-1 == s.large_bucket_size) {
             int64_t num_rows = peer_group_end - peer_group_start;
 
             s.small_bucket_size = num_rows / s.num_buckets;
