@@ -120,7 +120,6 @@ import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -503,25 +502,17 @@ public class ShowExecutor {
         } else {
             String db = showDbStmt.getCatalogName();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            try {
-                Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
-                if (connectorMetadata != null) {
-                    // get databases from external catalog
-                    // eg: for hive, get db info from hms
-                    // if fe can't connect to hms, would throw DdlException
-                    if (connectorMetadata.get() instanceof HiveMetadata) {
-                        dbNames = connectorMetadata.get().listDbNames();
-                    }
-                }
-            } catch (NullPointerException e) {
-                throw new DdlException("Can not acquire databases from " + db + ", please check catalog config!");
+            Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
+            if (metadataMgr.connectorMetadataExists(db)) {
+                dbNames = connectorMetadata.get().listDbNames();
+            } else {
+                throw new AnalysisException("Can not acquire databases from " + db + ", please check catalog config!");
             }
         }
 
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(), CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
         for (String fullName : dbNames) {
@@ -531,8 +522,7 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName,
-                    PrivPredicate.SHOW)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
                 continue;
             }
             dbNameSet.add(db);
@@ -544,6 +534,7 @@ public class ShowExecutor {
 
         resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
+
 
     // Show table statement.
     private void handleShowTable() throws AnalysisException {
