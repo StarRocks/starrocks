@@ -221,7 +221,7 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
 // And for the implementation, it uses `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`.
 //
 // The size of buckets could be `num_partition_rows/num_buckets` (small bucket)
-// or `num_partition_rows/num_buckets` (large bucket).
+// or `num_partition_rows/num_buckets+1` (large bucket).
 // The top `num_partition_rows%num_buckets` buckets are the large buckets.
 struct NtileState {
     int64_t num_buckets = 0;
