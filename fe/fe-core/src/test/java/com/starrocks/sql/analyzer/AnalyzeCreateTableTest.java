@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -14,7 +13,6 @@ public class AnalyzeCreateTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
@@ -194,6 +192,34 @@ public class AnalyzeCreateTableTest {
         String sql =
                 "create table table1 (col1 char(10) not null ) engine=olap primary key(col1)" +
                         " distributed by hash(col1) buckets 10";
+        analyzeFail(sql);
+    }
+
+    @Test
+    public void testIndex() {
+        String sql =
+                "create table table1 (col1 char(10) not null, index index1 (col1) using bitmap comment \"index1\") engine=olap duplicate key(col1)" +
+                        " distributed by hash(col1) buckets 10";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testIndexColumnNotInTable() {
+        String sql =
+                "create table table1 (col1 char(10) not null, index index1 (col2) using bitmap comment \"index1\") engine=olap duplicate key(col1)" +
+                        " distributed by hash(col1) buckets 10";
+        analyzeFail(sql);
+    }
+
+    @Test
+    public void testNullKey() {
+        String sql = "create table table1 (col1 char(10) not null) engine=olap distributed by hash(col1) buckets 10";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testNullDistribution() {
+        String sql = "create table table1 (col1 char(10) not null) engine=olap duplicate key(col1)";
         analyzeFail(sql);
     }
 }
