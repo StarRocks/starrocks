@@ -70,8 +70,6 @@ private:
     // where clause
     std::vector<std::string> _filters;
 
-    // Descriptor of tuples read from MySQL table.
-    const TupleDescriptor* _tuple_desc;
     // Tuple index in tuple row.
     size_t _slot_num = 0;
     std::unique_ptr<MysqlScanner> _mysql_scanner;
