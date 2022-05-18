@@ -49,10 +49,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -85,6 +88,7 @@ public class Auth implements Writable {
     private DbPrivTable dbPrivTable = new DbPrivTable();
     private TablePrivTable tablePrivTable = new TablePrivTable();
     private ResourcePrivTable resourcePrivTable = new ResourcePrivTable();
+    private ImpersonateUserPrivTable impersonateUserPrivTable = new ImpersonateUserPrivTable();
 
     private RoleManager roleManager = new RoleManager();
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
@@ -440,6 +444,18 @@ public class Auth implements Writable {
         return true;
     }
 
+    /**
+     * check if `currentUser` has impersonate privilege to execute sql as `toUser`
+     */
+    public boolean canImpersonate(UserIdentity currentUser, UserIdentity toUser) {
+        readLock();
+        try {
+            return impersonateUserPrivTable.canImpersonate(currentUser, toUser);
+        } finally {
+            readUnlock();
+        }
+    }
+
     /*
      * Check if current user has certain privilege.
      * This method will check the given privilege levels
@@ -753,6 +769,30 @@ public class Auth implements Writable {
         role.dropUser(userIdent);
     }
 
+    public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
+        grantImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+    }
+
+    public void replayGrantImpersonate(ImpersonatePrivInfo info) {
+        try {
+            grantImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+        } catch (DdlException e) {
+            LOG.error("should not happend", e);
+        }
+    }
+
+    public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
+        revokeImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+    }
+
+    public void replayRevokeImpersonate(ImpersonatePrivInfo info) {
+        try {
+            revokeImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+        } catch (DdlException e) {
+            LOG.error("should not happend", e);
+        }
+    }
+
     // grant
     public void grant(GrantStmt stmt) throws DdlException {
         PrivBitSet privs = PrivBitSet.of(stmt.getPrivileges());
@@ -911,6 +951,28 @@ public class Auth implements Writable {
         }
     }
 
+    private void grantImpersonateInternal(
+            UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            ImpersonateUserPrivEntry entry = ImpersonateUserPrivEntry.create(authorizedUser, securedUser);
+            entry.setSetByDomainResolver(false);
+            impersonateUserPrivTable.addEntry(entry, false, false);
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedUser, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
+            }
+            LOG.debug("finished to grant impersonate. is replay: {}", isReplay);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+
+
     // return true if user ident exist
     private boolean doesUserExist(UserIdentity userIdent) {
         if (userIdent.isDomain()) {
@@ -1035,6 +1097,26 @@ public class Auth implements Writable {
                     revokeResourcePrivs(userIdent, resourcePattern.getResourceName(), privs, errOnNonExist);
                     break;
             }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void revokeImpersonateInternal(
+            UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            ImpersonateUserPrivEntry entry = ImpersonateUserPrivEntry.create(authorizedUser, securedUser);
+            entry.setSetByDomainResolver(false);
+            impersonateUserPrivTable.revoke(entry, false, true);
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedUser, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokeImpersonate(info);
+            }
+            LOG.debug("finished to revoke impersonate. is replay: {}", isReplay);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
         } finally {
             writeUnlock();
         }
@@ -1592,6 +1674,24 @@ public class Auth implements Writable {
             // init root and admin user
             initUser();
         }
+    }
+
+    /**
+     * newly added metadata entity should deserialize with gson in this method
+     **/
+    public long readAsGson(DataInput in, long checksum) throws IOException {
+        this.impersonateUserPrivTable = ImpersonateUserPrivTable.read(in);
+        checksum ^= this.impersonateUserPrivTable.size();
+        return checksum;
+    }
+
+    /**
+     * newly added metadata entity should serialize with gson in this method
+     **/
+    public long writeAsGson(DataOutput out, long checksum) throws IOException {
+        impersonateUserPrivTable.write(out);
+        checksum ^= impersonateUserPrivTable.size();
+        return checksum;
     }
 
     @Override

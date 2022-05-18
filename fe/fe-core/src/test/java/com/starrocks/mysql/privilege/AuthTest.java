@@ -46,7 +46,9 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -62,7 +64,6 @@ import org.junit.Test;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -1537,6 +1538,7 @@ public class AuthTest {
         // 1. grant db table priv to resource
         List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
         grantStmt = new GrantStmt(userIdentity, null, resourcePattern, privileges);
+        LOG.info("xxx: grant stmt {}", grantStmt.toSql());
         hasException = false;
         try {
             grantStmt.analyze(analyzer);
@@ -2131,5 +2133,59 @@ public class AuthTest {
         Assert.assertEquals("%", user.getHost());
         Assert.assertTrue(auth.checkTblPriv(user, db, "table1", PrivPredicate.SELECT));
         Assert.assertFalse(auth.checkTblPriv(user, db, "table2", PrivPredicate.SELECT));
+     }
+
+     @Test
+     public void testGrantRevokeImpersonate() throws Exception {
+         // 1. prepare
+         // 1.1create harry, gregory, albert
+         UserIdentity harry = new UserIdentity("Harry", "%");
+         harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         UserIdentity gregory = new UserIdentity("Gregory", "%");
+         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         UserIdentity albert = new UserIdentity("Albert", "%");
+         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         List<UserIdentity> userToBeCreated = new ArrayList<>();
+         userToBeCreated.add(harry);
+         userToBeCreated.add(gregory);
+         userToBeCreated.add(albert);
+         for (UserIdentity userIdentity : userToBeCreated) {
+             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+             createUserStmt.analyze(analyzer);
+             auth.createUser(createUserStmt);
+         }
+
+
+         // 1.2 before test
+         Assert.assertFalse(auth.canImpersonate(harry, gregory));
+         Assert.assertFalse(auth.canImpersonate(harry, albert));
+
+         // 2. grant impersonate to gregory on harry
+         // 2.1 grant
+         GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 2.2 assert
+         Assert.assertTrue(auth.canImpersonate(harry, gregory));
+         Assert.assertFalse(auth.canImpersonate(harry, albert));
+
+         // 3. grant impersonate to albert on harry
+         // 3.1 grant
+         grantStmt = new GrantImpersonateStmt(harry, albert);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 3.2 assert
+         Assert.assertTrue(auth.canImpersonate(harry, gregory));
+         Assert.assertTrue(auth.canImpersonate(harry, albert));
+
+         // 4. revoke impersonate from albert on harry
+         // 4.1 revoke
+         RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.revokeImpersonate(revokeStmt);
+         // 4.2 assert
+         Assert.assertFalse(auth.canImpersonate(harry, gregory));
+         Assert.assertTrue(auth.canImpersonate(harry, albert));
      }
  }

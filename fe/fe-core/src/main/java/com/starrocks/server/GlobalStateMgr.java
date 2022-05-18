@@ -1656,6 +1656,8 @@ public class GlobalStateMgr {
             checksum = loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadWorkGroups(dis, checksum);
+            checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -2134,6 +2136,8 @@ public class GlobalStateMgr {
             checksum = saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveWorkGroups(dos, checksum);
+            checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();

@@ -71,8 +71,13 @@ statement
     | USE schema=identifier                                                                 #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+
+    // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
+    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
     | REVOKE identifierOrString FROM user                                                   #revokeRole
+    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
+    | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------

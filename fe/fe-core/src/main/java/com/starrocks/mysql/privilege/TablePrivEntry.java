@@ -40,12 +40,17 @@ public class TablePrivEntry extends DbPrivEntry {
     protected TablePrivEntry() {
     }
 
-    private TablePrivEntry(PatternMatcher hostPattern, String origHost, PatternMatcher dbPattern, String origDb,
-                           PatternMatcher userPattern, String user, PatternMatcher tblPattern, String origTbl,
-                           boolean isDomain, PrivBitSet privSet) {
-        super(hostPattern, origHost, dbPattern, origDb, userPattern, user, isDomain, privSet);
-        this.tblPattern = tblPattern;
+    private TablePrivEntry(String origHost, String user, boolean isDomain, PrivBitSet privSet, String db, String origTbl) {
+        super(origHost, user, isDomain, privSet, db);
         this.origTbl = origTbl;
+    }
+
+    @Override
+    protected void analyse() throws AnalysisException {
+        super.analyse();
+
+        tblPattern = PatternMatcher.createMysqlPattern(origTbl.equals(ANY_TBL) ? "%" : origTbl,
+                CaseSensibility.TABLE.getCaseSensibility());
         if (origTbl.equals(ANY_TBL)) {
             isAnyTbl = true;
         }
@@ -53,20 +58,14 @@ public class TablePrivEntry extends DbPrivEntry {
 
     public static TablePrivEntry create(String host, String db, String user, String tbl, boolean isDomain,
                                         PrivBitSet privs) throws AnalysisException {
-        PatternMatcher hostPattern = PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
-        PatternMatcher dbPattern = PatternMatcher.createMysqlPattern(db.equals(ANY_DB) ? "%" : db,
-                CaseSensibility.DATABASE.getCaseSensibility());
-        PatternMatcher userPattern = PatternMatcher.createMysqlPattern(user, CaseSensibility.USER.getCaseSensibility());
-
-        PatternMatcher tblPattern = PatternMatcher.createMysqlPattern(tbl.equals(ANY_TBL) ? "%" : tbl,
-                CaseSensibility.TABLE.getCaseSensibility());
-
-        if (privs.containsNodePriv() || privs.containsResourcePriv()) {
-            throw new AnalysisException("Table privilege can not contains global or resource privileges: " + privs);
+        if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+            throw new AnalysisException(
+                    "Table privilege can not contains global or resource or impersonate privileges: " + privs);
         }
 
-        return new TablePrivEntry(hostPattern, host, dbPattern, db, userPattern, user, tblPattern, tbl, isDomain,
-                privs);
+        TablePrivEntry tablePrivEntry = new TablePrivEntry(host, user, isDomain, privs, db, tbl);
+        tablePrivEntry.analyse();
+        return tablePrivEntry;
     }
 
     public PatternMatcher getTblPattern() {
@@ -146,14 +145,7 @@ public class TablePrivEntry extends DbPrivEntry {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-
         origTbl = Text.readString(in);
-        try {
-            tblPattern = PatternMatcher.createMysqlPattern(origTbl, CaseSensibility.TABLE.getCaseSensibility());
-        } catch (AnalysisException e) {
-            throw new IOException(e);
-        }
-        isAnyTbl = origTbl.equals(ANY_TBL);
     }
 
 }
