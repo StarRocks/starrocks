@@ -58,7 +58,24 @@ public class SubqueryTest extends PlanTestBase {
                 + "FROM t0\n"
                 + "WHERE v1 = 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertNotNull(plan);
+        assertContains(plan, "  15:Project\n" +
+                "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
+                "  |  \n" +
+                "  14:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----13:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----10:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(9: v7)");
     }
 
     @Test
