@@ -104,6 +104,7 @@
       + [CANCEL DECOMMISSION](/sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE CLUSTER](/sql-reference/sql-statements/Administration/CREATE%20CLUSTER.md)
       + [CREATE FILE](/sql-reference/sql-statements/Administration/CREATE%20FILE.md)
+      + [CREATE RESOURCE GROUP](/sql-reference/sql-statements/Administration/CREATE%20RESOURCE%20GROUP.md)
       + [DROP CLUSTER](/sql-reference/sql-statements/Administration/DROP%20CLUSTER.md)
       + [DROP FILE](/sql-reference/sql-statements/Administration/DROP%20FILE.md)
       + [ENTER](/sql-reference/sql-statements/Administration/ENTER.md)
