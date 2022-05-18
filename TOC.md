@@ -377,7 +377,7 @@
       + [array_difference](/sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_intersect](/sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_slice](/sql-reference/sql-functions/array-functions/array_slice.md)
-      + [array_overlap](/sql-reference/sql-functions/array-functions/array_overlap.md)
+      + [arrays_overlap](/sql-reference/sql-functions/array-functions/arrays_overlap.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)
       + [array_contains](/sql-reference/sql-functions/array-functions/array_contains.md)
