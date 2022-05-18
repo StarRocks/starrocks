@@ -47,6 +47,7 @@ public class CreateFunctionTest {
         retTypes.add(Type.VARCHAR);
 
         final TableFunction tableFunction = new TableFunction(functionName, colNames, argTypes, retTypes);
+        tableFunction.setFunctionId(-1024);
 
         final ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer(4096);
         final ByteBufOutputStream byteBufOutputStream = new ByteBufOutputStream(byteBuf);
@@ -58,8 +59,10 @@ public class CreateFunctionTest {
         newFunction.readFields(byteBufInputStream);
 
         Assert.assertEquals(newFunction.getFunctionName().getFunction(), fn);
+        Assert.assertEquals(newFunction.getFunctionId(), tableFunction.getFunctionId());
         Assert.assertEquals(newFunction.getDefaultColumnNames(), colNames);
         Assert.assertEquals(Arrays.asList(newFunction.getArgs()), argTypes);
+        Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
         Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
     }
 
