@@ -269,10 +269,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         visit(addRollupClauseContext.dupKeys().identifierList().identifier(), Identifier.class);
                 dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
             }
-            String baseRollupName = null;
-            if (addRollupClauseContext.fromRollup() != null) {
-                baseRollupName = ((Identifier) visit(addRollupClauseContext.fromRollup().identifier())).getValue();
-            }
+            String baseRollupName = addRollupClauseContext.fromRollup() != null ?
+                    ((Identifier) visit(addRollupClauseContext.fromRollup().identifier())).getValue() : null;
             Map<String, String> properties = null;
             if (addRollupClauseContext.properties() != null) {
                 properties = new HashMap<>();
@@ -310,10 +308,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (StarRocksParser.IndexDescContext context : indexDesc) {
             String indexName = ((Identifier) visit(context.identifier())).getValue();
             List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
-            String comment = null;
-            if (context.comment() != null) {
-                comment = ((StringLiteral) visit(context.comment())).getStringValue();
-            }
+            String comment =
+                    context.comment() != null ? ((StringLiteral) visit(context.comment())).getStringValue() : null;
             final IndexDef indexDef =
                     new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
                             IndexDef.IndexType.BITMAP, comment);
@@ -327,15 +323,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (StarRocksParser.ColumnDescContext context : columnDesc) {
             String columnName = ((Identifier) visit(context.identifier())).getValue();
             TypeDef typeDef = new TypeDef(getType(context.type()));
-            String charsetName = null;
-            if (null != context.charsetName()) {
-                charsetName = ((Identifier) visit(context.charsetName().identifier())).getValue();
-            }
+            String charsetName = context.charsetName() != null ?
+                    ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
             boolean isKey = context.KEY() != null;
-            AggregateType aggregateType = null;
-            if (null != context.aggDesc()) {
-                aggregateType = AggregateType.valueOf(context.aggDesc().getText().toUpperCase());
-            }
+            AggregateType aggregateType =
+                    context.aggDesc() != null ? AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
             Boolean isAllowNull = null;
             if (context.NOT() != null && context.NULL() != null) {
                 isAllowNull = false;
