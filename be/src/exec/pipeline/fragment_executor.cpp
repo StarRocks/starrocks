@@ -160,6 +160,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
     // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.

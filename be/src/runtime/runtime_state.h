@@ -285,6 +285,9 @@ public:
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
 
+    void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
+    bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
+
 private:
     Status create_error_log_file();
 
@@ -388,6 +391,8 @@ private:
     vectorized::GlobalDictMaps _load_global_dicts;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+
+    bool _enable_pipeline_engine = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

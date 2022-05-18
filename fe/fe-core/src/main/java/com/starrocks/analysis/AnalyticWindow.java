@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
@@ -39,6 +40,10 @@ public class AnalyticWindow implements ParseNode {
     public static final AnalyticWindow DEFAULT_WINDOW = new AnalyticWindow(Type.RANGE,
             new Boundary(BoundaryType.UNBOUNDED_PRECEDING, null),
             new Boundary(BoundaryType.CURRENT_ROW, null));
+
+    public static final AnalyticWindow DEFAULT_ROWS_WINDOW = new AnalyticWindow(AnalyticWindow.Type.ROWS,
+            new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
+            new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
 
     public enum Type {
         ROWS("ROWS"),
