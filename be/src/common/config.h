@@ -227,6 +227,7 @@ CONF_mInt64(column_dictionary_key_size_threshold, "0");
 //CONF_String(module_output, "");
 // memory_limitation_per_thread_for_schema_change unit GB
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
+CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
 // CONF_Int64(max_unpacked_row_block_size, "104857600");
 
