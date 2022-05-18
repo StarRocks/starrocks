@@ -80,12 +80,19 @@ public class WindowTransformer {
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (AnalyticExpr.isRowNumberFn(callExpr.getFn()) || AnalyticExpr.isNtileFn(callExpr.getFn())) {
-            Preconditions.checkState(windowFrame == null,
-                    String.format("Unexpected window set for %s()", callExpr.getFn().functionName()));
+        if (AnalyticExpr.isRowNumberFn(callExpr.getFn())) {
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for row_numer()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
-        }
-        if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
+        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for NTILE()");
+            windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
+
+            try {
+                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
 
@@ -136,12 +143,6 @@ public class WindowTransformer {
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
                         new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
                         new AnalyticWindow.Boundary(rightBoundaryType, rightBoundary, offsetValue));
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
-        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
-            try {
-                callExpr.uncheckedCastChild(Type.BIGINT, 0);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
