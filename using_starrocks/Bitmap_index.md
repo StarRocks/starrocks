@@ -1,12 +1,14 @@
 # Bitmap 索引
 
-StarRocks 支持基于Bitmap索引，对于有Filter的查询有明显的加速效果。
+StarRocks 支持Bitmap索引，对于有Filter的查询有明显的加速效果。
 
 ## 原理
 
 ### **1 什么是Bitmap**
 
-Bitmap是元素为bit的， 取值为0、1两种情形的, 可对某一位bit进行置位(set)和清零(clear)操作的数组。Bitmap的使用场景有：
+Bitmap是元素为bit的， 取值为0、1两种情形的, 可对某一位bit进行置位(set)和清零(clear)操作的数组。
+
+Bitmap的使用场景举例有：
 
 * 用一个long型表示32位学生的性别，0表示女生，1表示男生。
 * 用Bitmap表示一组数据中是否存在null值，0表示元素不为null，1表示为null。
@@ -16,7 +18,7 @@ Bitmap是元素为bit的， 取值为0、1两种情形的, 可对某一位bit进
 
 ![Bitmap索引](../assets/3.6.1-1.png)
 
-Bitmap只能表示取值为两种情形的列数组, 当列的取值为多种取值情形枚举类型时, 例如季度(Q1, Q2, Q3, Q4),  系统平台(Linux, Windows, FreeBSD, MacOS), 则无法用一个Bitmap编码; 此时可以为每个取值各自建立一个Bitmap的来表示这组数据; 同时为实际枚举取值建立词典。
+Bitmap只能表示取值为两种情形的列数组, 当列的取值为多种取值情形枚举类型时, 例如季度(Q1, Q2, Q3, Q4),  系统平台(Linux, Windows, FreeBSD, MacOS), 则无法用一个Bitmap编码,此时可以为每个取值各自建立一个Bitmap的来表示这组数据,同时为实际枚举取值建立词典。
 
 如上图所示，Platform列有4行数据，可能的取值有Android、Ios。StarRocks中会首先针对Platform列构建一个字典，将Android和Ios映射为int，然后就可以对Android和Ios分别构建Bitmap。具体来说，我们分别将Android、Ios 编码为0和1，因为Android出现在第1，2，3行，所以Bitmap是0111，因为Ios出现在第4行，所以Bitmap是1000。
 
@@ -47,7 +49,7 @@ CREATE INDEX index_name ON table1 (site_id) USING BITMAP COMMENT 'balabala';
 展示指定 table\_name 的下索引：
 
 ~~~ SQL
-SHOW INDEX FROM example_db.table_name;
+SHOW INDEX FROM [example_db].table_name;
 ~~~
 
 ### **3 删除索引**
@@ -61,6 +63,6 @@ DROP INDEX index_name ON [db_name.]table_name;
 ## 注意事项
 
 1. 对于明细模型，所有列都可以建Bitmap 索引；对于聚合模型，只有Key列可以建Bitmap 索引。
-2. Bitmap索引, 应该在取值为枚举型, 取值大量重复, 较低基数, 并且用作等值条件查询或者可转化为等值条件查询的列上创建。
-3. 不支持对Float、Double、Decimal 类型的列建Bitmap 索引。
-4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)信息查看。
+2. Bitmap索引, 应该在取值为枚举型、 取值大量重复、 较低基数、 并且用作等值条件查询或者可转化为等值条件查询的列上时进行创建。
+3. 不支持对Float、Double、Decimal 等类型的列上创建Bitmap 索引。
+4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)信息来进行查看（通过查询信息中rollup所展示的信息去核对物化视图是否命中或者命中正确）。

@@ -1,30 +1,12 @@
 # Broker Load
 
-StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支持CSV、ORCFile、Parquet等文件格式。数据量在几十GB到上百GB 级别。
+本节主要介绍如何通过 Broker 导入数据以及与其相关的常见问题。
 
-在Broker Load模式下，通过部署的Broker程序，StarRocks可读取对应数据源（如HDFS, S3）上的数据，利用自身的计算资源对数据进行预处理和导入。这是一种**异步**的导入方式，用户需要通过MySQL协议创建导入，并通过查看导入命令检查导入结果。
+Broker Load是一种**异步的导入方式**，通过部署的Broker程序，StarRocks可读取对应数据源（如HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。因为是异步导入，通过SQL异步创建导入作业后，可以通过 show load命令检查导入的结果。
 
-本节主要介绍Broker导入的基本原理、使用示例、最佳实践，及常见问题。
+## 支持的数据格式
 
----
-
-## 名词解释
-
-* Broker:  Broker 为一个独立的无状态进程，封装了文件系统接口，为 StarRocks 提供读取远端存储系统中文件的能力。
-
-* Plan:  导入执行计划，BE会执行导入执行计划将数据导入到StarRocks系统中。
-
----
-
-## 基本原理
-
-用户在提交导入任务后，FE 会生成对应的 Plan 并根据目前 BE 的个数和文件的大小，将 Plan 分给多个 BE 执行，每个 BE 执行一部分导入任务。BE 在执行过程中会通过 Broker 拉取数据，在对数据预处理之后将数据导入系统。所有 BE 均完成导入后，由 FE 最终判断导入是否成功。
-
-下图展示了 Broker Load 的主要流程：
-
-![brokerload](../assets/4.2.2-1.png)
-  
----
+Broker Load支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支持CSV、ORCFile、Parquet等文件格式。
 
 ## 支持的远程文件系统
 
@@ -39,37 +21,13 @@ StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支
 
 ### Broker搭建
 
-Broker Load需要借助Broker进程访问远端存储，因此使用Broker Load前需要搭建好Broker。
+Broker Load需要借助Broker进程访问远端存储，因此使用Broker Load前需要提前搭建好Broker进程。
 
-可以参考手动部署（[部署Broker](../quick_start/Deploy.md)）。
+broker进程部署可以参考手册（[部署Broker](../quick_start/Deploy.md)）。
 
 ### 创建导入任务
 
-**语法：**
-
-~~~SQL
-LOAD LABEL db_name.label_name 
-    (data_desc, ...)
-WITH BROKER broker_name broker_properties
-    [PROPERTIES (key1=value1, ... )]
-
-data_desc:
-    DATA INFILE ('file_path', ...)
-    [NEGATIVE]
-    INTO TABLE tbl_name
-    [PARTITION (p1, p2)]
-    [COLUMNS TERMINATED BY column_separator ]
-    [FORMAT AS file_type]
-    [(col1, ...)]
-    [COLUMNS FROM PATH AS (colx, ...)]
-    [SET (k1=f1(xx), k2=f2(xx))]
-    [WHERE predicate]
-
-broker_properties: 
-    (key2=value2, ...)
-~~~
-
-**Apache HDFS导入示例：**
+* **Apache HDFS导入示例：**
 
 ~~~sql
 LOAD LABEL db1.label1
@@ -101,7 +59,7 @@ PROPERTIES
 );
 ~~~
 
-**阿里云 OSS导入示例：**
+* **阿里云 OSS导入示例：**
 
 ~~~SQL
 LOAD LABEL example_db.label12
@@ -118,11 +76,9 @@ WITH BROKER my_broker
 )
 ~~~
 
-执行`HELP BROKER LOAD`可查看创建导入作业的详细语法。这里主要介绍命令中参数的意义和注意事项。
-  
 **Label：**
 
-导入任务的标识。每个导入任务，都有**一个数据库**内部唯一的Label。Label是用户在导入命令中自定义的名称。通过这个Label，用户可以查看对应导入任务的执行情况，并且Label可以用来防止用户导入相同的数据。当导入任务状态为FINISHED时，对应的Label就不能再次使用了。当 Label 对应的导入任务状态为CANCELLED时，**可以再次使用**该Label提交导入作业。
+导入任务的标识。每个导入任务都对应一个在**该数据库内**唯一的Label。Label是用户在导入命令中自定义的名称。通过这个Label，用户可以查看对应导入任务的执行情况，并且Label可以用来防止用户导入相同的数据。当导入任务状态为FINISHED时，对应的Label就不能再次使用了。当 Label 对应的导入任务状态为CANCELLED时，**可以再次使用**该Label提交导入作业。
 
 **数据描述类参数：**
 
@@ -150,37 +106,7 @@ data_desc中还可以设置数据取反导入。这个功能适用的场景是�
 
 在data_desc中可以指定待导入表的partition信息。如果待导入数据不属于指定的partition则不会被导入。同时，不在指定Partition中的数据会被认为是“错误数据”。对于不想要导入、也不想要记录为“错误数据”的数据，可以使用下面介绍的 **where predicate** 来过滤。
 
-* column separator
-
-用于指定导入文件中的列分隔符，默认为 \t。
-
-如果是不可见字符，则需要加\\x作为前缀，使用十六进制来表示分隔符。如hive文件的分隔符\x01，指定为"\\\\x01"。
-
-* file type
-
-用于指定导入文件的类型，例如：parquet、orc、csv，默认为csv。
-
-parquet类型也可以通过文件后缀名 **.parquet** 或者 **.parq** 判断。
-
-* COLUMNS FROM PATH AS
-
-提取文件路径中的分区字段。
-
-例: 导入文件为/path/col_name=col_value/dt=20210101/file1，col_name/dt为表中的列，则设置如下语句可以将col_value、20210101分别导入到col_name、dt对应的列中。
-
-~~~SQL
-...
-(col1, col2)
-COLUMNS FROM PATH AS (col_name, dt)
-~~~
-
-* set column mapping
-
-data_desc中的SET语句负责设置列**函数变换**。这里的列函数变换支持所有查询的等值表达式变换。如果原始数据的列和表中的列不一一对应，就需要用到这个属性。
-
-* where predicate
-
-data_desc中的WHERE语句负责过滤已经完成transform的数据。被过滤的数据不会进入容忍率的统计中。如果多个data-desc中声明了关于同一张表的多个条件，则会以AND语义合并这些条件。
+创建导入任务更详细的语法可以参考 [CREATE BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
 **导入作业参数：**
 
