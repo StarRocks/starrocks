@@ -112,6 +112,7 @@ import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -2620,7 +2621,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.CHAR() != null) {
             scalarType = ScalarType.CHAR;
         } else if (context.VARCHAR() != null) {
-            scalarType = ScalarType.VARCHAR;
+            scalarType = ScalarType.createVarcharType(-1);
         } else if (context.STRING() != null) {
             scalarType = DEFAULT_STRING;
         } else if (context.BITMAP() != null) {
@@ -2644,17 +2645,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDecimalType(StarRocksParser.DecimalTypeContext context) {
-        int precision = ScalarType.DEFAULT_PRECISION;
+        int precision = 10;
+        int precisionV2 = ScalarType.DEFAULT_PRECISION;
         int scale = ScalarType.DEFAULT_SCALE;
         if (context.precision != null) {
             precision = Integer.parseInt(context.precision.getText());
+            precisionV2 = precision;
             scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
         }
-        if (context.DECIMAL() != null || context.DECIMAL32() != null || context.DECIMAL64() != null ||
-                context.DECIMAL128() != null) {
+        if (context.DECIMAL() != null) {
             return ScalarType.createUnifiedDecimalType(precision, scale);
+        } else if (context.DECIMAL32() != null) {
+            if (context.precision != null) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
+            } else {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32);
+            }
+        } else if (context.DECIMAL64() != null) {
+            if (context.precision != null) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
+            } else {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64);
+            }
+        } else if (context.DECIMAL128() != null) {
+            if (context.precision != null) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+            } else {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128);
+            }
         } else if (context.DECIMALV2() != null) {
-            return ScalarType.createDecimalV2Type(precision, scale);
+            return ScalarType.createDecimalV2Type(precisionV2, scale);
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }

@@ -50,7 +50,7 @@ public class ScalarType extends Type implements Cloneable {
     private static final Logger LOG = LogManager.getLogger(ScalarType.class);
     // SQL allows the engine to pick the default precision. We pick the largest
     // precision that is supported by the smallest decimal type in the BE (4 bytes).
-    public static final int DEFAULT_PRECISION = 10;
+    public static final int DEFAULT_PRECISION = 9;
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
     public static final int DEFAULT_STRING_LENGTH = 65533;
