@@ -206,7 +206,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private final GlobalStateMgr stateMgr;
     private EditLog editLog;
     private final CatalogRecycleBin recycleBin;
-    private final ColocateTableIndex colocateTableIndex;
+    private ColocateTableIndex colocateTableIndex;
     private final SystemInfoService systemInfoService;
 
     public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
@@ -1654,6 +1654,11 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!hasKey) {
             ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_MUST_HAVE_KEYS);
         }
+    }
+
+    // only for test
+    public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
+        this.colocateTableIndex = colocateTableIndex;
     }
 
     // Create olap table and related base index synchronously.

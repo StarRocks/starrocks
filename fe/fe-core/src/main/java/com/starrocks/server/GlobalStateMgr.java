@@ -432,6 +432,7 @@ public class GlobalStateMgr {
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
+        localMetastore.setColocateTableIndex(colocateTableIndex);
     }
 
     public ColocateTableIndex getColocateTableIndex() {
