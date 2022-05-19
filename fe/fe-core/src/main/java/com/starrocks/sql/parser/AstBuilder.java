@@ -1361,8 +1361,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
         String catalog = null;
         if (context.db != null) {
-            QualifiedName qualifiedName = getQualifiedName(context.db);
-            catalog = qualifiedName.toString();
+            QualifiedName db = getQualifiedName(context.db);
+            catalog = db.toString();
         }
 
         if (catalog == null) {
