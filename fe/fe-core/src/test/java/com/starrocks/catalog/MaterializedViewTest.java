@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
@@ -35,6 +36,18 @@ public class MaterializedViewTest {
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private Database database;
+
+    @Mocked
+    private OlapTable olapTable1;
+
+    @Mocked
+    private OlapTable olapTable2;
+
+    @Mocked
+    private OlapTable olapTable3;
 
     @Before
     public void setUp() {
@@ -219,6 +232,7 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
+        mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
         File file = new File("./index");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
@@ -281,6 +295,24 @@ public class MaterializedViewTest {
 
     @Test
     public void testRangePartitionSerialization() throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getDb(100);
+                result = database;
+
+                database.getTable(10L);
+                result = olapTable1;
+
+                database.getTable(20L);
+                result = olapTable2;
+
+                database.getTable(30L);
+                result = olapTable3;
+            }
+        };
         RangePartitionInfo partitionInfo = generateRangePartitionInfo();
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(10, Lists.newArrayList(columns.get(0)));
@@ -292,6 +324,7 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
+        mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
         File file = new File("./index");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));

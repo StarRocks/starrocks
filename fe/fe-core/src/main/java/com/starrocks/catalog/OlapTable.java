@@ -180,6 +180,7 @@ public class OlapTable extends Table {
         this.indexes = null;
 
         this.tableProperty = null;
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
