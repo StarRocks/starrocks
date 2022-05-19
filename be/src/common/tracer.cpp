@@ -31,7 +31,7 @@ void Tracer::init(const std::string& service_name) {
         auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
                 new opentelemetry::sdk::trace::SimpleSpanProcessor(std::move(jaeger_exporter)));
         const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(
-                std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+                opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}});
         const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(
                 new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
         _tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
