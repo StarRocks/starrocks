@@ -282,10 +282,20 @@ public class CreateTableStmtTest {
         ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.HLL)));
         cols.add(col3);
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
-                new KeysDesc(KeysType.DUP_KEYS, colsName), null,
+                new KeysDesc(KeysType.AGG_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
         expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("No aggregate function specified for 'col3'");
+        expectedEx.expectMessage("AGG_KEYS table should specify aggregate type for non-key column[col3]");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testHLLWithPrimaryKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.HLL)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
         stmt.analyze(analyzer);
     }
 
@@ -294,10 +304,20 @@ public class CreateTableStmtTest {
         ColumnDef percentile = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.PERCENTILE)));
         cols.add(percentile);
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
-                new KeysDesc(KeysType.DUP_KEYS, colsName), null,
+                new KeysDesc(KeysType.AGG_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
         expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("No aggregate function specified for 'col3'");
+        expectedEx.expectMessage("AGG_KEYS table should specify aggregate type for non-key column[col3]");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testPercentileWithPrimaryKey() throws Exception {
+        ColumnDef percentile = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.PERCENTILE)));
+        cols.add(percentile);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
         stmt.analyze(analyzer);
     }
 
