@@ -219,8 +219,10 @@ Status MemTable::flush() {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
-    if (_result_chunk->reach_capacity_limit()) {
-        return Status::InternalError("memtable size exceed the limit");
+    std::string msg;
+    if (_result_chunk->reach_capacity_limit(&msg)) {
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
     int64_t duration_ns = 0;
     {
