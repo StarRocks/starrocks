@@ -81,11 +81,15 @@ public class SearchContext {
     // the ES cluster version
     private EsMajorVersion version;
 
+    // whether discovery the nodes where shards reside in
+    private boolean wanOnly;
+
     public SearchContext(EsTable table) {
         this.table = table;
         fullSchema = table.getFullSchema();
         sourceIndex = table.getIndexName();
         type = table.getMappingType();
+        wanOnly = table.wanOnly();
     }
 
     public String sourceIndex() {
@@ -135,5 +139,9 @@ public class SearchContext {
     // this will be refactor soon
     public EsTablePartitions tablePartitions() throws Exception {
         return EsTablePartitions.fromShardPartitions(table, shardPartitions);
+    }
+
+    public boolean wanOnly() {
+        return wanOnly;
     }
 }
