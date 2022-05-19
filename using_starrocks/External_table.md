@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、ElasticSearch、Hive、StarRocks、Apache Iceberg和Apache Hudi。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、Elasticsearch、Hive、StarRocks、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -44,9 +44,9 @@ PROPERTIES
 
 <br/>
 
-## ElasticSearch外部表
+## Elasticsearch 外部表
 
-StarRocks与ElasticSearch都是目前流行的分析系统，StarRocks强于大规模分布式计算，ElasticSearch擅长全文检索。StarRocks支持ElasticSearch访问的目的，就在于将这两种能力结合，提供更完善的一个OLAP解决方案。
+StarRocks 与 Elasticsearch 都是目前流行的分析系统，StarRocks 强于大规模分布式计算，Elasticsearch 擅长全文检索。StarRocks 支持 Elasticsearch 访问的目的，就在于将这两种能力结合，提供更完善的一个 OLAP 解决方案。
 
 ### 建表示例
 
@@ -84,7 +84,7 @@ PROPERTIES (
 
 ### 谓词下推
 
-StarRocks支持对ElasticSearch表进行谓词下推，把过滤条件推给ElasticSearch进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
+StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 Elasticsearch 进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
@@ -455,8 +455,8 @@ Hive Table的Partition统计信息以及Partition下面的文件信息可以缓�
    | hms_process_events_parallel_num    | 处理Events事件的并发数                    | 4 |
 
 * 注意事项
-  * 不同版本Hive Metastore的Events事件可能不同，且上述开启HiveMetastore Event机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启Hive Metastore Event机制的版本有2.X和3.X。用户可以在FE日志中搜索"event id"来验证event是否开启成功，如果没有开启成功，event id始终保持为0。如果无法判断是否成功开启Event机制，请在StarRocks用户交流群中联系值班同学进行排查。
-  * 当前Hive元数据缓存模式为懒加载，即：如果HIVE新增了分区，StarRocks只会将新增分区的partition key进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行refresh分区操作时，该分区的文件信息才会被加载。StarRocks首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到StarRocks中。
+  * 不同版本 Hive Metastore 的 Events 事件可能不同，且上述开启 HiveMetastore Event 机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启 Hive Metastore Event 机制的版本有 2.X 和 3.X。用户可以在 FE 日志中搜索 "event id" 来验证 event 是否开启成功，如果没有开启成功，event id 始终保持为 0。如果无法判断是否成功开启 Event 机制，请在 StarRocks 用户交流群中联系值班同学进行排查。
+  * 当前 Hive 元数据缓存模式为懒加载，即：如果 Hive 新增了分区，StarRocks 只会将新增分区的 partition key 进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行 refresh 分区操作时，该分区的文件信息才会被加载。StarRocks 首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到 StarRocks 中。
   * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
   * 当前自动更新不支持add/drop column等schema change操作，Hive表结构如有更改，需要重新创建Hive外表。Hive外表支持Schema change将会在近期推出，敬请期待。
 
