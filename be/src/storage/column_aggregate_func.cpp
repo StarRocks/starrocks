@@ -233,7 +233,8 @@ public:
 };
 
 template <>
-class ReplaceAggregator<HyperLogLogColumn, HyperLogLog> final : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
+class ReplaceAggregator<HyperLogLogColumn, HyperLogLog> final
+        : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
         auto* data = down_cast<HyperLogLogColumn*>(src.get());
@@ -252,7 +253,8 @@ public:
 };
 
 template <>
-class ReplaceAggregator<PercentileColumn , PercentileValue> final : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
+class ReplaceAggregator<PercentileColumn, PercentileValue> final
+        : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
         auto* data = down_cast<PercentileColumn*>(src.get());
@@ -607,7 +609,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_REPLACE(OLAP_FIELD_TYPE_ARRAY, ArrayColumn, ArrayState)
             CASE_REPLACE(OLAP_FIELD_TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(OLAP_FIELD_TYPE_OBJECT, BitmapColumn, BitmapValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_PERCENTILE, PercentileColumn , PercentileValue)
+            CASE_REPLACE(OLAP_FIELD_TYPE_PERCENTILE, PercentileColumn, PercentileValue)
             CASE_DEFAULT_WARNING(type)
         }
     }
