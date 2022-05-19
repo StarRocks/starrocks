@@ -57,6 +57,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
+import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableStmt extends DdlStmt {
 
@@ -405,7 +406,7 @@ public class CreateTableStmt extends DdlStmt {
         for (ColumnDef columnDef : columnDefs) {
             columnDef.analyze(engineName.equals("olap"));
 
-            if (columnDef.getType().isHllType()) {
+            if (columnDef.getAggregateType() == HLL_UNION) {
                 hasHll = true;
             }
 
@@ -430,7 +431,7 @@ public class CreateTableStmt extends DdlStmt {
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-            throw new AnalysisException("HLL must be used in AGG_KEYS");
+            throw new AnalysisException("HLL_UNION must be used in AGG_KEYS");
         }
 
         if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
