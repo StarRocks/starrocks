@@ -1427,6 +1427,11 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean use_staros = false;
+    @ConfField
+    public static String starmanager_address = "127.0.0.1:6090";
+    @ConfField
+    public static boolean integrate_staros = false;
+
     /**
      * default bucket number when create OLAP table without buckets info
      */
