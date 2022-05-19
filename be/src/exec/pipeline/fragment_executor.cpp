@@ -306,15 +306,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
-                auto* source_operator = driver->source_operator();
-                if (_wg != nullptr) {
-                    // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    source_operator->set_workgroup(_wg);
-                } else {
-                    if (dynamic_cast<ConnectorScanOperator*>(source_operator) != nullptr) {
-                        source_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                if (auto* scan_operator = driver->source_scan_operator()) {
+                    if (_wg != nullptr) {
+                        // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
+                        scan_operator->set_workgroup(_wg);
                     } else {
-                        source_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                        } else {
+                            scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        }
                     }
                 }
 

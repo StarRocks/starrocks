@@ -52,11 +52,6 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
-    virtual void set_workgroup(workgroup::WorkGroupPtr wg) {}
-
-    // Some specific source operators need execute i/o tasks in io_threads.
-    virtual void set_io_threads(PriorityThreadPool* io_threads) {}
-
     size_t degree_of_parallelism() const {
         auto* source_op_factory = down_cast<SourceOperatorFactory*>(_factory);
         return source_op_factory->degree_of_parallelism();
@@ -64,7 +59,6 @@ public:
 
 protected:
     MorselQueue* _morsel_queue = nullptr;
-
 };
 
 } // namespace pipeline
