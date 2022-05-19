@@ -147,9 +147,9 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_OVERLAP)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
             if (functionCallExpr.getChildren().size() != 2) {
-                throw new SemanticException("array_overlap only support 2 parameters");
+                throw new SemanticException("arrays_overlap only support 2 parameters");
             }
         }
 
