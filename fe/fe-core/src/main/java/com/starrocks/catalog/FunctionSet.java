@@ -77,7 +77,7 @@ public class FunctionSet {
     public static final String RETENTION = "retention";
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
-    public static final String ARRAY_OVERLAP = "array_overlap";
+    public static final String ARRAYS_OVERLAP = "arrays_overlap";
 
     // Window functions:
     public static final String LEAD = "lead";
