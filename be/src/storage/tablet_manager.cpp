@@ -1383,6 +1383,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (old_tablet_ptr != nullptr) {
         if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
+            // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
+            old_tablet_ptr.reset();
             Status st = delete_shutdown_tablet(tablet_id);
             if (st.ok() || st.is_not_found()) {
                 LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id;
