@@ -21,7 +21,7 @@
 
 # This file used to compile all thrift files.
 BUILD_DIR = ${CURDIR}/../build/
-
+STARROCKS_THIRDPARTY = ${CURDIR}/../../thirdparty
 THRIFT = ${STARROCKS_THIRDPARTY}/installed/bin/thrift
 
 SOURCES = $(shell find ${CURDIR} -name "*.thrift")

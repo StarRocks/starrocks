@@ -23,7 +23,7 @@
 # This file compile all protobuf files.
 
 BUILD_DIR = ${CURDIR}/../build/
-
+STARROCKS_THIRDPARTY = ${CURDIR}/../../thirdparty
 PROTOC = ${STARROCKS_THIRDPARTY}/installed/bin/protoc
 
 SOURCES = $(shell find ${CURDIR} -name "*.proto")
