@@ -38,7 +38,6 @@ import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.alter.MaterializedViewManager;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
@@ -397,7 +396,6 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
-    private MaterializedViewManager materializedViewManager;
 
     private TaskManager taskManager;
 

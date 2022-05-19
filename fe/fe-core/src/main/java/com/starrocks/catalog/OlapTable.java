@@ -158,6 +158,10 @@ public class OlapTable extends Table {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    // not serialized field
+    // record all materialized views based on this OlapTable
+    private Set<Long> relatedMaterializedViews;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -217,6 +221,7 @@ public class OlapTable extends Table {
         this.indexes = indexes;
 
         this.tableProperty = null;
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -1679,6 +1684,20 @@ public class OlapTable extends Table {
             return TStorageFormat.DEFAULT;
         }
         return tableProperty.getStorageFormat();
+    }
+
+    // should call this when create materialized view
+    public void addRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.add(mvId);
+    }
+
+    // should call this when drop materialized view
+    public void removeRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.remove(mvId);
+    }
+
+    public Set<Long> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
     }
 
     @Override

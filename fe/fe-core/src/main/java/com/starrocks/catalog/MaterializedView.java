@@ -11,6 +11,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedView;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -23,6 +25,7 @@ import java.util.Set;
  * meta structure for materialized view
  */
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
     public enum RefreshType {
         SYNC,
@@ -112,7 +115,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private String viewDefineSql;
 
     public MaterializedView() {
-        // for persist
         super(TableType.MATERIALIZED_VIEW);
         this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
         this.tableProperty = null;
@@ -171,6 +173,24 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
         partitionInfo.postDeserialized();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
+            active = false;
+            return;
+        }
+        // register materialized view to base tables
+        for (long tableId : baseTableIds) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
+                LOG.warn("tableId:{} do not exist. set materialized view:{} to invalid", tableId, id);
+                active = false;
+                continue;
+            }
+            // now table must be OlapTable
+            // it is checked when creation
+            ((OlapTable) table).addRelatedMaterializedView(id);
+        }
     }
 
     @Override
