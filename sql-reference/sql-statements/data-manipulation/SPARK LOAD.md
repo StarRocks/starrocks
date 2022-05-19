@@ -269,7 +269,7 @@ WHERE k1 > 10
 WITH RESOURCE 'my_spark';
 ```
 
-### 从HIVE外表导入并构建全局字典
+### 从 Hive 外表导入并构建全局字典
 
 从 hive 外部表导入，并将源表中的 uuid 列通过全局字典转化为 bitmap 类型。
 
