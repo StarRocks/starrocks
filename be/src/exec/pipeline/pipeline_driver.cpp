@@ -471,7 +471,7 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     // Update statistics of scan operator
     if (ScanOperator* scan = source_scan_operator()) {
         query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
-        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
     }
 
     // Update cpu cost of this query
