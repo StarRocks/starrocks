@@ -168,25 +168,26 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
         _segment_writer.reset(); // ensure all files are closed
         if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             for (const auto& tmp_segment_file : _tmp_segment_files) {
-                // Even if an error is encountered, these files that have not been cleaned up
-                // will be cleaned up by the GC background. So here we only print the error
-                // message when we encounter an error.
+                // these files will be cleaned up with error handling by the GC background even though
+                // they have not been deleted here after an error occurred, so we just go ahead here and
+                // print the error message only when we encounter an error except Status::NotFound().
+                // The following similar scenarios are same.
                 auto st = _fs->delete_file(tmp_segment_file);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
             }
             _tmp_segment_files.clear();
             for (auto i = 0; i < _num_segment; ++i) {
                 auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-                // Even if an error is encountered, these files that have not been cleaned up
-                // will be cleaned up by the GC background. So here we only print the error
-                // message when we encounter an error.
                 auto st = _fs->delete_file(path);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << path << ", " << st.to_string();
             }
             for (auto i = 0; i < _num_delfile; ++i) {
                 auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
                 auto st = _fs->delete_file(path);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << path << ", " << st.to_string();
             }
             //// only deleting segment files may not delete all delete files or temporary files
             //// during final merge, should iterate directory and delete all files with rowset_id prefix
@@ -211,11 +212,9 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
         } else {
             for (int i = 0; i < _num_segment; ++i) {
                 auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-                // Even if an error is encountered, these files that have not been cleaned up
-                // will be cleaned up by the GC background. So here we only print the error
-                // message when we encounter an error.
                 auto st = _fs->delete_file(path);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
@@ -526,11 +525,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
               << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
 
     for (const auto& tmp_segment_file : _tmp_segment_files) {
-        // Even if an error is encountered, these files that have not been cleaned up
-        // will be cleaned up by the GC background. So here we only print the error
-        // message when we encounter an error.
         auto st = _fs->delete_file(tmp_segment_file);
-        RETURN_IF_ERROR_WITH_WARN(st, "Fail to delete segment temp file");
+        LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                << "Fail to delete segment temp file=" << tmp_segment_file << ", " << st.to_string();
     }
     _tmp_segment_files.clear();
 
@@ -584,11 +581,9 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
 
         for (int i = 0; i < _num_segment; ++i) {
             auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
-            // Even if an error is encountered, these files that have not been cleaned up
-            // will be cleaned up by the GC background. So here we only print the error
-            // message when we encounter an error.
             auto st = _fs->delete_file(path);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
+            LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                    << "Fail to delete file=" << path << ", " << st.to_string();
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);
