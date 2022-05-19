@@ -117,4 +117,10 @@ public class ShowLoadStmtTest {
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE \'abc\' LIMIT 10", stmt.toString());
     }
+
+    @Test 
+    public void testGetRedirectStatus() {
+        ShowLoadStmt loadStmt = new ShowLoadStmt(null, null, null, null);
+        Assert.assertTrue(loadStmt.getRedirectStatus().equals(RedirectStatus.FORWARD_WITH_SYNC));
+    }
 }
