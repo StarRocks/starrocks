@@ -47,6 +47,18 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
+    virtual int64_t get_last_scan_rows_num() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
+    virtual int64_t get_last_scan_bytes() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -94,6 +106,8 @@ private:
     std::weak_ptr<QueryContext> _query_ctx;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    int64_t _last_scan_rows_num = 0;
+    int64_t _last_scan_bytes = 0;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

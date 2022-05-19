@@ -48,8 +48,6 @@ Status Operator::prepare(RuntimeState* state) {
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
 
-    _total_cost_cpu_time_ns_counter = ADD_TIMER(_common_metrics, "OperatorTotalCostCpuTime");
-
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
