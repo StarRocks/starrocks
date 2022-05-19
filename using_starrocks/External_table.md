@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、ElasticSearch、Hive、StarRocks以及Apache Iceberg。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、Elasticsearch、Hive、StarRocks、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -44,9 +44,9 @@ PROPERTIES
 
 <br/>
 
-## ElasticSearch外部表
+## Elasticsearch 外部表
 
-StarRocks与ElasticSearch都是目前流行的分析系统，StarRocks强于大规模分布式计算，ElasticSearch擅长全文检索。StarRocks支持ElasticSearch访问的目的，就在于将这两种能力结合，提供更完善的一个OLAP解决方案。
+StarRocks 与 Elasticsearch 都是目前流行的分析系统，StarRocks 强于大规模分布式计算，Elasticsearch 擅长全文检索。StarRocks 支持 Elasticsearch 访问的目的，就在于将这两种能力结合，提供更完善的一个 OLAP 解决方案。
 
 ### 建表示例
 
@@ -84,7 +84,7 @@ PROPERTIES (
 
 ### 谓词下推
 
-StarRocks支持对ElasticSearch表进行谓词下推，把过滤条件推给ElasticSearch进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
+StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 Elasticsearch 进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
@@ -340,7 +340,68 @@ select count(*) from profile_wos_p7;
 
 1.19版本开始，StarRocks支持将数据通过外表方式写入另一个StarRocks集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源StarRocks集群上创建一个Schema信息一致的外表，并在属性中指定目标集群和表的信息。
 
-通过insert into 写入数据至StarRocks外表,可以实现如下目标:
+自动增量更新元数据缓存主要是通过定期消费 Hive Metastore 的 event 来实现，新增分区以及分区新增数据无需通过手动执行 refresh 来更新。用户需要在 Hive Metastore 端开启元数据 Event 机制。相比 Loading Cache 的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache 的自动刷新机制将不再生效。
+
+* Hive Metastore 开启 event 机制
+
+   用户需要在$HiveMetastore/conf/hive-site.xml 中添加如下配置，并重启 Hive Metastore. 以下配置为 Hive Metastore 3.1.2 版本的配置，用户可以将以下配置先拷贝到 hive-site.xml 中进行验证，因为在 Hive Metastore 中配置不存在的参数只会提示 WARN 信息，不会抛出任何异常。
+
+~~~xml
+<property>
+    <name>hive.metastore.event.db.notification.api.auth</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.notifications.add.thrift.objects</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.metastore.alter.notifications.basic</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.dml.events</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.metastore.transactional.event.listeners</name>
+    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
+  </property>
+  <property>
+    <name>hive.metastore.event.db.listener.timetolive</name>
+    <value>172800s</value>
+  </property>
+  <property>
+    <name>hive.metastore.server.max.message.size</name>
+    <value>858993459</value>
+  </property>
+~~~
+
+* StarRocks 开启自动增量元数据同步
+
+    用户需要在$FE_HOME/conf/fe.conf 中添加如下配置并重启 FE.
+    `enable_hms_events_incremental_sync=true`
+    自动增量元数据同步相关配置如下，如无特殊需求，无需修改。
+
+   | 参数值                             | 说明                                      | 默认值 |
+   | --- | --- | ---|
+   | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能            | false |
+   | hms_events_polling_interval_ms     | StarRocks 拉取 Hive Metastore Event 事件间隔 | 5 秒 |
+   | hms_events_batch_size_per_rpc      | StarRocks 每次拉取 Event 事件的最大数量      | 500 |
+   | enable_hms_parallel_process_evens  | 对接收的 Events 是否并行处理                | true |
+   | hms_process_events_parallel_num    | 处理 Events 事件的并发数                    | 4 |
+
+* 注意事项
+  * 不同版本 Hive Metastore 的 Events 事件可能不同，且上述开启 HiveMetastore Event 机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启 Hive Metastore Event 机制的版本有 2.X 和 3.X。用户可以在 FE 日志中搜索 "event id" 来验证 event 是否开启成功，如果没有开启成功，event id 始终保持为 0。如果无法判断是否成功开启 Event 机制，请在 StarRocks 用户交流群中联系值班同学进行排查。
+  * 当前 Hive 元数据缓存模式为懒加载，即：如果 Hive 新增了分区，StarRocks 只会将新增分区的 partition key 进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行 refresh 分区操作时，该分区的文件信息才会被加载。StarRocks 首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到 StarRocks 中。
+  * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
+  * 当前自动更新不支持 add/drop column 等 schema change 操作，Hive 表结构如有更改，需要重新创建 Hive 外表。Hive 外表支持 Schema change 将会在近期推出，敬请期待。
+
+## StarRocks 外部表
+
+1.19 版本开始，StarRocks 支持将数据通过外表方式写入另一个 StarRocks 集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源 StarRocks 集群上创建一个 Schema 信息一致的外表，并在属性中指定目标集群和表的信息。
+
+通过 insert into 写入数据至 StarRocks 外表, 可以实现如下目标:
 
 * 集群间的数据同步
 * 在外表集群计算结果写入目标表集群，并在目标表集群提供查询服务，实现读写分离

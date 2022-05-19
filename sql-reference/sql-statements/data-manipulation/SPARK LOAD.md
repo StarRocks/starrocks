@@ -1,6 +1,6 @@
 # SPARK LOAD
 
-## description
+## 功能
 
 Spark load 通过外部的 Spark 资源实现对导入数据的预处理，提高 StarRocks 大数据量的导入性能并且节省 StarRocks 集群的计算资源。主要用于初次迁移，大数据量导入 StarRocks 的场景。
 
@@ -140,133 +140,147 @@ timezone:         指定某些受时区影响的函数的时区，如 strftime/a
 
 6.导入数据格式样例
 
-整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234
-浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
-日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12:34:03。
-（注：如果是其他日期格式，可以在导入命令中，使用 strftime 或者 time_format 函数进行转换）
-字符串类（CHAR/VARCHAR）："I am a student", "a"
-NULL值：\N
+```plain text
+1.整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234。
 
-## example
+2.浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
 
-1. 从 HDFS 导入一批数据，指定超时时间和过滤比例。使用名为 my_spark 的 spark 资源。
+3.日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12: 34: 03。（注：如果是其他日期格式，可以在导入命令中，使用 strftime 或者 time_format 函数进行转换）
 
-    ```sql
-    LOAD LABEL example_db.label1
-    (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-    INTO TABLE `my_table`
-    )
-    WITH RESOURCE 'my_spark'
-    PROPERTIES
-    (
-        "timeout" = "3600",
-        "max_filter_ratio" = "0.1"
-    );
-    ```
+4.字符串类（CHAR/VARCHAR）："I am a student", "a"
+NULL 值：\N
+```
 
-    其中 hdfs_host 为 namenode 的 host，hdfs_port 为 fs.defaultFS 端口（默认9000）
+## 示例
 
-2. 从 HDFS 导入一批"负"数据，指定分隔符为逗号，使用通配符*指定目录下的所有文件，并指定 spark 资源的临时参数。
+### 从HDFS导入数据
 
-    ```sql
-    LOAD LABEL example_db.label3
-    (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
-    NEGATIVE
-    INTO TABLE `my_table`
-    COLUMNS TERMINATED BY ","
-    )
-    WITH RESOURCE 'my_spark'
-    (
-        "spark.executor.memory" = "3g",
-        "broker.username" = "hdfs_user",
-        "broker.password" = "hdfs_passwd"
-    );
-    ```
+从 HDFS 导入一批数据，指定超时时间和过滤比例。使用名为 my_spark 的 spark 资源。
 
-3. 从 HDFS 导入一批数据，指定分区, 并对导入文件的列做一些转化，如下：
+```sql
+LOAD LABEL example_db.label1
+(
+DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+INTO TABLE `my_table`
+)
+WITH RESOURCE 'my_spark'
+PROPERTIES
+(
+    "timeout" = "3600",
+    "max_filter_ratio" = "0.1"
+);
+```
 
-    ```plain text
-    表结构为：
-    k1 varchar(20)
-    k2 int
+其中 hdfs_host 为 namenode 的 host，hdfs_port 为 fs.defaultFS 端口（默认 9000）
 
-    假设数据文件只有一行数据：
+### 从HDFS导入"负"数据
 
-    Adele,1,1
+从 HDFS 导入一批 "负" 数据，指定分隔符为逗号，使用通配符*指定目录下的所有文件，并指定 spark 资源的临时参数。"负" 数据详细含义见上文语法参数介绍部分。
 
-    数据文件中各列，对应导入语句中指定的各列：
-    k1,tmp_k2,tmp_k3
+```sql
+LOAD LABEL example_db.label3
+(
+DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
+NEGATIVE
+INTO TABLE `my_table`
+COLUMNS TERMINATED BY ","
+)
+WITH RESOURCE 'my_spark'
+(
+    "spark.executor.memory" = "3g",
+    "broker.username" = "hdfs_user",
+    "broker.password" = "hdfs_passwd"
+);
+```
 
-    转换如下：
+### 从HDFS导入数据到指定分区并进行列转换
 
-    1. k1: 不变换
-    2. k2：是 tmp_k2 和 tmp_k3 数据之和
+从 HDFS 导入一批数据，指定分区, 并对导入文件的列做一些转化，如下：
 
-    LOAD LABEL example_db.label6
-    (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-    INTO TABLE `my_table`
-    PARTITION (p1, p2)
-    COLUMNS TERMINATED BY ","
-    (k1, tmp_k2, tmp_k3)
-    SET (
-    k2 = tmp_k2 + tmp_k3
-    )
-    )
-    WITH RESOURCE 'my_spark';
-    ```
+```plain text
+表结构为：
+k1 varchar(20)
+k2 int
 
-4. 提取文件路径中的分区字段
+假设数据文件只有一行数据：
 
-    如果需要，则会根据表中定义的字段类型解析文件路径中的分区字段（partitioned fields），类似Spark中Partition Discovery的功能
+Adele,1,1
 
-    ```sql
-    LOAD LABEL example_db.label10
-    (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
-    INTO TABLE `my_table`
-    (k1, k2, k3)
-    COLUMNS FROM PATH AS (city, utc_date)
-    SET (uniq_id = md5sum(k1, city))
-    )
-    WITH RESOURCE 'my_spark';
-    ```
+数据文件中各列，对应导入语句中指定的各列：
+k1,tmp_k2,tmp_k3
 
-    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing目录下包括如下文件：
+转换如下：
 
-    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+1. k1: 不变换
+2. k2：是 tmp_k2 和 tmp_k3 数据之和
 
-    则提取文件路径的中的city和utc_date字段
+LOAD LABEL example_db.label6
+(
+DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+INTO TABLE `my_table`
+PARTITION (p1, p2)
+COLUMNS TERMINATED BY ","
+(k1, tmp_k2, tmp_k3)
+SET (
+k2 = tmp_k2 + tmp_k3
+)
+)
+WITH RESOURCE 'my_spark';
+```
 
-5. 对待导入数据进行过滤，k1 值大于 10 的列才能被导入。
+### 提取文件路径中的分区字段
 
-    ```sql
-    LOAD LABEL example_db.label10
-    (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-    INTO TABLE `my_table`
-    WHERE k1 > 10
-    )
-    WITH RESOURCE 'my_spark';
-    ```
+如果需要，则会根据表中定义的字段类型解析文件路径中的分区字段（partitioned fields），类似 Spark 中 Partition Discovery 的功能
 
-6. 从 hive 外部表导入，并将源表中的 uuid 列通过全局字典转化为 bitmap 类型。
+```sql
+LOAD LABEL example_db.label10
+(
+DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
+INTO TABLE `my_table`
+(k1, k2, k3)
+COLUMNS FROM PATH AS (city, utc_date)
+SET (uniq_id = md5sum(k1, city))
+)
+WITH RESOURCE 'my_spark';
+```
 
-    ```sql
-    LOAD LABEL db1.label1
-    (
-    DATA FROM TABLE hive_t1
-    INTO TABLE tbl1
-    SET
-    (
-    uuid=bitmap_dict(uuid)
-    )
-    )
-    WITH RESOURCE 'my_spark';
-    ```
+`hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing` 目录下包括如下文件：
 
-## keyword
+`[hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing/utc_date = 2019-06-26/0000.csv, hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing/utc_date = 2019-06-26/0001.csv, ...]`
 
-SPARK,LOAD
+则提取文件路径的中的 `city` 和 `utc_date` 字段。
+
+### 对导入数据进行过滤
+
+对待导入数据进行过滤，k1 值大于 10 的列才能被导入。
+
+```sql
+LOAD LABEL example_db.label10
+(
+DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+INTO TABLE `my_table`
+WHERE k1 > 10
+)
+WITH RESOURCE 'my_spark';
+```
+
+### 从 Hive 外表导入并构建全局字典
+
+从 hive 外部表导入，并将源表中的 uuid 列通过全局字典转化为 bitmap 类型。
+
+```sql
+LOAD LABEL db1.label1
+(
+DATA FROM TABLE hive_t1
+INTO TABLE tbl1
+SET
+(
+uuid=bitmap_dict(uuid)
+)
+)
+WITH RESOURCE 'my_spark';
+```
+
+## 关键字(keywords)
+
+SPARK, LOAD

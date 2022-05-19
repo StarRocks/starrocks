@@ -33,25 +33,15 @@
 |master_sync_policy|SYNC|Master日志刷盘的方式，默认是SYNC|
 |replica_sync_policy|SYNC|Follower日志刷盘的方式，默认是SYNC|
 |replica_ack_policy|SIMPLE_MAJORITY|日志被认为有效的形式，默认是多数派返回确认消息，就认为生效|
-|bdbje_heartbeat_timeout_second|30|BDBJE心跳超时的间隔|
-|bdbje_lock_timeout_second|1|BDBJE锁超时的间隔|
-|txn_rollback_limit|100|事务回滚的上限|
-|frontend_address|0.0.0.0|FE IP地址|
-|priority_networks|空字符串|以CIDR形式10.10.10.0/24指定FE IP地址，适用于机器有多个IP，需要特殊指定的形式|
-|metadata_failure_recovery|false|强制重置FE的元数据，慎用|
-|ignore_meta_check|false|忽略元数据落后的情形|
-|max_bdbje_clock_delta_ms|5000|Master与Non-master最大容忍的时钟偏移|
-|http_port|8030|Http Server的端口|
-|http_backlog_num|1024|HttpServer port backlog|
-|thrift_backlog_num|1024|ThriftServer port backlog|
-|rpc_port|9020|FE 上的 thrift server 端口|
-|query_port|9030|FE 上的 mysql server 端口|
-|mysql_service_nio_enabled|false|FE 连接服务的nio是否开启|
-|mysql_service_io_threads_num|4|FE 连接服务线程数|
-|auth_token|空字符串|Token是否自动开启|
-|tablet_create_timeout_second|1|建表超时时长|
-|max_create_table_timeout_second|60|建表最大超时时间|
-|publish_version_timeout_second|30|版本生效的超时时间|
+|meta_delay_toleration_second|300|非 leader 节点容忍的最大元数据落后的时间|
+|cluster_id|-1|相同 cluster_id 的 FE/BE 节点属于同一个集群。等于-1 则在 leader FE 第一次启动时随机生成一个|
+
+* **Query Engine**
+
+|配置项|默认值|作用|
+|---|---|---|
+|disable_colocate_join|FALSE|FALSE 表示开启 Colocate Join，TRUE 表示不开启 Colocate Join|
+|enable_udf|FALSE|是否开启 UDF|
 |publish_version_interval_ms|10|发送版本生效任务的时间间隔|
 |load_straggler_wait_second|300|控制BE副本最大容忍的导入落后时长，超过这个时长就进行克隆|
 |max_layout_length_per_row|2147483647|单行最大的长度，Integer.MAX_VALUE|
@@ -89,18 +79,15 @@
 |expr_children_limit|10000|查询中in中可以涉及的数目|
 |expr_depth_limit|3000|查询嵌套的层次|
 |locale|zh_CN.UTF-8|字符集|
-|remote_fragment_exec_timeout_ms|5000|FE发送查询规划的RPC超时时间，不涉及任务执行|
-|max_query_retry_time|2|FE上查询重试的次数|
-|catalog_try_lock_timeout_ms|5000|Catalog Lock获取的超时时长|
-|disable_load_job|false|不接收任何导入任务，集群出问题时的止损措施|
-|es_state_sync_interval_second|10|FE获取Elastic Search Index的时间|
-|tablet_repair_delay_factor_second|60|FE控制进行副本修复的间隔|
-|max_routine_load_job_num|100|最大的routine load作业数|
-|max_routine_load_task_concurrent_num|5|每个routine load作业最大并发执行的task数|
-|max_routine_load_task_num_per_be|5|每个be最大并发执行的routine load task数，需要小于等于be的配置routine_load_thread_pool_size|
-|max_routine_load_batch_size|524288000|每个routine load task导入的最大数据量，默认500M|
-|routine_load_task_consume_second|3|每个routine load task消费数据的最大时间，默认为3s|
-|routine_load_task_timeout_second|15|每个routine load task超时时间，默认15s|
+|hive_meta_load_concurrency|4|Hive 元数据并发线程数。|
+|hive_meta_cache_refresh_interval_s|4096|定时刷新 Hive 外表元数据缓存的周期。|
+|hive_meta_cache_ttl_s|3600 *2|HIve 外表元数据缓存失效时间，默认 2h。|
+|hive_meta_store_timeout_s|3600 *24|连接 Hive Metastore 的超时时间，默认 24h。|
+|es_state_sync_interval_second|10|FE 获取 Elasticsearch Index 的时间|
+|enable_auth_check|TRUE|是否开启鉴权。|
+|auth_token|空字符串|为空则在 Master FE 第一次启动时随机生成一个。|
+|enable_metric_calculator|TRUE|是否开启定期收集 metrics。|
+|backup_plugin_path|/tools/trans_file_tool/trans_files.sh|Deprecated。Backup 和 Restore 的插件路径。|
 
 ## BE 配置项
 
