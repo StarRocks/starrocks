@@ -187,6 +187,48 @@ std::string TabletColumn::get_string_by_aggregation_type(FieldAggregationMethod 
     return "";
 }
 
+size_t TabletColumn::estimate_field_size(size_t variable_length) const {
+    switch (_type) {
+    case OLAP_FIELD_TYPE_UNKNOWN:
+    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
+    case OLAP_FIELD_TYPE_STRUCT:
+    case OLAP_FIELD_TYPE_MAP:
+    case OLAP_FIELD_TYPE_NONE:
+    case OLAP_FIELD_TYPE_MAX_VALUE:
+    case OLAP_FIELD_TYPE_BOOL:
+    case OLAP_FIELD_TYPE_TINYINT:
+    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+        return 1;
+    case OLAP_FIELD_TYPE_SMALLINT:
+    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+        return 2;
+    case OLAP_FIELD_TYPE_DATE:
+        return 3;
+    case OLAP_FIELD_TYPE_INT:
+    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case OLAP_FIELD_TYPE_FLOAT:
+    case OLAP_FIELD_TYPE_DATE_V2:
+    case OLAP_FIELD_TYPE_DECIMAL32:
+        return 4;
+    case OLAP_FIELD_TYPE_BIGINT:
+    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case OLAP_FIELD_TYPE_DOUBLE:
+    case OLAP_FIELD_TYPE_DATETIME:
+    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case OLAP_FIELD_TYPE_DECIMAL64:
+        return 8;
+    case OLAP_FIELD_TYPE_DECIMAL:
+        return 12;
+    case OLAP_FIELD_TYPE_LARGEINT:
+    case OLAP_FIELD_TYPE_DECIMAL_V2:
+    case OLAP_FIELD_TYPE_DECIMAL128:
+        return 16;
+    default:
+        // CHAR, VARCHAR, HLL, PERCENTILE, JSON, ARRAY, OBJECT
+        return variable_length;
+    }
+}
+
 uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_length) {
     switch (type) {
     case OLAP_FIELD_TYPE_UNKNOWN:
@@ -512,6 +554,14 @@ std::unique_ptr<TabletSchema> TabletSchema::convert_to_format(DataFormatVersion 
     }
     auto schema = std::make_unique<TabletSchema>(schema_pb);
     return schema;
+}
+
+size_t TabletSchema::estimate_row_size(size_t variable_len) const {
+    size_t size = 0;
+    for (const auto& col : _cols) {
+        size += col.estimate_field_size(variable_len);
+    }
+    return size;
 }
 
 size_t TabletSchema::row_size() const {
