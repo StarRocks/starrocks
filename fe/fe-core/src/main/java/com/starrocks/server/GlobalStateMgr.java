@@ -553,7 +553,6 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
-        this.materializedViewManager = new MaterializedViewManager();
     }
 
     public static void destroyCheckpoint() {
@@ -704,10 +703,6 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
-    }
-
-    public MaterializedViewManager getMaterializedViewManager() {
-        return materializedViewManager;
     }
 
     // Use tryLock to avoid potential dead lock
