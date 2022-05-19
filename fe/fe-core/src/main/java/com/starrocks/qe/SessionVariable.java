@@ -204,6 +204,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
+    public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -218,7 +220,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
-    @VariableMgr.VarAttr(name = ENABLE_SPILLING)
+    @Deprecated
+    @VariableMgr.VarAttr(name = ENABLE_SPILLING, flag = VariableMgr.INVISIBLE)
     public boolean enableSpilling = false;
 
     // query timeout in second.
@@ -233,7 +236,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = IS_REPORT_SUCCESS)
     private boolean isReportSucc = false;
     // only for Aliyun DTS, useless.
-    @VariableMgr.VarAttr(name = PROFILING)
+    @Deprecated
+    @VariableMgr.VarAttr(name = PROFILING, flag = VariableMgr.INVISIBLE)
     private boolean openProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
@@ -319,7 +323,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int netBufferLength = 16384;
 
     // if true, need report to coordinator when plan fragment execute successfully.
-    @VariableMgr.VarAttr(name = CODEGEN_LEVEL)
+    @Deprecated
+    @VariableMgr.VarAttr(name = CODEGEN_LEVEL, flag = VariableMgr.INVISIBLE)
     private int codegenLevel = 0;
 
     @VariableMgr.VarAttr(name = BATCH_SIZE, flag = VariableMgr.INVISIBLE)
@@ -411,16 +416,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_DP_JOIN_REORDER)
+    @VariableMgr.VarAttr(name = CBO_ENABLE_DP_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableDPJoinReorder = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_DP)
     private long cboMaxReorderNodeUseDP = 10;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER)
+    @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN, flag = VariableMgr.INVISIBLE)
     private boolean enableReplicationJoin = true;
 
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
@@ -525,6 +530,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
+
+    @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
+    private int statisticCollectParallel = 1;
+
+    public int getStatisticCollectParallel() {
+        return statisticCollectParallel;
+    }
+
+    public void setStatisticCollectParallel(int statisticCollectParallel) {
+        this.statisticCollectParallel = statisticCollectParallel;
+    }
 
     public long getRuntimeFilterScanWaitTime() {
         return runtimeFilterScanWaitTime;
@@ -634,10 +650,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isDisableColocateJoin() {
         return disableColocateJoin;
-    }
-
-    public boolean isDisableBucketJoin() {
-        return disableBucketJoin;
     }
 
     public int getParallelExecInstanceNum() {

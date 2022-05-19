@@ -31,8 +31,12 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setReportSuccess(false);
-        // Always use 1 parallel to avoid affect normal query
-        context.getSessionVariable().setParallelExecInstanceNum(1);
+        int parallel = context.getSessionVariable().getStatisticCollectParallel();
+        if (null != ConnectContext.get()) {
+            parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallel();
+        }
+        context.getSessionVariable().setParallelExecInstanceNum(parallel);
+        context.getSessionVariable().setPipelineDop(1);
         // TODO(kks): remove this if pipeline support STATISTIC result sink type
         context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
@@ -45,15 +49,6 @@ public class StatisticUtils {
         context.setThreadLocalInfo();
         context.setStartTime();
         return context;
-    }
-
-    public static Table getStatisticsTable() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
-        if (db != null) {
-            return db.getTable(Constants.StatisticsTableName);
-        } else {
-            return null;
-        }
     }
 
     // check database in black list
