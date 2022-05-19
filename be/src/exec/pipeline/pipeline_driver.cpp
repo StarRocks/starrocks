@@ -453,9 +453,9 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     driver_acct().update_last_time_spent(time_spent);
 
     // Update statistics of scan operator
-    if (SourceOperator* source = source_operator()) {
-        query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
-        query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
+    if (ScanOperator* scan = source_scan_operator()) {
+        query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
     }
 }
 
