@@ -219,6 +219,9 @@ Status MemTable::flush() {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
+    if (_result_chunk->reach_capacity_limit()) {
+        return Status::InternalError("memtable size exceed the limit");
+    }
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
