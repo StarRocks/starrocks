@@ -513,19 +513,19 @@ insert into external_t select * from other_table;
 
 其中：
 
-* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表
-* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址
-* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值
-* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名
-* **password**：该属性描述目标表所属 StarRocks 集群的访问密码
-* **database**：该属性描述目标表所属数据库名称
-* **table**：该属性描述目标表名称
+* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表.
+* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址.
+* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值.
+* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名.
+* **password**：该属性描述目标表所属 StarRocks 集群的访问密码.
+* **database**：该属性描述目标表所属数据库名称.
+* **table**：该属性描述目标表名称.
 
 目前 StarRocks 外表使用上有以下限制：
 
-* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL
-* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致
-* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上
+* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL.
+* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致.
+* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上.
 
 ## Apache Iceberg 外表
 
