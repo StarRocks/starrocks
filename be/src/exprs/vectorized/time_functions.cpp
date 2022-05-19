@@ -1807,6 +1807,19 @@ ColumnPtr TimeFunctions::date_trunc(FunctionContext* context, const Columns& col
     return ctc->function(context, columns);
 }
 
+ColumnPtr TimeFunctions::yesterday(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->impl()->state();
+    DateTimeValue dtv;
+    if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
+        DateValue dv;
+        dv.from_date(dtv.year(), dtv.month(), dtv.day());
+        dv = dv.add<TimeUnit::DAY>(-1);
+        return ColumnHelper::create_const_column<TYPE_DATE>(dv, 1);
+    } else {
+        return ColumnHelper::create_const_null_column(1);
+    }
+}
+
 Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {

@@ -2608,5 +2608,16 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         }
     }
 }
+
+TEST_F(TimeFunctionsTest, yesterday) {
+    ColumnPtr now = TimeFunctions::now(_utils->get_fn_ctx(), Columns());
+    ColumnPtr cur_date = TimeFunctions::yesterday(_utils->get_fn_ctx(), Columns());
+    ASSERT_TRUE(cur_date->is_constant());
+    ASSERT_FALSE(cur_date->is_date());
+    TimestampValue ts = ColumnHelper::as_column<ConstColumn>(now)->get(0).get_timestamp();
+    auto v = ColumnHelper::as_column<ConstColumn>(cur_date);
+    ASSERT_EQ((DateValue)ts, v->get(0).get_date().add<DAY>(-1));
+}
+
 } // namespace vectorized
 } // namespace starrocks

@@ -336,6 +336,7 @@ vectorized_functions = [
     # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    [50251, 'yesterday', 'DATE', [], 'TimeFunctions::yesterday'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],

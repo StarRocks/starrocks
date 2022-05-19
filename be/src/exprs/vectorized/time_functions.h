@@ -539,6 +539,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    /**
+     * return yesterday’s date at one of the moments of request execution.
+     * @param: []
+     * @paramType columns: []
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(yesterday);
+
 private:
     // internal approach to process string content, based on any string format.
     static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
