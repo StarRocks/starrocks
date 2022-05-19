@@ -591,11 +591,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // check can not generate 1 phase aggregation if fe do not get real table row count from be.
         String sql = "select count(1) from orders group by O_CUSTKEY, O_ORDERDATE";
         String plan = getFragmentPlan(sql);
-        // check has 2 phase aggregation
+        // check has 3 phase aggregation
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: O_ORDERKEY, 2: O_CUSTKEY, 5: O_ORDERDATE"));
     }
 
     @Test
@@ -606,7 +607,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct v1) from t0 group by v2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: v1, 2: v2"));
     }
 
     @Test
