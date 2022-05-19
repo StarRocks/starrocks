@@ -1360,9 +1360,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
         String catalog = null;
-        if (context.db != null) {
-            QualifiedName db = getQualifiedName(context.db);
-            catalog = db.toString();
+        if (context.catalog != null) {
+            QualifiedName dbName = getQualifiedName(context.catalog);
+            catalog = dbName.toString();
         }
 
         if (context.pattern != null) {
