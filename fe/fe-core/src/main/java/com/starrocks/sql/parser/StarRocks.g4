@@ -844,7 +844,7 @@ unitIdentifier
 
 type
     : baseType
-    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | decimalType
     | arrayType
     ;
 
@@ -879,7 +879,7 @@ baseType
     ;
 
 decimalType
-    : DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128) ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
 qualifiedName

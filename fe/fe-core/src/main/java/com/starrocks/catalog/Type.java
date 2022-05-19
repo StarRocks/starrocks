@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
  * Mostly contains static type instances and helper methods for convenience, as well
  * as abstract methods that subclasses must implement.
  */
-public abstract class Type implements Cloneable {
+public abstract class Type implements Cloneable, ParseNode {
     private static final Logger LOG = LogManager.getLogger(Type.class);
 
     // Maximum nesting depth of a type. This limit my be changed after running more

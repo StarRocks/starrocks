@@ -182,6 +182,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Type.DEFAULT_STRING;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
@@ -322,7 +323,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ColumnDef> columnDefList = new ArrayList<>();
         for (StarRocksParser.ColumnDescContext context : columnDesc) {
             String columnName = ((Identifier) visit(context.identifier())).getValue();
-            TypeDef typeDef = new TypeDef(getType(context.type()));
+            TypeDef typeDef = new TypeDef((Type) visit(context.type()));
             String charsetName = context.charsetName() != null ?
                     ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
             boolean isKey = context.KEY() != null;
@@ -1927,7 +1928,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
-        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+        return new CastExpr(new TypeDef((Type) visit(context.type())), (Expr) visit(context.expression()));
     }
 
     @Override
@@ -2134,7 +2135,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitArrayConstructor(StarRocksParser.ArrayConstructorContext context) {
         if (context.arrayType() != null) {
             return new ArrayExpr(
-                    new ArrayType(getType(context.arrayType().type())),
+                    new ArrayType((Type) visit(context.arrayType().type())),
                     visit(context.expression(), Expr.class));
         }
 
@@ -2577,27 +2578,90 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private Type getType(StarRocksParser.TypeContext type) {
-        Integer length = null;
-        Integer precision = null;
-        Integer scale = null;
-
-        if (type.baseType() != null) {
-            if (type.baseType().typeParameter() != null) {
-                length = Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString());
-            }
-            return ScalarType.createTypeFromParser(type.baseType().getText(), length, precision, scale);
-        } else if (type.decimalType() != null) {
-            if (type.precision != null) {
-                precision = Integer.parseInt(type.precision.getText());
-                scale = type.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(type.scale.getText());
-            }
-            return ScalarType.createTypeFromParser(type.decimalType().getText(), length, precision, scale);
-        } else if (type.arrayType() != null) {
-            StarRocksParser.ArrayTypeContext arrayTypeContext = type.arrayType();
-            return new ArrayType(getType(arrayTypeContext.type()));
+    @Override
+    public ParseNode visitType(StarRocksParser.TypeContext context) {
+        if (context.baseType() != null) {
+            return visit(context.baseType());
+        } else if (context.decimalType() != null) {
+            return visit(context.decimalType());
+        } else if (context.arrayType() != null) {
+            return visit(context.arrayType());
         }
+        throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
+    }
 
-        throw new IllegalArgumentException("Unsupported type specification: " + type.getText());
+    @Override
+    public ParseNode visitBaseType(StarRocksParser.BaseTypeContext context) {
+        ScalarType scalarType;
+        if (context.BOOLEAN() != null) {
+            scalarType = ScalarType.BOOLEAN;
+        } else if (context.TINYINT() != null) {
+            scalarType = ScalarType.TINYINT;
+        } else if (context.SMALLINT() != null) {
+            scalarType = ScalarType.SMALLINT;
+        } else if (context.INT() != null) {
+            scalarType = ScalarType.INT;
+        } else if (context.INTEGER() != null) {
+            scalarType = ScalarType.INT;
+        } else if (context.BIGINT() != null) {
+            scalarType = ScalarType.BIGINT;
+        } else if (context.LARGEINT() != null) {
+            scalarType = ScalarType.LARGEINT;
+        } else if (context.FLOAT() != null) {
+            scalarType = ScalarType.FLOAT;
+        } else if (context.DOUBLE() != null) {
+            scalarType = ScalarType.DOUBLE;
+        } else if (context.DATE() != null) {
+            scalarType = ScalarType.DATE;
+        } else if (context.DATETIME() != null) {
+            scalarType = ScalarType.DATETIME;
+        } else if (context.TIME() != null) {
+            scalarType = ScalarType.TIME;
+        } else if (context.CHAR() != null) {
+            scalarType = ScalarType.CHAR;
+        } else if (context.VARCHAR() != null) {
+            scalarType = ScalarType.VARCHAR;
+        } else if (context.STRING() != null) {
+            scalarType = DEFAULT_STRING;
+        } else if (context.BITMAP() != null) {
+            scalarType = ScalarType.BITMAP;
+        } else if (context.HLL() != null) {
+            scalarType = ScalarType.HLL;
+        } else if (context.PERCENTILE() != null) {
+            scalarType = ScalarType.PERCENTILE;
+        } else if (context.JSON() != null) {
+            scalarType = ScalarType.JSON;
+        } else {
+            throw new IllegalArgumentException("Unsupported type " + context.getText());
+        }
+        scalarType = scalarType.clone();
+        if (context.typeParameter() != null) {
+            int length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
+            scalarType.setLength(length);
+        }
+        return scalarType;
+    }
+
+    @Override
+    public ParseNode visitDecimalType(StarRocksParser.DecimalTypeContext context) {
+        int precision = ScalarType.DEFAULT_PRECISION;
+        int scale = ScalarType.DEFAULT_SCALE;
+        if (context.precision != null) {
+            precision = Integer.parseInt(context.precision.getText());
+            scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
+        }
+        if (context.DECIMAL() != null || context.DECIMAL32() != null || context.DECIMAL64() != null ||
+                context.DECIMAL128() != null) {
+            return ScalarType.createUnifiedDecimalType(precision, scale);
+        } else if (context.DECIMALV2() != null) {
+            return ScalarType.createDecimalV2Type(precision, scale);
+        } else {
+            throw new IllegalArgumentException("Unsupported type " + context.getText());
+        }
+    }
+
+    @Override
+    public ParseNode visitArrayType(StarRocksParser.ArrayTypeContext context) {
+        return new ArrayType((Type) visit(context.type()));
     }
 }
