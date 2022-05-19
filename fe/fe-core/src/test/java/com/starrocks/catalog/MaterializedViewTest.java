@@ -10,7 +10,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TMaterializedView;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -201,8 +200,6 @@ public class MaterializedViewTest {
         Assert.assertEquals(TTableType.MATERIALIZED_VIEW, tableDescriptor.getTableType());
         Assert.assertEquals(1000, tableDescriptor.getId());
         Assert.assertEquals("mv_name", tableDescriptor.getTableName());
-        TMaterializedView tMaterializedView = tableDescriptor.getMaterializedView();
-        Assert.assertTrue(tMaterializedView != null);
     }
 
     @Test
