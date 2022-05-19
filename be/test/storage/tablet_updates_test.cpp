@@ -2351,13 +2351,13 @@ void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_
             keys.push_back(num_keys_per_rowset * i + i);
         }
         auto rs = create_rowset(tablet, keys);
-        ASSERT_TRUE(_tablet->rowset_commit(v, rs).ok());
+        ASSERT_TRUE(tablet->rowset_commit(v, rs).ok());
     };
     for (auto v : versions) {
         add_version(v);
     }
     vector<int64_t> missing_version_ranges;
-    ASSERT_TRUE(_tablet->updates()->get_missing_version_ranges(missing_version_ranges).ok());
+    ASSERT_TRUE(tablet->updates()->get_missing_version_ranges(missing_version_ranges).ok());
     ASSERT_EQ(missing_version_ranges, expected_missing_ranges);
 }
 
@@ -2498,7 +2498,7 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
     ASSERT_EQ(max_version, dest_tablet->updates()->max_version());
 }
 
-TEST_F(TabletUpdatesTest, test_load_snapshot_primary) {
+TEST_F(TabletUpdatesTest, load_snapshot_primary) {
     srand(GetCurrentTimeMicros());
     test_load_snapshot_primary(7, {3, 4, 5});
     test_load_snapshot_primary(7, {3, 5, 7});
