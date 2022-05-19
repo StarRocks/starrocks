@@ -24,6 +24,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 
 import java.util.List;
 
@@ -95,6 +96,8 @@ public interface ConnectorMetadata {
 
     default void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {}
+
+    default void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {}
 
     default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {}
 

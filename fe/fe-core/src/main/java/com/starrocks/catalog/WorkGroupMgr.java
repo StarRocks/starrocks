@@ -19,9 +19,13 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,6 +41,8 @@ import java.util.stream.Collectors;
 
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class WorkGroupMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(WorkGroupMgr.class);
+
     private GlobalStateMgr globalStateMgr;
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
@@ -181,6 +187,21 @@ public class WorkGroupMgr implements Writable {
                 replayAddWorkGroup(workgroup);
             }
         }
+    }
+
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
+    }
+
+    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 
     private void replayAddWorkGroup(WorkGroup workgroup) {

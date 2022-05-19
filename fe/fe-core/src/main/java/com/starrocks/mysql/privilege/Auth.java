@@ -59,7 +59,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -1592,6 +1594,20 @@ public class Auth implements Writable {
             // init root and admin user
             initUser();
         }
+    }
+
+    public long loadAuth(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
+            // CAN NOT use Auth.read(), cause this auth instance is already passed to DomainResolver
+            readFields(dis);
+        }
+        LOG.info("finished replay auth from image");
+        return checksum;
+    }
+
+    public long saveAuth(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 
     @Override

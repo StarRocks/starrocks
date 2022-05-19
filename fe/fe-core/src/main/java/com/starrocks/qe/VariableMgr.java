@@ -519,6 +519,20 @@ public class VariableMgr {
         return rows;
     }
 
+    // global variable persistence
+    public static long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
+            read(in);
+        }
+        LOG.info("finished replay globalVariable from image");
+        return checksum;
+    }
+
+    public static long saveGlobalVariable(DataOutputStream out, long checksum) throws IOException {
+        VariableMgr.write(out);
+        return checksum;
+    }
+
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface VarAttr {
         // Name in show variables and set statement;

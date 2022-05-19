@@ -32,6 +32,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.TimeoutException;
@@ -49,7 +50,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -589,5 +592,18 @@ public class LoadManager implements Writable {
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
             }
         }
+    }
+
+    public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
+            readFields(in);
+        }
+        LOG.info("finished replay loadJobsV2 from image");
+        return checksum;
+    }
+
+    public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
     }
 }
