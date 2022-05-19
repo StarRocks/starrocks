@@ -97,7 +97,7 @@ public class TaskRun {
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            status.setErrorMsg(queryState.getErrorMessage());
+            status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;
             if (queryState.getErrorCode() != null) {
                 errorCode = queryState.getErrorCode().getCode();
