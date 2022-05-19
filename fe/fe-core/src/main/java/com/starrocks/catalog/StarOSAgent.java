@@ -37,7 +37,7 @@ public class StarOSAgent {
     public StarOSAgent() {
         client = new StarClient();
         serviceId = -1;
-        //check if Config.starmanager_address == FE address
+        // check if Config.starmanager_address == FE address
         if (Config.integrate_staros) {
             String[] starMgrAddr = Config.starmgr_address.split(":");
             if (!starMgrAddr[0].equals("127.0.0.1")) {
@@ -45,7 +45,7 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
-        //client.connectServer(Config.starmanager_address);
+        // client.connectServer(Config.starmanager_address);
     }
 
     public List<Long> createShards(int numShards) {
@@ -148,6 +148,7 @@ public class StarOSAgent {
 
          try {
              serviceId = client.bootstrapService("starrocks", serviceName);
+             LOG.info("get serviceId: {} by bootstrapService to strMgr", serviceId);
          } catch (StarClientException e) {
              if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                  LOG.warn(e);
@@ -156,7 +157,6 @@ public class StarOSAgent {
                  getServiceId(String serviceName);
              }
          }
-         LOG.info("get serviceId: {} from strMgr", serviceId);
      }*/
 
     /*
@@ -166,12 +166,12 @@ public class StarOSAgent {
          }
          try {
              ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
+             serviceId = serviceInfo.getServiceId();
          } catch (StarClientException e) {
              Log.warn(e);
              System.exit(-1);
          }
-         serviceId = serviceInfo.getServiceId();
-         LOG.info("get serviceId: {} from strMgr", serviceId);
+         LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
     }*/
 
     // Mock StarClient
@@ -214,12 +214,12 @@ public class StarOSAgent {
             return idToWorker.get(id);
         }
 
-        //register service
+        // register service
         public synchronized void registerService(String serviceTemplateName) {
             LOG.info("service {} registered.", serviceTemplateName);
         }
 
-        //bootstrap service
+        // bootstrap service
         public synchronized long bootstrapService(String serviceTemplateName, String serviceName) {
             long serviceId = 1;
             LOG.info("service {} bootstrapped.", serviceName);
@@ -228,7 +228,7 @@ public class StarOSAgent {
 
         public long getServiceInfo(String serviceName) {
             long serviceId = 1;
-            //get serviceId by client
+            // get serviceId by client
             return serviceId;
         }
     }
