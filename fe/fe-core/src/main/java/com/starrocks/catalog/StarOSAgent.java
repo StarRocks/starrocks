@@ -39,9 +39,9 @@ public class StarOSAgent {
         serviceId = -1;
         //check if Config.starmanager_address == FE address
         if (Config.integrate_staros) {
-            String[] starMgrAddr = Config.starmanager_address.split(":");
+            String[] starMgrAddr = Config.starmgr_address.split(":");
             if (!starMgrAddr[0].equals("127.0.0.1")) {
-                LOG.warn("Config.starmanager_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
+                LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
                 System.exit(-1);
             }
         }
@@ -148,21 +148,21 @@ public class StarOSAgent {
 
          try {
              serviceId = client.bootstrapService("starrocks", serviceName);
-             LOG.info("get serviceId: {} from strMgr", serviceId);
          } catch (StarClientException e) {
              if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                  LOG.warn(e);
                  System.exit(-1);
              } else {
-                 serviceId = client.getServiceInfo(serviceName).getServiceId();
+                 getServiceId(String serviceName);
              }
          }
+         LOG.info("get serviceId: {} from strMgr", serviceId);
      }*/
 
     /*
      public void getServiceId(String serviceName) {
          if (serviceId != -1) {
-             return ;
+             return;
          }
          try {
              ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
@@ -171,6 +171,7 @@ public class StarOSAgent {
              System.exit(-1);
          }
          serviceId = serviceInfo.getServiceId();
+         LOG.info("get serviceId: {} from strMgr", serviceId);
     }*/
 
     // Mock StarClient
