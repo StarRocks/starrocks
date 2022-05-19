@@ -1365,24 +1365,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             catalog = db.toString();
         }
 
-        if (catalog == null) {
-            if (context.pattern != null) {
-                StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-                return new ShowDbStmt(stringLiteral.getValue());
-            } else if (context.expression() != null) {
-                return new ShowDbStmt(null, (Expr) visit(context.expression()));
-            } else {
-                return new ShowDbStmt(null, null, null);
-            }
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowDbStmt(stringLiteral.getValue(), catalog);
+        } else if (context.expression() != null) {
+            return new ShowDbStmt(null, (Expr) visit(context.expression()), catalog);
         } else {
-            if (context.pattern != null) {
-                StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-                return new ShowDbStmt(stringLiteral.getValue(), catalog);
-            } else if (context.expression() != null) {
-                return new ShowDbStmt(null, (Expr) visit(context.expression()), catalog);
-            } else {
-                return new ShowDbStmt(null, null, catalog);
-            }
+            return new ShowDbStmt(null, null, catalog);
         }
     }
 
