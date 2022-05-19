@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -238,5 +239,10 @@ public class ResourceMgr implements Writable {
             }
             return result;
         }
+    }
+
+    public long saveResources(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
     }
 }
