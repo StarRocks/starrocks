@@ -119,4 +119,15 @@ public class SetStmtTest {
         expectedEx.expectMessage("Set statement only support constant expr.");
         var.analyze(analyzer);
     }
+
+    @Test
+    public void setResourceGroup() {
+        SetVar setVar = new SetVar(SetType.DEFAULT, SessionVariable.RESOURCE_GROUP, new StringLiteral("not_exists"));
+        try {
+            setVar.analyze(analyzer);
+            Assert.fail("should fail");
+        } catch (UserException e) {
+            Assert.assertEquals("resource group not exists: not_exists", e.getMessage());
+        }
+    }
 }

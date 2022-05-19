@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -170,6 +171,14 @@ public class SetVar {
                 }
             } catch (NumberFormatException ex) {
                 throw new AnalysisException(SessionVariable.SQL_SELECT_LIMIT + " is not a number");
+            }
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
+            String wgName = getValue().getStringValue();
+            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
+            if (wg == null) {
+                throw new AnalysisException("resource group not exists: " + wgName);
             }
         }
     }
