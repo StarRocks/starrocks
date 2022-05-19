@@ -10,13 +10,9 @@ namespace starrocks {
 
 namespace sdktrace = opentelemetry::sdk::trace;
 namespace trace = opentelemetry::trace;
-const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer =
-        opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
 
 Tracer::~Tracer() {
-    if (_tracer != nullptr) {
-        shutdown();
-    }
+    shutdown();
 }
 
 Tracer& Tracer::Instance() {
@@ -39,6 +35,8 @@ void Tracer::init(const std::string& service_name) {
         const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(
                 new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
         _tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+    } else {
+        _tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
     }
 }
 
@@ -51,9 +49,6 @@ bool Tracer::is_enabled() const {
 }
 
 Span Tracer::start_trace(const std::string& trace_name) {
-    if (!is_enabled()) {
-        return noop_tracer->StartSpan(trace_name);
-    }
     return _tracer->StartSpan(trace_name);
 }
 
@@ -65,9 +60,6 @@ Span Tracer::add_span(const std::string& span_name, const Span& parent_span) {
 Span Tracer::add_span(const std::string& span_name, const SpanContext& parent_ctx) {
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
-    if (!is_enabled()) {
-        return noop_tracer->StartSpan(span_name, span_opts);
-    }
     return _tracer->StartSpan(span_name, span_opts);
 }
 
