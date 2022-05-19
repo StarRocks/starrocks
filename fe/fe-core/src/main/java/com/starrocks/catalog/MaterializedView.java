@@ -150,11 +150,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
-        TMaterializedView tMaterializedView = new TMaterializedView();
-        tMaterializedView.setMvName(getName());
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
                 fullSchema.size(), 0, getName(), "");
-        tTableDescriptor.setMaterializedView(tMaterializedView);
         return tTableDescriptor;
     }
 
