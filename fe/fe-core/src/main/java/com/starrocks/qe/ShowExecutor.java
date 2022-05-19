@@ -33,7 +33,6 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowAnalyzeStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
@@ -130,12 +129,15 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -261,6 +263,8 @@ public class ShowExecutor {
             handleShowWorkGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
+        } else if (stmt instanceof ShowCatalogsStmt) {
+            handleShowCatalogs();
         } else {
             handleEmtpy();
         }
@@ -1547,4 +1551,18 @@ public class ShowExecutor {
         List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
         resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
+
+    private void handleShowCatalogs() {
+        ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
+        rowSet.add(Arrays.asList("default", "default", "internal catalog"));
+        rowSet.sort(new Comparator<List<String>>() {
+            @Override
+            public int compare(List<String> o1, List<String> o2) {
+                return o1.get(0).compareTo(o2.get(0));
+            }
+        });
+        resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
+    }
+
 }

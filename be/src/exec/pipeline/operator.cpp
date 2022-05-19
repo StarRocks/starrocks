@@ -40,7 +40,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = state->instance_mem_tracker();
+    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -90,6 +90,18 @@ std::vector<ExprContext*>& Operator::runtime_in_filters() {
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
     return _factory->get_runtime_bloom_filters();
 }
+const RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() const {
+    return _factory->get_runtime_bloom_filters();
+}
+
+int64_t Operator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->wait_timeout_ms();
+}
 
 const std::vector<SlotId>& Operator::filter_null_value_columns() const {
     return _factory->get_filter_null_value_columns();
@@ -132,6 +144,10 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     }
 
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+}
+
+RuntimeState* Operator::runtime_state() {
+    return _factory->runtime_state();
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {

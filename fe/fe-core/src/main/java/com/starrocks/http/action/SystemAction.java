@@ -90,7 +90,7 @@ public class SystemAction extends WebBaseAction {
             // forward to master
             String showProcStmt = "SHOW PROC \"" + procPath + "\"";
             MasterOpExecutor masterOpExecutor = new MasterOpExecutor(new OriginStatement(showProcStmt, 0),
-                    ConnectContext.get(), RedirectStatus.FORWARD_NO_SYNC, true);
+                    ConnectContext.get(), RedirectStatus.FORWARD_NO_SYNC);
             try {
                 masterOpExecutor.execute();
             } catch (Exception e) {

@@ -6,8 +6,6 @@
 
 #include "fs/fs_memory.h"
 #include "storage/chunk_helper.h"
-#include "storage/fs/file_block_manager.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -103,8 +101,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test";
-    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_mutable_index_wal";
+    const std::string kIndexFile = "./PersistentIndexTest_test_mutable_index_wal/index.l0.0.0";
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -132,11 +130,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     }
 
     {
-        ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({kIndexFile});
-        ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
-        wblock->close();
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
     }
 
     {
@@ -239,10 +234,9 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
 
     ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
 
-    std::unique_ptr<fs::ReadableBlock> rb;
-    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
-    ASSERT_TRUE(block_mgr->open_block("./index.l1.1.1", &rb).ok());
-    auto st_load = ImmutableIndex::load(std::move(rb));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file("./index.l1.1.1"));
+    auto st_load = ImmutableIndex::load(std::move(rf));
     if (!st_load.ok()) {
         LOG(WARNING) << st_load.status();
     }
@@ -449,8 +443,8 @@ PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
 
 PARALLEL_TEST(PersistentIndexTest, test_replace) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test";
-    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_replace";
+    const std::string kIndexFile = "./PersistentIndexTest_test_replace/index.l0.0.0";
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -475,10 +469,7 @@ PARALLEL_TEST(PersistentIndexTest, test_replace) {
         src_rssid.emplace_back(1);
     }
 
-    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({kIndexFile});
-    ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
+    ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
 
     EditVersion version(0, 0);
     index_meta.set_key_size(sizeof(Key));

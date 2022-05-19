@@ -18,7 +18,7 @@ namespace starrocks {
 CompactionScheduler::CompactionScheduler() {
     auto st = ThreadPoolBuilder("compact_pool")
                       .set_min_threads(1)
-                      .set_max_threads(config::max_compaction_task_num)
+                      .set_max_threads(std::max(1, StorageEngine::instance()->compaction_manager()->max_task_num()))
                       .set_max_queue_size(1000)
                       .build(&_compaction_pool);
     DCHECK(st.ok());
@@ -61,12 +61,7 @@ void CompactionScheduler::notify() {
 }
 
 bool CompactionScheduler::_can_schedule_next() {
-    int32_t max_task_num = std::min(config::max_compaction_task_num,
-                                    static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                         (config::cumulative_compaction_num_threads_per_disk +
-                                                          config::base_compaction_num_threads_per_disk)));
-    return config::enable_compaction &&
-           StorageEngine::instance()->compaction_manager()->running_tasks_num() < max_task_num &&
+    return !StorageEngine::instance()->compaction_manager()->check_if_exceed_max_task_num() &&
            StorageEngine::instance()->compaction_manager()->candidates_size() > 0;
 }
 
@@ -90,15 +85,8 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
     // to compatible with old compaction framework
     // TODO: can be optimized to use just one lock
     int64_t last_failure_ms = 0;
-    uint16_t task_num = StorageEngine::instance()->compaction_manager()->running_tasks_num_for_type(
-            compaction_task->compaction_type());
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
-        if (config::max_cumulative_compaction_task >= 0 && task_num >= config::max_cumulative_compaction_task) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for cumulative compaction limit:" << config::max_cumulative_compaction_task;
-            return false;
-        }
         std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
@@ -117,11 +105,6 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
         }
         last_failure_ms = tablet->last_cumu_compaction_failure_time();
     } else {
-        if (config::max_base_compaction_task >= 0 && task_num >= config::max_base_compaction_task) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for base compaction limit:" << config::max_base_compaction_task;
-            return false;
-        }
         std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for base lock";

@@ -33,6 +33,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 set(UDF_FILES
   java/java_udf.cpp
   java/java_data_converter.cpp
+  java/java_native_method.cpp
 )
 
 add_library(Udf udf.cpp udf_ir.cpp java/utils.cpp ${UDF_FILES})

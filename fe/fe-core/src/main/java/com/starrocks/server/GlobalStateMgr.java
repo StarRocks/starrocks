@@ -196,10 +196,12 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
+import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -263,7 +265,9 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -387,6 +391,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private IcebergRepository icebergRepository;
 
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
@@ -501,6 +506,12 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
+    private MetadataMgr metadataMgr;
+    private CatalogMgr catalogMgr;
+    private ConnectorMgr connectorMgr;
+
+    private TaskManager taskManager;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -534,7 +545,7 @@ public class GlobalStateMgr {
         return systemInfoService;
     }
 
-    private SystemInfoService getClusterInfo() {
+    public SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
 
@@ -555,7 +566,7 @@ public class GlobalStateMgr {
         return this.colocateTableIndex;
     }
 
-    private CatalogRecycleBin getRecycleBin() {
+    public CatalogRecycleBin getRecycleBin() {
         return this.recycleBin;
     }
 
@@ -642,6 +653,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
+        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
@@ -678,6 +690,10 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
+        this.metadataMgr = new MetadataMgr();
+        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.taskManager = new TaskManager();
     }
 
     public static void destroyCheckpoint() {
@@ -814,8 +830,24 @@ public class GlobalStateMgr {
         return starOSAgent;
     }
 
+    public CatalogMgr getCatalogMgr() {
+        return catalogMgr;
+    }
+
+    public ConnectorMgr getConnectorMgr() {
+        return connectorMgr;
+    }
+
+    public MetadataMgr getMetadataMgr() {
+        return metadataMgr;
+    }
+
+    public TaskManager getTaskManager() {
+        return taskManager;
+    }
+
     // Use tryLock to avoid potential dead lock
-    private boolean tryLock(boolean mustLock) {
+    public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
                 if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -843,7 +875,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private void unlock() {
+    public void unlock() {
         if (lock.isHeldByCurrentThread()) {
             this.lock.unlock();
         }
@@ -1423,6 +1455,7 @@ public class GlobalStateMgr {
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         statisticAutoCollector.start();
+        taskManager.start();
     }
 
     // start threads that should running on all FE
@@ -5364,7 +5397,7 @@ public class GlobalStateMgr {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
-            // This maybe a information_schema db request, and information_schema db name is case insensitive.
+            // This maybe an information_schema db request, and information_schema db name is case-insensitive.
             // So, we first extract db name to check if it is information_schema.
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
@@ -5856,6 +5889,33 @@ public class GlobalStateMgr {
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
         this.alter.processCreateMaterializedView(stmt);
+    }
+
+    public void createMaterializedView(CreateMaterializedViewStatement statement)
+            throws DdlException {
+        // check Mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = statement.getTableName().getTbl();
+        String dbName = statement.getTableName().getDb();
+        LOG.debug("Begin create materialized view: {}", mvName);
+        // check if db exists
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(mvName) != null) {
+                if (statement.isIfNotExists()) {
+                    LOG.info("Create materialized view [{}] which already exists", mvName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
@@ -6615,6 +6675,10 @@ public class GlobalStateMgr {
         }
     }
 
+    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
+        this.isDefaultClusterCreated = isDefaultClusterCreated;
+    }
+
     /**
      * @param ctx
      * @param clusterName
@@ -6789,14 +6853,17 @@ public class GlobalStateMgr {
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
             request.setTable_name(tableName);
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
+                        timeout,
+                        Config.thrift_rpc_retry_times,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
@@ -7238,7 +7305,8 @@ public class GlobalStateMgr {
         setFrontendConfig(configs);
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
@@ -7250,11 +7318,10 @@ public class GlobalStateMgr {
             request.setValues(new ArrayList<>(configs.values()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(),
-                                        fe.getRpcPort()),
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 timeout,
-                                client -> client.setConfig(request)
-                        );
+                                Config.thrift_rpc_retry_times,
+                                client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");

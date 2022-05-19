@@ -16,14 +16,14 @@ import java.util.Map;
 
 // Alter WorkGroup specified by name
 // 1. Add a new classifier to the WorkGroup
-//  ALTER RESOURCE_GROUP <name> ADD (user='<user>', role='<role>', query_type in (...), source_ip='<cidr>')
+//  ALTER RESOURCE GROUP <name> ADD (user='<user>', role='<role>', query_type in (...), source_ip='<cidr>')
 //
 // 2. Drop present classifiers by their ids
-//  ALTER RESOURCE_GROUP <name> DROP (<id_1>, <id_2>, ...)
-//  ALTER RESOURCE_GROUP <name> DROP ALL
+//  ALTER RESOURCE GROUP <name> DROP (<id_1>, <id_2>, ...)
+//  ALTER RESOURCE GROUP <name> DROP ALL
 //
 // 3. Modify properties
-//  ALTER RESOURCE_GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
+//  ALTER RESOURCE GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
 public class AlterWorkGroupStmt extends DdlStmt {
     private String name;
     private SubCommand cmd;
@@ -61,11 +61,12 @@ public class AlterWorkGroupStmt extends DdlStmt {
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
-                    changedProperties.getBigQueryCpuCoreSecondLimit() == null &&
+                    changedProperties.getBigQueryCpuSecondLimit() == null &&
                     changedProperties.getBigQueryMemLimit() == null &&
                     changedProperties.getBigQueryScanRowsLimit() == null) {
                 throw new SemanticException(
-                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit','big_query_mem_limit' , 'big_query_scan_rows_limit', 'big_query_cpu_core_second_limit', hould be specified");
+                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit','big_query_mem_limit', " +
+                                "'big_query_scan_rows_limit', 'big_query_cpu_second_limit', should be specified");
             }
         }
     }

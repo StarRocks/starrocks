@@ -222,7 +222,7 @@ public class PredicateStatisticsCalculator {
             }
             if (rightColumnStatistic.hasNaNValue()) {
                 rightColumnStatistic =
-                        rightColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                        ColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
                                 .setMinValue(Double.NEGATIVE_INFINITY).build();
             }
 

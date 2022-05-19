@@ -240,9 +240,9 @@ public class WorkGroupMgr implements Writable {
                     wg.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 }
 
-                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuCoreSecondLimit();
+                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuSecondLimit();
                 if (bigQueryCpuCoreSecondLimit != null) {
-                    wg.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
+                    wg.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 }
 
                 Integer concurrentLimit = changedProperties.getConcurrencyLimit();
@@ -389,13 +389,23 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType) {
+    public WorkGroup chooseWorkGroupByName(String wgName) {
+        readLock();
+        try {
+            return workGroupMap.get(wgName);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
         String user = getUnqualifiedUser(ctx);
         String role = getUnqualifiedRole(ctx);
         String remoteIp = ctx.getRemoteIP();
         List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp)).collect(Collectors.toList());
-        classifierList.sort(Comparator.comparingDouble(WorkGroupClassifier::weight));
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
+                .collect(Collectors.toList());
         if (classifierList.isEmpty()) {
             return null;
         } else {

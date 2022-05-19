@@ -245,6 +245,10 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
 }
 
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
+    if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
+        // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
+        return Status::OK();
+    }
     string rowset_unique_id = rowset->rowset_id().to_string();
     VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;

@@ -578,7 +578,8 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 21> : 37\n" +
+                "  |  <slot 40> : CAST(37 AS INT");
     }
 
     @Test
@@ -1464,8 +1465,8 @@ public class JoinTest extends PlanTestBase {
         // test having group column
         sql = "select count(*) from join1 left join join2 on join1.id = join2.id\n" +
                 "group by join2.id having join2.id > 1;";
-        starRocksAssert.query(sql).explainContains("  3:HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+        starRocksAssert.query(sql).explainContains("  4:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 5: id",
@@ -1473,7 +1474,7 @@ public class JoinTest extends PlanTestBase {
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 2: id > 1",
-                "  1:OlapScanNode\n" +
+                "  2:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 5: id > 1");
@@ -1968,13 +1969,15 @@ public class JoinTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        starRocksAssert.query(sql).explainContains("  4:CROSS JOIN\n" +
-                        "  |  cross join:\n" +
-                        "  |  predicates is NULL",
+        String plan  = starRocksAssert.query(sql).explainQuery();
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
+                "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                        "  |  output: max(22: k9)\n" +
-                        "  |  group by: \n" +
-                        "  |  having: CAST(23: max AS DOUBLE) > 0.0");
+                "  |  output: max(22: k9)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
     }
 
     @Test
@@ -2022,31 +2025,19 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testPredicateOnThreeTables() throws Exception {
-        String sql = "SELECT \n" +
-                "  DISTINCT t1.v4 \n" +
-                "FROM \n" +
-                "  t1, \n" +
-                "  (\n" +
-                "    SELECT \n" +
-                "      t3.v10, \n" +
-                "      t3.v11, \n" +
-                "      t3.v12\n" +
-                "    FROM \n" +
-                "      t3\n" +
-                "  ) subt3 FULL \n" +
-                "  JOIN t0 ON subt3.v12 != t0.v1 \n" +
-                "  AND subt3.v12 = t0.v1 \n" +
-                "WHERE \n" +
-                "  (\n" +
-                "    (t0.v2) BETWEEN (\n" +
-                "      CAST(subt3.v11 AS STRING)\n" +
-                "    ) \n" +
-                "    AND (t0.v2)\n" +
-                "  ) = (t1.v4);";
+        String sql = "SELECT DISTINCT t1.v4 \n" +
+                "FROM t1, t3 subt3 FULL JOIN t0 ON subt3.v12 != t0.v1 AND subt3.v12 = t0.v1 \n" +
+                "WHERE ((t0.v2) BETWEEN (CAST(subt3.v11 AS STRING)) AND (t0.v2)) = (t1.v4);";
         String plan = getFragmentPlan(sql);
         // check no exception
-        assertContains(plan, "HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
+        assertContains(plan, "  11:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v4\n" +
+                "  |  \n" +
+                "  10:Project\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  \n" +
+                "  9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v4 = 10: cast");
@@ -2599,5 +2590,57 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:EMPTYSET");
         assertContains(plan, "2:EMPTYSET");
+    }
+
+    @Test
+    public void testSemiJoinReorderProjections() throws Exception {
+        String sql = "WITH with_t_0 as (\n" +
+                "  SELECT \n" +
+                "    t1_3.t1b, \n" +
+                "    t1_3.t1d \n" +
+                "  FROM \n" +
+                "    test_all_type AS t1_3 \n" +
+                "  WHERE \n" +
+                "    (\n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          t1_3.t1a \n" +
+                "        FROM \n" +
+                "          test_all_type AS t1_3\n" +
+                "      )\n" +
+                "    ) < (\n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          11\n" +
+                "      )\n" +
+                "    )\n" +
+                ") \n" +
+                "SELECT \n" +
+                "  SUM(count) \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      CAST(false AS INT) as count \n" +
+                "    FROM \n" +
+                "      test_all_type AS t1_3 FULL \n" +
+                "      JOIN (\n" +
+                "        SELECT \n" +
+                "          with_t_0.t1b \n" +
+                "        FROM \n" +
+                "          with_t_0 AS with_t_0 \n" +
+                "        WHERE \n" +
+                "          (with_t_0.t1d) IN (\n" +
+                "            (\n" +
+                "              SELECT \n" +
+                "                t1_3.t1d \n" +
+                "              FROM \n" +
+                "                test_all_type AS t1_3\n" +
+                "            )\n" +
+                "          )\n" +
+                "      ) subwith_t_0 ON t1_3.id_decimal = subwith_t_0.t1b\n" +
+                "  ) t;";
+        String plan = getFragmentPlan(sql);
+        // check no error
+        assertContains(plan, "16:ASSERT NUMBER OF ROWS");
     }
 }

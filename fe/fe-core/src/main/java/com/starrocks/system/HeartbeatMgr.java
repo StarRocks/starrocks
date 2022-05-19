@@ -248,13 +248,14 @@ public class HeartbeatMgr extends MasterDaemon {
                     }
 
                     // Update number of hardare of cores of corresponding backend.
+                    int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
                     if (tBackendInfo.isSetNum_hardware_cores()) {
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, tBackendInfo.getNum_hardware_cores());
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
-                            version);
+                            version, cpuCores);
                 } else {
                     return new BackendHbResponse(backendId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"

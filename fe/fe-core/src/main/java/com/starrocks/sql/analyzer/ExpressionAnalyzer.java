@@ -14,6 +14,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
@@ -843,6 +844,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitDefaultValueExpr(DefaultValueExpr node, Scope context) {
             node.setType(Type.VARCHAR);
+            return null;
+        }
+
+        @Override
+        public Void visitCloneExpr(CloneExpr node, Scope context) {
             return null;
         }
     }

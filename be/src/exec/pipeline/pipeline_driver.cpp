@@ -6,8 +6,9 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "exec/pipeline/olap_scan_operator.h"
+#include "common/statusor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
@@ -37,6 +38,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
 
     DCHECK(_state == DriverState::NOT_READY);
+
+    source_operator()->add_morsel_queue(_morsel_queue);
+
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
@@ -50,15 +54,12 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
         const auto* global_rf_collector = op->runtime_bloom_filters();
-        auto is_scan_operator = dynamic_cast<ScanOperator*>(op.get()) != nullptr;
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 _global_rf_descriptors.emplace_back(desc);
             }
 
-            auto wait_time_ns = 1000'000L * (is_scan_operator ? global_rf_collector->scan_wait_timeout_ms()
-                                                              : global_rf_collector->wait_timeout_ms());
-            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, wait_time_ns);
+            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
         }
     }
     if (!all_local_rf_set.empty()) {
@@ -66,7 +67,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    source_operator()->add_morsel_queue(_morsel_queue.get());
     for (auto& op : _operators) {
         RETURN_IF_ERROR(op->prepare(runtime_state));
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
@@ -100,6 +100,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
+    Status return_status = Status::OK();
+    DeferOp defer([&]() {
+        if (return_status.ok()) {
+            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+        }
+    });
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
@@ -117,9 +123,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
+                        RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    RETURN_IF_ERROR(_mark_operator_finishing(next_op, runtime_state));
+                    RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
@@ -130,7 +136,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
-                    _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
@@ -141,30 +146,29 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     SCOPED_TIMER(curr_op->_pull_timer);
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
-                auto status = maybe_chunk.status();
-                if (!status.ok() && !status.is_end_of_file()) {
-                    LOG(WARNING) << "pull_chunk returns not ok status " << status.to_string();
-                    return status;
+                return_status = maybe_chunk.status();
+                if (!return_status.ok() && !return_status.is_end_of_file()) {
+                    LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
+                    return return_status;
                 }
 
                 if (_check_fragment_is_canceled(runtime_state)) {
-                    _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
                     return _state;
                 }
 
-                if (status.ok()) {
+                if (return_status.ok()) {
                     COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
-                            status = next_op->push_chunk(runtime_state, maybe_chunk.value());
+                            return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
 
-                        if (!status.ok() && !status.is_end_of_file()) {
-                            LOG(WARNING) << "push_chunk returns not ok status " << status.to_string();
-                            return status;
+                        if (!return_status.ok() && !return_status.is_end_of_file()) {
+                            LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
+                            return return_status;
                         }
 
                         COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
@@ -180,9 +184,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
-                        RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
+                        RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    RETURN_IF_ERROR(_mark_operator_finishing(next_op, runtime_state));
+                    RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
@@ -202,14 +206,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
-            RETURN_IF_ERROR(_mark_operator_finished(_operators[i], runtime_state));
+            RETURN_IF_ERROR(return_status = _mark_operator_finished(_operators[i], runtime_state));
         }
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
 
@@ -227,7 +230,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             } else {
                 set_driver_state(DriverState::READY);
             }
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
             return _state;
         }
     }
@@ -317,12 +319,21 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            if (_fragment_ctx->enable_resource_group()) {
-                if (_workgroup) {
-                    _workgroup->decr_num_queries();
+
+            auto frag_id = _fragment_ctx->fragment_instance_id();
+            int active_fragments = _query_ctx->num_active_fragments();
+            int active_drivers = _fragment_ctx->num_drivers();
+            // Acquire the pointer to avoid be released when removing query
+            auto wg = _workgroup;
+            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
+                if (wg) {
+                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
+                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
+                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
+                             << ", query_ctx address=" << _query_ctx;
+                    wg->decr_num_queries();
                 }
             }
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
@@ -357,7 +368,6 @@ std::string PipelineDriver::to_readable_string() const {
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
-    DCHECK(_workgroup != nullptr);
     return _workgroup.get();
 }
 
@@ -450,6 +460,19 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
                                              op->_finishing_timer->value() + op->_finished_timer->value() +
                                              op->_close_timer->value());
     return Status::OK();
+}
+
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    driver_acct().increment_schedule_times();
+    driver_acct().update_last_chunks_moved(total_chunks_moved);
+    driver_acct().update_accumulated_rows_moved(total_rows_moved);
+    driver_acct().update_last_time_spent(time_spent);
+
+    // Update statistics of scan operator
+    if (SourceOperator* source = source_operator()) {
+        query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
+    }
 }
 
 } // namespace starrocks::pipeline

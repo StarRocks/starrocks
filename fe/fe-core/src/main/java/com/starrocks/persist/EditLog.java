@@ -633,6 +633,7 @@ public class EditLog {
                     globalStateMgr.replayModifyTableColocate(info);
                     break;
                 }
+                case OperationType.OP_HEARTBEAT_V2:
                 case OperationType.OP_HEARTBEAT: {
                     final HbPackage hbPackage = (HbPackage) journal.getData();
                     GlobalStateMgr.getCurrentHeartbeatMgr().replayHearbeat(hbPackage);
@@ -810,6 +811,16 @@ public class EditLog {
                             (ModifyTableColumnOperationLog) journal.getData();
                     globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
+                }
+                case OperationType.OP_CREATE_CATALOG: {
+                    CreateCatalogLog createCatalogLog =
+                            (CreateCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayCreateCatalog(createCatalogLog);
+                }
+                case OperationType.OP_DROP_CATALOG: {
+                    DropCatalogLog dropCatalogLog =
+                            (DropCatalogLog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
@@ -1258,7 +1269,7 @@ public class EditLog {
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
-        logEdit(OperationType.OP_HEARTBEAT, hbPackage);
+        logEdit(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
 
     public void logAddFunction(Function function) {

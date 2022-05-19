@@ -71,13 +71,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean canBeSkipped() {
-        if (isRename) {
-            return true;
-        }
-
-        Table tblAfter = tableAfter.deepCopy();
-        filterParameters(tableBefore.getParameters(), tblAfter.getParameters());
-        return tblAfter.equals(tableBefore);
+        return false;
     }
 
     @Override

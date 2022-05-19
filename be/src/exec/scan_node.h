@@ -29,6 +29,11 @@
 
 namespace starrocks {
 
+namespace pipeline {
+class MorselQueue;
+using MorselQueuePtr = std::unique_ptr<MorselQueue>;
+} // namespace pipeline
+
 class TScanRange;
 
 // Abstract base class of all scan nodes; introduces set_scan_range().
@@ -58,6 +63,11 @@ public:
     // Convert scan_ranges into node-specific scan restrictions.  This should be
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
+    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request);
+
+    // If this scan node accept empty scan ranges.
+    virtual bool accept_empty_scan_ranges() const { return true; }
 
     bool is_scan_node() const override { return true; }
 

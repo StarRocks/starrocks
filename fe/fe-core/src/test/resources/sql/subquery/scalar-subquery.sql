@@ -135,7 +135,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=3.0
 numNodes=0
@@ -173,7 +172,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=2.0
 numNodes=0
@@ -254,7 +252,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t0
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=4.0
 numNodes=0
@@ -297,7 +294,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: t3
 tabletRatio=3/3
-
 cardinality=1
 avgRowSize=5.0
 numNodes=0
@@ -342,8 +338,7 @@ INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            EXCHANGE GATHER
-                VALUES (2)
+            VALUES (2)
 [end]
 
 [sql]
@@ -353,8 +348,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: column_0 
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            EXCHANGE GATHER
-                VALUES (2)
+            VALUES (2)
 [end]
 
 [sql]
@@ -362,8 +356,7 @@ select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [4: sum > cast(5: column_0 as bigint(20))])
     ASSERT LE 1
-        EXCHANGE GATHER
-            VALUES (2)
+        VALUES (2)
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [null]
             EXCHANGE SHUFFLE[3]

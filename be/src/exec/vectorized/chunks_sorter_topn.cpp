@@ -96,16 +96,12 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
-DataSegment* ChunksSorterTopn::get_result_data_segment() {
-    return &_merged_segment;
+SortedRuns ChunksSorterTopn::get_sorted_runs() {
+    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
 }
 
-uint64_t ChunksSorterTopn::get_partition_rows() const {
+size_t ChunksSorterTopn::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
-}
-
-Permutation* ChunksSorterTopn::get_permutation() const {
-    return nullptr;
 }
 
 /*

@@ -25,9 +25,9 @@
 #include <utility>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/column_block.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_handle.h"
@@ -40,10 +40,6 @@ namespace starrocks {
 
 class KeyCoder;
 class TypeInfo;
-
-namespace fs {
-class BlockManager;
-}
 
 class EncodingInfo;
 class IndexedColumnReader;
@@ -80,12 +76,12 @@ public:
     Status next_batch(size_t* n, ColumnBlockView* column_view);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<fs::ReadableBlock> rblock);
+    IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<RandomAccessFile> read_file);
 
     Status _read_data_page(const PagePointer& pp);
 
     const IndexedColumnReader* _reader = nullptr;
-    std::unique_ptr<fs::ReadableBlock> _rblock;
+    std::unique_ptr<RandomAccessFile> _read_file;
     // iterator for ordinal index page
     IndexPageIterator _ordinal_iter;
     // iterator for value index page
@@ -106,9 +102,9 @@ class IndexedColumnReader {
     friend class IndexedColumnIterator;
 
 public:
-    // Does *NOT* take the ownership of |block_mgr|.
-    IndexedColumnReader(fs::BlockManager* block_mgr, std::string file_name, IndexedColumnMetaPB meta)
-            : _block_mgr(block_mgr), _file_name(std::move(file_name)), _meta(std::move(meta)){};
+    // Does *NOT* take the ownership of |fs|.
+    IndexedColumnReader(FileSystem* fs, std::string file_name, IndexedColumnMetaPB meta)
+            : _fs(fs), _file_name(std::move(file_name)), _meta(std::move(meta)){};
 
     Status load(bool use_page_cache, bool kept_in_memory);
 
@@ -130,14 +126,14 @@ public:
     bool kept_in_memory() const { return _kept_in_memory; }
 
 private:
-    Status load_index_page(fs::ReadableBlock* rblock, const PagePointerPB& pp, PageHandle* handle,
+    Status load_index_page(RandomAccessFile* read_file, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);
 
     // read a page specified by `pp' from `file' into `handle'
-    Status read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
+    Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
                      PageFooterPB* footer) const;
 
-    fs::BlockManager* _block_mgr;
+    FileSystem* _fs;
     std::string _file_name;
     IndexedColumnMetaPB _meta;
 

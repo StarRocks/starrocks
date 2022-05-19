@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SortInfo;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -102,20 +101,6 @@ public class ExchangeNode extends PlanNode {
                         DistributionSpec.DistributionType type) {
         this(id, inputNode, copyConjuncts);
         distributionType = type;
-    }
-
-    public ExchangeNode(PlanNodeId id, PlanNode inputNode, boolean copyConjuncts,
-                        DistributionSpec.DistributionType type, TupleDescriptor tuple) {
-        this(id, inputNode, copyConjuncts, type);
-        tupleIds.add(tuple.getId());
-        nullableTupleIds.add(tuple.getId());
-        receiveColumns = Lists.newArrayList();
-        tuple.getSlots().forEach(s -> receiveColumns.add(s.getId().asInt()));
-    }
-
-    // For Test
-    public ExchangeNode(PlanNodeId id, PlanNode inputNode) {
-        super(id, inputNode, "EXCHANGE");
     }
 
     public void setPartitionType(TPartitionType type) {

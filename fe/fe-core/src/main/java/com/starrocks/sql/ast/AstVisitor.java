@@ -8,7 +8,6 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
@@ -20,8 +19,8 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -63,7 +62,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -132,6 +130,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSubmitTaskStmt(SubmitTaskStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
@@ -198,6 +204,19 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    // ----------------- Catalog Clause -------------
+    public R visitCreateCatalogStatement(CreateCatalogStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitDropCatalogStatement(DropCatalogStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitShowCatalogsStmt(ShowCatalogsStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ----------------- Alter Clause ---------------
@@ -384,6 +403,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
 

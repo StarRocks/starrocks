@@ -32,7 +32,7 @@ public:
     // when yielding the driver in the executor thread.
     virtual void update_statistics(const DriverRawPtr driver) = 0;
 
-    virtual size_t size() = 0;
+    virtual size_t size() const = 0;
     bool empty() { return size() == 0; }
 
 protected:
@@ -70,44 +70,9 @@ public:
 
     double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
 
-    void put(const DriverRawPtr driver) {
-        if (driver->driver_state() == DriverState::CANCELED) {
-            queue.emplace_front(driver);
-        } else {
-            queue.emplace_back(driver);
-        }
-        driver_number++;
-    }
-
-    void cancel(const DriverRawPtr driver) {
-        DCHECK(driver->is_in_ready_queue());
-        pending_cancel_queue.emplace(driver);
-    }
-
-    DriverRawPtr take() {
-        DCHECK(!empty());
-        if (!pending_cancel_queue.empty()) {
-            DriverRawPtr driver = pending_cancel_queue.front();
-            pending_cancel_queue.pop();
-            cancelled_set.insert(driver);
-            --driver_number;
-            return driver;
-        }
-
-        while (!queue.empty()) {
-            DriverRawPtr driver = queue.front();
-            queue.pop_front();
-            auto iter = cancelled_set.find(driver);
-            if (iter != cancelled_set.end()) {
-                cancelled_set.erase(iter);
-            } else {
-                --driver_number;
-                return driver;
-            }
-        }
-        return nullptr;
-    }
-
+    void put(const DriverRawPtr driver);
+    void cancel(const DriverRawPtr driver);
+    DriverRawPtr take();
     inline bool empty() const { return driver_number == 0; }
 
     inline size_t size() const { return driver_number; }
@@ -128,22 +93,7 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() {
-        double factor = 1;
-        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
-            // initialize factor for every sub queue,
-            // Higher priority queues have more execution time,
-            // so they have a larger factor.
-            _queues[i].factor_for_normal = factor;
-            factor *= RATIO_OF_ADJACENT_QUEUE;
-        }
-
-        int64_t time_slice = 0;
-        for (int i = 0; i < QUEUE_SIZE; ++i) {
-            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-            _level_time_slices[i] = time_slice;
-        }
-    }
+    QuerySharedDriverQueue();
     ~QuerySharedDriverQueue() override = default;
     void close() override;
     void put_back(const DriverRawPtr driver) override;
@@ -158,7 +108,7 @@ public:
 
     void cancel(DriverRawPtr driver) override;
 
-    size_t size() override;
+    size_t size() const override;
 
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
@@ -183,22 +133,7 @@ class QuerySharedDriverQueueWithoutLock : public FactoryMethod<DriverQueue, Quer
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock>;
 
 public:
-    QuerySharedDriverQueueWithoutLock() {
-        double factor = 1;
-        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
-            // initialize factor for every sub queue,
-            // Higher priority queues have more execution time,
-            // so they have a larger factor.
-            _queues[i].factor_for_normal = factor;
-            factor *= RATIO_OF_ADJACENT_QUEUE;
-        }
-
-        int64_t time_slice = 0;
-        for (int i = 0; i < QUEUE_SIZE; ++i) {
-            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-            _level_time_slices[i] = time_slice;
-        }
-    }
+    QuerySharedDriverQueueWithoutLock();
     ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
 
@@ -214,7 +149,7 @@ public:
 
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override { return _size; }
+    size_t size() const override { return _size; }
 
 private:
     void _put_back(const DriverRawPtr driver);
@@ -260,7 +195,7 @@ public:
 
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override;
+    size_t size() const override;
 
 private:
     // The schedule period is equal to SCHEDULE_PERIOD_PER_WG_NS * num_workgroups.

@@ -27,6 +27,7 @@ namespace starrocks {
 
 static const std::string HTTP_DB_KEY = "db";
 static const std::string HTTP_TABLE_KEY = "table";
+static const std::string HTTP_TXN_OP_KEY = "txn_op";
 static const std::string HTTP_LABEL_KEY = "label";
 static const std::string HTTP_FORMAT_KEY = "format";
 static const std::string HTTP_COLUMNS = "columns";
@@ -35,6 +36,7 @@ static const std::string HTTP_COLUMN_SEPARATOR = "column_separator";
 static const std::string HTTP_ROW_DELIMITER = "row_delimiter";
 static const std::string HTTP_MAX_FILTER_RATIO = "max_filter_ratio";
 static const std::string HTTP_TIMEOUT = "timeout";
+static const std::string HTTP_IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
 static const std::string HTTP_PARTITIONS = "partitions";
 static const std::string HTTP_TEMP_PARTITIONS = "temporary_partitions";
 static const std::string HTTP_NEGATIVE = "negative";

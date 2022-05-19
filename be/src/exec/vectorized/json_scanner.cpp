@@ -73,9 +73,21 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         RETURN_IF_ERROR(_open_next_reader());
         _cur_file_eof = false;
     }
-    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
-    if (status.is_end_of_file()) {
-        _cur_file_eof = true;
+
+    Status status;
+    try {
+        status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = "Unrecognized json format, stop json loader.";
+        LOG(WARNING) << err_msg;
+        return Status::DataQualityError(err_msg);
+    }
+    if (!status.ok()) {
+        if (status.is_end_of_file()) {
+            _cur_file_eof = true;
+        } else {
+            return status;
+        }
     }
 
     if (src_chunk->num_rows() == 0) {
@@ -308,7 +320,7 @@ Status JsonReader::open() {
     _empty_parser = false;
 
     if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-        _build_slot_descs();
+        RETURN_IF_ERROR(_build_slot_descs());
     }
 
     _closed = false;
@@ -403,7 +415,6 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
             // the parser is exhausted.
             _empty_parser = true;
         } else if (!st.ok()) {
-            chunk->set_num_rows(rows_read);
             return st;
         }
     }
@@ -426,7 +437,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             _state->append_error_msg_to_file("", st.to_string());
             return st;
         }
-
+        size_t chunk_row_num = chunk->num_rows();
         st = _construct_row(&row, chunk);
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -437,6 +448,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
+            // Before continuing to process other rows, we need to first clean the fail parsed row.
+            chunk->set_num_rows(chunk_row_num);
         }
         ++(*rows_read);
 
@@ -615,7 +628,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
     }
 }
 
-void JsonReader::_build_slot_descs() {
+Status JsonReader::_build_slot_descs() {
     // build _slot_desc_dict.
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
@@ -632,8 +645,9 @@ void JsonReader::_build_slot_descs() {
 
     // get the first row of json.
     simdjson::ondemand::object obj;
-    if (!_parser->get_current(&obj).ok()) return;
-
+    if (!_parser->get_current(&obj).ok()) {
+        return Status::DataQualityError("can not get first row of json");
+    }
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
 
@@ -643,7 +657,7 @@ void JsonReader::_build_slot_descs() {
             json_str = field.key();
         } catch (simdjson::simdjson_error& e) {
             // Nothing would be done if got any error.
-            return;
+            return Status::DataQualityError("parse invalid field key");
         }
 
         oss << json_str;
@@ -669,7 +683,7 @@ void JsonReader::_build_slot_descs() {
 
     std::swap(ordered_slot_descs, _slot_descs);
 
-    return;
+    return Status::OK();
 }
 
 // read one json string from file read and parse it to json doc.
@@ -694,8 +708,8 @@ Status JsonReader::_read_and_parse_json() {
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        RETURN_IF_ERROR(stream_file->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
-                                                      simdjson::SIMDJSON_PADDING));
+        RETURN_IF_ERROR(stream_file->pipe()->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
+                                                              simdjson::SIMDJSON_PADDING));
         if (_parser_buf_sz == 0) {
             return Status::EndOfFile("EOF of reading file");
         }

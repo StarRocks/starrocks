@@ -330,6 +330,40 @@ struct TListTableStatusResult {
     1: required list<TTableStatus> tables
 }
 
+// Arguments to showTasks/ShowTaskRuns
+struct TGetTasksParams {
+    1: optional string db
+    2: optional Types.TUserIdentity current_user_ident
+}
+
+struct TTaskInfo {
+    1: optional string task_name
+    2: optional i64 create_time
+    3: optional string schedule
+    4: optional string database
+    5: optional string definition
+}
+
+struct TGetTaskInfoResult {
+    1: required list<TTaskInfo> tasks
+}
+
+struct TTaskRunInfo {
+    1: optional string query_id
+    2: optional string task_name
+    3: optional i64 create_time
+    4: optional i64 finish_time
+    5: optional string state
+    6: optional string database
+    7: optional string definition
+    8: optional i32 error_code
+    9: optional string error_message
+}
+
+struct TGetTaskRunInfoResult {
+    1: optional list<TTaskRunInfo> task_runs
+}
+
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -927,6 +961,8 @@ service FrontendService {
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
+    
+    // Deprecated
     MasterService.TFetchResourceResult fetchResource()
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
@@ -936,6 +972,9 @@ service FrontendService {
     TMasterOpResult forward(TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
+
+    TGetTaskInfoResult getTasks(1:TGetTasksParams params)
+    TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
 
     TFeResult updateExportTaskStatus(1:TUpdateExportTaskStatusRequest request)
 

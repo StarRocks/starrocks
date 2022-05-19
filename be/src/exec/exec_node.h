@@ -295,6 +295,7 @@ protected:
     void init_runtime_profile(const std::string& name);
 
     RuntimeState* runtime_state() { return _runtime_state; }
+    const RuntimeState* runtime_state() const { return _runtime_state; }
 
     // Executes _debug_action if phase matches _debug_phase.
     // 'phase' must not be INVALID.

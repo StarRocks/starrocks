@@ -26,10 +26,9 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 set(EXEC_FILES
+    fd_cache.cpp
     fs.cpp
     fs_posix.cpp
-    fs_util.cpp
-    fs_stream_pipe.cpp
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp

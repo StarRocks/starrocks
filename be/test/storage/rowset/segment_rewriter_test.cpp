@@ -16,7 +16,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -39,9 +38,7 @@ class SegmentRewriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
         _fs = FileSystem::CreateSharedFromString("posix://").value();
-        ASSIGN_OR_ABORT(_block_mgr, fs::fs_util::block_manager("posix://"));
-        bool created;
-        ASSERT_OK(_fs->create_dir_if_missing(kSegmentDir, &created));
+        ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
 
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
@@ -70,7 +67,6 @@ protected:
     const std::string kSegmentDir = "./ut_dir/segment_rewriter_test";
 
     std::shared_ptr<FileSystem> _fs;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
 };
@@ -82,11 +78,9 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     opts.num_rows_per_block = 10;
 
     std::string file_name = kSegmentDir + "/partial_rowset";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &partial_tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &partial_tablet_schema, opts);
     ASSERT_OK(writer.init());
 
     int32_t chunk_size = config::vector_chunk_size;
@@ -117,8 +111,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
-    auto partial_segment =
-            *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &partial_tablet_schema);
+    auto partial_segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &partial_tablet_schema);
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     TabletSchema tablet_schema = create_schema(
@@ -140,11 +133,11 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, dst_file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, dst_file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
@@ -173,10 +166,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     EXPECT_EQ(count, num_rows);
 
     // add useless string to partial segment
-    std::unique_ptr<fs::WritableBlock> wblock_tmp;
-    fs::CreateBlockOptions wblock_opts_tmp({file_name});
-    wblock_opts_tmp.mode = FileSystem::MUST_EXIST;
-    ASSERT_OK(_block_mgr->create_block(wblock_opts_tmp, &wblock_tmp));
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST};
+    ASSIGN_OR_ABORT(auto wblock_tmp, _fs->new_writable_file(wopts, file_name));
     for (int i = 0; i < 10; i++) {
         wblock_tmp->append("test");
     }
@@ -194,7 +185,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
     ASSERT_OK(SegmentRewriter::rewrite(file_name, tablet_schema, read_column_ids, new_write_columns,
                                        partial_segment->id(), partial_rowset_footer));
-    auto rewrite_segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto rewrite_segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
 
     ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
     res = rewrite_segment->new_iterator(schema, seg_options);

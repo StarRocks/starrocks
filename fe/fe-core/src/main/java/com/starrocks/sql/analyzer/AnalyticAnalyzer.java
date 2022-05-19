@@ -63,24 +63,7 @@ public class AnalyticAnalyzer {
 
         if (isOffsetFn(analyticFunction.getFn()) && analyticFunction.getChildren().size() > 1) {
             Expr offset = analyticFunction.getChild(1);
-            boolean isPosConstant = true;
-            if (!offset.isConstant()) {
-                isPosConstant = false;
-            } else {
-                double value = 0;
-                if (offset instanceof IntLiteral) {
-                    IntLiteral intl = (IntLiteral) offset;
-                    value = intl.getDoubleValue();
-                } else if (offset instanceof LargeIntLiteral) {
-                    LargeIntLiteral intl = (LargeIntLiteral) offset;
-                    value = intl.getDoubleValue();
-                }
-                if (value <= 0) {
-                    isPosConstant = false;
-                }
-            }
-
-            if (!isPosConstant) {
+            if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
                                 analyticFunction.toSql());
@@ -97,6 +80,15 @@ public class AnalyticAnalyzer {
             }
         }
 
+        if (isNtileFn(analyticFunction.getFn())) {
+            Expr numBuckets = analyticFunction.getChild(0);
+            if (!isPositiveConstantInteger(numBuckets)) {
+                throw new SemanticException(
+                        "The num_buckets parameter of NTILE must be a constant positive integer: " +
+                                analyticFunction.toSql());
+            }
+        }
+
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
                     isHllAggFn(analyticFunction.getFn()))) {
@@ -105,6 +97,23 @@ public class AnalyticAnalyzer {
 
             verifyWindowFrame(analyticExpr);
         }
+    }
+
+    private static boolean isPositiveConstantInteger(Expr expr) {
+        if (!expr.isConstant()) {
+            return false;
+        }
+
+        double value = 0;
+        if (expr instanceof IntLiteral) {
+            IntLiteral intl = (IntLiteral) expr;
+            value = intl.getDoubleValue();
+        } else if (expr instanceof LargeIntLiteral) {
+            LargeIntLiteral intl = (LargeIntLiteral) expr;
+            value = intl.getDoubleValue();
+        }
+
+        return value > 0;
     }
 
     private static void verifyWindowFrame(AnalyticExpr analyticExpr) {
@@ -292,7 +301,16 @@ public class AnalyticAnalyzer {
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.RANK)
                 || fn.functionName().equalsIgnoreCase(AnalyticExpr.DENSERANK)
-                || fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER);
+                || fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER)
+                || fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    private static boolean isNtileFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
     }
 
     private static boolean isHllAggFn(Function fn) {

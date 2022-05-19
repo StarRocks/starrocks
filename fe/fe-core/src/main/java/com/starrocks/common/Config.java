@@ -429,6 +429,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
+    /**
+     * the timeout for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_timeout_ms = 10000;
+
+    /**
+     * the retry times for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_retry_times = 3;
+
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
     // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
@@ -1268,6 +1280,12 @@ public class Config extends ConfigBase {
     public static int max_agent_tasks_send_per_be = 10000;
 
     /**
+     * min num of thread to refresh hive meta
+     */
+    @ConfField
+    public static int hive_meta_cache_refresh_min_threads = 50;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField
@@ -1327,6 +1345,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_custom_worker_thread = false;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_worker_num_threads = 64;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1425,4 +1455,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_password_reuse = true;
+    /**
+     * If set to false, when the load is empty, success is returned.
+     * Otherwise, `all partitions have no load data` is returned.
+     */
+    @ConfField(mutable = true)
+    public static boolean empty_load_as_error = true;
+
+    /**
+     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     */
+    @ConfField(mutable = true)
+    public static int quorom_publish_wait_time_ms = 500;
 }

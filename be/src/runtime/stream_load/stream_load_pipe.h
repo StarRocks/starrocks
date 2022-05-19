@@ -25,6 +25,7 @@
 #include <deque>
 #include <mutex>
 
+#include "io/input_stream.h"
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
@@ -72,6 +73,11 @@ public:
         _write_buf = ByteBuffer::allocate(chunk_size);
         _write_buf->put_bytes(data + pos, size - pos);
         return Status::OK();
+    }
+
+    bool exhausted() override {
+        std::unique_lock<std::mutex> l(_lock);
+        return _buf_queue.empty();
     }
 
     /* read_one_messages returns data that is written by append in one time.
@@ -212,6 +218,22 @@ private:
     ByteBufferPtr _write_buf;
     ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
+};
+
+// TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.
+class StreamLoadPipeInputStream : public io::InputStream {
+public:
+    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file);
+    ~StreamLoadPipeInputStream() override;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override;
+
+    Status skip(int64_t n) override;
+
+    std::shared_ptr<StreamLoadPipe> pipe() { return _pipe; }
+
+private:
+    std::shared_ptr<StreamLoadPipe> _pipe;
 };
 
 } // namespace starrocks

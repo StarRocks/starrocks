@@ -285,10 +285,10 @@ void Aggregator::close(RuntimeState* state) {
             } else if (!_is_only_group_by_columns) {
                 if (false) {
                 }
-#define HASH_MAP_METHOD(NAME)                                                  \
-    else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME) \
+#define HASH_MAP_METHOD(NAME)                                                     \
+    else if (_hash_map_variant.type == vectorized::AggHashMapVariant::Type::NAME) \
             _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
-                APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
             }
 
@@ -378,7 +378,7 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
                                                          _single_agg_state + _agg_states_offsets[i]);
         } else {
-            DCHECK_EQ(_agg_intput_columns[i].size(), 1);
+            DCHECK_GE(_agg_intput_columns[i].size(), 1);
             _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_intput_columns[i][0].get(),
                                                         _single_agg_state + _agg_states_offsets[i]);
         }
@@ -473,9 +473,8 @@ void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
 }
 
 Status Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
-    _evaluate_group_by_exprs(chunk);
-    RETURN_IF_ERROR(_evaluate_agg_fn_exprs(chunk));
-    return Status::OK();
+    _reset_exprs(chunk);
+    return _evaluate_exprs(chunk);
 }
 
 void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
@@ -532,23 +531,23 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
 }
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                             \
-    if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                                             \
+    if (_hash_map_variant.type == vectorized::AggHashMapVariant::Type::SRC) {                                          \
         _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(_state->chunk_size()); \
         _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());                           \
         _hash_map_variant.DST->hash_map.insert(_hash_map_variant.SRC->hash_map.begin(),                                \
                                                _hash_map_variant.SRC->hash_map.end());                                 \
-        _hash_map_variant.type = vectorized::HashMapVariant::Type::DST;                                                \
+        _hash_map_variant.type = vectorized::AggHashMapVariant::Type::DST;                                             \
         _hash_map_variant.SRC.reset();                                                                                 \
         return;                                                                                                        \
     }
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                             \
-    if (_hash_set_variant.type == vectorized::HashSetVariant::Type::SRC) {                                             \
+    if (_hash_set_variant.type == vectorized::AggHashSetVariant::Type::SRC) {                                          \
         _hash_set_variant.DST = std::make_unique<decltype(_hash_set_variant.DST)::element_type>(_state->chunk_size()); \
         _hash_set_variant.DST->hash_set.reserve(_hash_set_variant.SRC->hash_set.capacity());                           \
         _hash_set_variant.DST->hash_set.insert(_hash_set_variant.SRC->hash_set.begin(),                                \
                                                _hash_set_variant.SRC->hash_set.end());                                 \
-        _hash_set_variant.type = vectorized::HashSetVariant::Type::DST;                                                \
+        _hash_set_variant.type = vectorized::AggHashSetVariant::Type::DST;                                             \
         _hash_set_variant.SRC.reset();                                                                                 \
         return;                                                                                                        \
     }
@@ -626,7 +625,7 @@ void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state
     }
 }
 
-void Aggregator::_evaluate_group_by_exprs(vectorized::Chunk* chunk) {
+void Aggregator::_reset_exprs(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_expr_release_timer);
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
         _group_by_columns[i] = nullptr;
@@ -640,7 +639,7 @@ void Aggregator::_evaluate_group_by_exprs(vectorized::Chunk* chunk) {
     }
 }
 
-Status Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
+Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {

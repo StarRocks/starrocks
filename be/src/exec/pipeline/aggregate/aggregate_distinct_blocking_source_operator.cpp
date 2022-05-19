@@ -32,10 +32,10 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chu
     if (false) {
     }
 #define HASH_SET_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == vectorized::HashSetVariant::Type::NAME)                      \
+    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME)                   \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
                     *_aggregator->hash_set_variant().NAME, chunk_size, &chunk);
-    APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
     size_t old_size = chunk->num_rows();

@@ -19,6 +19,8 @@ public:
     MemoryFileSystem(const MemoryFileSystem&) = delete;
     void operator=(const MemoryFileSystem&) = delete;
 
+    Type type() const override { return MEMORY; }
+
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& url) override;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& url) override;

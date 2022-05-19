@@ -65,29 +65,6 @@ Status FdInputStream::seek(int64_t offset) {
     _offset = offset;
     return Status::OK();
 }
-StatusOr<int64_t> FdInputStream::read_at(int64_t offset, void* data, int64_t count) {
-    CHECK_IS_CLOSED(_is_closed);
-    ssize_t res;
-    RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, offset));
-    if (UNLIKELY(res < 0)) {
-        _errno = errno;
-        return io_error("read", _errno);
-    }
-    _offset = offset + res;
-    return res;
-}
-
-Status FdInputStream::read_at_fully(int64_t offset, void* data, int64_t count) {
-    int64_t nread = 0;
-    while (nread < count) {
-        ASSIGN_OR_RETURN(auto n, read_at(offset + nread, static_cast<uint8_t*>(data) + nread, count - nread));
-        nread += n;
-        if (n == 0) {
-            return Status::IOError("cannot read fully");
-        }
-    }
-    return Status::OK();
-}
 
 #undef CHECK_IS_CLOSED
 } // namespace starrocks::io

@@ -53,6 +53,7 @@ public final class ProcService {
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
         root.register("colocation_group", new ColocationGroupProcDir());
+        root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
     }
 
     // Get the corresponding PROC Node by the specified path

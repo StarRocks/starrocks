@@ -59,7 +59,7 @@ const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
 
 const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
-        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum"};
+        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
@@ -1095,7 +1095,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             for (auto j = 1; j < profiles.size(); j++) {
                 auto* profile = profiles[j];
                 if (i >= profile->num_children()) {
-                    LOG(WARNING) << "find non-isomorphic children, profile_name" << profile0->name()
+                    LOG(WARNING) << "find non-isomorphic children, profile_name=" << profile0->name()
                                  << ", another profile_name=" << profile->name();
                     return;
                 }

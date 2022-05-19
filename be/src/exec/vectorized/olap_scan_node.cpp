@@ -9,8 +9,10 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/olap_scan_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/olap_scan_operator.h"
+#include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -536,26 +538,29 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
+StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* scan_range) {
+    TTabletId tablet_id = scan_range->tablet_id;
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
+           << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    return tablet;
+}
+
 Status OlapScanNode::_capture_tablet_rowsets() {
     _tablet_rowsets.resize(_scan_ranges.size());
     for (int i = 0; i < _scan_ranges.size(); ++i) {
         const auto& scan_range = _scan_ranges[i];
 
-        // Get version.
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-        // Get tablet.
-        TTabletId tablet_id = scan_range->tablet_id;
-        std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-        if (!tablet) {
-            std::stringstream ss;
-            SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
-            ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-               << ", reason=" << err;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(scan_range.get()));
 
         // Capture row sets of this version tablet.
         {
@@ -642,8 +647,27 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto factory = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this);
-    return pipeline::decompose_scan_node_to_pipeline(factory, this, context);
+    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this);
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+
+    // scan_prepare_op.
+    auto scan_prepare_op =
+            std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(), scan_ctx);
+    scan_prepare_op->set_degree_of_parallelism(1);
+    this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
+
+    auto scan_prepare_pipeline = pipeline::OpFactories{
+            std::move(scan_prepare_op),
+            std::make_shared<pipeline::NoopSinkOperatorFactory>(context->next_operator_id(), id()),
+    };
+    context->add_pipeline(scan_prepare_pipeline);
+
+    // scan_op.
+    auto scan_op =
+            std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this, std::move(scan_ctx));
+    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+
+    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
 } // namespace starrocks::vectorized

@@ -8,6 +8,7 @@
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -31,9 +32,9 @@ public:
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
 
     // how many rows read from storage
-    virtual int64_t raw_rows_read() const { return 0; }
+    virtual int64_t raw_rows_read() const = 0;
     // how mnay rows returned after filtering.
-    virtual int64_t num_rows_read() const { return 0; }
+    virtual int64_t num_rows_read() const = 0;
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -52,6 +53,11 @@ protected:
     std::vector<ExprContext*> _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
+    const TupleDescriptor* _tuple_desc = nullptr;
+
+    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
+        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
+    }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
@@ -69,6 +75,16 @@ public:
     Status prepare(RuntimeState* state) { return Status::OK(); }
     Status open(RuntimeState* state) { return Status::OK(); }
     void close(RuntimeState* state) {}
+
+    // For some data source does not support scan ranges, dop is limited to 1,
+    // and that will limit upper operators. And the solution is to insert a local exchange operator to fanout
+    // and let upper operators have better parallelism.
+    virtual bool insert_local_exchange_operator() const { return false; }
+
+    // If this data source accept empty scan ranges, because for some data source there is no concept of scan ranges
+    // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
+    // the method `insert_local_exchange_operator` is true also.
+    virtual bool accept_empty_scan_ranges() const { return true; }
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
@@ -76,6 +92,9 @@ class Connector {
 public:
     // supported connectors.
     static const std::string HIVE;
+    static const std::string ES;
+    static const std::string JDBC;
+    static const std::string MYSQL;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

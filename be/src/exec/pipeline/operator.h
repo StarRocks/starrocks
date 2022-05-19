@@ -118,6 +118,9 @@ public:
     std::vector<ExprContext*>& runtime_in_filters();
 
     RuntimeFilterProbeCollector* runtime_bloom_filters();
+    const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
+
+    virtual int64_t global_rf_wait_timeout_ns() const;
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
@@ -146,6 +149,8 @@ public:
         return growth_time;
     }
 
+    RuntimeState* runtime_state();
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -161,7 +166,12 @@ protected:
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     std::shared_ptr<RuntimeProfile> _common_metrics;
     std::shared_ptr<RuntimeProfile> _unique_metrics;
-    MemTracker* _mem_tracker = nullptr;
+
+    // All the memory usage will be automatically added to the instance level MemTracker by memory allocate hook
+    // But for some special operators, we hope to see the memory usage of some special data structures,
+    // such as hash table of aggregate operators.
+    // So the following indenpendent MemTracker is introduced to record these memory usage
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
@@ -215,15 +225,15 @@ public:
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
-                             std::vector<SlotId>&& filter_null_value_columns,
-                             std::vector<TupleSlotMapping>&& tuple_slot_mappings) {
+                             const std::vector<SlotId>& filter_null_value_columns,
+                             const std::vector<TupleSlotMapping>& tuple_slot_mappings) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
         _row_desc = row_desc;
         _runtime_filter_collector = runtime_filter_collector;
-        _filter_null_value_columns = std::move(filter_null_value_columns);
-        _tuple_slot_mappings = std::move(tuple_slot_mappings);
+        _filter_null_value_columns = filter_null_value_columns;
+        _tuple_slot_mappings = tuple_slot_mappings;
     }
     // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
     // to bound its runtime in-filters.
@@ -238,12 +248,18 @@ public:
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
-        if (_runtime_filter_collector) {
-            return _runtime_filter_collector->get_rf_probe_collector();
-        } else {
+        if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
+        return _runtime_filter_collector->get_rf_probe_collector();
     }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
+        if (_runtime_filter_collector == nullptr) {
+            return nullptr;
+        }
+        return _runtime_filter_collector->get_rf_probe_collector();
+    }
+
     const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }

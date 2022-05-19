@@ -6,7 +6,6 @@
 #include <fs/fs_broker.h>
 
 #include "column/column_helper.h"
-#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"

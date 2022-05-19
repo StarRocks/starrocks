@@ -44,6 +44,7 @@ set(EXEC_FILES
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
     es/es_query_builder.cpp
+    es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
     parquet_builder.cpp
@@ -54,6 +55,7 @@ set(EXEC_FILES
     vectorized/aggregate/distinct_blocking_node.cpp
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
+    vectorized/partition/chunks_partitioner.cpp
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
@@ -67,7 +69,7 @@ set(EXEC_FILES
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
     vectorized/chunks_sorter.cpp
-    vectorized/chunk_sorter_heapsorter.cpp
+    vectorized/chunks_sorter_heap_sort.cpp
     vectorized/chunks_sorter_topn.cpp
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp
@@ -95,12 +97,8 @@ set(EXEC_FILES
     vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
-    vectorized/es_http_scan_node.cpp
-    vectorized/es_http_scanner.cpp
-    vectorized/es_http_components.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
-    vectorized/mysql_scan_node.cpp
     vectorized/schema_scanner/schema_tables_scanner.cpp
     vectorized/schema_scanner/schema_dummy_scanner.cpp
     vectorized/schema_scanner/schema_schemata_scanner.cpp
@@ -112,11 +110,12 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_triggers_scanner.cpp
     vectorized/schema_scanner/schema_events_scanner.cpp
     vectorized/schema_scanner/schema_views_scanner.cpp
+    vectorized/schema_scanner/schema_tasks_scanner.cpp
+    vectorized/schema_scanner/schema_task_runs_scanner.cpp
     vectorized/schema_scanner/schema_user_privileges_scanner.cpp
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
-    vectorized/jdbc_scan_node.cpp
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp
     vectorized/sorting/merge_column.cpp
@@ -135,19 +134,25 @@ set(EXEC_FILES
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/limit_operator.cpp
-    pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
-    pipeline/scan_operator.cpp
-    pipeline/olap_scan_operator.cpp
-    pipeline/connector_scan_operator.cpp
-    pipeline/jdbc_scan_operator.cpp
+    pipeline/scan/morsel.cpp
+    pipeline/scan/scan_operator.cpp
+    pipeline/scan/olap_chunk_source.cpp
+    pipeline/scan/olap_scan_operator.cpp
+    pipeline/scan/olap_scan_prepare_operator.cpp
+    pipeline/scan/olap_scan_context.cpp
+    pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/morsel.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/local_partition_topn_sink.cpp
+    pipeline/sort/local_partition_topn_source.cpp
+    pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp

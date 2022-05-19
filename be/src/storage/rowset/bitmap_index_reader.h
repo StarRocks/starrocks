@@ -24,6 +24,7 @@
 #include <roaring/roaring.hh>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/column_block.h"
@@ -32,11 +33,8 @@
 
 namespace starrocks {
 
+class FileSystem;
 class TypeInfo;
-
-namespace fs {
-class BlockManager;
-}
 
 namespace vectorized {
 class SparseRange;
@@ -50,7 +48,7 @@ class BitmapIndexReader {
 public:
     BitmapIndexReader() = default;
 
-    Status load(fs::BlockManager* block_mgr, const std::string& file_name, const BitmapIndexPB* bitmap_index_meta,
+    Status load(FileSystem* fs, const std::string& file_name, const BitmapIndexPB* bitmap_index_meta,
                 bool use_page_cache, bool kept_in_memory);
 
     // create a new column iterator. Client should delete returned iterator

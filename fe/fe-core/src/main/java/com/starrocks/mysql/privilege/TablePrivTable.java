@@ -28,6 +28,8 @@ import com.starrocks.qe.ConnectContext;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
 
 /*
  * TablePrivTable saves all table level privs
@@ -35,17 +37,18 @@ import java.io.IOException;
 public class TablePrivTable extends PrivTable {
 
     /*
-     * Return first priv which match the user@host on db.tbl The returned priv will
+     * Return first priv which match current user on db.tbl The returned priv will
      * be saved in 'savedPrivs'.
      */
     public void getPrivs(UserIdentity currentUser, String db, String tbl, PrivBitSet savedPrivs) {
-        TablePrivEntry matchedEntry = null;
-        for (PrivEntry entry : entries) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
-            if (!tblPrivEntry.match(currentUser, true)) {
-                continue;
-            }
+        List<PrivEntry> userPrivEntryList = map.get(currentUser);
+        if (userPrivEntryList == null) {
+            return;
+        }
 
+        TablePrivEntry matchedEntry = null;
+        for (PrivEntry entry : userPrivEntryList) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
             // check db
             Preconditions.checkState(!tblPrivEntry.isAnyDb());
             if (!tblPrivEntry.getDbPattern().match(db)) {
@@ -68,19 +71,15 @@ public class TablePrivTable extends PrivTable {
     }
 
     /*
-     * Check if user@host has specified privilege on any table
+     * Check if user has specified privilege on any table
+     * TODO I can't think of any occasion that requires the privilege of ANY table,
+     *      nor can I find such usage through all codes.
+     *      I will try to remove this in another PR.
      */
-    public boolean hasPriv(String host, String user, PrivPredicate wanted) {
-        for (PrivEntry entry : entries) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
-            // check host
-            if (!tblPrivEntry.isAnyHost() && !tblPrivEntry.getHostPattern().match(host)) {
-                continue;
-            }
-            // check user
-            if (!tblPrivEntry.isAnyUser() && !tblPrivEntry.getUserPattern().match(user)) {
-                continue;
-            }
+    public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             // check priv
             if (tblPrivEntry.privSet.satisfy(wanted)) {
                 return true;
@@ -90,13 +89,9 @@ public class TablePrivTable extends PrivTable {
     }
 
     public boolean hasPrivsOfDb(UserIdentity currentUser, String db) {
-        for (PrivEntry entry : entries) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
-
-            if (!tblPrivEntry.match(currentUser, true)) {
-                continue;
-            }
-
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             // check db
             Preconditions.checkState(!tblPrivEntry.isAnyDb());
             if (!tblPrivEntry.getDbPattern().match(db)) {
@@ -120,8 +115,9 @@ public class TablePrivTable extends PrivTable {
     }
 
     public boolean hasClusterPriv(ConnectContext ctx, String clusterName) {
-        for (PrivEntry entry : entries) {
-            TablePrivEntry tblPrivEntry = (TablePrivEntry) entry;
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
+        while (iter.hasNext()) {
+            TablePrivEntry tblPrivEntry = (TablePrivEntry) iter.next();
             if (tblPrivEntry.getOrigDb().startsWith(clusterName)) {
                 return true;
             }

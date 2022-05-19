@@ -1929,7 +1929,8 @@ public class PlanFragmentBuilder {
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
                         return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE);
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_AGG);
                     });
         }
 
@@ -2279,24 +2280,8 @@ public class PlanFragmentBuilder {
             int cteId = consume.getCteId();
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
-
-            // create new tuple, don't use CTE-Produce tuple
-            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
-
-            for (ColumnRefOperator cteProduceColumnRef : consume.getCteOutputColumnRefMap().values()) {
-                SlotId slotId = new SlotId(cteProduceColumnRef.getId());
-                SlotDescriptor cteProduceDesc = context.getDescTbl().getSlotDesc(slotId);
-
-                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(tupleDescriptor, slotId);
-                slotDescriptor.setIsNullable(cteProduceDesc.getIsNullable());
-                slotDescriptor.setIsMaterialized(true);
-                slotDescriptor.setType(cteProduceDesc.getType());
-                context.getColRefToExpr()
-                        .put(cteProduceColumnRef, new SlotRef(cteProduceColumnRef.toString(), slotDescriptor));
-            }
-
-            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), cteFragment.getPlanRoot(), false,
-                    DistributionSpec.DistributionType.SHUFFLE, tupleDescriptor);
+            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
+                    cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 

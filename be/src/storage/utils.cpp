@@ -144,7 +144,8 @@ Status read_write_test_file(const string& test_file_path) {
         write_test_buff[i] = static_cast<char>(tmp_value);
     }
 
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(test_file_path));
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(opts, test_file_path));
     RETURN_IF_ERROR(wf->append(Slice(write_buff.get(), TEST_FILE_BUF_SIZE)));
     RETURN_IF_ERROR(wf->close());
 

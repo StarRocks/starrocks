@@ -182,9 +182,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
-    _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
-    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
@@ -267,10 +264,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     return Status::OK();
 }
 
-void HiveDataSource::_init_chunk(vectorized::ChunkPtr* chunk) {
-    *chunk = ChunkHelper::new_chunk(*_tuple_desc, _runtime_state->chunk_size());
-}
-
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         _scanner->close(state);
@@ -283,7 +276,7 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     if (_no_data) {
         return Status::EndOfFile("no data");
     }
-    _init_chunk(chunk);
+    _init_chunk(chunk, _runtime_state->chunk_size());
     SCOPED_TIMER(_profile.scan_timer);
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));

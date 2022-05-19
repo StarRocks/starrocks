@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "runtime/global_dicts.h"
-#include "storage/fs/fs_util.h"
 #include "storage/olap_common.h"
 #include "storage/seek_range.h"
 
@@ -26,6 +25,8 @@ namespace starrocks::vectorized {
 class ColumnPredicate;
 class DeletePredicates;
 class Schema;
+struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 class RowsetReadOptions {
 public:
@@ -57,6 +58,8 @@ public:
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
+
+    RowidRangeOptionPtr rowid_range_option = nullptr;
 };
 
 } // namespace starrocks::vectorized

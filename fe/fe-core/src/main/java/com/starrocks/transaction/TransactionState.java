@@ -553,6 +553,7 @@ public class TransactionState implements Writable {
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
+        sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
         sb.append(", reason: ").append(reason);
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
@@ -726,6 +727,7 @@ public class TransactionState implements Writable {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
                     this.getDbId(),
+                    commitTime,
                     partitionVersions,
                     createTime);
             this.addPublishVersionTask(backendId, task);

@@ -171,4 +171,9 @@ public class MysqlScanNode extends ScanNode {
         // We assume that the data volume of all mysql tables is very small, so set cardinality directly to 1.
         cardinality = cardinality == -1 ? 1 : cardinality;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

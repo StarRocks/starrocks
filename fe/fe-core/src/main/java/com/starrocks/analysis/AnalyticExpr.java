@@ -90,6 +90,7 @@ public class AnalyticExpr extends Expr {
     public static String RANK = "RANK";
     public static String DENSERANK = "DENSE_RANK";
     public static String ROWNUMBER = "ROW_NUMBER";
+    public static String NTILE = "NTILE";
     public static String MIN = "MIN";
     public static String MAX = "MAX";
     public static String SUM = "SUM";
@@ -229,6 +230,22 @@ public class AnalyticExpr extends Expr {
         }
 
         return fn.functionName().equalsIgnoreCase(MIN) || fn.functionName().equalsIgnoreCase(MAX);
+    }
+
+    public static boolean isNtileFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(NTILE);
+    }
+
+    public static boolean isRowNumberFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(ROWNUMBER);
     }
 
     private static boolean isRankingFn(Function fn) {
