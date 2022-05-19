@@ -78,6 +78,22 @@ Status SchemaHelper::get_table_privs(const std::string& ip, const int32_t port, 
             [&request, &result](FrontendServiceConnection& client) { client->getTablePrivs(*result, request); });
 }
 
+Status SchemaHelper::get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
+                               TGetTaskInfoResult* var_result) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&var_params, &var_result](FrontendServiceConnection& client) {
+                                                           client->getTasks(*var_result, var_params);
+                                                       });
+}
+
+Status SchemaHelper::get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
+                                   TGetTaskRunInfoResult* var_result) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&var_params, &var_result](FrontendServiceConnection& client) {
+                                                           client->getTaskRuns(*var_result, var_params);
+                                                       });
+}
+
 void fill_data_column_with_null(vectorized::Column* data_column) {
     vectorized::NullableColumn* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
     nullable_column->append_nulls(1);
