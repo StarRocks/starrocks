@@ -100,13 +100,13 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTaskInfoResult;
+import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListTableStatusResult;
-import com.starrocks.thrift.TListTaskInfoResult;
-import com.starrocks.thrift.TListTaskRunInfoResult;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
@@ -329,9 +329,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TListTaskInfoResult getTasks(TGetTasksParams params) throws TException {
+    public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
         LOG.debug("get show task request: {}", params);
-        TListTaskInfoResult result = new TListTaskInfoResult();
+        TGetTaskInfoResult result = new TGetTaskInfoResult();
         List<TTaskInfo> tasksResult = Lists.newArrayList();
         result.setTasks(tasksResult);
 
@@ -363,9 +363,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TListTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
+    public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
         LOG.debug("get show task run request: {}", params);
-        TListTaskRunInfoResult result = new TListTaskRunInfoResult();
+        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 

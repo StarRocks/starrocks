@@ -22,7 +22,7 @@ private:
     int _db_index{0};
     int _task_index{0};
     TGetDbsResult _db_result;
-    TListTaskInfoResult _task_result;
+    TGetTaskInfoResult _task_result;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

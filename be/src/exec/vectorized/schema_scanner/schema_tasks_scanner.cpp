@@ -126,7 +126,7 @@ Status SchemaTasksScanner::get_new_tasks() {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::show_tasks(*(_param->ip), _param->port, task_params, &_task_result));
+        RETURN_IF_ERROR(SchemaHelper::get_tasks(*(_param->ip), _param->port, task_params, &_task_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }

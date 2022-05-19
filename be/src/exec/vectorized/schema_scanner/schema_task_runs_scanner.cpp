@@ -181,14 +181,14 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status SchemaTaskRunsScanner::get_new_task_run() {
+Status SchemaTaskRunsScanner::get_new_task_runs() {
     TGetTasksParams task_params;
     task_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::show_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
+        RETURN_IF_ERROR(SchemaHelper::get_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -205,7 +205,7 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
     while (_task_run_index >= _task_run_result.task_runs.size()) {
         if (_db_index < _db_result.dbs.size()) {
-            RETURN_IF_ERROR(get_new_task_run());
+            RETURN_IF_ERROR(get_new_task_runs());
         } else {
             *eos = true;
             return Status::OK();

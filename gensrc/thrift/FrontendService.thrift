@@ -344,7 +344,7 @@ struct TTaskInfo {
     5: optional string definition
 }
 
-struct TListTaskInfoResult {
+struct TGetTaskInfoResult {
     1: required list<TTaskInfo> tasks
 }
 
@@ -360,7 +360,7 @@ struct TTaskRunInfo {
     9: optional string error_message
 }
 
-struct TListTaskRunInfoResult {
+struct TGetTaskRunInfoResult {
     1: optional list<TTaskRunInfo> task_runs
 }
 
@@ -973,8 +973,8 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
 
-    TListTaskInfoResult getTasks(1:TGetTasksParams params)
-    TListTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
+    TGetTaskInfoResult getTasks(1:TGetTasksParams params)
+    TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
 
     TFeResult updateExportTaskStatus(1:TUpdateExportTaskStatusRequest request)
 
