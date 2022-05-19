@@ -27,10 +27,9 @@ Tracer& Tracer::Instance() {
 }
 
 void Tracer::init(const std::string& service_name) {
-    if (config::enable_tracer) {
+    if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
-        opts.endpoint = config::jaeger_server_endpoint;
-        opts.server_port = config::jaeger_server_port;
+        opts.endpoint = config::jaeger_endpoint;
         auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
                 new opentelemetry::exporter::jaeger::JaegerExporter(opts));
         auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
@@ -48,7 +47,7 @@ void Tracer::shutdown() {
 }
 
 bool Tracer::is_enabled() const {
-    return config::enable_tracer;
+    return !config::jaeger_endpoint.empty();
 }
 
 Span Tracer::start_trace(const std::string& trace_name) {

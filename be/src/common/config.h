@@ -715,10 +715,8 @@ CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
-// Some config for opentelemetry tracing.
-CONF_Bool(enable_tracer, "false");
-CONF_String(jaeger_server_endpoint, "localhost");
-CONF_Int64(jaeger_server_port, "6381");
+// Config for opentelemetry tracing.
+CONF_String(jaeger_endpoint, "");
 
 } // namespace config
 
