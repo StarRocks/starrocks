@@ -11,22 +11,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMaterializedView;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
  * meta structure for materialized view
  */
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
-    private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
     public enum RefreshType {
         SYNC,
@@ -110,8 +106,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "active")
     private boolean active;
 
-    // TODO: partition expression
-
     // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -171,26 +165,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        MaterializedView that = (MaterializedView) o;
-        return id == that.id;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-
-    @Override
     public void gsonPostProcess() throws IOException {
         // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
@@ -202,7 +176,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @Override
     public void write(DataOutput out) throws IOException {
         partitionInfo.preSerialize();
-        String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
