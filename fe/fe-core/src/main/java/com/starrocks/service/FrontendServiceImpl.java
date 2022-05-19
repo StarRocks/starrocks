@@ -66,6 +66,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -97,6 +100,9 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTaskInfoResult;
+import com.starrocks.thrift.TGetTaskRunInfoResult;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
@@ -128,6 +134,8 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -319,6 +327,75 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return result;
     }
+
+    @Override
+    public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
+        LOG.debug("get show task request: {}", params);
+        TGetTaskInfoResult result = new TGetTaskInfoResult();
+        List<TTaskInfo> tasksResult = Lists.newArrayList();
+        result.setTasks(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Task> taskList = taskManager.showTasks(params.db);
+
+        for (Task task : taskList) {
+            TTaskInfo info = new TTaskInfo();
+            info.setTask_name(task.getName());
+            info.setCreate_time(task.getCreateTime() / 1000);
+            // Now there are only MANUAL types of Tasks
+            info.setSchedule("MANUAL");
+            info.setDatabase(task.getDbName());
+            info.setDefinition(task.getDefinition());
+            tasksResult.add(info);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
+        LOG.debug("get show task run request: {}", params);
+        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
+        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
+        result.setTask_runs(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        for (TaskRunStatus status : taskRunList) {
+            TTaskRunInfo info = new TTaskRunInfo();
+            info.setQuery_id(status.getQueryId());
+            info.setTask_name(status.getTaskName());
+            info.setCreate_time(status.getCreateTime() / 1000);
+            info.setFinish_time(status.getFinishTime() / 1000);
+            info.setState(status.getState().toString());
+            info.setDefinition(status.getDefinition());
+            info.setError_code(status.getErrorCode());
+            info.setError_message(status.getErrorMessage());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+
 
     @Override
     public TGetDBPrivsResult getDBPrivs(TGetDBPrivsParams params) throws TException {

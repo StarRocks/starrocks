@@ -1455,6 +1455,7 @@ public class GlobalStateMgr {
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         statisticAutoCollector.start();
+        taskManager.start();
     }
 
     // start threads that should running on all FE

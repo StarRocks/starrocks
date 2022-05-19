@@ -46,13 +46,25 @@ public class TaskRunManager {
         return queryId;
     }
 
-    public List<TaskRunStatus> showTaskRunStatus() {
+    public List<TaskRunStatus> showTaskRunStatus(String dbName) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
-        for (Queue<TaskRun> pTaskRunQueue : pendingTaskRunMap.values()) {
-            taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
+        if (dbName == null) {
+            for (Queue<TaskRun> pTaskRunQueue : pendingTaskRunMap.values()) {
+                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
+            }
+            taskRunList.addAll(runningTaskRunMap.values().stream().map(TaskRun::getStatus).collect(Collectors.toList()));
+            taskRunList.addAll(taskRunHistory.getAllHistory());
+        } else {
+            for (Queue<TaskRun> pTaskRunQueue : pendingTaskRunMap.values()) {
+                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus)
+                        .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+            }
+            taskRunList.addAll(runningTaskRunMap.values().stream().map(TaskRun::getStatus)
+                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+            taskRunList.addAll(taskRunHistory.getAllHistory().stream()
+                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+
         }
-        taskRunList.addAll(runningTaskRunMap.values().stream().map(TaskRun::getStatus).collect(Collectors.toList()));
-        taskRunList.addAll(taskRunHistory.getAllHistory());
         return taskRunList;
     }
 
