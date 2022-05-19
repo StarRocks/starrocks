@@ -240,9 +240,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SQL_MODE)
     private long sqlMode = 32L;
 
-    @Deprecated
-    @VariableMgr.VarAttr(name = RESOURCE_GROUP)
-    private String deprecatedResourceGroup = "normal";
+    // The specified resource group of this session
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
+    private String resourceGroup = "";
 
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
@@ -625,11 +625,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public String getResourceGroup() {
-        return deprecatedResourceGroup;
+        return resourceGroup;
     }
 
     public void setResourceGroup(String resourceGroup) {
-        this.deprecatedResourceGroup = resourceGroup;
+        this.resourceGroup = resourceGroup;
     }
 
     public boolean isDisableColocateJoin() {
@@ -1075,7 +1075,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             charsetClient = Text.readString(in);
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
-            deprecatedResourceGroup = Text.readString(in);
+            // Deprecated variable, keep it just for compatibility
+            // resourceGroup = Text.readString(in);
+            Text.readString(in);
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {
@@ -1117,6 +1119,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 }
 
                 if (!root.has(attr.name())) {
+                    continue;
+                }
+                // Do not restore the session_only variable
+                if ((attr.flag() & VariableMgr.SESSION_ONLY) != 0) {
                     continue;
                 }
 
