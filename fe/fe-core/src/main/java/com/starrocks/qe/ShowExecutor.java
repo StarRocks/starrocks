@@ -535,7 +535,6 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
 
-
     // Show table statement.
     private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
