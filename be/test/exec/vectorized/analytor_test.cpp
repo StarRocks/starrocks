@@ -1,15 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include <gtest/gtest.h>
-
 #include "exec/vectorized/analytor.h"
+
+#include <gtest/gtest.h>
 
 namespace starrocks::vectorized {
 class AnalytorTest : public ::testing::Test {
 public:
-    void SetUp() override {
-        config::vector_chunk_size = 1024;
-    }
+    void SetUp() override { config::vector_chunk_size = 1024; }
 };
 
 // NOLINTNEXTLINE
@@ -146,4 +144,4 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
     ASSERT_EQ(analytor3.found_partition_end(), 0);
 }
 
-}
+} // namespace starrocks::vectorized
