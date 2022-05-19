@@ -156,7 +156,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *        select t0.v1,
          *             case
          *                 when t1Rows = 0 then false
-         *                 when t0.v2 is null then is null
+         *                 when t0.v2 is null then null
          *                 when t1d.v2 is not null then true
          *                 when v2Nulls < t1Rows then null
          *                 else false
