@@ -3,6 +3,7 @@
 #include "column/const_column.h"
 
 #include <algorithm>
+#include <iostream>
 
 #include "column/column_helper.h"
 #include "simd/simd.h"
@@ -12,10 +13,17 @@ namespace starrocks::vectorized {
 
 ConstColumn::ConstColumn(ColumnPtr data) : _data(std::move(data)), _size(0) {
     DCHECK(!_data->is_constant());
+    // _data->resize(1);
+    // DCHECK(_data->size() == 1);
 }
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());
+    std::cout << _data->size() << std::endl;
+    if (_data->size() > 1) {
+        _data->resize(1);
+        DCHECK(_data->size() == 1);
+    }
 }
 
 void ConstColumn::append(const Column& src, size_t offset, size_t count) {
