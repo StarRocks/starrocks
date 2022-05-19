@@ -197,7 +197,7 @@ protected:
 
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
-    int64_t _last_growth_cpu_time_ns = 0;
+    std::atomic_int64_t _last_growth_cpu_time_ns = 0;
 
 private:
     void _init_rf_counters(bool init_bloom);
