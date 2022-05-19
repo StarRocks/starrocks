@@ -49,6 +49,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
@@ -63,6 +64,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -605,6 +607,15 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
     public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
+        return checksum;
+    }
+
+    public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
+            readFields(dis);
+        }
+        setCatalog(globalStateMgr);
+        LOG.info("finished replay backupHandler from image");
         return checksum;
     }
 }

@@ -334,7 +334,7 @@ public class PluginMgr implements Writable {
 
     public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_78) {
-            GlobalStateMgr.getCurrentPluginMgr().readFields(dis);
+            readFields(dis);
         }
         LOG.info("finished replay plugins from image");
         return checksum;

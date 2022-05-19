@@ -21,6 +21,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -1104,7 +1105,7 @@ public class GlobalStateMgr {
             checksum = nodeMgr.loadBrokers(dis, checksum);
             checksum = loadResources(dis, checksum);
             checksum = exportMgr.loadExportJob(dis, checksum);
-            checksum = loadBackupHandler(dis, checksum);
+            checksum = backupHandler.loadBackupHandler(dis, checksum, this);
             checksum = auth.loadAuth(dis, checksum);
             // global transaction must be replayed before load jobs v2
             checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
@@ -1275,15 +1276,6 @@ public class GlobalStateMgr {
         }
 
         return newChecksum;
-    }
-
-    public long loadBackupHandler(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
-            getBackupHandler().readFields(dis);
-        }
-        getBackupHandler().setCatalog(this);
-        LOG.info("finished replay backupHandler from image");
-        return checksum;
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
@@ -2721,6 +2713,7 @@ public class GlobalStateMgr {
     }
 
     // for test only
+    @VisibleForTesting
     public void clear() {
         localMetastore.clear();
     }
