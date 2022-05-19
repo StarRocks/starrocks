@@ -2,7 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master
 //                     /fs_brokers/apache_hdfs_broker/src/main/java
-//                     /org/apache/doris/broker/hdfs/FileSystemManager.java 
+//                     /org/apache/doris/broker/hdfs/FileSystemManager.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
