@@ -24,8 +24,8 @@
 #include <string>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/slice.h"
 
 using std::string;
@@ -37,15 +37,15 @@ protected:
     const std::string kBlockManagerDir = "./ut_dir/file_block_manager";
 
     void SetUp() override {
-        if (FileUtils::check_exist(kBlockManagerDir)) {
-            ASSERT_TRUE(FileUtils::remove_all(kBlockManagerDir).ok());
+        if (fs::path_exist(kBlockManagerDir)) {
+            ASSERT_TRUE(fs::remove_all(kBlockManagerDir).ok());
         }
-        ASSERT_TRUE(FileUtils::create_dir(kBlockManagerDir).ok());
+        ASSERT_TRUE(fs::create_directories(kBlockManagerDir).ok());
     }
 
     void TearDown() override {
-        if (FileUtils::check_exist(kBlockManagerDir)) {
-            ASSERT_TRUE(FileUtils::remove_all(kBlockManagerDir).ok());
+        if (fs::path_exist(kBlockManagerDir)) {
+            ASSERT_TRUE(fs::remove_all(kBlockManagerDir).ok());
         }
     }
 };

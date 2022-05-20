@@ -66,7 +66,6 @@ set(UTIL_FILES
   system_metrics.cpp
   url_parser.cpp
   url_coding.cpp
-  file_utils.cpp
   mysql_row_buffer.cpp
   error_util.cc
   spinlock.cc

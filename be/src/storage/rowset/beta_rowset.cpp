@@ -21,13 +21,14 @@
 
 #include "storage/rowset/beta_rowset.h"
 
+#include <fs/fs_util.h>
 #include <unistd.h> // for link()
-#include <util/file_utils.h>
 
 #include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
 #include "segment_options.h"
@@ -42,7 +43,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -148,12 +148,12 @@ Status BetaRowset::link_files_to(const std::string& dir, RowsetId new_rowset_id)
 Status BetaRowset::copy_files_to(const std::string& dir) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
-        if (FileUtils::check_exist(dst_path)) {
+        if (fs::path_exist(dst_path)) {
             LOG(WARNING) << "Path already exist: " << dst_path;
             return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+        if (!fs::copy_file(src_path, dst_path).ok()) {
             LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
@@ -161,13 +161,13 @@ Status BetaRowset::copy_files_to(const std::string& dir) {
     }
     for (int i = 0; i < num_delete_files(); ++i) {
         std::string src_path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        if (FileUtils::check_exist(src_path)) {
+        if (fs::path_exist(src_path)) {
             std::string dst_path = segment_del_file_path(dir, rowset_id(), i);
-            if (FileUtils::check_exist(dst_path)) {
+            if (fs::path_exist(dst_path)) {
                 LOG(WARNING) << "Path already exist: " << dst_path;
                 return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+            if (!fs::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                              << ", errno=" << Errno::no();
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
