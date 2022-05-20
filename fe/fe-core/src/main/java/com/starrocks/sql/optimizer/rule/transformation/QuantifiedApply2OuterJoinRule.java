@@ -125,7 +125,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
         private ColumnRefSet correlationPredicateInnerRefs;
 
-        private ScalarOperator innerJoinOnPredicate;
+        private ScalarOperator countJoinOnPredicate;
 
         private final List<ColumnRefOperator> distinctAggregateOutputs;
 
@@ -155,7 +155,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * after: with xx as (select t1.v2, t1.v3 from t1)
          *        select t0.v1,
          *             case
-         *                 when t1Rows = 0 then false
+         *                 when t1Rows = 0 or t1Rows is null then false // t1 empty table
          *                 when t0.v2 is null then null
          *                 when t1d.v2 is not null then true
          *                 when v2Nulls < t1Rows then null
@@ -164,14 +164,14 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *         from t0
          *              left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
          *                              on t0.v2= t1d.v2 and t0.v3 = t1d.v3
-         *              inner join (select count(*) as t1Rows, count(xx.v2) as v2Nulls from xx group by xx.v3) as t1c
+         *              left outer join (select count(*) as t1Rows, count(xx.v2) as v2Nulls from xx group by xx.v3) as t1c
          *                              on t1c.v3 = t1d.v3
          *
          *                                           CTEAnchor
          *                                          /        \
          *                                    CTEProduce     Project
          *    Apply(t0.v2 in t1.v2)              /               \
-         *    /          \          ===>     Project          inner join
+         *    /          \          ===>     Project         left/cross join
          *   t0          t1                   /              /          \
          *                                Filter         Left join       Agg(count)
          *                                 /             /       \           \
@@ -190,10 +190,9 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             OptExpression leftJoin = OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN,
                     Utils.compoundAnd(inPredicate, correlationPredicate)), input.getInputs().get(0), distinctAggregate);
 
-            OptExpression innerJoin = OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                    innerJoinOnPredicate), leftJoin, countAggregate);
+            OptExpression crossJoin = buildCrossOrLeftJoin(leftJoin, countAggregate);
 
-            OptExpression caseWhen = buildCaseWhen(innerJoin);
+            OptExpression caseWhen = buildCaseWhen(crossJoin);
 
             OptExpression anchor = OptExpression.create(new LogicalCTEAnchorOperator(cteId), cteProduce, caseWhen);
 
@@ -336,7 +335,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             Map<ColumnRefOperator, ScalarOperator> countRewriteMap = Maps.newHashMap();
             countConsumeOutputMaps.forEach((k, v) -> countRewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(countRewriteMap);
-            innerJoinOnPredicate = rewriter.rewrite(correlationPredicate);
+            countJoinOnPredicate = rewriter.rewrite(correlationPredicate);
 
             // count aggregate
             Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
@@ -352,6 +351,20 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
             return OptExpression.create(
                     new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates), countConsume);
+        }
+
+        /*
+         * 1. build cross join if un-correlation sub-query
+         * 2. build left join if correlation sub-query
+         */
+        private OptExpression buildCrossOrLeftJoin(OptExpression leftJoin, OptExpression countAggregate) {
+            if (countJoinOnPredicate != null) {
+                return OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, countJoinOnPredicate),
+                        leftJoin, countAggregate);
+            }
+
+            return OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null),
+                    leftJoin, countAggregate);
         }
 
         /*
