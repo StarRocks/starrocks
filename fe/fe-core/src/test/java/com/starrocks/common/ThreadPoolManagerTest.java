@@ -50,7 +50,7 @@ public class ThreadPoolManagerTest {
 
         Runnable task = () -> {
             try {
-                Thread.sleep(500);
+                Thread.sleep(1000);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -64,7 +64,7 @@ public class ThreadPoolManagerTest {
         Assert.assertEquals(0, testCachedPool.getQueue().size());
         Assert.assertEquals(0, testCachedPool.getCompletedTaskCount());
 
-        Thread.sleep(700);
+        Thread.sleep(1400);
 
         Assert.assertEquals(2, testCachedPool.getPoolSize());
         Assert.assertEquals(0, testCachedPool.getActiveCount());
@@ -80,7 +80,7 @@ public class ThreadPoolManagerTest {
         Assert.assertEquals(2, testFixedThreaddPool.getQueue().size());
         Assert.assertEquals(0, testFixedThreaddPool.getCompletedTaskCount());
 
-        Thread.sleep(2000);
+        Thread.sleep(4000);
 
         Assert.assertEquals(2, testFixedThreaddPool.getPoolSize());
         Assert.assertEquals(0, testFixedThreaddPool.getActiveCount());
