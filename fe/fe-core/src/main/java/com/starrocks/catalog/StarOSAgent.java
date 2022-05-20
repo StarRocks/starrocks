@@ -82,7 +82,6 @@ public class StarOSAgent {
     private class StarClient {
         // private Map<Long, List<Replica>> shardIdToWorkerIds;
         private Map<Long, Worker> idToWorker;
-        private Set<Worker> workerList;
 
         private long id = System.currentTimeMillis();
 
