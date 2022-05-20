@@ -42,8 +42,9 @@ ExprContext::ExprContext(Expr* root)
         : _fn_contexts_ptr(nullptr), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
 
 ExprContext::~ExprContext() {
-    DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
     for (auto& _fn_context : _fn_contexts) {
+        _fn_context->impl()->close();
         delete _fn_context;
     }
 }
@@ -79,10 +80,10 @@ Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
 }
 
 void ExprContext::close(RuntimeState* state) {
-    if (_closed) {
+    bool expected = false;
+    if (!_closed.compare_exchange_strong(expected, true)) {
         return;
     }
-    _closed = true;
     FunctionContext::FunctionStateScope scope =
             _is_clone ? FunctionContext::THREAD_LOCAL : FunctionContext::FRAGMENT_LOCAL;
     _root->close(state, this, scope);
@@ -94,6 +95,7 @@ void ExprContext::close(RuntimeState* state) {
     if (_pool != nullptr) {
         _pool->free_all();
     }
+    _pool.reset();
 }
 
 int ExprContext::register_func(RuntimeState* state, const starrocks_udf::FunctionContext::TypeDesc& return_type,
