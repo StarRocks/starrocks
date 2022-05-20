@@ -11,12 +11,11 @@ namespace starrocks {
 class TracerTest : public testing::Test {};
 
 TEST_F(TracerTest, BasicTest) {
-    std::unique_ptr<Tracer> tracer = std::make_unique<Tracer>("TracerTest");
-    auto span = tracer->start_trace("test");
-    EXPECT_TRUE(span->IsRecording());
+    EXPECT_FALSE(Tracer::Instance().is_enabled());
+    auto span = Tracer::Instance().start_trace("test");
+    EXPECT_FALSE(span->IsRecording());
     span->End();
     EXPECT_FALSE(span->IsRecording());
-    tracer->shutdown();
 }
 
 } // namespace starrocks
