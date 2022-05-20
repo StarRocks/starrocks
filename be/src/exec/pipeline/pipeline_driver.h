@@ -14,6 +14,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
@@ -215,6 +216,9 @@ public:
     }
 
     Operators& operators() { return _operators; }
+    ScanOperator* source_scan_operator() {
+        return _operators.empty() ? nullptr : dynamic_cast<ScanOperator*>(_operators.front().get());
+    }
     SourceOperator* source_operator() {
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
     }

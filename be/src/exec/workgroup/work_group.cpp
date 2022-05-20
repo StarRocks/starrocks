@@ -322,7 +322,7 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
         if (wg_growth_cpu_use_cost > _big_query_cpu_second_limit) {
             _bigquery_count++;
-            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {] but limit is {}",
+            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {} but limit is {}",
                                                  wg_growth_cpu_use_cost, _big_query_cpu_second_limit));
         }
     }

@@ -142,11 +142,10 @@ public:
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 
     // The different operators have their own independent logic for calculating Cost
-    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns_counter->value(); }
     virtual int64_t get_last_growth_cpu_time_ns() {
-        int64_t growth_time = _total_cost_cpu_time_ns_counter->value() - _last_growth_cpu_time_ns;
-        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns_counter->value();
-        return growth_time;
+        int64_t res = _last_growth_cpu_time_ns;
+        _last_growth_cpu_time_ns = 0;
+        return res;
     }
 
     RuntimeState* runtime_state();
@@ -196,8 +195,9 @@ protected:
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 
-    RuntimeProfile::Counter* _total_cost_cpu_time_ns_counter = nullptr;
-    int64_t _last_growth_cpu_time_ns = 0;
+    // Some extra cpu cost of this operator that not accounted by pipeline driver,
+    // such as OlapScanOperator( use separated IO thread to execute the IO task)
+    std::atomic_int64_t _last_growth_cpu_time_ns = 0;
 
 private:
     void _init_rf_counters(bool init_bloom);

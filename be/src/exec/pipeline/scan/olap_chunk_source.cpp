@@ -426,12 +426,6 @@ int64_t OlapChunkSource::last_spent_cpu_time_ns() {
     return _last_spent_cpu_time_ns - time_ns;
 }
 
-int64_t OlapChunkSource::last_scan_rows_num() {
-    int64_t temp = _last_scan_rows_num;
-    _last_scan_rows_num = 0;
-    return temp;
-}
-
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;

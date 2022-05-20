@@ -52,23 +52,6 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
-
-    virtual int64_t get_last_scan_bytes() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
-
-    virtual void set_workgroup(workgroup::WorkGroupPtr wg) {}
-
-    // Some specific source operators need execute i/o tasks in io_threads.
-    virtual void set_io_threads(PriorityThreadPool* io_threads) {}
-
     size_t degree_of_parallelism() const {
         auto* source_op_factory = down_cast<SourceOperatorFactory*>(_factory);
         return source_op_factory->degree_of_parallelism();
@@ -76,9 +59,6 @@ public:
 
 protected:
     MorselQueue* _morsel_queue = nullptr;
-
-    int64_t _last_scan_rows_num = 0;
-    int64_t _last_scan_bytes = 0;
 };
 
 } // namespace pipeline

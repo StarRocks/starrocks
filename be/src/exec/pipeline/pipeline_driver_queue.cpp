@@ -352,33 +352,24 @@ void DriverQueueWithWorkGroup::cancel(DriverRawPtr driver) {
 }
 
 void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
+    // TODO: reduce the lock scope
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
     auto* wg = driver->workgroup();
     wg->driver_queue()->update_statistics(driver);
     wg->increment_real_runtime_ns(runtime_ns);
-
-    // for big query check cpu
-    auto* query_ctx = driver->query_ctx();
-    if (wg->big_query_cpu_second_limit()) {
-        wg->incr_total_cpu_cost(runtime_ns);
-        query_ctx->incr_cpu_cost(runtime_ns);
-
-        // Increase the overhead of the source operator alone
-        int64_t source_operator_last_cpu_time_ns = driver->source_operator()->get_last_growth_cpu_time_ns();
-        wg->incr_total_cpu_cost(source_operator_last_cpu_time_ns);
-        query_ctx->incr_cpu_cost(source_operator_last_cpu_time_ns);
-
-        // Increase the overhead of the sink operator alone
-        auto* sink_operator = driver->sink_operator();
-        int64_t sink_operator_last_cpu_time_ns = sink_operator->get_last_growth_cpu_time_ns();
-
-        wg->incr_total_cpu_cost(sink_operator_last_cpu_time_ns);
-        query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
-    }
-
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
+
+    // For big query check cpu
+    if (wg->big_query_cpu_second_limit()) {
+        // Calculate the cost of the source && sink operator alone
+        int64_t source_operator_last_cpu_time_ns = driver->source_operator()->get_last_growth_cpu_time_ns();
+        int64_t sink_operator_last_cpu_time_ns = driver->sink_operator()->get_last_growth_cpu_time_ns();
+        int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+
+        wg->incr_total_cpu_cost(accounted_cpu_cost);
+    }
 }
 
 size_t DriverQueueWithWorkGroup::size() const {

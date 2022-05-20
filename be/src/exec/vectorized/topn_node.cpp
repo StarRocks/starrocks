@@ -58,8 +58,12 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _order_by_types.resize(size);
         for (size_t i = 0; i < size; ++i) {
             const TExprNode& expr_node = tnode.sort_node.sort_info.sort_tuple_slot_exprs[i].nodes[0];
-            _order_by_types[i].type_desc = TypeDescriptor::from_thrift(expr_node.type);
+            auto type_desc = TypeDescriptor::from_thrift(expr_node.type);
+            _order_by_types[i].type_desc = type_desc;
             _order_by_types[i].is_nullable = expr_node.is_nullable || has_outer_join_child;
+            if (!type_desc.support_orderby()) {
+                return Status::NotSupported(fmt::format("order by type {} is not supported", type_desc.debug_string()));
+            }
         }
     }
 
