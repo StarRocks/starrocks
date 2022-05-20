@@ -207,16 +207,20 @@ public abstract class AstVisitor<R, C> {
     }
 
     // ----------------- Catalog Clause -------------
-    public R visitCreateCatalogStatement(CreateCatalogStmt stmt, C context) {
-        return visitStatement(stmt, context);
+    public R visitCatalogStatement(StatementBase statement, C context) {
+        return visitStatement(statement, context);
     }
 
-    public R visitDropCatalogStatement(DropCatalogStmt stmt, C context) {
-        return visitStatement(stmt, context);
+    public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
+        return visitCatalogStatement(statement, context);
+    }
+
+    public R visitDropCatalogStatement(DropCatalogStmt statement, C context) {
+        return visitCatalogStatement(statement, context);
     }
 
     public R visitShowCatalogsStmt(ShowCatalogsStmt statement, C context) {
-        return visitShowStatement(statement, context);
+        return visitCatalogStatement(statement, context);
     }
 
     // ----------------- Alter Clause ---------------
