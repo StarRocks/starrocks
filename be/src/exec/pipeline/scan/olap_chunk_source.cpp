@@ -32,6 +32,11 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
           _limit(scan_node->limit()),
           _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
 
+OlapChunkSource::~OlapChunkSource() {
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
