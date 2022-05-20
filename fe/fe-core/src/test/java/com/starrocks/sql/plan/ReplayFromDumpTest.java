@@ -43,6 +43,7 @@ public class ReplayFromDumpTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
