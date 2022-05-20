@@ -147,6 +147,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return viewDefineSql;
     }
 
+    public void setViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
@@ -191,6 +195,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public void write(DataOutput out) throws IOException {
+        // write type first
+        Text.writeString(out, type.name());
         partitionInfo.preSerialize();
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }

@@ -92,6 +92,15 @@ public class MaterializedViewTest {
         Assert.assertEquals(3, mv2.getDefaultReplicationNum().shortValue());
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
+        Assert.assertEquals(true, mv2.isActive());
+        mv2.setActive(false);
+        Assert.assertEquals(false, mv2.isActive());
+        mv2.setBaseTableIds(Sets.newHashSet(10L, 20L));
+        Assert.assertEquals(Sets.newHashSet(10L, 20L), mv2.getBaseTableIds());
+
+        String mvDefinition = "create materialized view mv2 select col1, col2 from table1";
+        mv2.setViewDefineSql(mvDefinition);
+        Assert.assertEquals(mvDefinition, mv2.getViewDefineSql());
     }
 
     @Test
@@ -334,24 +343,26 @@ public class MaterializedViewTest {
         dos.flush();
         dos.close();
 
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        MaterializedView materializedView = MaterializedView.read(dis);
-        Assert.assertTrue(mv.equals(materializedView));
-        Assert.assertEquals(mv.getName(), materializedView.getName());
-        PartitionInfo partitionInfo1 = materializedView.getPartitionInfo();
-        Assert.assertTrue(partitionInfo1 != null);
-        Assert.assertEquals(PartitionType.RANGE, partitionInfo1.getType());
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo1;
-        Assert.assertTrue(partitionInfo.getRange(20000L).equals(rangePartitionInfo.getRange(20000L)));
-        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-        Assert.assertTrue(distributionInfo != null);
-        Assert.assertTrue(distributionInfo instanceof HashDistributionInfo);
-        Assert.assertEquals(10, distributionInfo.getBucketNum());
-        Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
-
+        // deserialized from Table.read
+        File file2 = new File("./index");
+        DataInputStream dis2 = new DataInputStream(new FileInputStream(file2));
+        Table table = Table.read(dis2);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView materializedView2 = (MaterializedView) table;
+        Assert.assertTrue(mv.equals(materializedView2));
+        Assert.assertEquals(mv.getName(), materializedView2.getName());
+        PartitionInfo partitionInfo2 = materializedView2.getPartitionInfo();
+        Assert.assertTrue(partitionInfo2 != null);
+        Assert.assertEquals(PartitionType.RANGE, partitionInfo2.getType());
+        RangePartitionInfo rangePartitionInfo2 = (RangePartitionInfo) partitionInfo2;
+        Assert.assertTrue(partitionInfo.getRange(20000L).equals(rangePartitionInfo2.getRange(20000L)));
+        DistributionInfo distributionInfo2 = materializedView2.getDefaultDistributionInfo();
+        Assert.assertTrue(distributionInfo2 != null);
+        Assert.assertTrue(distributionInfo2 instanceof HashDistributionInfo);
+        Assert.assertEquals(10, distributionInfo2.getBucketNum());
+        Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo2).getDistributionColumns().size());
+        dis2.close();
         // 3. delete files
-        dis.close();
         file.delete();
     }
 }
