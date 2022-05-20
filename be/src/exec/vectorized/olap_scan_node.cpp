@@ -39,10 +39,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
 
-    // init filtered_ouput_columns
+    // init filtered_output_columns
     for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
     }
+
+    _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
 }
@@ -573,38 +575,53 @@ Status OlapScanNode::_capture_tablet_rowsets() {
 }
 
 struct TypeMemoryUsed {
-    template <FieldType type>
+    template <PrimitiveType ptype>
     size_t operator()() {
-        switch (type) {
-        case OLAP_FIELD_TYPE_VARCHAR:
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_JSON:
+        switch (ptype) {
+        case TYPE_VARCHAR:
+        case TYPE_CHAR:
+        case TYPE_JSON:
+        case TYPE_HLL:
+        case TYPE_OBJECT:
+        case TYPE_PERCENTILE:
+            // Use 100 bytes to estimate types of indeterminate length.
             return 100;
-#define M(TYPE) return 100;
-            APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M)
-#undef M
         default:
             return 0;
         }
     }
 };
 
+void OlapScanNode::_estimate_scan_and_output_row_bytes() {
+    const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
+    const auto& slots = tuple_desc->slots();
+
+    std::unordered_set<std::string> unused_output_column_set;
+    for (const auto& column : unused_output_column_set) {
+        unused_output_column_set.emplace(column);
+    }
+
+    for (const auto& slot : slots) {
+        size_t filed_bytes = std::max<size_t>(slot->slot_size(), 0);
+        filed_bytes += type_dispatch_column(slot->type().type, TypeMemoryUsed());
+
+        _estimated_scan_row_bytes += filed_bytes;
+        if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
+            _estimated_output_row_bytes += filed_bytes;
+        }
+    }
+}
+
 size_t OlapScanNode::_scanner_concurrency() {
     int64_t query_limit = _runtime_state->query_mem_tracker_ptr()->limit();
 
-    size_t chunk_mem_usage = 0;
-    size_t row_mem_usage = 0;
-    const auto& fields = _chunk_schema->fields();
-    // we could use statistics
-    for (const auto& field : fields) {
-        row_mem_usage += field->type()->size();
-        row_mem_usage += field_type_dispatch_column(field->type()->type(), TypeMemoryUsed());
-    }
     // We temporarily assume that the memory tried in the storage layer
-    // is the same size as the chunk
-    row_mem_usage *= 2;
-    chunk_mem_usage = row_mem_usage * _runtime_state->chunk_size();
+    // is the same size as the chunk_size * _estimated_scan_row_bytes.
+    size_t row_mem_usage = _estimated_scan_row_bytes + _estimated_output_row_bytes;
+    size_t chunk_mem_usage = row_mem_usage * _runtime_state->chunk_size();
     DCHECK_GT(chunk_mem_usage, 0);
+
     // limit scan memory usage not greater than 1/4 query limit
     int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
     // limit concurrency not greater than scanner numbers

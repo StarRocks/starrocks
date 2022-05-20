@@ -125,7 +125,9 @@ private:
 
     // scanner concurrency
     size_t _scanner_concurrency();
+    void _estimate_scan_and_output_row_bytes();
 
+private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
@@ -137,6 +139,8 @@ private:
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
+    size_t _estimated_scan_row_bytes = 0;
+    size_t _estimated_output_row_bytes = 0;
     bool _start = false;
 
     mutable SpinLock _status_mutex;
