@@ -3,12 +3,16 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,7 +43,7 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
-        client.connectServer(Config.starmanager_address);
+        client.connectServer(Config.starmgr_address);
     }
 
     public List<Long> createShards(int numShards) {
@@ -77,7 +81,7 @@ public class StarOSAgent {
             WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
             String ipPort = workerInfo.getIpPort();
             String host = ipPort.split(":")[0];
-            long backendId = Catalog.getCurrentSystemInfo().getBackendIdByHost(host);
+            long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(host);
             if (backendId == -1) {
                 LOG.warn("Backend does not exists. host: {}", host);
                 continue;
@@ -87,7 +91,7 @@ public class StarOSAgent {
         return backendIds;
     }
 
-    public void registerAndBootStrapService(String serviceName) {
+    public void registerAndBootstrapService(String serviceName) {
         if (serviceId != -1) {
             return;
         }
@@ -122,7 +126,7 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            Log.warn(e);
+            LOG.warn(e);
             System.exit(-1);
         }
         LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
