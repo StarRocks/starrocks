@@ -153,35 +153,35 @@ public class TaskManager implements Writable {
         }
     }
 
-    public String executeTask(String taskName) {
+    public SubmitResult executeTask(String taskName) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
-            return null;
+            return new SubmitResult(null, SubmitResult.SubmitStatus.Failed);
         }
-        return taskRunManager.addTaskRun(TaskRunBuilder.newBuilder(task).build());
+        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build());
     }
 
-    public void dropTasks(List<String> taskNameList, boolean isReplay) {
+    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
         if (!tryLock()) {
             return;
         }
         try {
-            for (String taskName : taskNameList) {
-                Task task = nameToTaskMap.get(taskName);
+            for (long taskId : taskIdList) {
+                Task task = manualTaskMap.get(taskId);
                 if (task == null) {
                     return;
                 }
-                nameToTaskMap.remove(taskName);
+                nameToTaskMap.remove(task.getName());
                 manualTaskMap.remove(task.getId());
             }
 
             if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskNameList);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskIdList);
             }
         } finally {
             unlock();
         }
-        LOG.info("drop tasks:{}", taskNameList);
+        LOG.info("drop tasks:{}", taskIdList);
     }
 
     public List<Task> showTasks(String dbName) {
@@ -221,8 +221,8 @@ public class TaskManager implements Writable {
         createTask(task, true);
     }
 
-    public void replayDropTasks(List<String> taskNameList) {
-        dropTasks(taskNameList, true);
+    public void replayDropTasks(List<Long> taskIdList) {
+        dropTasks(taskIdList, true);
     }
 
     public TaskRunManager getTaskRunManager() {
@@ -231,7 +231,7 @@ public class TaskManager implements Writable {
 
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ConnectContext.get());
-        Long createResult = this.createTask(task, false);
+        Long createResult = createTask(task, false);
 
         String taskName = task.getName();
         if (createResult < 0) {
@@ -240,12 +240,15 @@ public class TaskManager implements Writable {
             }
             throw new DdlException("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
         }
-        String queryId = this.executeTask(taskName);
+        SubmitResult submitResult = executeTask(taskName);
+        if (submitResult.getStatus() != SubmitResult.SubmitStatus.Submitted) {
+            dropTasks(ImmutableList.of(task.getId()), false);
+        }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         builder.addColumn(new Column("TaskName", ScalarType.createVarchar(40)));
         builder.addColumn(new Column("Status", ScalarType.createVarchar(10)));
-        List<String> item = ImmutableList.of(taskName, "Submitted");
+        List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
     }
@@ -390,19 +393,19 @@ public class TaskManager implements Writable {
         long currentTimeMs = System.currentTimeMillis();
 
         List<Task> currentTask = showTasks(null);
-        List<String> taskToDelete = Lists.newArrayList();
+        List<Long> taskIdToDelete = Lists.newArrayList();
         currentTask.sort((o1, o2) -> Long.signum(o1.getCreateTime() - o2.getCreateTime()));
         int labelKeepMaxSecond = Config.label_keep_max_second;
         int numTaskToRemove = currentTask.size() - Config.label_keep_max_num;
         for (Task task : currentTask) {
             if ((currentTimeMs - task.getCreateTime()) / 1000 > labelKeepMaxSecond ||
                     numTaskToRemove > 0) {
-                taskToDelete.add(task.getName());
+                taskIdToDelete.add(task.getId());
                 --numTaskToRemove;
             }
         }
-
-        dropTasks(taskToDelete, true);
+        // this will do in checkpoint and does not need write log
+        dropTasks(taskIdToDelete, true);
     }
 
     public void removeOldTaskRunHistory() {
@@ -431,8 +434,6 @@ public class TaskManager implements Writable {
                     --numHistoryToRemove;
                 }
             }
-
-            GlobalStateMgr.getCurrentState().getEditLog().logDropTaskRuns(historyToDelete);
         } finally {
             unlock();
         }
@@ -464,10 +465,14 @@ public class TaskManager implements Writable {
         // Use to execute actual TaskRun
         private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-        public String addTaskRun(TaskRun taskRun) {
+        public SubmitResult submitTaskRun(TaskRun taskRun) {
             // duplicate submit
             if (taskRun.getStatus() != null) {
                 return null;
+            }
+
+            if (pendingTaskRunMap.keySet().size() > Config.pending_task_run_num_limit) {
+                return new SubmitResult(null, SubmitResult.SubmitStatus.Rejected);
             }
 
             String queryId = UUIDUtil.genUUID().toString();
@@ -477,7 +482,7 @@ public class TaskManager implements Writable {
 
             Queue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId, u -> Queues.newConcurrentLinkedQueue());
             taskRuns.offer(taskRun);
-            return queryId;
+            return new SubmitResult(queryId, SubmitResult.SubmitStatus.Submitted);
         }
 
         // check if a running TaskRun is complete and remove it from running TaskRun map

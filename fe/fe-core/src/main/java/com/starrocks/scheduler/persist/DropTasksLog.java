@@ -14,15 +14,15 @@ import java.util.List;
 
 public class DropTasksLog implements Writable {
 
-    @SerializedName("taskNameList")
-    List<String> taskNameList;
+    @SerializedName("taskIdList")
+    List<Long> taskIdList;
 
-    public DropTasksLog(List<String> taskNameList) {
-        this.taskNameList = taskNameList;
+    public DropTasksLog(List<Long> taskIdList) {
+        this.taskIdList = taskIdList;
     }
 
-    public List<String> getTaskNameList() {
-        return taskNameList;
+    public List<Long> getTaskIdList() {
+        return taskIdList;
     }
 
     public static DropTasksLog read(DataInput in) throws IOException {

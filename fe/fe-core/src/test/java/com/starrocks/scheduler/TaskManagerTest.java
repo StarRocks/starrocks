@@ -86,7 +86,7 @@ public class TaskManagerTest {
         TaskManager.TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.addTaskRun(taskRun);
+        taskRunManager.submitTaskRun(taskRun);
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 

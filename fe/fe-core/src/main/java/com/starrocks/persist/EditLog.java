@@ -712,7 +712,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DROP_TASKS: {
                     DropTasksLog dropTasksLog = (DropTasksLog) journal.getData();
-                    globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskNameList());
+                    globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
                     break;
                 }
                 case OperationType.OP_CREATE_TASK_RUN: {
@@ -985,8 +985,8 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_TASK, info);
     }
 
-    public void logDropTasks(List<String> taskNameList) {
-        logEdit(OperationType.OP_DROP_TASKS, new DropTasksLog(taskNameList));
+    public void logDropTasks(List<Long> taskIdList) {
+        logEdit(OperationType.OP_DROP_TASKS, new DropTasksLog(taskIdList));
     }
 
     public void logTaskRunCreateStatus(TaskRunStatus status) {
