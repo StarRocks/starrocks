@@ -132,6 +132,17 @@ public class StarOSAgent {
         LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
     }
 
+    public long addWorker(String workerIpPort) {
+        long workerId = -1;
+        try {
+            workerId = client.addWorker(serviceId, workerIpPort);
+        } catch (StarClientException e) {
+            LOG.warn(e);
+            System.exit(-1);
+        }
+        return workerId;
+    }
+
     // Mock StarClient
     /*private class StarClient {
         // private Map<Long, List<Replica>> shardIdToWorkerIds;
