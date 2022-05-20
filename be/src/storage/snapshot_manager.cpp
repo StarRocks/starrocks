@@ -488,8 +488,8 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
         return Status::RuntimeError("empty snapshot_id_path");
     }
     std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
-    (void)FileUtils::remove_all(snapshot_dir);
-    RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
+    (void)fs::remove_all(snapshot_dir);
+    RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
 
     // If tablet is PrimaryKey tablet, we should dump snapshot meta file first and then link files
     // to snapshot directory
@@ -519,7 +519,7 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
     st = make_snapshot_on_tablet_meta(snapshot_type, snapshot_dir, tablet, snapshot_rowset_metas, full_snapshot_version,
                                       g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
-        (void)FileUtils::remove_all(snapshot_id_path);
+        (void)fs::remove_all(snapshot_id_path);
         return st;
     }
 
@@ -528,7 +528,7 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
         auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return st;
         }
     }

@@ -2272,7 +2272,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     DeferOp del_tablet([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet->tablet_id());
-        (void)FileUtils::remove_all(tablet->schema_hash_path());
+        (void)fs::remove_all(tablet->schema_hash_path());
     });
     tablet->set_enable_persistent_index(enable_persistent_index);
     const int N = 8000;
@@ -2342,7 +2342,7 @@ void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_
     auto tablet = create_tablet(rand(), rand());
     DeferOp del_tablet([&]() {
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
-        (void)FileUtils::remove_all(tablet->schema_hash_path());
+        (void)fs::remove_all(tablet->schema_hash_path());
     });
     const int num_keys_per_rowset = 1000;
     auto add_version = [&](int64_t v) {
@@ -2377,7 +2377,7 @@ void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vec
     auto tablet = create_tablet(rand(), rand());
     DeferOp del_tablet([&]() {
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
-        (void)FileUtils::remove_all(tablet->schema_hash_path());
+        (void)fs::remove_all(tablet->schema_hash_path());
     });
     const int num_keys_per_rowset = 1000;
     auto add_version = [&](int64_t v) {
@@ -2442,8 +2442,8 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(src_tablet->tablet_id());
         (void)tablet_mgr->drop_tablet(dest_tablet->tablet_id());
-        (void)FileUtils::remove_all(src_tablet->schema_hash_path());
-        (void)FileUtils::remove_all(dest_tablet->schema_hash_path());
+        (void)fs::remove_all(src_tablet->schema_hash_path());
+        (void)fs::remove_all(dest_tablet->schema_hash_path());
     });
     const int num_keys_per_rowset = 1000;
     auto add_version = [&](TabletSharedPtr& tablet, int64_t v) {
@@ -2468,14 +2468,14 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
 
     auto snapshot_dir = SnapshotManager::instance()->snapshot_primary(src_tablet, missing_version_ranges, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(src_tablet, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
