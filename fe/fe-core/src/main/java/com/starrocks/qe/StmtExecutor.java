@@ -993,6 +993,9 @@ public class StmtExecutor {
         if (statisticsForAuditLog.cpuCostNs == null) {
             statisticsForAuditLog.cpuCostNs = 0L;
         }
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
+        }
         return statisticsForAuditLog;
     }
 
