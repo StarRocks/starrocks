@@ -390,6 +390,9 @@ public:
     void test_load_snapshot_incremental_with_partial_rowset_old(bool enable_persistent_index);
     void test_load_snapshot_incremental_with_partial_rowset_new(bool enable_persistent_index,
                                                                 PartialUpdateCloneCase update_case);
+    void test_load_snapshot_primary(int64_t num_version, const std::vector<uint64_t>& holes);
+    void test_load_snapshot_primary(int64_t max_version, const std::vector<uint64_t>& holes,
+                                    bool enable_persistent_index);
     void test_load_snapshot_full(bool enable_persistent_index);
     void test_load_snapshot_full_file_not_exist(bool enable_persistent_index);
     void test_load_snapshot_full_mismatched_tablet_id(bool enable_persistent_index);
@@ -397,6 +400,12 @@ public:
     void test_issue_4181(bool enable_persistent_index);
     void test_snapshot_with_empty_rowset(bool enable_persistent_index);
     void test_get_column_values(bool enable_persistent_index);
+    void test_get_missing_version_ranges(const std::vector<int64_t>& versions,
+                                         const std::vector<int64_t>& expected_missing_ranges);
+    void test_get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& versions,
+                                                   const std::vector<int64_t>& missing_ranges,
+                                                   const std::vector<int64_t>& expect_rowset_versions, bool gc,
+                                                   bool expect_error);
 
     void tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1, std::vector<int32_t>& column_indexes,
                          const std::shared_ptr<TabletSchema>& partial_schema);
@@ -2259,19 +2268,24 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset_with_persistent_index) {
 
 void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet(rand(), rand());
-    _tablet->set_enable_persistent_index(enable_persistent_index);
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)FileUtils::remove_all(tablet->schema_hash_path());
+    });
+    tablet->set_enable_persistent_index(enable_persistent_index);
     const int N = 8000;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
     std::size_t max_rows_per_segment = 1000;
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowsets(tablet, keys, max_rows_per_segment)).ok());
+    ASSERT_TRUE(tablet->rowset_commit(3, create_rowsets(tablet, keys, max_rows_per_segment)).ok());
     std::vector<uint32_t> read_column_ids = {1, 2};
     std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
-    const auto& tablet_schema = _tablet->tablet_schema();
+    const auto& tablet_schema = tablet->tablet_schema();
     for (auto i = 0; i < read_column_ids.size(); i++) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema.column(read_column_id);
@@ -2290,7 +2304,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
         std::sort(rowids.begin(), rowids.end());
         rowids_by_rssid.emplace(i, rowids);
     }
-    _tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
+    tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
     auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
         std::stringstream ss;
         ss << "[";
@@ -2310,7 +2324,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     for (const auto& read_column : read_columns) {
         read_column->reset_column();
     }
-    _tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
+    tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
     ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
     ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }
@@ -2321,6 +2335,173 @@ TEST_F(TabletUpdatesTest, get_column_values) {
 
 TEST_F(TabletUpdatesTest, get_column_values_with_persistent_index) {
     test_get_column_values(true);
+}
+
+void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_t>& versions,
+                                                        const std::vector<int64_t>& expected_missing_ranges) {
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
+        (void)FileUtils::remove_all(tablet->schema_hash_path());
+    });
+    const int num_keys_per_rowset = 1000;
+    auto add_version = [&](int64_t v) {
+        std::vector<int64_t> keys;
+        for (int i = 0; i < num_keys_per_rowset; i++) {
+            keys.push_back(num_keys_per_rowset * i + i);
+        }
+        auto rs = create_rowset(tablet, keys);
+        ASSERT_TRUE(tablet->rowset_commit(v, rs).ok());
+    };
+    for (auto v : versions) {
+        add_version(v);
+    }
+    vector<int64_t> missing_version_ranges;
+    ASSERT_TRUE(tablet->updates()->get_missing_version_ranges(missing_version_ranges).ok());
+    ASSERT_EQ(missing_version_ranges, expected_missing_ranges);
+}
+
+TEST_F(TabletUpdatesTest, get_missing_version_ranges) {
+    srand(GetCurrentTimeMicros());
+    test_get_missing_version_ranges({2, 3, 4, 6, 8, 10, 14, 15, 20, 23},
+                                    {5, 5, 7, 7, 9, 9, 11, 13, 16, 19, 21, 22, 24});
+    test_get_missing_version_ranges({}, {2});
+    test_get_missing_version_ranges({2, 3, 4, 5}, {6});
+    test_get_missing_version_ranges({3, 4, 5}, {2, 2, 6});
+}
+
+void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& versions,
+                                                                  const std::vector<int64_t>& missing_ranges,
+                                                                  const std::vector<int64_t>& expect_rowset_versions,
+                                                                  bool gc, bool expect_error) {
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
+        (void)FileUtils::remove_all(tablet->schema_hash_path());
+    });
+    const int num_keys_per_rowset = 1000;
+    auto add_version = [&](int64_t v) {
+        std::vector<int64_t> keys;
+        for (int i = 0; i < num_keys_per_rowset; i++) {
+            keys.push_back(num_keys_per_rowset * i + i);
+        }
+        auto rs = create_rowset(tablet, keys);
+        ASSERT_TRUE(tablet->rowset_commit(v, rs).ok());
+    };
+    for (auto v : versions) {
+        add_version(v);
+    }
+    if (gc) {
+        while (true) {
+            EditVersion ev;
+            tablet->updates()->get_latest_applied_version(&ev);
+            if (ev.major() == versions.back()) {
+                break;
+            }
+            SleepForMs(50);
+        }
+        // only keep last version
+        tablet->updates()->remove_expired_versions(INT64_MAX);
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    auto st = tablet->updates()->get_rowsets_for_incremental_snapshot(missing_ranges, rowsets);
+    if (expect_error) {
+        EXPECT_TRUE(st.is_not_found());
+    } else {
+        EXPECT_TRUE(st.ok());
+    }
+    std::vector<int64_t> rowset_versions;
+    for (auto& rowset : rowsets) {
+        rowset_versions.push_back(rowset->version().first);
+    }
+    EXPECT_EQ(expect_rowset_versions, rowset_versions);
+}
+
+TEST_F(TabletUpdatesTest, get_rowsets_for_incremental_snapshot) {
+    srand(GetCurrentTimeMicros());
+    test_get_rowsets_for_incremental_snapshot({2}, {3, 4, 6}, {}, false, true);
+    test_get_rowsets_for_incremental_snapshot({2, 3, 4, 5}, {3, 3, 6}, {3}, false, false);
+    test_get_rowsets_for_incremental_snapshot({2, 3, 4, 5, 6}, {3, 3, 5, 5, 7}, {3, 5}, false, false);
+    test_get_rowsets_for_incremental_snapshot({2, 3, 4, 5, 6, 7}, {3, 3, 5, 5, 7}, {3, 5, 7}, false, false);
+    // after gc, there will only be version:7 left, should get empty rowset list
+    test_get_rowsets_for_incremental_snapshot({2, 3, 4, 5, 6, 7}, {3, 3, 5, 5, 7}, {}, true, false);
+}
+
+void TabletUpdatesTest::test_load_snapshot_primary(int64_t num_version, const std::vector<uint64_t>& holes) {
+    test_load_snapshot_primary(num_version, holes, false);
+    test_load_snapshot_primary(num_version, holes, true);
+}
+
+void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const std::vector<uint64_t>& holes,
+                                                   bool enable_persistent_index) {
+    auto src_tablet = create_tablet(rand(), rand());
+    auto dest_tablet = create_tablet(rand(), rand());
+    src_tablet->set_enable_persistent_index(enable_persistent_index);
+    dest_tablet->set_enable_persistent_index(enable_persistent_index);
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(src_tablet->tablet_id());
+        (void)tablet_mgr->drop_tablet(dest_tablet->tablet_id());
+        (void)FileUtils::remove_all(src_tablet->schema_hash_path());
+        (void)FileUtils::remove_all(dest_tablet->schema_hash_path());
+    });
+    const int num_keys_per_rowset = 1000;
+    auto add_version = [&](TabletSharedPtr& tablet, int64_t v) {
+        std::vector<int64_t> keys;
+        for (int i = 0; i < num_keys_per_rowset; i++) {
+            keys.push_back(num_keys_per_rowset * i + i);
+        }
+        auto rs = create_rowset(tablet, keys);
+        ASSERT_TRUE(tablet->rowset_commit(v, rs).ok());
+    };
+    size_t holes_index = 0;
+    for (int64_t v = 2; v <= max_version; v++) {
+        add_version(src_tablet, v);
+        if (holes_index < holes.size() && v == holes[holes_index]) {
+            holes_index++;
+        } else {
+            add_version(dest_tablet, v);
+        }
+    }
+    std::vector<int64_t> missing_version_ranges;
+    ASSERT_TRUE(dest_tablet->updates()->get_missing_version_ranges(missing_version_ranges).ok());
+
+    auto snapshot_dir = SnapshotManager::instance()->snapshot_primary(src_tablet, missing_version_ranges, 3600);
+    ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
+    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(src_tablet, *snapshot_dir);
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
+    ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
+
+    std::set<std::string> files;
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    ASSERT_TRUE(st.ok()) << st;
+    files.erase("meta");
+
+    for (const auto& f : files) {
+        std::string src = meta_dir + "/" + f;
+        std::string dst = dest_tablet->schema_hash_path() + "/" + f;
+        st = FileSystem::Default()->link_file(src, dst);
+        ASSERT_TRUE(st.ok()) << st;
+        LOG(INFO) << "Linked " << src << " to " << dst;
+    }
+    // Pretend that tablet0 is a peer replica of tablet1
+    snapshot_meta->tablet_meta().set_tablet_id(dest_tablet->tablet_id());
+    snapshot_meta->tablet_meta().set_schema_hash(dest_tablet->schema_hash());
+    for (auto& rm : snapshot_meta->rowset_metas()) {
+        rm.set_tablet_id(dest_tablet->tablet_id());
+    }
+
+    st = dest_tablet->updates()->load_snapshot(*snapshot_meta);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(max_version, dest_tablet->updates()->max_version());
+}
+
+TEST_F(TabletUpdatesTest, load_snapshot_primary) {
+    srand(GetCurrentTimeMicros());
+    test_load_snapshot_primary(7, {3, 4, 5});
+    test_load_snapshot_primary(7, {3, 5, 7});
 }
 
 } // namespace starrocks
