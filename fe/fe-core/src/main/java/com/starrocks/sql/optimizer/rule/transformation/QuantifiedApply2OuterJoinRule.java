@@ -113,11 +113,11 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
         // e.g: select t0.v1, t0.v2 in (select t1.v2 from t1 where t0.v3 = t1.v3) from t0;
         //
-        // in sub-query in predicate, will rewrite multi-times.
+        // origin in sub-query in predicate
         // e.g: t0.v2 in (t1.v2) -> t0.v2 = t1.v2
         private BinaryPredicateOperator inPredicate;
 
-        // correlation predicate, will rewrite multi-times.
+        // origin correlation predicate
         // e.g: t0.v3 = t1.v3
         private ScalarOperator correlationPredicate;
 
@@ -126,6 +126,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         private ColumnRefSet correlationPredicateInnerRefs;
 
         private ScalarOperator countJoinOnPredicate;
+
+        private ScalarOperator distinctJoinOnPredicate;
 
         private final List<ColumnRefOperator> distinctAggregateOutputs;
 
@@ -188,7 +190,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             OptExpression countAggregate = buildCountAndConsume();
 
             OptExpression leftJoin = OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN,
-                    Utils.compoundAnd(inPredicate, correlationPredicate)), input.getInputs().get(0), distinctAggregate);
+                    distinctJoinOnPredicate), input.getInputs().get(0), distinctAggregate);
 
             OptExpression crossJoin = buildCrossOrLeftJoin(leftJoin, countAggregate);
 
@@ -290,8 +292,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             distinctConsumeOutputMaps.forEach((k, v) -> distinctRewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(distinctRewriteMap);
 
-            inPredicate = (BinaryPredicateOperator) rewriter.rewrite(inPredicate);
-            correlationPredicate = rewriter.rewrite(correlationPredicate);
+            distinctJoinOnPredicate =
+                    Utils.compoundAnd(rewriter.rewrite(inPredicate), rewriter.rewrite(correlationPredicate));
 
             distinctAggregateOutputs.addAll(distinctConsumeOutputMaps.keySet());
             // distinct aggregate
@@ -331,7 +333,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             OptExpression countConsume =
                     OptExpression.create(new LogicalCTEConsumeOperator(cteId, countConsumeOutputMaps));
 
-            // rewrite inner join on-clause by cte consume output
+            // rewrite cross/left join on-clause by cte consume output
             Map<ColumnRefOperator, ScalarOperator> countRewriteMap = Maps.newHashMap();
             countConsumeOutputMaps.forEach((k, v) -> countRewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(countRewriteMap);
