@@ -32,6 +32,7 @@ DIAGNOSTIC_POP
 #include <memory>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -45,7 +46,6 @@ DIAGNOSTIC_POP
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 #include "util/path_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -296,7 +296,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
         }
 
         TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
-        st = FileUtils::create_dir(new_tablet->schema_hash_path());
+        st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
@@ -1425,7 +1425,7 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
 }
 
 Status TabletManager::_remove_tablet_directories(const TabletSharedPtr& tablet) {
-    return FileUtils::remove_all(tablet->tablet_id_path());
+    return fs::remove_all(tablet->tablet_id_path());
 }
 
 Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& tablet) {

@@ -27,6 +27,12 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs));
+    for (auto& expr : _partition_exprs) {
+        auto& type_desc = expr->root()->type();
+        if (!type_desc.support_groupby()) {
+            return Status::NotSupported(fmt::format("partition by type {} is not supported", type_desc.debug_string()));
+        }
+    }
     auto partition_size = _t_partition_exprs.size();
     _partition_types.resize(partition_size);
     for (auto i = 0; i < partition_size; ++i) {
