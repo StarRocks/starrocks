@@ -24,9 +24,9 @@
 #include <memory>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
-#include "util/file_utils.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -45,7 +45,7 @@ Status ZipFile::close() {
     }
 
     for (auto& p : _clean_paths) {
-        RETURN_IF_ERROR(FileUtils::remove_all(p));
+        RETURN_IF_ERROR(fs::remove_all(p));
     }
 
     return Status::OK();
@@ -67,7 +67,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
 
     // 0.check target path
     std::string target = target_path + "/" + dir_name;
-    if (FileUtils::check_exist(target)) {
+    if (fs::path_exist(target)) {
         return Status::AlreadyExist("path already exists: " + target);
     }
 
@@ -75,7 +75,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
     std::string temp = target_path + "/.tmp_" + std::to_string(GetCurrentTimeMicros()) + "_" + dir_name;
     _clean_paths.push_back(temp);
 
-    RETURN_IF_ERROR(FileUtils::create_dir(temp));
+    RETURN_IF_ERROR(fs::create_directories(temp));
 
     // 2.unzip to temp directory
     for (int i = 0; i < global_info.number_entry; ++i) {
@@ -106,7 +106,7 @@ Status ZipFile::extract_file(const std::string& target_path) {
     std::string path = target_path + "/" + std::string(file_name);
 
     if (HasSuffixString(file_name, "/") || HasSuffixString(file_name, "\\")) {
-        return FileUtils::create_dir(path);
+        return fs::create_directories(path);
     }
 
     // is file, unzip

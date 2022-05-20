@@ -20,8 +20,8 @@
 #include <gtest/gtest.h>
 #include <libgen.h>
 
+#include "fs/fs_util.h"
 #include "plugin/plugin.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -68,14 +68,14 @@ public:
 };
 
 TEST_F(PluginLoaderTest, normal) {
-    FileUtils::remove_all(_path + "/plugin_test/target");
+    fs::remove_all(_path + "/plugin_test/target");
 
     DynamicPluginLoader plugin_loader("PluginExample", PLUGIN_TYPE_STORAGE, _path + "/plugin_test/source/test.zip",
                                       "libplugin_example.so", _path + "/plugin_test/target");
     ASSERT_TRUE(plugin_loader.install().ok());
 
-    ASSERT_TRUE(FileUtils::is_dir(_path + "/plugin_test/target/PluginExample"));
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/PluginExample/"));
+    ASSERT_TRUE(fs::is_dir(_path + "/plugin_test/target/PluginExample"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/PluginExample/"));
 
     std::shared_ptr<Plugin> plugin = plugin_loader.plugin();
 
@@ -86,10 +86,10 @@ TEST_F(PluginLoaderTest, normal) {
     ASSERT_TRUE(plugin->flags & PLUGIN_NOT_DYNAMIC_UNINSTALL);
     ASSERT_FALSE(plugin_loader.uninstall().ok());
 
-    ASSERT_TRUE(FileUtils::is_dir(_path + "/plugin_test/target/PluginExample"));
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/PluginExample/"));
+    ASSERT_TRUE(fs::is_dir(_path + "/plugin_test/target/PluginExample"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/PluginExample/"));
 
-    FileUtils::remove_all(_path + "/plugin_test/target");
+    fs::remove_all(_path + "/plugin_test/target");
 }
 
 TEST_F(PluginLoaderTest, builtin) {
