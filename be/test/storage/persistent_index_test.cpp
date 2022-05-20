@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -17,7 +18,6 @@
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/faststring.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -213,7 +213,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
             ASSERT_EQ(values[i], get_values[i]);
         }
     }
-    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
@@ -429,7 +429,7 @@ void build_persistent_index_from_tablet(size_t N) {
     }
 
     manager->index_cache().release(index_entry);
-    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
@@ -507,7 +507,7 @@ PARALLEL_TEST(PersistentIndexTest, test_replace) {
     for (int i = N / 2; i < N; i++) {
         ASSERT_EQ(values[i], new_get_values[i]);
     }
-    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 } // namespace starrocks

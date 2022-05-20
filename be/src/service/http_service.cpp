@@ -21,6 +21,7 @@
 
 #include "service/http_service.h"
 
+#include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compaction_action.h"
@@ -43,7 +44,6 @@
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
-#include "util/file_utils.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -105,7 +105,7 @@ Status HttpService::start() {
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
-        FileUtils::create_dir(config::pprof_profile_dir);
+        fs::create_directories(config::pprof_profile_dir);
     }
 
     HeapAction* heap_action = new HeapAction();

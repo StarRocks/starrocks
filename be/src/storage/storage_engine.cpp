@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
@@ -46,7 +47,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/file_utils.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -862,7 +862,7 @@ void StorageEngine::_clean_unused_txns() {
 
 Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
     Status res = Status::OK();
-    if (!FileUtils::check_exist(scan_root)) {
+    if (!fs::path_exist(scan_root)) {
         // dir not existed. no need to sweep trash.
         return res;
     }
@@ -891,7 +891,7 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
             VLOG(10) << "get actual expire time " << actual_expire << " of dir: " << dir_name;
 
             if (difftime(local_now, mktime(&local_tm_create)) >= actual_expire) {
-                Status ret = FileUtils::remove_all(path_name);
+                Status ret = fs::remove_all(path_name);
                 if (!ret.ok()) {
                     LOG(WARNING) << "fail to remove file. path: " << path_name << ", error: " << ret.to_string();
                     res = Status::IOError(

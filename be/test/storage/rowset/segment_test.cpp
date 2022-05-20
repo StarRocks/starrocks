@@ -29,6 +29,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -42,7 +43,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 

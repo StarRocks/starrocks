@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "column/datum_tuple.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
@@ -42,7 +43,6 @@
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
-#include "util/file_utils.h"
 
 using std::string;
 
@@ -65,8 +65,8 @@ protected:
         static int i = 0;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_" + std::to_string(i);
 
-        ASSERT_OK(FileUtils::remove_all(config::storage_root_path));
-        ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
+        ASSERT_OK(fs::remove_all(config::storage_root_path));
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
 
         std::vector<StorePath> paths;
         paths.emplace_back(config::storage_root_path);
@@ -82,7 +82,7 @@ protected:
         exec_env->set_storage_engine(k_engine);
 
         const std::string rowset_dir = config::storage_root_path + "/data/beta_rowset_test";
-        ASSERT_TRUE(FileUtils::create_dir(rowset_dir).ok());
+        ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
         i++;
     }
@@ -92,8 +92,8 @@ protected:
         delete k_engine;
         k_engine = nullptr;
         starrocks::ExecEnv::GetInstance()->set_storage_engine(nullptr);
-        if (FileUtils::check_exist(config::storage_root_path)) {
-            ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        if (fs::path_exist(config::storage_root_path)) {
+            ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         StoragePageCache::release_global_cache();
     }

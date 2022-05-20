@@ -281,7 +281,7 @@ public:
         auto snapshot_dir = SnapshotManager::instance()->snapshot_full(source_tablet, clone_version, 3600);
         CHECK(snapshot_dir.ok()) << snapshot_dir.status();
 
-        DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+        DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
         auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(source_tablet, *snapshot_dir);
         auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
@@ -290,7 +290,7 @@ public:
         RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         std::set<std::string> files;
-        auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+        auto st = fs::list_dirs_files(meta_dir, NULL, &files);
         CHECK(st.ok()) << st;
         files.erase("meta");
 
@@ -323,7 +323,7 @@ public:
         auto snapshot_dir = SnapshotManager::instance()->snapshot_full(source_tablet, clone_version, 3600);
         CHECK(snapshot_dir.ok()) << snapshot_dir.status();
 
-        DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+        DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
         auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(source_tablet, *snapshot_dir);
         auto meta_file = meta_dir + "/meta";
@@ -345,7 +345,7 @@ public:
         CHECK(std::filesystem::create_directories(new_tablet_path));
 
         std::set<std::string> files;
-        CHECK(FileUtils::list_dirs_files(meta_dir, NULL, &files).ok());
+        CHECK(fs::list_dirs_files(meta_dir, NULL, &files).ok());
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = new_tablet_path + "/" + f;
@@ -1293,8 +1293,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1310,14 +1310,14 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {4, 5, 6}, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1367,8 +1367,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1384,14 +1384,14 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {2, 3, 4, 5, 6}, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1441,8 +1441,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1458,14 +1458,14 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
     auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {4, 5, 6}, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1502,8 +1502,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool 
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1519,14 +1519,14 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool 
     auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {4, 5, 6}, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1565,8 +1565,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1582,14 +1582,14 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
     auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {5, 6}, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1675,8 +1675,8 @@ void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const st
     *snapshot_id_path = SnapshotManager::instance()->calc_snapshot_id_path(tablet, 3600);
     ASSERT_TRUE(!snapshot_id_path->empty());
     *snapshot_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet, *snapshot_id_path);
-    (void)FileUtils::remove_all(*snapshot_dir);
-    ASSERT_TRUE(FileUtils::create_dir(*snapshot_dir).ok());
+    (void)fs::remove_all(*snapshot_dir);
+    ASSERT_TRUE(fs::create_directories(*snapshot_dir).ok());
 
     snapshot_rowset_metas->reserve(snapshot_rowsets->size());
     for (const auto& rowset : *snapshot_rowsets) {
@@ -1690,7 +1690,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    ASSERT_TRUE(FileUtils::list_dirs_files(meta_dir, NULL, &files).ok());
+    ASSERT_TRUE(fs::list_dirs_files(meta_dir, NULL, &files).ok());
     files.erase("meta");
 
     for (const auto& f : files) {
@@ -1740,8 +1740,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(b
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int32_t> column_indexes = {0, 1};
@@ -1803,8 +1803,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int32_t> column_indexes = {0, 1};
@@ -1831,8 +1831,8 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
     std::string snapshot_id_path;
     std::string snapshot_dir;
     DeferOp remove([&]() {
-        (void)FileUtils::remove_all(snapshot_dir);
-        (void)FileUtils::remove_all(snapshot_id_path);
+        (void)fs::remove_all(snapshot_dir);
+        (void)fs::remove_all(snapshot_id_path);
     });
 
     snapshot_prepare(tablet0, delta_versions, &snapshot_id_path, &snapshot_dir, &snapshot_rowsets,
@@ -1926,8 +1926,8 @@ void TabletUpdatesTest::test_load_snapshot_full(bool enable_persistent_index) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1973,8 +1973,8 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1990,14 +1990,14 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
     auto snapshot_dir = SnapshotManager::instance()->snapshot_full(tablet0, 11, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2043,8 +2043,8 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -2060,14 +2060,14 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
     auto snapshot_dir = SnapshotManager::instance()->snapshot_full(tablet0, 11, 3600);
     ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
 
-    DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2105,8 +2105,8 @@ void TabletUpdatesTest::test_issue_4193(bool enable_persistent_index) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -2156,8 +2156,8 @@ void TabletUpdatesTest::test_issue_4181(bool enable_persistent_index) {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -2206,7 +2206,7 @@ void TabletUpdatesTest::test_snapshot_with_empty_rowset(bool enable_persistent_i
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
-        (void)FileUtils::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet0->schema_hash_path());
     });
 
     std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -2224,7 +2224,7 @@ void TabletUpdatesTest::test_snapshot_with_empty_rowset(bool enable_persistent_i
     DeferOp defer2([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
         (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
-        (void)FileUtils::remove_all(tablet1->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
     });
 
     ASSERT_EQ(12, tablet1->updates()->max_version());
