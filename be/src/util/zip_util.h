@@ -24,8 +24,9 @@
 #include <string>
 #include <utility>
 
+#include <minizip/unzip.h>
+
 #include "common/status.h"
-#include "util/minizip/unzip.h"
 
 namespace starrocks {
 
