@@ -24,6 +24,7 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -235,6 +236,21 @@ std::string TypeDescriptor::debug_string() const {
     default:
         return type_to_string(type);
     }
+}
+
+bool TypeDescriptor::support_join() const {
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+}
+
+bool TypeDescriptor::support_orderby() const {
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+}
+
+bool TypeDescriptor::support_groupby() const {
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {

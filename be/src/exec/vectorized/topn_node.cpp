@@ -42,6 +42,13 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+        for (auto& expr : _analytic_partition_exprs) {
+            auto& type_desc = expr->root()->type();
+            if (!type_desc.support_groupby()) {
+                return Status::NotSupported(
+                        fmt::format("partition by type {} is not supported", type_desc.debug_string()));
+            }
+        }
     }
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
