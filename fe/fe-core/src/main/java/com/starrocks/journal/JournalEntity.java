@@ -91,6 +91,11 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.MultiDropTaskInfo;
+import com.starrocks.scheduler.MultiDropTaskRunInfo;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.scheduler.TaskRunStatusChange;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -505,6 +510,26 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_TASK:
+                data = Task.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASKS:
+                data = MultiDropTaskInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_TASK_RUN_CREATE_STATUS:
+                data = TaskRunStatus.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_TASK_RUN_STATUS_CHANGE:
+                data = TaskRunStatusChange.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASK_RUNS:
+                data = MultiDropTaskRunInfo.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);

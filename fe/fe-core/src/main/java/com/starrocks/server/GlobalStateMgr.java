@@ -1121,6 +1121,7 @@ public class GlobalStateMgr {
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = taskManager.loadTasks(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1349,6 +1350,7 @@ public class GlobalStateMgr {
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = taskManager.saveTasks(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3066,6 +3068,16 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            taskManager.removeOldTaskInfo();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old task failed", t);
+        }
+        try {
+            taskManager.removeOldTaskRunHistory();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old run history failed", t);
         }
     }
 }

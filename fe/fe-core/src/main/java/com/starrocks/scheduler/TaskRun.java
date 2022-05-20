@@ -120,11 +120,15 @@ public class TaskRun {
         return status;
     }
 
-    public TaskRunStatus initStatus(String queryId) {
+    public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
         status.setTaskName(task.getName());
-        status.setCreateTime(System.currentTimeMillis());
+        if (createTime == null) {
+            status.setCreateTime(System.currentTimeMillis());
+        } else {
+            status.setCreateTime(createTime);
+        }
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         this.status = status;

@@ -216,4 +216,11 @@ public class OperationType {
     // drop external catalog
     public static final short OP_DROP_CATALOG = 10061;
 
+    // task 10070 ~ 10090
+    public static final short OP_CREATE_TASK = 10071;
+    public static final short OP_DROP_TASKS = 10072;
+    public static final short OP_TASK_RUN_CREATE_STATUS = 10081;
+    public static final short OP_TASK_RUN_STATUS_CHANGE = 10082;
+    public static final short OP_DROP_TASK_RUNS = 10083;
+
 }

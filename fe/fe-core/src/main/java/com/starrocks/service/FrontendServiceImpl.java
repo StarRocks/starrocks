@@ -380,7 +380,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
