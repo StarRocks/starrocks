@@ -10,7 +10,8 @@
 
 namespace starrocks::vectorized {
 
-ConstColumn::ConstColumn(ColumnPtr data) : _data(std::move(data)), _size(0) {
+ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(data, 0) {}
+
     DCHECK(!_data->is_constant());
     if (_data->size() > 1) {
         _data->resize(1);
