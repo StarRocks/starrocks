@@ -87,7 +87,12 @@ Status EngineCloneTask::execute() {
         if (Tablet::check_migrate(tablet)) {
             return Status::Corruption("Fail to check migrate tablet");
         }
-        auto st = _do_clone(tablet.get());
+        Status st;
+        if (tablet->updates() != nullptr) {
+            st = _do_clone_primary_tablet(tablet.get());
+        } else {
+            st = _do_clone(tablet.get());
+        }
         _set_tablet_info(st, false);
     } else {
         auto st = _do_clone(nullptr);
@@ -111,6 +116,36 @@ static string version_list_to_string(const std::vector<Version>& versions) {
         }
     }
     return str.str();
+}
+
+static string version_range_list_to_string(const std::vector<int64_t>& versions) {
+    std::ostringstream str;
+    for (size_t i = 0; i < versions.size(); i += 2) {
+        str << "[" << versions[i] << "," << (i + 1 < versions.size() ? versions[i + 1] : -1) << "]";
+    }
+    return str.str();
+}
+
+Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
+    Status st;
+    string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
+    DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
+    vector<int64_t> missing_version_ranges;
+    st = tablet->updates()->get_missing_version_ranges(missing_version_ranges);
+    if (st.ok()) {
+        LOG(INFO) << "Cloning existing tablet. "
+                  << " tablet:" << _clone_req.tablet_id << " type:" << KeysType_Name(tablet->keys_type())
+                  << " missing_version_ranges=" << version_range_list_to_string(missing_version_ranges);
+        st = _clone_copy(*tablet->data_dir(), download_path, _error_msgs, nullptr, &missing_version_ranges);
+        if (st.ok()) {
+            st = _finish_clone_primary(tablet, download_path);
+        }
+    }
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load snapshot:" << st << " tablet:" << tablet->tablet_id();
+        _error_msgs->push_back(st.to_string());
+    }
+    return st;
 }
 
 Status EngineCloneTask::_do_clone(Tablet* tablet) {
@@ -259,7 +294,8 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
 }
 
 Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_path, std::vector<string>* error_msgs,
-                                    const std::vector<Version>* missed_versions) {
+                                    const std::vector<Version>* missed_versions,
+                                    const std::vector<int64_t>* missing_version_ranges) {
     std::string local_path = local_data_path + "/";
     const auto& token = _master_info.token;
 
@@ -273,7 +309,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         int32_t snapshot_format = 0;
         std::string snapshot_path;
         st = _make_snapshot(src.host, src.be_port, _clone_req.tablet_id, _clone_req.schema_hash, timeout_s,
-                            missed_versions, &snapshot_path, &snapshot_format);
+                            missed_versions, missing_version_ranges, &snapshot_path, &snapshot_format);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to make snapshot from " << src.host << ": " << st.to_string()
                          << " tablet:" << _clone_req.tablet_id;
@@ -316,7 +352,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
 
 Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId tablet_id, TSchemaHash schema_hash,
                                        int timeout_s, const std::vector<Version>* missed_versions,
-                                       std::string* snapshot_path, int32_t* snapshot_format) {
+                                       const std::vector<int64_t>* missing_version_ranges, std::string* snapshot_path,
+                                       int32_t* snapshot_format) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot will stop.");
@@ -333,6 +370,13 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
             // NOTE: assume missing version composed of singleton delta.
             DCHECK_EQ(version.first, version.second);
             request.missing_version.push_back(version.first);
+        }
+    }
+    if (missing_version_ranges != nullptr) {
+        DCHECK(!missing_version_ranges->empty());
+        request.__isset.missing_version_ranges = true;
+        for (auto v : *missing_version_ranges) {
+            request.missing_version_ranges.push_back(v);
         }
     }
     if (timeout_s > 0) {
