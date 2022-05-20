@@ -6,9 +6,11 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/nullable_column.h"
 #include "exprs/base64.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
@@ -336,9 +338,13 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
 ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
-
     const constexpr PrimitiveType TYPE = TYPE_BIGINT;
-    ArrayColumn* array_column = down_cast<ArrayColumn*>(columns[0].get());
+
+    Column* data_column = ColumnHelper::get_data_column(columns[0].get());
+    NullData::pointer null_data =
+            columns[0]->is_nullable() ? down_cast<NullableColumn*>(columns[0])->null_column_data().data() : nullptr;
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(data_column);
+
     RunTimeColumnType<TYPE>::Container& element_container =
             array_column->elements_column()->is_nullable()
                     ? down_cast<RunTimeColumnType<TYPE>*>(
@@ -347,7 +353,7 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
                     : down_cast<RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
     const auto& offsets = array_column->offsets_column()->get_data();
 
-    NullColumn::Container::pointer null_data =
+    NullColumn::Container::pointer element_null_data =
             array_column->elements_column()->is_nullable()
                     ? down_cast<NullableColumn*>(array_column->elements_column().get())->null_column_data().data()
                     : nullptr;
@@ -361,7 +367,10 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
         }
         // build bitmap
         BitmapValue bitmap;
-        for (int j = offset; j < length; j++) {
+        for (int j = offset; j < offset + length; j++) {
+            if (element_null_data && element_null_data[j]) {
+                continue;
+            }
             bitmap.add(element_container[j]);
         }
         // append bitmap
