@@ -4,11 +4,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.Relation;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,14 +16,14 @@ import java.util.Map;
 
 // Alter WorkGroup specified by name
 // 1. Add a new classifier to the WorkGroup
-//  ALTER RESOURCE_GROUP <name> ADD (user='<user>', role='<role>', query_type in (...), source_ip='<cidr>')
+//  ALTER RESOURCE GROUP <name> ADD (user='<user>', role='<role>', query_type in (...), source_ip='<cidr>')
 //
 // 2. Drop present classifiers by their ids
-//  ALTER RESOURCE_GROUP <name> DROP (<id_1>, <id_2>, ...)
-//  ALTER RESOURCE_GROUP <name> DROP ALL
+//  ALTER RESOURCE GROUP <name> DROP (<id_1>, <id_2>, ...)
+//  ALTER RESOURCE GROUP <name> DROP ALL
 //
 // 3. Modify properties
-//  ALTER RESOURCE_GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
+//  ALTER RESOURCE GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
 public class AlterWorkGroupStmt extends DdlStmt {
     private String name;
     private SubCommand cmd;

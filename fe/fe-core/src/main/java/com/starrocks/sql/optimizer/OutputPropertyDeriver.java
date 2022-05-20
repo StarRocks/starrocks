@@ -291,7 +291,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         Set<ColumnRefOperator> allGroupingRefs = Sets.newHashSet();
 
         node.getRepeatColumnRef().forEach(allGroupingRefs::addAll);
-        allGroupingRefs.removeAll(subRefs);
+        subRefs.forEach(allGroupingRefs::remove);
 
         DistributionSpec.PropertyInfo propertyInfo =
                 childrenOutputProperties.get(0).getDistributionProperty().getSpec().getPropertyInfo();

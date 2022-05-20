@@ -50,7 +50,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +107,7 @@ public class Utils {
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
         if (null == root || !root.isVariable()) {
-            return Collections.emptyList();
+            return new LinkedList<>();
         }
 
         LinkedList<ColumnRefOperator> list = new LinkedList<>();

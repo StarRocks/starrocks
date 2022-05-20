@@ -18,7 +18,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -34,7 +33,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -515,14 +513,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                "  `id` int(11) NULL COMMENT \"\",\n" +
-                "  `id2` bitmap bitmap_union NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`id`)\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\"\n" +
-                ");")
+                        "  `id` int(11) NULL COMMENT \"\",\n" +
+                        "  `id2` bitmap bitmap_union NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`id`)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -830,6 +828,19 @@ public class PlanTestBase {
                 "PARTITION p_20211230 VALUES [('2021-12-30'), ('2021-12-31'))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(`session_id`) BUCKETS 5 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
