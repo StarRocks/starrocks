@@ -58,7 +58,7 @@ public:
 
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
 
-    void set_mem_costs(int64_t bytes) { mem_cost_bytes = bytes; }
+    void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
 
     void merge(QueryStatisticsRecvr* recvr);
 
@@ -69,21 +69,9 @@ public:
         _stats_items.clear();
     }
 
-    void to_pb(PQueryStatistics* statistics) {
-        DCHECK(statistics != nullptr);
-        statistics->set_scan_rows(scan_rows);
-        statistics->set_scan_bytes(scan_bytes);
-        statistics->set_returned_rows(returned_rows);
-        statistics->set_cpu_cost_ns(cpu_ns);
-        statistics->set_mem_cost_bytes(mem_cost_bytes);
-        *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
-    }
+    void to_pb(PQueryStatistics* statistics);
 
-    void merge_pb(const PQueryStatistics& statistics) {
-        scan_rows += statistics.scan_rows();
-        scan_bytes += statistics.scan_bytes();
-        _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
-    }
+    void merge_pb(const PQueryStatistics& statistics);
 
 private:
     int64_t scan_rows{0};
