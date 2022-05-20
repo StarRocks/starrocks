@@ -116,7 +116,7 @@ public class SqlParserUtils {
         return statementBase;
     }
 
-    public static StatementBase newParseAndAnalyzeStmt(String originStmt, ConnectContext connectContext) {
+    public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext connectContext) {
         LOG.info("begin to parse stmt: " + originStmt);
         StatementBase statementBase = null;
         try {

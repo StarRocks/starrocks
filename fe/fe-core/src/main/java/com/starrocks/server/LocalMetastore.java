@@ -860,7 +860,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
                         (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                                .parseStmtWithNewParser(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -871,7 +871,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
-                    e.getMessage());
+                    e.getMessage(), e);
         }
     }
 
