@@ -68,7 +68,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;

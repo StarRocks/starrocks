@@ -2,10 +2,10 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.statistic.Constants;

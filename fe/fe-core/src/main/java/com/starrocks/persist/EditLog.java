@@ -64,11 +64,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.MultiDropTaskInfo;
-import com.starrocks.scheduler.MultiDropTaskRunInfo;
 import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskRunStatus;
-import com.starrocks.scheduler.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.DropTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
@@ -711,24 +711,24 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_TASKS: {
-                    MultiDropTaskInfo multiDropTaskInfo = (MultiDropTaskInfo) journal.getData();
-                    globalStateMgr.getTaskManager().replayDropTasks(multiDropTaskInfo.getTaskNameList());
+                    DropTasksLog dropTasksLog = (DropTasksLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskNameList());
                     break;
                 }
-                case OperationType.OP_TASK_RUN_CREATE_STATUS: {
+                case OperationType.OP_CREATE_TASK_RUN: {
                     final TaskRunStatus status = (TaskRunStatus) journal.getData();
                     globalStateMgr.getTaskManager().replayTaskRunCreateStatus(status);
                     break;
                 }
-                case OperationType.OP_TASK_RUN_STATUS_CHANGE: {
+                case OperationType.OP_ALTER_TASK_RUN: {
                     final TaskRunStatusChange statusChange =
                             (TaskRunStatusChange) journal.getData();
                     globalStateMgr.getTaskManager().replayTaskRunStatusChange(statusChange);
                     break;
                 }
                 case OperationType.OP_DROP_TASK_RUNS: {
-                    MultiDropTaskRunInfo multiDropTaskRunInfo = (MultiDropTaskRunInfo) journal.getData();
-                    globalStateMgr.getTaskManager().replayDropTaskRuns(multiDropTaskRunInfo.getQueryIdList());
+                    DropTaskRunsLog dropTaskRunsLog = (DropTaskRunsLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
                 case OperationType.OP_CREATE_SMALL_FILE: {
@@ -986,19 +986,19 @@ public class EditLog {
     }
 
     public void logDropTasks(List<String> taskNameList) {
-        logEdit(OperationType.OP_DROP_TASKS, new MultiDropTaskInfo(taskNameList));
+        logEdit(OperationType.OP_DROP_TASKS, new DropTasksLog(taskNameList));
     }
 
     public void logTaskRunCreateStatus(TaskRunStatus status) {
-        logEdit(OperationType.OP_TASK_RUN_CREATE_STATUS, status);
+        logEdit(OperationType.OP_CREATE_TASK_RUN, status);
     }
 
     public void logTaskRunStatusChange(TaskRunStatusChange statusChange) {
-        logEdit(OperationType.OP_TASK_RUN_STATUS_CHANGE, statusChange);
+        logEdit(OperationType.OP_ALTER_TASK_RUN, statusChange);
     }
 
     public void logDropTaskRuns(List<String> queryIdList) {
-        logEdit(OperationType.OP_DROP_TASK_RUNS, new MultiDropTaskRunInfo(queryIdList));
+        logEdit(OperationType.OP_DROP_TASK_RUNS, new DropTaskRunsLog(queryIdList));
     }
 
     public void logAddPartition(PartitionPersistInfo info) {

@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.scheduler;
+package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
@@ -12,21 +12,21 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class MultiDropTaskRunInfo implements Writable {
+public class DropTasksLog implements Writable {
 
-    @SerializedName("queryIdList")
-    List<String> queryIdList;
+    @SerializedName("taskNameList")
+    List<String> taskNameList;
 
-    public MultiDropTaskRunInfo(List<String> queryIdList) {
-        this.queryIdList = queryIdList;
+    public DropTasksLog(List<String> taskNameList) {
+        this.taskNameList = taskNameList;
     }
 
-    public List<String> getQueryIdList() {
-        return queryIdList;
+    public List<String> getTaskNameList() {
+        return taskNameList;
     }
 
-    public static MultiDropTaskRunInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), MultiDropTaskRunInfo.class);
+    public static DropTasksLog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), DropTasksLog.class);
     }
 
     @Override
