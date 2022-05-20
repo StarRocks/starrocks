@@ -64,6 +64,19 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testMine(){
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("CREATE TABLE test.sales_records(\n" +
+                        "    record_id int,\n" +
+                        "    seller_id int,\n" +
+                        "    store_id int,\n" +
+                        "    sale_date int,\n" +
+                        "    sale_amt bigint\n" +
+                        ") distributed BY hash(record_id)\n" +
+                        "properties(\"replication_num\" = \"1\");"));
+    }
+
+    @Test
     public void testNormal() throws DdlException {
 
         ExceptionChecker.expectThrowsNoException(

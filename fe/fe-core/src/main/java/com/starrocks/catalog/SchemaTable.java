@@ -444,6 +444,19 @@ public class SchemaTable extends Table {
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("materialized_views",
+                            new SchemaTable(
+                                    SystemIdGenerator.getNextId(),
+                                    "materialized_views",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("id", ScalarType.createVarchar(50))
+                                            .column("name", ScalarType.createVarchar(50))
+                                            .column("database_name", ScalarType.createVarchar(20))
+                                            .column("text",
+                                                    ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("rows", ScalarType.createVarchar(50))
+                                            .build()))
                     .build();
 
     public static class Builder {
