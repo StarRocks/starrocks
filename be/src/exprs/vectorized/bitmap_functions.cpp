@@ -6,9 +6,11 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/nullable_column.h"
 #include "exprs/base64.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
@@ -331,6 +333,51 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
                                     array_offsets),
                 NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
     }
+}
+
+ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
+
+    Column* data_column = ColumnHelper::get_data_column(columns[0].get());
+    NullData::pointer null_data = columns[0]->is_nullable()
+                                          ? down_cast<NullableColumn*>(columns[0].get())->null_column_data().data()
+                                          : nullptr;
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(data_column);
+
+    RunTimeColumnType<TYPE>::Container& element_container =
+            array_column->elements_column()->is_nullable()
+                    ? down_cast<RunTimeColumnType<TYPE>*>(
+                              down_cast<NullableColumn*>(array_column->elements_column().get())->data_column().get())
+                              ->get_data()
+                    : down_cast<RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
+    const auto& offsets = array_column->offsets_column()->get_data();
+
+    NullColumn::Container::pointer element_null_data =
+            array_column->elements_column()->is_nullable()
+                    ? down_cast<NullableColumn*>(array_column->elements_column().get())->null_column_data().data()
+                    : nullptr;
+
+    for (int row = 0; row < size; ++row) {
+        uint32_t offset = offsets[row];
+        uint32_t length = offsets[row + 1] - offsets[row];
+        if (null_data && null_data[row]) {
+            builder.append_null();
+            continue;
+        }
+        // build bitmap
+        BitmapValue bitmap;
+        for (int j = offset; j < offset + length; j++) {
+            if (element_null_data && element_null_data[j]) {
+                continue;
+            }
+            bitmap.add(element_container[j]);
+        }
+        // append bitmap
+        builder.append(std::move(bitmap));
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
