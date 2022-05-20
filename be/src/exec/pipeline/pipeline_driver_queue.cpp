@@ -278,6 +278,7 @@ void DriverQueueWithWorkGroup::cancel(DriverRawPtr driver) {
 }
 
 void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
+    // TODO: reduce the lock scope
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
