@@ -34,8 +34,6 @@ class ColumnExprPredicate : public ColumnPredicate {
 public:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
                         const SlotDescriptor* slot_desc);
-    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, std::unique_ptr<ExprContext> expr_ctx,
-                        const SlotDescriptor* slot_desc);
 
     ~ColumnExprPredicate() override;
 
@@ -63,13 +61,13 @@ public:
 
 private:
     void _add_expr_ctxs(std::vector<ExprContext*> expr_ctxs);
-    
+
     // Take ownership of this expression, not necessary to clone
     void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
-    
+
     // Share the ownership, is necessary to clone it
     void _add_expr_ctx(ExprContext* expr_ctx);
-    
+
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;

@@ -99,7 +99,7 @@ private:
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
-    
+
     // NOTE: _reader may reference the _predicate_free_pool, it should be released before the _predicate_free_pool
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
