@@ -195,8 +195,8 @@ PROPERTIES(
   * 指定为 WEEK 时，分区名后缀需为yyyy\_ww，例如2020\_13代表2020年第13周。
   * 指定为 MONTH 时，动态创建的分区名后缀格式为 yyyyMM，例如 202003。
 
-* dynamic\_partition.start: 动态分区的开始时间。以当天为基准，超过该时间范围的分区将会被删除。如果不填写，则默认为Integer.MIN\_VALUE 即 -2147483648。
-* dynamic\_partition.end: 动态分区的结束时间。 以当天为基准，会提前创建N个单位的分区范围。
+* dynamic\_partition.start: 动态分区的开始时间。以当天为基准，超过该时间范围的分区将会被删除。如果不填写，则默认为Integer.MIN\_VALUE 即 -2147483648。**取值范围为小于 0 的负整数，最大值为 -1**。
+* dynamic\_partition.end: 动态分区的结束时间。 以当天为基准，会提前创建N个单位的分区范围。**取值范围为大于 0 的正整数，最小值为 1**。
 * dynamic\_partition.prefix : 动态创建的分区名前缀。
 * dynamic\_partition.buckets : 动态创建的分区所对应的分桶数量。
 
