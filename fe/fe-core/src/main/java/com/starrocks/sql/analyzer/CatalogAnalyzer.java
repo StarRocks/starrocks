@@ -17,7 +17,6 @@ import java.util.Map;
 
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
-
 public class CatalogAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
@@ -30,7 +29,6 @@ public class CatalogAnalyzer {
 
         @Override
         public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-            // TODO check permission
             String catalogName = statement.getCatalogName();
             if (Strings.isNullOrEmpty(catalogName)) {
                 throw new SemanticException("'catalog name' can not be null or empty");
@@ -58,7 +56,6 @@ public class CatalogAnalyzer {
 
         @Override
         public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-            // TODO check permission
             String name = statement.getName();
             if (Strings.isNullOrEmpty(name)) {
                 throw new SemanticException("'catalog name' can not be null or empty");
