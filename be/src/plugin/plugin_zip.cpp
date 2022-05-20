@@ -25,10 +25,10 @@
 #include <cstring>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "http/http_client.h"
-#include "util/file_utils.h"
 #include "util/md5.h"
 #include "util/slice.h"
 #include "util/time.h"
@@ -48,7 +48,7 @@ bool is_local_source(const std::string& source) {
 
 PluginZip::~PluginZip() {
     for (auto& p : _clean_paths) {
-        WARN_IF_ERROR(FileUtils::remove_all(p), "clean plugin_zip temp path failed: " + p);
+        WARN_IF_ERROR(fs::remove_all(p), "clean plugin_zip temp path failed: " + p);
     }
 }
 
@@ -56,12 +56,12 @@ Status PluginZip::extract(const std::string& target_dir, const std::string& plug
     // check plugin install path
     std::string plugin_install_path = strings::Substitute("$0/$1", target_dir, plugin_name);
 
-    if (FileUtils::check_exist(plugin_install_path)) {
+    if (fs::path_exist(plugin_install_path)) {
         return Status::AlreadyExist(strings::Substitute("plugin $0 already install!", plugin_name));
     }
 
-    if (!FileUtils::check_exist(target_dir)) {
-        RETURN_IF_ERROR(FileUtils::create_dir(target_dir));
+    if (!fs::path_exist(target_dir)) {
+        RETURN_IF_ERROR(fs::create_directories(target_dir));
     }
 
     std::string zip_path = _source;
