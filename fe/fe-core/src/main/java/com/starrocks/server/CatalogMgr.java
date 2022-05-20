@@ -16,6 +16,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.CreateCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.List;
 import java.util.Map;
@@ -52,7 +53,8 @@ public class CatalogMgr {
         // TODO edit log
     }
 
-    public synchronized void dropCatalog(String catalogName) {
+    public synchronized void dropCatalog(DropCatalogStmt stmt) {
+        String catalogName = stmt.getName();
         Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
         connectorMgr.removeConnector(catalogName);
         catalogs.remove(catalogName);
@@ -80,7 +82,7 @@ public class CatalogMgr {
 
     public void replayDropCatalog(DropCatalogLog log) {
         String catalogName = log.getCatalogName();
-        dropCatalog(catalogName);
+        dropCatalog(new DropCatalogStmt(catalogName));
     }
 
     public List<List<String>> getCatalogsInfo() {
