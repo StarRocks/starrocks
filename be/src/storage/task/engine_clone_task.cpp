@@ -129,7 +129,7 @@ static string version_range_list_to_string(const std::vector<int64_t>& versions)
 Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
     Status st;
     string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
-    DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
+    DeferOp defer([&]() { (void)fs::remove_all(download_path); });
     vector<int64_t> missing_version_ranges;
     st = tablet->updates()->get_missing_version_ranges(missing_version_ranges);
     if (st.ok()) {
