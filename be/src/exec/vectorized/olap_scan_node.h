@@ -69,6 +69,8 @@ public:
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
 
+    int max_scan_concurrency() const override;
+
 private:
     friend class TabletScanner;
 
@@ -124,13 +126,12 @@ private:
     Status _capture_tablet_rowsets();
 
     // scanner concurrency
-    size_t _scanner_concurrency();
+    size_t _scanner_concurrency() const;
     void _estimate_scan_and_output_row_bytes();
 
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
-    RuntimeState* _runtime_state = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
