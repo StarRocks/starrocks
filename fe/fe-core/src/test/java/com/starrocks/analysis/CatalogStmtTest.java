@@ -93,12 +93,11 @@ public class CatalogStmtTest {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
 
-        catalogMgr.dropCatalog("hive_catalog");
+        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
         Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));
     }
-
 
     @Test
     public void testDropCatalog() throws Exception {
