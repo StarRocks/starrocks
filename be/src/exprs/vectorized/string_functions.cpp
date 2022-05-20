@@ -11,6 +11,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/math_functions.h"
@@ -24,15 +25,15 @@
 
 namespace starrocks::vectorized {
 
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func)                          \
-    if (col->reach_capacity_limit()) {                                          \
-        col->reset_column();                                                    \
-        throw std::runtime_error("binary column exceed 4G in function " #func); \
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
+    if (UNLIKELY(col->reach_capacity_limit())) {                                     \
+        col->reset_column();                                                         \
+        throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
 
-#define RETURN_COLUMN(col, func_name)                    \
-    auto VARNAME_LINENUM(res) = col;                     \
-    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name); \
+#define RETURN_COLUMN(stmt, func_name)                                    \
+    auto VARNAME_LINENUM(res) = stmt;                                     \
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(VARNAME_LINENUM(res), func_name); \
     return VARNAME_LINENUM(res);
 
 constexpr size_t CONCAT_SMALL_OPTIMIZE_THRESHOLD = 16 << 20;
@@ -1395,7 +1396,7 @@ ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] con
 }
 // pad
 template <PadType pad_type>
-static inline ColumnPtr pad(FunctionContext* context, const Columns& columns) {
+static ColumnPtr pad(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = (PadState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state != nullptr) {
