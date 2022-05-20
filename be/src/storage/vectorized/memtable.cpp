@@ -190,6 +190,11 @@ OLAPStatus MemTable::flush() {
     if (_result_chunk == nullptr) {
         return OLAP_SUCCESS;
     }
+    std::string msg;
+    if (_result_chunk->reach_capacity_limit(&msg)) {
+        LOG(WARNING) << "memtable of tablet: " << _tablet_id << " reache the capacity limit, detail msg:" << msg;
+        return OLAP_ERR_OTHER_ERROR;
+    }
 
     int64_t duration_ns = 0;
     {
