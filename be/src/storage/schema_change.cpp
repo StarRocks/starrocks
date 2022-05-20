@@ -1209,7 +1209,7 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
     Status status = _do_process_alter_tablet_v2(request);
     LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
               << " duration: " << timer.elapsed_time() / 1000000
-              << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() <<" bytes";
+              << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
     return status;
 }
 
