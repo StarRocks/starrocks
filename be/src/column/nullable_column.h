@@ -278,8 +278,8 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
+    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+        return _data_column->reach_capacity_limit(msg) || _null_column->reach_capacity_limit(msg);
     }
 
 private:
