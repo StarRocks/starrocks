@@ -614,15 +614,15 @@ bool BinaryColumnBase<T>::reach_capacity_limit(std::string* msg) const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     if constexpr (std::is_same_v<T, uint32_t>) {
         // The size limit of a single element is 2^32 - 1.
-        // The size limit of all elements is 2^32.
-        // The number limit of elements is 2^32.
+        // The size limit of all elements is 2^32 - 1.
+        // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("Total byte size of binary column exceed the limit: " +
                             std::to_string(Column::MAX_CAPACITY_LIMIT));
             }
             return true;
-        } else if (_offsets.size() > Column::MAX_CAPACITY_LIMIT) {
+        } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("Total row count of binary column exceed the limit: " +
                             std::to_string(Column::MAX_CAPACITY_LIMIT));
@@ -633,8 +633,8 @@ bool BinaryColumnBase<T>::reach_capacity_limit(std::string* msg) const {
         }
     } else {
         // The size limit of a single element is 2^32 - 1.
-        // The size limit of all elements is 2^64.
-        // The number limit of elements is 2^32.
+        // The size limit of all elements is 2^64 - 1.
+        // The number limit of elements is 2^32 - 1.
         if (_bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("Total byte size of large binary column exceed the limit: " +
@@ -643,8 +643,8 @@ bool BinaryColumnBase<T>::reach_capacity_limit(std::string* msg) const {
             return true;
         } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
-                msg->append("Total byte size of large binary column exceed the limit: " +
-                            std::to_string(Column::MAX_LARGE_CAPACITY_LIMIT));
+                msg->append("Total row count of large binary column exceed the limit: " +
+                            std::to_string(Column::MAX_CAPACITY_LIMIT));
             }
             return true;
         } else {
