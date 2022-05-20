@@ -444,4 +444,25 @@ std::string BinaryColumn::debug_item(uint32_t idx) const {
     return s;
 }
 
+bool BinaryColumn::reach_capacity_limit(std::string* msg) const {
+    // The size limit of a single element is 2^32 - 1.
+    // The size limit of all elements is 2^32 - 1.
+    // The number limit of elements is 2^32 - 1.
+    if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
+        if (msg != nullptr) {
+            msg->append("Total byte size of binary column exceed the limit: " +
+                        std::to_string(Column::MAX_CAPACITY_LIMIT));
+        }
+        return true;
+    } else if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
+        if (msg != nullptr) {
+            msg->append("Total row count of binary column exceed the limit: " +
+                        std::to_string(Column::MAX_CAPACITY_LIMIT));
+        }
+        return true;
+    } else {
+        return false;
+    }
+}
+
 } // namespace starrocks::vectorized

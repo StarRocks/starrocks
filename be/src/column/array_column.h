@@ -147,8 +147,8 @@ public:
 
     std::string debug_string() const override;
 
-    bool reach_capacity_limit() const override {
-        return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
+    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+        return _elements->reach_capacity_limit(msg) || _offsets->reach_capacity_limit(msg);
     }
 
 private:
