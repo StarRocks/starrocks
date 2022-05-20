@@ -1467,4 +1467,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+
+    /**
+     * If the configuration is not set, it is not enabled tracer.
+     */
+    @ConfField(mutable = true)
+    public static String jaeger_server_endpoint = "";
 }

@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+import com.starrocks.common.tracing.Traceing;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.bdbje.BDBTool;
@@ -90,6 +91,9 @@ public class StarRocksFE {
             }
 
             Log4jConfig.initLogging();
+
+            // Init the tracer.
+            Traceing.initTracer();
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
