@@ -21,6 +21,8 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -150,6 +152,11 @@ public class DbPrivEntry extends PrivEntry {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         origDb = Text.readString(in);
+    }
+
+    @Override
+    public String toGrantSQL() {
+        return new GrantStmt(getUserIdent(), new TablePattern(origDb, "*"), privSet).toSql();
     }
 
 }

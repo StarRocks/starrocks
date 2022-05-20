@@ -67,7 +67,10 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1375,6 +1378,45 @@ public class Auth implements Writable {
         } finally {
             writeUnlock();
         }
+    }
+
+    /**
+     * get all `GRANT XX ON XX TO XX` SQLs
+     */
+    public List<List<String>> getGrantsSQLs(UserIdentity currentUser) {
+        List<List<String>> ret = Lists.newArrayList();
+
+        // 1. get all possible users
+        Set<UserIdentity> identities;
+        if (currentUser != null) {
+            identities = new HashSet<>();
+            identities.add(currentUser);
+        } else {
+            identities = getAllUserIdents(false);
+        }
+
+        // 2. loop for grants SQL
+        List<PrivTable> allTables = Arrays.asList(
+                userPrivTable, dbPrivTable, tablePrivTable, resourcePrivTable, impersonateUserPrivTable);
+        for (UserIdentity userIdentity : identities) {
+            List<String> line = Lists.newArrayList();
+            line.add(userIdentity.toString());
+
+            // loop all privilege tables
+            List<String> allSQLs = new ArrayList<>();
+            for (PrivTable table : allTables) {
+                Iterator<PrivEntry> iter = table.getReadOnlyIteratorByUser(userIdentity);
+                while (iter.hasNext()) {
+                    String sql = iter.next().toGrantSQL();
+                    if (sql != null) {
+                        allSQLs.add(sql);
+                    }
+                } // for entity
+            } // for table
+            line.add(String.join("\n", allSQLs));
+            ret.add(line);
+        }
+        return ret;
     }
 
     // return the auth info of specified user, or infos of all users, if user is not specified.

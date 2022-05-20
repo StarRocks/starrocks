@@ -5,6 +5,7 @@ package com.starrocks.mysql.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 
 public class ImpersonateUserPrivEntry extends PrivEntry {
     @SerializedName(value = "securedUserIdentity")
@@ -35,31 +36,6 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
     }
 
     @Override
-    public int compareTo(PrivEntry other) {
-        if (!(other instanceof ImpersonateUserPrivEntry)) {
-            throw new ClassCastException("cannot cast " + other.getClass().toString() + " to " + this.getClass());
-        }
-
-        ImpersonateUserPrivEntry otherEntry = (ImpersonateUserPrivEntry) other;
-        int res = origHost.compareTo(otherEntry.origHost);
-        if (res != 0) {
-            return -res;
-        }
-
-        res = origUser.compareTo(otherEntry.origUser);
-        if (res != 0) {
-            return -res;
-        }
-
-        res = securedUserIdentity.getHost().compareTo(otherEntry.securedUserIdentity.getHost());
-        if (res != 0) {
-            return -res;
-        }
-
-        return securedUserIdentity.getQualifiedUser().compareTo(otherEntry.securedUserIdentity.getQualifiedUser());
-    }
-
-    @Override
     public boolean keyMatch(PrivEntry other) {
         if (!(other instanceof ImpersonateUserPrivEntry)) {
             return false;
@@ -77,5 +53,10 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
         sb.append(", user: ").append(origUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
+    }
+
+    @Override
+    public String toGrantSQL() {
+        return new GrantImpersonateStmt(getUserIdent(), getSecuredUserIdentity()).toString();
     }
 }

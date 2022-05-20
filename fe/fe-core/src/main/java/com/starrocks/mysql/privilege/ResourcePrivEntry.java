@@ -21,6 +21,8 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
@@ -135,5 +137,10 @@ public class ResourcePrivEntry extends PrivEntry {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         origResource = Text.readString(in);
+    }
+
+    @Override
+    public String toGrantSQL() {
+        return new GrantStmt(getUserIdent(), new ResourcePattern(origResource), privSet).toSql();
     }
 }

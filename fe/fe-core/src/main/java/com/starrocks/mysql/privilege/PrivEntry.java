@@ -239,4 +239,11 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     public int compareTo(PrivEntry o) {
         throw new NotImplementedException();
     }
+
+    /**
+     * used for `SHOW GRANTS FOR`
+     */
+    public String toGrantSQL() {
+        throw new NotImplementedException();
+    }
 }

@@ -21,6 +21,8 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -167,5 +169,13 @@ public class GlobalPrivEntry extends PrivEntry {
             in.readFully(pdBytes);
             this.password = new Password(pdBytes);
         }
+    }
+
+    @Override
+    public String toGrantSQL() {
+        if (privSet.isEmpty()) {
+            return null;
+        }
+        return new GrantStmt(getUserIdent(), new TablePattern("*", "*"), privSet).toSql();
     }
 }

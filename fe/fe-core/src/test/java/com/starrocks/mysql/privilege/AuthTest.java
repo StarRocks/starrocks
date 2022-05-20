@@ -64,7 +64,9 @@ import org.junit.Test;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -1538,7 +1540,6 @@ public class AuthTest {
         // 1. grant db table priv to resource
         List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
         grantStmt = new GrantStmt(userIdentity, null, resourcePattern, privileges);
-        LOG.info("xxx: grant stmt {}", grantStmt.toSql());
         hasException = false;
         try {
             grantStmt.analyze(analyzer);
@@ -2188,4 +2189,76 @@ public class AuthTest {
          Assert.assertFalse(auth.canImpersonate(harry, gregory));
          Assert.assertTrue(auth.canImpersonate(harry, albert));
      }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        // 1. create 3 users
+        List<String> names = Arrays.asList("user1", "user2", "user3");
+        List<UserIdentity> userToBeCreated = new ArrayList<>();
+        for (String name : names) {
+            UserIdentity userIdentity = new UserIdentity(name, "%");
+            userIdentity.analyze("test_cluster");
+            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+            userToBeCreated.add(userIdentity);
+        }
+        UserIdentity emptyPrivilegeUser = userToBeCreated.get(0);
+        UserIdentity onePrivilegeUser = userToBeCreated.get(1);
+        UserIdentity manyPrivilegeUser = userToBeCreated.get(2);
+
+        // 1. emptyPrivilegeUser has one privilege
+        List<List<String>> infos = auth.getGrantsSQLs(emptyPrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
+        Assert.assertEquals("GRANT Select_priv ON test_cluster:information_schema.* TO 'test_cluster:user1'@'%'", infos.get(0).get(1));
+
+        // 2. grant table privilege to onePrivilegeUser
+        TablePattern table = new TablePattern("testdb", "table1");
+        table.analyze("test_cluster");
+        auth.grantPrivs(onePrivilegeUser, table, PrivBitSet.of(Privilege.SELECT_PRIV), false);
+        infos = auth.getGrantsSQLs(onePrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
+        String expectSQL = "GRANT Select_priv ON test_cluster:testdb.table1 TO 'test_cluster:user2'@'%'";
+        Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
+
+        // 3. grant resource & table & global & impersonate to manyPrivilegeUser
+        List<String> expectSQLs = new ArrayList<>();
+        TablePattern db = new TablePattern("testdb", "*");
+        db.analyze("test_cluster");
+        auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
+        expectSQLs.add("GRANT Select_priv, Load_priv ON test_cluster:testdb.* TO 'test_cluster:user3'@'%'");
+        TablePattern global = new TablePattern("*", "*");
+        global.analyze("test_cluster");
+        auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
+        expectSQLs.add("GRANT Grant_priv ON *.* TO 'test_cluster:user3'@'%'");
+        ResourcePattern resourcePattern = new ResourcePattern("test_resource");
+        resourcePattern.analyze();
+        auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
+        expectSQLs.add("GRANT Usage_priv ON RESOURCE 'test_resource' TO 'test_cluster:user3'@'%'");
+        auth.grantImpersonate(new GrantImpersonateStmt(manyPrivilegeUser, emptyPrivilegeUser));
+        expectSQLs.add("GRANT IMPERSONATE ON 'test_cluster:user1'@'%' TO 'test_cluster:user3'@'%'");
+        infos = auth.getGrantsSQLs(manyPrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(manyPrivilegeUser.toString(), infos.get(0).get(0));
+        for (String expect : expectSQLs) {
+            Assert.assertTrue(infos.get(0).get(1).contains(expect));
+        }
+
+        // 4. check all grants
+        infos = auth.getGrantsSQLs(null);
+        Assert.assertEquals(4, infos.size()); // the other is root
+        Set<String> nameSet = new HashSet<>();
+        for (List<String> line: infos) {
+            nameSet.add(line.get(0));
+        }
+        Assert.assertTrue(nameSet.contains(emptyPrivilegeUser.toString()));
+        Assert.assertTrue(nameSet.contains(onePrivilegeUser.toString()));
+        Assert.assertTrue(nameSet.contains(manyPrivilegeUser.toString()));
+    }
  }
