@@ -59,4 +59,4 @@ TEST(TabletSchemaTest, test_estimate_row_size) {
     size_t row_size = tablet_schema.estimate_row_size(100);
     ASSERT_EQ(row_size, 134);
 }
-}
+} // namespace starrocks
