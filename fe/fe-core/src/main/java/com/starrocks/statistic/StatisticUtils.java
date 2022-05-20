@@ -31,9 +31,9 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setReportSuccess(false);
-        int parallel = context.getSessionVariable().getStatisticCollectParallel();
+        int parallel = context.getSessionVariable().getStatisticCollectParallelism();
         if (null != ConnectContext.get()) {
-            parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallel();
+            parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallelism();
         }
         context.getSessionVariable().setParallelExecInstanceNum(parallel);
         context.getSessionVariable().setPipelineDop(1);

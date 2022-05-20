@@ -532,14 +532,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableOptimizerTraceLog = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
-    private int statisticCollectParallel = 1;
+    private int statisticCollectParallelism = 1;
 
-    public int getStatisticCollectParallel() {
-        return statisticCollectParallel;
+    public int getStatisticCollectParallelism() {
+        return statisticCollectParallelism;
     }
 
-    public void setStatisticCollectParallel(int statisticCollectParallel) {
-        this.statisticCollectParallel = statisticCollectParallel;
+    public void setStatisticCollectParallelism(int statisticCollectParallelism) {
+        this.statisticCollectParallelism = statisticCollectParallelism;
     }
 
     public long getRuntimeFilterScanWaitTime() {
