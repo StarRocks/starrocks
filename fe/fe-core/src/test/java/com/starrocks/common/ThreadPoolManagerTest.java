@@ -50,7 +50,7 @@ public class ThreadPoolManagerTest {
 
         Runnable task = () -> {
             try {
-                Thread.sleep(500);
+                Thread.sleep(1000);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -59,12 +59,14 @@ public class ThreadPoolManagerTest {
             testCachedPool.submit(task);
         }
 
+        Thread.sleep(200);
+
         Assert.assertEquals(2, testCachedPool.getPoolSize());
         Assert.assertEquals(2, testCachedPool.getActiveCount());
         Assert.assertEquals(0, testCachedPool.getQueue().size());
         Assert.assertEquals(0, testCachedPool.getCompletedTaskCount());
 
-        Thread.sleep(700);
+        Thread.sleep(1500);
 
         Assert.assertEquals(2, testCachedPool.getPoolSize());
         Assert.assertEquals(0, testCachedPool.getActiveCount());
@@ -74,13 +76,14 @@ public class ThreadPoolManagerTest {
         for (int i = 0; i < 4; i++) {
             testFixedThreaddPool.submit(task);
         }
+        Thread.sleep(200);
 
         Assert.assertEquals(2, testFixedThreaddPool.getPoolSize());
         Assert.assertEquals(2, testFixedThreaddPool.getActiveCount());
         Assert.assertEquals(2, testFixedThreaddPool.getQueue().size());
         Assert.assertEquals(0, testFixedThreaddPool.getCompletedTaskCount());
 
-        Thread.sleep(2000);
+        Thread.sleep(4500);
 
         Assert.assertEquals(2, testFixedThreaddPool.getPoolSize());
         Assert.assertEquals(0, testFixedThreaddPool.getActiveCount());
