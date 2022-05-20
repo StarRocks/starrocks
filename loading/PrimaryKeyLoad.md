@@ -283,7 +283,7 @@ mysql > select * from demo_db.demo_tbl2;
 
 Routine Load 更多使用方法请参考 [ROUTINE LOAD](../loading/RoutineLoad.md)。
 
-## 部分更新
+## 部分更新【公测中】
 
 > 自 StarRocks 2.2 起，主键模型的表支持部分更新，即只需要更新部分列。
 
