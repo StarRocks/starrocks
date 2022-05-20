@@ -416,123 +416,144 @@ public class ReportHandler extends Daemon {
             if (db == null) {
                 continue;
             }
-            db.writeLock();
-            try {
+            List<Long> allTabletIds = tabletSyncMap.get(dbId);
+            int offset = 0;
+
+            LOG.info("before sync tablets in db[{}]. report num: {}. backend[{}]",
+                    dbId, allTabletIds.size(), backendId);
+            while (offset < allTabletIds.size()) {
                 int syncCounter = 0;
-                List<Long> tabletIds = tabletSyncMap.get(dbId);
-                LOG.info("before sync tablets in db[{}]. report num: {}. backend[{}]",
-                        dbId, tabletIds.size(), backendId);
-                List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
-                for (int i = 0; i < tabletMetaList.size(); i++) {
-                    TabletMeta tabletMeta = tabletMetaList.get(i);
-                    if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                        continue;
-                    }
-                    long tabletId = tabletIds.get(i);
-                    long tableId = tabletMeta.getTableId();
-                    OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
-
-                    long partitionId = tabletMeta.getPartitionId();
-                    Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
-                    if (partition == null) {
-                        continue;
-                    }
-
-                    long indexId = tabletMeta.getIndexId();
-                    MaterializedIndex index = partition.getIndex(indexId);
-                    if (index == null) {
-                        continue;
-                    }
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-
-                    LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-                    if (tablet == null) {
-                        continue;
-                    }
-
-                    Replica replica = tablet.getReplicaByBackendId(backendId);
-                    if (replica == null) {
-                        continue;
-                    }
-                    // yiguolei: it is very important here, if the replica is under schema change or rollup
-                    // should ignore the report.
-                    // eg.
-                    // original replica import successfully, but the dest schema change replica failed
-                    // the fe will sync the replica with the original replica, but ignore the schema change replica.
-                    // if the last failed version is changed, then fe will think schema change successfully.
-                    // this is an fatal error.
-                    if (replica.getState() == ReplicaState.NORMAL) {
-                        long metaVersion = replica.getVersion();
-                        long backendVersion = -1L;
-                        long rowCount = -1L;
-                        long dataSize = -1L;
-                        // schema change maybe successfully in fe, but not inform be, then be will report two schema hash
-                        // just select the dest schema hash
-                        for (TTabletInfo tabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
-                            if (tabletInfo.getSchema_hash() == schemaHash) {
-                                backendVersion = tabletInfo.getVersion();
-                                rowCount = tabletInfo.getRow_count();
-                                dataSize = tabletInfo.getData_size();
-                                break;
-                            }
+                int logSyncCounter = 0;
+                List<Long> tabletIds = allTabletIds.subList(offset, allTabletIds.size());
+                db.writeLock();
+                try {
+                    List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+                    for (int i = 0; i < tabletMetaList.size(); i++) {
+                        offset++;
+                        TabletMeta tabletMeta = tabletMetaList.get(i);
+                        if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                            continue;
                         }
-                        if (backendVersion == -1L) {
+                        long tabletId = tabletIds.get(i);
+                        long tableId = tabletMeta.getTableId();
+                        OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                        if (olapTable == null) {
                             continue;
                         }
 
-                        // 1. replica is not set bad force
-                        // 2. metaVersion < backendVersion or (metaVersion == backendVersion && replica.isBad())
-                        if (!replica.isSetBadForce() &&
-                                ((metaVersion < backendVersion) ||
-                                        (metaVersion == backendVersion && replica.isBad()))) {
+                        long partitionId = tabletMeta.getPartitionId();
+                        Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
+                        if (partition == null) {
+                            continue;
+                        }
 
-                            // This is just a optimization for the old compatibility
-                            // The init version in FE is (1-0), in BE is (2-0)
-                            // If the BE report version is (2-0), we just update the replica's version in Master FE,
-                            // and no need to write edit log, to save some time.
-                            // TODO(cmy): This will be removed later.
-                            boolean isInitVersion = metaVersion == 1 && backendVersion == 2;
+                        long indexId = tabletMeta.getIndexId();
+                        MaterializedIndex index = partition.getIndex(indexId);
+                        if (index == null) {
+                            continue;
+                        }
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
-                            if (backendReportVersion < GlobalStateMgr.getCurrentSystemInfo()
-                                    .getBackendReportVersion(backendId)) {
+                        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+                        if (tablet == null) {
+                            continue;
+                        }
+
+                        Replica replica = tablet.getReplicaByBackendId(backendId);
+                        if (replica == null) {
+                            continue;
+                        }
+                        // yiguolei: it is very important here, if the replica is under schema change or
+                        // rollup
+                        // should ignore the report.
+                        // eg.
+                        // original replica import successfully, but the dest schema change replica
+                        // failed
+                        // the fe will sync the replica with the original replica, but ignore the schema
+                        // change replica.
+                        // if the last failed version is changed, then fe will think schema change
+                        // successfully.
+                        // this is an fatal error.
+                        if (replica.getState() == ReplicaState.NORMAL) {
+                            long metaVersion = replica.getVersion();
+                            long backendVersion = -1L;
+                            long rowCount = -1L;
+                            long dataSize = -1L;
+                            // schema change maybe successfully in fe, but not inform be, then be will
+                            // report two schema hash
+                            // just select the dest schema hash
+                            for (TTabletInfo tabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
+                                if (tabletInfo.getSchema_hash() == schemaHash) {
+                                    backendVersion = tabletInfo.getVersion();
+                                    rowCount = tabletInfo.getRow_count();
+                                    dataSize = tabletInfo.getData_size();
+                                    break;
+                                }
+                            }
+                            if (backendVersion == -1L) {
                                 continue;
                             }
 
-                            // happens when
-                            // 1. PUSH finished in BE but failed or not yet report to FE
-                            // 2. repair for VERSION_INCOMPLETE finished in BE, but failed or not yet report to FE
-                            replica.updateRowCount(backendVersion, dataSize, rowCount);
+                            // 1. replica is not set bad force
+                            // 2. metaVersion < backendVersion or (metaVersion == backendVersion &&
+                            // replica.isBad())
+                            if (!replica.isSetBadForce() &&
+                                    ((metaVersion < backendVersion) ||
+                                            (metaVersion == backendVersion && replica.isBad()))) {
 
-                            if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
-                                // last failed version < 0 means this replica becomes health after sync,
-                                // so we write an edit log to sync this operation
-                                replica.setBad(false);
-                                ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tableId,
-                                        partitionId, indexId, tabletId, backendId, replica.getId(),
-                                        replica.getVersion(), schemaHash,
-                                        dataSize, rowCount,
-                                        replica.getLastFailedVersion(),
-                                        replica.getLastSuccessVersion());
-                                GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                                // This is just a optimization for the old compatibility
+                                // The init version in FE is (1-0), in BE is (2-0)
+                                // If the BE report version is (2-0), we just update the replica's version in
+                                // Master FE,
+                                // and no need to write edit log, to save some time.
+                                // TODO(cmy): This will be removed later.
+                                boolean isInitVersion = metaVersion == 1 && backendVersion == 2;
+
+                                if (backendReportVersion < GlobalStateMgr.getCurrentSystemInfo()
+                                        .getBackendReportVersion(backendId)) {
+                                    continue;
+                                }
+
+                                // happens when
+                                // 1. PUSH finished in BE but failed or not yet report to FE
+                                // 2. repair for VERSION_INCOMPLETE finished in BE, but failed or not yet report
+                                // to FE
+                                replica.updateRowCount(backendVersion, dataSize, rowCount);
+
+                                if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
+                                    // last failed version < 0 means this replica becomes health after sync,
+                                    // so we write an edit log to sync this operation
+                                    replica.setBad(false);
+                                    ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tableId,
+                                            partitionId, indexId, tabletId, backendId, replica.getId(),
+                                            replica.getVersion(), schemaHash,
+                                            dataSize, rowCount,
+                                            replica.getLastFailedVersion(),
+                                            replica.getLastSuccessVersion());
+                                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                                    ++logSyncCounter;
+                                }
+
+                                ++syncCounter;
+                                LOG.debug("sync replica {} of tablet {} in backend {} in db {}. report version: {}",
+                                        replica.getId(), tabletId, backendId, dbId, backendReportVersion);
+                            } else {
+                                LOG.debug("replica {} of tablet {} in backend {} version is changed"
+                                        + " between check and real sync. meta[{}]. backend[{}]",
+                                        replica.getId(), tabletId, backendId, metaVersion,
+                                        backendVersion);
                             }
-
-                            ++syncCounter;
-                            LOG.debug("sync replica {} of tablet {} in backend {} in db {}. report version: {}",
-                                    replica.getId(), tabletId, backendId, dbId, backendReportVersion);
-                        } else {
-                            LOG.debug("replica {} of tablet {} in backend {} version is changed"
-                                            + " between check and real sync. meta[{}]. backend[{}]",
-                                    replica.getId(), tabletId, backendId, metaVersion,
-                                    backendVersion);
                         }
-                    }
-                } // end for tabletMetaSyncMap
-                LOG.info("sync {} tablets in db[{}]. backend[{}]", syncCounter, dbId, backendId);
-            } finally {
-                db.writeUnlock();
+                        // update replica operation is heavy, couldn't do much in db write lock
+                        if (logSyncCounter > 10) {
+                            break;
+                        }
+                    } // end for tabletMetaSyncMap
+                } finally {
+                    db.writeUnlock();
+                }
+                LOG.info("sync {} update {} in {} tablets in db[{}]. backend[{}]", syncCounter, logSyncCounter,
+                        offset, dbId, backendId);
             }
         } // end for dbs
     }
