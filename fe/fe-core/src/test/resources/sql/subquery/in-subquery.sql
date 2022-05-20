@@ -8,6 +8,27 @@ LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
 [end]
 
 [sql]
+select t0.v1 from t0 where (t0.v2 in (select t3.v11 from t3)) is null
+[result]
+CTEAnchor(cteid=3)
+    CTEProducer(cteid=3)
+        SCAN (columns[5: v11] predicate[null])
+    CROSS JOIN (join-predicate [null] post-join-predicate [CASE WHEN 10: countRows = 0 THEN false WHEN 2: v2 IS NULL THEN null WHEN 5: v11 IS NOT NULL THEN true WHEN 11: countNulls < 10: countRows THEN null ELSE false END IS NULL])
+        LEFT OUTER JOIN (join-predicate [2: v2 = 8: v11] post-join-predicate [null])
+            SCAN (columns[1: v1, 2: v2] predicate[null])
+            EXCHANGE BROADCAST
+                AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v11]] having [null]
+                    EXCHANGE SHUFFLE[8]
+                        AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v11]] having [null]
+                            CTEConsumer(cteid=3)
+        EXCHANGE BROADCAST
+            AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: countNulls=count(11: countNulls)}] group by [[]] having [null]
+                EXCHANGE GATHER
+                    AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: countNulls=count(9: v11)}] group by [[]] having [null]
+                        CTEConsumer(cteid=3)
+[end]
+
+[sql]
 select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])

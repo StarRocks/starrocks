@@ -167,7 +167,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *              left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
          *                              on t0.v2= t1d.v2 and t0.v3 = t1d.v3
          *              left outer join (select count(*) as t1Rows, count(xx.v2) as v2Nulls from xx group by xx.v3) as t1c
-         *                              on t1c.v3 = t1d.v3
+         *                              on t1c.v3 = t0.v3
          *
          *                                           CTEAnchor
          *                                          /        \
