@@ -27,11 +27,11 @@
 #include <string>
 #include <vector>
 
+#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 
@@ -48,9 +48,9 @@ static MemTracker* k_schema_change_mem_tracker = nullptr;
 void set_up() {
     ExecEnv::GetInstance()->init_mem_tracker();
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
-    FileUtils::remove_all(config::storage_root_path);
-    FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
-    FileUtils::create_dir(config::storage_root_path);
+    fs::remove_all(config::storage_root_path);
+    fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
+    fs::create_directories(config::storage_root_path);
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
     config::min_file_descriptor_number = 1000;
@@ -71,8 +71,8 @@ void set_up() {
 
 void tear_down() {
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
-    FileUtils::remove_all(config::storage_root_path);
-    FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
+    fs::remove_all(config::storage_root_path);
+    fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     k_tablet_meta_mem_tracker->release(k_tablet_meta_mem_tracker->consumption());
     k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
     delete k_tablet_meta_mem_tracker;
@@ -244,8 +244,8 @@ class TestDeleteConditionHandler : public testing::Test {
 protected:
     void SetUp() {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
-        FileUtils::remove_all(config::storage_root_path);
-        ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
+        fs::remove_all(config::storage_root_path);
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
 
         // 1. Prepare for query split key.
         // create base tablet
@@ -268,7 +268,7 @@ protected:
         tablet.reset();
         dup_tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
-        ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
     }
 
     std::string _schema_hash_path;
@@ -399,8 +399,8 @@ class TestDeleteConditionHandler2 : public testing::Test {
 protected:
     void SetUp() {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
-        FileUtils::remove_all(config::storage_root_path);
-        ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
+        fs::remove_all(config::storage_root_path);
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
 
         // 1. Prepare for query split key.
         // create base tablet
@@ -415,7 +415,7 @@ protected:
     void TearDown() {
         tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
-        ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
     }
 
     std::string _schema_hash_path;
