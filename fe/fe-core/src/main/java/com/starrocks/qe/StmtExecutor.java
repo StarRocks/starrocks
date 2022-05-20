@@ -990,6 +990,9 @@ public class StmtExecutor {
         if (statisticsForAuditLog.scanRows == null) {
             statisticsForAuditLog.scanRows = 0L;
         }
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
+        }
         return statisticsForAuditLog;
     }
 

@@ -82,10 +82,9 @@ public:
 
     Status init_query(workgroup::WorkGroup* wg);
 
+    // Some statistic about the query, including cpu, scan_rows, scan_bytes
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
     int64_t cpu_cost() const { return _cur_cpu_cost; }
-
-    // Record the number of rows read from the data source for big query checking
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
