@@ -39,6 +39,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
+import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableAnalyzer {
     private static final Set<String> engineNames;
@@ -210,7 +211,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
 
-            if (columnDef.getType().isHllType()) {
+            if (columnDef.getAggregateType() == HLL_UNION) {
                 hasHll = true;
             }
 
@@ -235,7 +236,7 @@ public class CreateTableAnalyzer {
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-            throw new SemanticException("HLL must be used in AGG_KEYS");
+            throw new SemanticException("HLL_UNION must be used in AGG_KEYS");
         }
 
         if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {

@@ -142,17 +142,33 @@ public class AnalyzeCreateTableTest {
     @Test
     public void testHLLWithoutAggregateMethod() {
         String sql =
-                "create table test.table1 (col1 int, col2 varchar(10), col3 HLL) engine=olap duplicate key(col1, col2)" +
+                "create table test.table1 (col1 int, col2 varchar(10), col3 HLL) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10";
-        analyzeFail(sql, "No aggregate function specified for 'col3'");
+        analyzeFail(sql, "AGG_KEYS table should specify aggregate type for non-key column[col3]");
+    }
+
+    @Test
+    public void testHLLWithPrimaryKey() throws Exception {
+        String sql =
+                "create table table1 (col1 int, col2 varchar(10), col3 HLL) engine=olap primary key(col1, col2)" +
+                        " distributed by hash(col1) buckets 10";
+        analyzeSuccess(sql);
     }
 
     @Test
     public void testPercentileWithoutAggregateMethod() {
         String sql =
-                "create table test.table1 (col1 int, col2 varchar(10), col3 PERCENTILE) engine=olap duplicate key(col1, col2)" +
+                "create table table1 (col1 int, col2 varchar(10), col3 PERCENTILE) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10";
-        analyzeFail(sql, "No aggregate function specified for 'col3'");
+        analyzeFail(sql, "AGG_KEYS table should specify aggregate type for non-key column[col3]");
+    }
+
+    @Test
+    public void testPercentileWithPrimaryKey() throws Exception {
+        String sql =
+                "create table table1 (col1 int, col2 varchar(10), col3 PERCENTILE) engine=olap primary key(col1, col2)" +
+                        " distributed by hash(col1) buckets 10";
+        analyzeSuccess(sql);
     }
 
     @Test
