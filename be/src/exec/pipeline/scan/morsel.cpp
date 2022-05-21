@@ -79,9 +79,10 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 
     // When it hasn't initialized any segment,
     // or _segment_idx exceeds the segments of the current rowset,
-    // or current segment is finished,
+    // or current segment is empty or finished,
     // we should pick up the next segment and init it.
-    while (!_has_init_any_segment || _cur_segment() == nullptr || !_segment_range_iter.has_more()) {
+    while (!_has_init_any_segment || _cur_segment() == nullptr || _cur_segment()->num_rows() == 0 ||
+           !_segment_range_iter.has_more()) {
         if (!_next_segment()) {
             return nullptr;
         }
@@ -162,13 +163,10 @@ Segment* PhysicalSplitMorselQueue::_cur_segment() {
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
+    DCHECK(_num_segment_rest_rows == 0);
     if (!_has_init_any_segment) {
         _has_init_any_segment = true;
     } else {
-        if (_num_segment_rest_rows > 0) {
-            return true;
-        }
-
         // Read the next segment of the current rowset.
         if (++_segment_idx >= _cur_rowset()->segments().size()) {
             _segment_idx = 0;
@@ -204,7 +202,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
 
     auto* segment = _cur_segment();
     // The new rowset doesn't contain any segment.
-    if (segment == nullptr) {
+    if (segment == nullptr || segment->num_rows() == 0) {
         return Status::OK();
     }
 
