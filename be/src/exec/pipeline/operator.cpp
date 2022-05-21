@@ -48,8 +48,6 @@ Status Operator::prepare(RuntimeState* state) {
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
 
-    _total_cost_cpu_time_ns_counter = ADD_TIMER(_common_metrics, "OperatorTotalCostCpuTime");
-
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
@@ -89,6 +87,18 @@ std::vector<ExprContext*>& Operator::runtime_in_filters() {
 
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
     return _factory->get_runtime_bloom_filters();
+}
+const RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() const {
+    return _factory->get_runtime_bloom_filters();
+}
+
+int64_t Operator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->wait_timeout_ms();
 }
 
 const std::vector<SlotId>& Operator::filter_null_value_columns() const {

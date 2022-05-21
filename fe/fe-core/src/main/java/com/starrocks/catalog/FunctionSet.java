@@ -77,7 +77,7 @@ public class FunctionSet {
     public static final String RETENTION = "retention";
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
-    public static final String ARRAY_OVERLAP = "array_overlap";
+    public static final String ARRAYS_OVERLAP = "arrays_overlap";
     public static final String WINDOW_FUNNEL = "window_funnel";
 
     // Window functions:
@@ -88,6 +88,7 @@ public class FunctionSet {
     public static final String LAST_VALUE = "last_value";
     public static final String DENSE_RANK = "dense_rank";
     public static final String RANK = "rank";
+    public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
 
     // Scalar functions:
@@ -254,6 +255,16 @@ public class FunctionSet {
                     .add("uuid")
                     .add("sleep")
                     .build();
+
+    public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.DENSE_RANK)
+            .add(FunctionSet.RANK)
+            .add(FunctionSet.NTILE)
+            .add(FunctionSet.ROW_NUMBER)
+            .add(FunctionSet.FIRST_VALUE)
+            .add(FunctionSet.LAST_VALUE)
+            .add(FunctionSet.FIRST_VALUE_REWRITE)
+            .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -563,6 +574,8 @@ public class FunctionSet {
         String[] sumNames = {"sum", "sum_distinct"};
         for (String name : sumNames) {
             addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.TINYINT), Type.BIGINT, Type.BIGINT, false, true, false));
@@ -578,8 +591,6 @@ public class FunctionSet {
                     Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
@@ -744,6 +755,8 @@ public class FunctionSet {
                 Collections.emptyList(), Type.BIGINT, Type.VARCHAR));
         addBuiltin(AggregateFunction.createAnalyticBuiltin("row_number",
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
+        addBuiltin(AggregateFunction.createAnalyticBuiltin("ntile",
+                Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
 
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));

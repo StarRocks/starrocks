@@ -19,6 +19,8 @@ class RuntimeState;
 namespace vectorized {
 
 class ColumnPredicate;
+struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
@@ -50,11 +52,15 @@ struct TabletReaderParams {
 
     RuntimeProfile* profile = nullptr;
 
-    std::string to_string() const;
     int chunk_size = 1024;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
+
+    RowidRangeOptionPtr rowid_range_option = nullptr;
+
+public:
+    std::string to_string() const;
 };
 
 } // namespace vectorized

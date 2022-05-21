@@ -53,21 +53,6 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-static Morsels convert_scan_range_to_morsel(ScanNode* scan_node, const std::vector<TScanRangeParams>& scan_ranges,
-                                            int node_id) {
-    Morsels morsels;
-
-    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
-    if (!scan_node->accept_empty_scan_ranges() && scan_ranges.size() == 0) {
-        morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, TScanRangeParams()));
-    } else {
-        for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<ScanMorsel>(node_id, scan_range));
-        }
-    }
-    return morsels;
-}
-
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
@@ -175,6 +160,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
     // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
@@ -259,8 +245,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_node, scan_ranges, scan_node->id());
-        morsel_queues.emplace(scan_node->id(), std::make_unique<FixedMorselQueue>(std::move(morsels)));
+        ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
+                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
+        morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
     }
 
     return Status::OK();
@@ -319,15 +306,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
-                auto* source_operator = driver->source_operator();
-                if (_wg != nullptr) {
-                    // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    source_operator->set_workgroup(_wg);
-                } else {
-                    if (dynamic_cast<ConnectorScanOperator*>(source_operator) != nullptr) {
-                        source_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                if (auto* scan_operator = driver->source_scan_operator()) {
+                    if (_wg != nullptr) {
+                        // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
+                        scan_operator->set_workgroup(_wg);
                     } else {
-                        source_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                        } else {
+                            scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        }
                     }
                 }
 

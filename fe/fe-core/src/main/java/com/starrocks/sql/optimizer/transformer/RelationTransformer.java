@@ -636,6 +636,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         expr.setFn(tableFunction);
         ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
 
+        if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
+            throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
+        }
+
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         for (ScalarOperator scalarOperator : operator.getChildren()) {
             if (scalarOperator instanceof ColumnRefOperator) {

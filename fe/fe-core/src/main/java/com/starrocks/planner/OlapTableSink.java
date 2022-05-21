@@ -80,12 +80,12 @@ import java.util.stream.Collectors;
 public class OlapTableSink extends DataSink {
     private static final Logger LOG = LogManager.getLogger(OlapTableSink.class);
 
-    private int clusterId;
+    private final int clusterId;
     // input variables
-    private OlapTable dstTable;
-    private TupleDescriptor tupleDescriptor;
+    private final OlapTable dstTable;
+    private final TupleDescriptor tupleDescriptor;
     // specified partition ids. this list should not be empty and should contains all related partition ids
-    private List<Long> partitionIds;
+    private final List<Long> partitionIds;
 
     // set after init called
     private TDataSink tDataSink;
@@ -342,7 +342,6 @@ public class OlapTableSink extends DataSink {
     private TNodesInfo createStarrocksNodesInfo() {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
-        ;
         for (Long id : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));

@@ -78,6 +78,10 @@ public class DatabaseTest {
                 GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
+
+                globalStateMgr.getClusterId();
+                minTimes = 0;
+                result = 1;
             }
         };
     }

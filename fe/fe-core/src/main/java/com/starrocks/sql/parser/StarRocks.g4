@@ -41,8 +41,7 @@ statement
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
     | dropExternalCatalogStatement                                                          #dropCatalog
-    | showCatalogStatement                                                                  #showCatalogs
-    | showDbFromCatalogStatement                                                            #showDbFromCatalog
+    | showCatalogsStatement                                                                 #showCatalogs
 
     // DML Statement
     | insertStatement                                                                       #insert
@@ -74,7 +73,7 @@ statement
 
     // Other statement
     | USE schema=identifier                                                                 #use
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
+    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | GRANT identifierOrString TO user                                                      #grantRole
     | REVOKE identifierOrString FROM user                                                   #revokeRole
@@ -187,13 +186,10 @@ dropExternalCatalogStatement
     : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
-showCatalogStatement
+showCatalogsStatement
     : SHOW CATALOGS
     ;
 
-showDbFromCatalogStatement
-    : SHOW DATABASES FROM catalogName=identifierOrString
-    ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
@@ -275,24 +271,24 @@ showAnalyzeStatement
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createWorkGroupStatement
-    : CREATE RESOURCE_GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
+    : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
         TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
     ;
 
 dropWorkGroupStatement
-    : DROP RESOURCE_GROUP identifier
+    : DROP RESOURCE GROUP identifier
     ;
 
 alterWorkGroupStatement
-    : ALTER RESOURCE_GROUP identifier ADD classifier (',' classifier)*
-    | ALTER RESOURCE_GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
-    | ALTER RESOURCE_GROUP identifier DROP ALL
-    | ALTER RESOURCE_GROUP identifier WITH '(' property (',' property)* ')'
+    : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
+    | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | ALTER RESOURCE GROUP identifier DROP ALL
+    | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
     ;
 
 showWorkGroupStatement
-    : SHOW RESOURCE_GROUP identifier
-    | SHOW RESOURCE_GROUPS ALL?
+    : SHOW RESOURCE GROUP identifier
+    | SHOW RESOURCE GROUPS ALL?
     ;
 
 classifier
@@ -300,6 +296,10 @@ classifier
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
@@ -593,6 +593,7 @@ informationFunctionExpression
 
 specialFunctionExpression
     : CHAR '(' expression ')'
+    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
@@ -618,6 +619,7 @@ windowFunction
     : name = ROW_NUMBER '(' ')'
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
+    | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
     | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
@@ -823,26 +825,31 @@ number
     ;
 
 nonReserved
-    : AVG | ADMIN | ASYNC
-    | BUCKETS | BACKEND
-    | CAST | CATALOG | CATALOGS | CONNECTION_ID| CURRENT | COLUMNS | COMMENT | COMMIT | COSTS | COUNT | CONFIG
-    | DATA | DATABASE | DATE | DATETIME | DAY | DISTRIBUTION
-    | END | EXTERNAL | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FOLLOWER | FREE
-    | GLOBAL
-    | HASH | HOUR
-    | INTERVAL
-    | LAST | LESS | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MONTH | MERGE
-    | NONE | NULLS
-    | OFFSET | OBSERVER
-    | PASSWORD | PRECEDING | PROPERTIES
-    | QUARTER
-    | REFRESH | ROLLUP | ROLLBACK | REPLICA | RESOURCE_GROUP | RESOURCE_GROUPS
-    | SECOND | SESSION | SETS | START | SUM | STATUS | SUBMIT | SYNC
-    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
-    | UNBOUNDED | USER
-    | VARIABLES | VIEW | VERBOSE
-    | WEEK
+    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
+    | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
+    | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | END | ENGINE | ENGINES | ERRORS | EVENTS | EXTERNAL | EXTRACT | EVERY
+    | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+    | GLOBAL | GRANTS
+    | HASH | HELP | HLL_UNION | HOUR
+    | IDENTIFIED | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | NAME | NAMES | NEGATIVE | NO | NULLS
+    | OBSERVER | OFFSET | ONLY | OPEN
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
+    | PROPERTIES | PROPERTY
+    | QUARTER | QUERY | QUOTA
+    | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | RESOURCE | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
+    | SUBMIT | SYNC
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
+    | TRIGGERS | TRUNCATE | TYPE | TYPES
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | VALUE | VARIABLES | VIEW | VERBOSE
+    | WARNINGS | WEEK | WORK | WRITE
     | YEAR
     ;

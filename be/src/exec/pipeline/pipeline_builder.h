@@ -61,10 +61,12 @@ public:
 private:
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
+
     uint32_t _next_pipeline_id = 0;
     uint32_t _next_operator_id = 0;
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
-    size_t _degree_of_parallelism = 1;
+
+    const size_t _degree_of_parallelism;
 };
 
 class PipelineBuilder {

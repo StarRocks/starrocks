@@ -73,6 +73,8 @@ public class AuditEvent {
     public long scanRows = -1;
     @AuditField(value = "ReturnRows")
     public long returnRows = -1;
+    @AuditField(value = "CpuCostNs")
+    public long cpuCostNs = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -158,6 +160,14 @@ public class AuditEvent {
 
         public AuditEventBuilder setReturnRows(long returnRows) {
             auditEvent.returnRows = returnRows;
+            return this;
+        }
+
+        /**
+         * Cpu cost in nanoseconds
+         */
+        public AuditEventBuilder setCpuCostNs(long cpuNs) {
+            auditEvent.cpuCostNs = cpuNs;
             return this;
         }
 

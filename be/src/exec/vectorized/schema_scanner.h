@@ -58,7 +58,7 @@ public:
     SchemaScanner(ColumnDesc* columns, int column_num);
     virtual ~SchemaScanner();
 
-    // init object need infomation, schema etc.
+    // init object need information, schema etc.
     virtual Status init(SchemaScannerParam* param, ObjectPool* pool);
     // Start to work
     virtual Status start(RuntimeState* state);

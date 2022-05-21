@@ -201,21 +201,20 @@ public class Analyzer {
 
         @Override
         public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-            statement.analyze();
+            CatalogAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
         public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-            statement.analyze();
+            CatalogAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitShowCatalogStatement(ShowCatalogsStmt statement, ConnectContext context) {
-            ShowStmtAnalyzer.analyze(statement, context);
+        public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
             return null;
         }
-
     }
 }

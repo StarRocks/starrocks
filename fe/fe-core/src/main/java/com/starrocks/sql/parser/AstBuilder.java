@@ -540,7 +540,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowCatalogStatement(StarRocksParser.ShowCatalogStatementContext context) {
+    public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt();
     }
 
@@ -836,7 +836,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
-        if (context.RESOURCE_GROUPS() != null) {
+        if (context.GROUPS() != null) {
             return new ShowWorkGroupStmt(null, context.ALL() != null);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
@@ -1362,7 +1362,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {
+    public ParseNode visitShowDatabasesStatement(StarRocksParser.ShowDatabasesStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowDbStmt(stringLiteral.getValue());
@@ -1764,7 +1764,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
-            "row_number", "rank", "dense_rank", "lead", "lag", "first_value", "last_value");
+            "row_number", "rank", "dense_rank", "ntile", "lead", "lag", "first_value", "last_value");
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
@@ -1815,6 +1815,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
+        } else if (context.CURRENT_TIMESTAMP() != null) {
+            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {

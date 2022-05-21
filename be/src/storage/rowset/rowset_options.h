@@ -25,6 +25,8 @@ namespace starrocks::vectorized {
 class ColumnPredicate;
 class DeletePredicates;
 class Schema;
+struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 class RowsetReadOptions {
 public:
@@ -56,6 +58,8 @@ public:
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
+
+    RowidRangeOptionPtr rowid_range_option = nullptr;
 };
 
 } // namespace starrocks::vectorized

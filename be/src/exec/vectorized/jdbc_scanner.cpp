@@ -63,14 +63,6 @@ Status JDBCScanner::open(RuntimeState* state) {
 }
 
 Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    *chunk = std::make_shared<Chunk>();
-    const std::vector<SlotDescriptor*>& slot_descs = _tuple_desc->slots();
-
-    // init column information
-    for (auto& slot_desc : slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
-    }
     bool has_next = false;
     RETURN_IF_ERROR(_has_next(&has_next));
     if (!has_next) {
@@ -183,7 +175,14 @@ void JDBCScanner::_init_profile() {
 
 Status JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
     auto type = slot_desc->type().type;
-    if (java_class == "java.lang.Integer") {
+    if (java_class == "java.lang.Short") {
+        if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
+            return Status::NotSupported(
+                    fmt::format("Type mismatches on column[{}], JDBC result type is Short, please set the type to "
+                                "one of tinyint,smallint,int,bigint",
+                                slot_desc->col_name()));
+        }
+    } else if (java_class == "java.lang.Integer") {
         if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is Integer, please set the type to "
@@ -422,7 +421,9 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
                     _append_value_from_result<cpp_type>(helper.list_get(jcolumn, i), func, slot_desc, column.get())); \
         }                                                                                                             \
     }
-        if (column_class == "java.lang.Integer") {
+        if (column_class == "java.lang.Short") {
+            FILL_COLUMN(valint16_t, int16_t);
+        } else if (column_class == "java.lang.Integer") {
             FILL_COLUMN(valint32_t, int32_t);
         } else if (column_class == "java.lang.String") {
             FILL_COLUMN(to_string, std::string);
