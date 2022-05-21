@@ -80,10 +80,6 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         this.tblRef.getName().setDb(dbName);
     }
 
-    public void setTblRef(TableRef tblRef) {
-        this.tblRef = tblRef;
-    }
-
     public String getTblName() {
         return tblRef.getName().getTbl();
     }
