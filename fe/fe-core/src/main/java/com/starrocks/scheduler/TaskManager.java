@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public class TaskManager {
 
@@ -50,27 +52,31 @@ public class TaskManager {
     // Use to concurrency control
     private final QueryableReentrantLock lock;
 
-    public TaskManager() {
+    private AtomicBoolean isStart = new AtomicBoolean(false);
 
+    public TaskManager() {
         manualTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         taskRunManager = new TaskRunManager();
         lock = new QueryableReentrantLock(true);
+    }
 
-        dispatchScheduler.scheduleAtFixedRate(() -> {
-            if (!tryLock()) {
-                return;
-            }
-            try {
-                taskRunManager.checkRunningTaskRun();
-                taskRunManager.scheduledPendingTaskRun();
-            } catch (Exception ex) {
-                LOG.warn("failed to dispatch job.", ex);
-            } finally {
-                unlock();
-            }
-
-        }, 0, 1, TimeUnit.SECONDS);
+    public void start() {
+        if (isStart.compareAndSet(false, true)) {
+            dispatchScheduler.scheduleAtFixedRate(() -> {
+                if (!tryLock()) {
+                    return;
+                }
+                try {
+                    taskRunManager.checkRunningTaskRun();
+                    taskRunManager.scheduledPendingTaskRun();
+                } catch (Exception ex) {
+                    LOG.warn("failed to dispatch job.", ex);
+                } finally {
+                    unlock();
+                }
+            }, 0, 1, TimeUnit.SECONDS);
+        }
     }
 
     public long createTask(Task task) {
@@ -111,9 +117,14 @@ public class TaskManager {
         // GlobalStateMgr.getCurrentState().getEditLog().logDropTask(taskName);
     }
 
-    public List<Task> showTask() {
+    public List<Task> showTasks(String dbName) {
         List<Task> taskList = Lists.newArrayList();
-        taskList.addAll(manualTaskMap.values());
+        if (dbName == null) {
+            taskList.addAll(manualTaskMap.values());
+        } else {
+            taskList.addAll(manualTaskMap.values().stream()
+                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+        }
         return taskList;
     }
 

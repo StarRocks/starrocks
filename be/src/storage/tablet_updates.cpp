@@ -460,7 +460,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
             LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
                       << " txn:" << rowset->txn_id() << " " << rowset->rowset_id().to_string()
                       << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
-                      << " #row:" << rowset->num_rows()
+                      << " #delfile:" << rowset->num_delete_files() << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
@@ -730,11 +730,23 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
-    st = index.load(&_tablet);
-    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    // empty rowset does not need to load in-memory primary index, so skip it
+    if (rowset->has_data_files() || enable_persistent_index) {
+        auto st = index.load(&_tablet);
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+        if (!st.ok()) {
+            manager->index_cache().remove(index_entry);
+            std::string msg = Substitute("_apply_rowset_commit error: load primary index failed: $0 $1", st.to_string(),
+                                         debug_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
+    }
+    st = index.prepare(version);
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
-        std::string msg = Substitute("_apply_rowset_commit error: load primary index failed: $0 $1", st.to_string(),
+        std::string msg = Substitute("_apply_rowset_commit error: primary index prepare failed: $0 $1", st.to_string(),
                                      debug_string());
         LOG(ERROR) << msg;
         _set_error(msg);
@@ -762,7 +774,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
-    index.prepare(version);
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
@@ -777,12 +788,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
 
     PersistentIndexMetaPB index_meta;
-    st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
-    if (!st.ok() && !st.is_not_found()) {
-        std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
+    if (enable_persistent_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
     }
     st = index.commit(&index_meta);
     if (!st.ok()) {
@@ -2427,8 +2440,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         LOG(INFO) << "load incremental snapshot done " << _debug_string(true);
         return Status::OK();
     } else if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_FULL) {
-        LOG(INFO) << "load full snapshot start #rowset:" << snapshot_meta.rowset_metas().size() << " "
-                  << _debug_string(true);
+        LOG(INFO) << "load full snapshot start #rowset:" << snapshot_meta.rowset_metas().size()
+                  << " version:" << snapshot_meta.snapshot_version() << " " << _debug_string(true);
         if (snapshot_meta.tablet_meta().tablet_id() != _tablet.tablet_id()) {
             return Status::InvalidArgument("mismatched tablet id");
         }
@@ -2742,6 +2755,99 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
     } else {
         manager->index_cache().release(index_entry);
     }
+    return Status::OK();
+}
+
+Status TabletUpdates::get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges) {
+    // usually, version ranges will have no hole or 1 hole(3 elements in ranges array)
+    missing_version_ranges.reserve(3);
+    std::lock_guard rl(_lock);
+    if (_edit_version_infos.empty()) {
+        return Status::InternalError("get_missing_version_ranges:empty edit_version_info");
+    }
+    int64_t last = _edit_version_infos.back()->version.major();
+    for (auto& itr : _pending_commits) {
+        int64_t cur = itr.first;
+        if (last + 1 < cur) {
+            missing_version_ranges.push_back(last + 1);
+            missing_version_ranges.push_back(cur - 1);
+        }
+        last = cur;
+    }
+    missing_version_ranges.push_back(last + 1);
+    return Status::OK();
+}
+
+Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
+                                                           std::vector<RowsetSharedPtr>& rowsets) {
+    // TODO: also find rowsets in pending_rowsets
+    vector<int64_t> versions;
+    vector<uint32_t> rowsetids;
+    {
+        std::lock_guard lg(_lock);
+        int64_t vmax = _edit_version_infos.back()->version.major();
+        for (size_t i = 0; i + 1 < missing_version_ranges.size(); i += 2) {
+            for (size_t v = missing_version_ranges[i]; v <= missing_version_ranges[i + 1]; v++) {
+                if (v <= vmax) {
+                    versions.push_back(v);
+                } else {
+                    break;
+                }
+            }
+        }
+        int64_t vcur = missing_version_ranges.back();
+        while (vcur <= vmax) {
+            versions.push_back(vcur++);
+        }
+        if (versions.empty()) {
+            string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
+                                             _debug_version_info(false), missing_version_ranges.back());
+            LOG(WARNING) << msg;
+            return Status::NotFound(msg);
+        }
+        rowsetids.reserve(versions.size());
+        // compare two lists to find matching versions and record rowsetid
+        size_t versions_index = 0;
+        size_t edit_versions_index = 0;
+        while (versions_index < versions.size() && edit_versions_index < _edit_version_infos.size()) {
+            auto& edit_version_info = _edit_version_infos[edit_versions_index];
+            if (edit_version_info->deltas.empty()) {
+                edit_versions_index++;
+                continue;
+            }
+            auto edit_version = edit_version_info->version.major();
+            if (edit_version == versions[versions_index]) {
+                DCHECK_EQ(1, edit_version_info->deltas.size());
+                rowsetids.emplace_back(edit_version_info->deltas[0]);
+                versions_index++;
+                edit_versions_index++;
+            } else if (edit_version > versions[versions_index]) {
+                // some version is missing, maybe already GCed, switch to full_snapshot
+                LOG(WARNING) << strings::Substitute("get_rowsets_for_incremental_snapshot: version $0 not found $1",
+                                                    versions[versions_index], _debug_version_info(false));
+                return Status::OK();
+            } else {
+                edit_versions_index++;
+            }
+        }
+    }
+    // get rowset from rowsetid
+    {
+        std::lock_guard lg2(_rowsets_lock);
+        for (auto rid : rowsetids) {
+            auto itr = _rowsets.find(rid);
+            if (itr != _rowsets.end()) {
+                rowsets.push_back(itr->second);
+            } else {
+                LOG(ERROR) << strings::Substitute(
+                        "get_rowsets_for_incremental_snapshot: rowset not found tablet:$0 rowsetid:$1",
+                        _tablet.tablet_id(), rid);
+            }
+        }
+    }
+    LOG(INFO) << strings::Substitute("get_rowsets_for_incremental_snapshot $0 missing_ranges:$1 return:$2",
+                                     _debug_version_info(true), JoinInts(missing_version_ranges, ","),
+                                     JoinInts(versions, ","));
     return Status::OK();
 }
 

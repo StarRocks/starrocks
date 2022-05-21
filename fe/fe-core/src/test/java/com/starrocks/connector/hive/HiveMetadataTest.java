@@ -32,7 +32,7 @@ public class HiveMetadataTest {
         String metastoreUris = "thrift://127.0.0.1:9083";
         HiveMetadata metadata = new HiveMetadata(metastoreUris);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDatabaseNames());
+        Assert.assertEquals(expectResult, metadata.listDbNames());
     }
 
     @Test

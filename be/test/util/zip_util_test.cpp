@@ -32,9 +32,9 @@
 #include <string>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -44,13 +44,13 @@ using namespace strings;
 TEST(ZipUtilTest, basic) {
     const std::string path = "./be/test/util";
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 
     ZipFile zf = ZipFile(path + "/test_data/zip_normal.zip");
     auto st = zf.extract(path + "/test_data", "target");
     ASSERT_TRUE(st.ok()) << st.to_string();
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_normal_data"));
-    ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_normal_data"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_normal_data"));
+    ASSERT_FALSE(fs::is_directory(path + "/test_data/target/zip_normal_data").value());
 
     auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
 
@@ -60,25 +60,25 @@ TEST(ZipUtilTest, basic) {
 
     ASSERT_EQ("hello world", slice.to_string());
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 }
 
 TEST(ZipUtilTest, dir) {
     const std::string path = "./be/test/util";
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 
     ZipFile zipFile = ZipFile(path + "/test_data/zip_dir.zip");
     ASSERT_TRUE(zipFile.extract(path + "/test_data", "target").ok());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/one"));
-    ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/one"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/one"));
+    ASSERT_TRUE(fs::is_directory(path + "/test_data/target/zip_test/one").value());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/one/data"));
-    ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_test/one/data"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/one/data"));
+    ASSERT_FALSE(fs::is_directory(path + "/test_data/target/zip_test/one/data").value());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/two"));
-    ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/two"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/two"));
+    ASSERT_TRUE(fs::is_directory(path + "/test_data/target/zip_test/two").value());
 
     auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
 
@@ -88,7 +88,7 @@ TEST(ZipUtilTest, dir) {
 
     ASSERT_EQ("test", slice.to_string());
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 }
 
 TEST(ZipUtilTest, targetAlready) {

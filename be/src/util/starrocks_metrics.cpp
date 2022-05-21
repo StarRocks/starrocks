@@ -24,8 +24,8 @@
 #include <unistd.h>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "util/debug_util.h"
-#include "util/file_utils.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -214,7 +214,10 @@ void StarRocksMetrics::_update_process_thread_num() {
     ss << "/proc/" << pid << "/task/";
 
     int64_t count = 0;
-    Status st = FileUtils::get_children_count(FileSystem::Default(), ss.str(), &count);
+    auto st = FileSystem::Default()->iterate_dir(ss.str(), [&](std::string_view /*name*/) {
+        count++;
+        return true;
+    });
     if (!st.ok()) {
         LOG(WARNING) << "failed to count thread num from: " << ss.str();
         process_thread_num.set_value(0);
@@ -232,7 +235,10 @@ void StarRocksMetrics::_update_process_fd_num() {
     std::stringstream ss;
     ss << "/proc/" << pid << "/fd/";
     int64_t count = 0;
-    Status st = FileUtils::get_children_count(FileSystem::Default(), ss.str(), &count);
+    auto st = FileSystem::Default()->iterate_dir(ss.str(), [&](std::string_view) {
+        count++;
+        return true;
+    });
     if (!st.ok()) {
         LOG(WARNING) << "failed to count fd from: " << ss.str();
         process_fd_num_used.set_value(0);

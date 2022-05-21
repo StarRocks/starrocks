@@ -47,7 +47,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -56,6 +58,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
 public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
@@ -325,7 +329,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.getType() == TableType.OLAP && !GlobalStateMgr.isCheckpointThread()) {
+                if (table.getType() == TableType.OLAP && !isCheckpointThread()) {
                     GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
                 }
             }
@@ -386,7 +390,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         idToRecycleTime.remove(partitionId);
 
         Partition partition = partitionInfo.getPartition();
-        if (!GlobalStateMgr.isCheckpointThread()) {
+        if (!isCheckpointThread()) {
             GlobalStateMgr.getCurrentState().onErasePartition(partition);
         }
 
@@ -925,5 +929,27 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized List<Long> getAllDbIds() {
         return Lists.newArrayList(idToDatabase.keySet());
+    }
+
+    public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
+            readFields(dis);
+            if (!isCheckpointThread()) {
+                // add tablet in Recycle bin to TabletInvertedIndex
+                addTabletToInvertedIndex();
+            }
+            // create DatabaseTransactionMgr for db in recycle bin.
+            // these dbs do not exist in `idToDb` of the globalStateMgr.
+            for (Long dbId : getAllDbIds()) {
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+            }
+        }
+        LOG.info("finished replay recycleBin from image");
+        return checksum;
+    }
+
+    public long saveRecycleBin(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 }

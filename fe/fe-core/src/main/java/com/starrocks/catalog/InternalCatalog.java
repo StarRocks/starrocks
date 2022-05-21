@@ -12,4 +12,5 @@ public class InternalCatalog extends Catalog {
     public InternalCatalog(String comment) {
         super(DEFAULT_INTERNAL_CATALOG_NAME, comment);
     }
+
 }

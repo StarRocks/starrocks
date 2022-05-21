@@ -123,6 +123,7 @@ public class BuiltinAggregateFunction extends Function {
         LAST_VALUE("LAST_VALUE", TAggregationOp.LAST_VALUE, null),
         RANK("RANK", TAggregationOp.RANK, null),
         DENSE_RANK("DENSE_RANK", TAggregationOp.DENSE_RANK, null),
+        NTILE("NTILE", TAggregationOp.NTILE, null),
         ROW_NUMBER("ROW_NUMBER", TAggregationOp.ROW_NUMBER, null),
         LEAD("LEAD", TAggregationOp.LEAD, null),
         FIRST_VALUE_REWRITE("FIRST_VALUE_REWRITE", null, null);

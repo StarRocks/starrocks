@@ -30,11 +30,11 @@
 #include <set>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "util/file_utils.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -93,13 +93,13 @@ public:
 };
 
 TEST_F(PluginZipTest, local_normal) {
-    FileUtils::remove_all(_path + "/plugin_test/target");
+    fs::remove_all(_path + "/plugin_test/target");
 
     PluginZip zip(_path + "/plugin_test/source/test.zip");
     ASSERT_TRUE(zip.extract(_path + "/plugin_test/target/", "test").ok());
 
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test"));
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test/test.txt"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/test"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/test/test.txt"));
 
     auto file = *Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt");
 
@@ -109,19 +109,19 @@ TEST_F(PluginZipTest, local_normal) {
 
     ASSERT_EQ("hello world", s.to_string());
 
-    FileUtils::remove_all(_path + "/plugin_test/target/");
+    fs::remove_all(_path + "/plugin_test/target/");
 }
 
 TEST_F(PluginZipTest, http_normal) {
-    FileUtils::remove_all(_path + "/plugin_test/target");
+    fs::remove_all(_path + "/plugin_test/target");
 
     PluginZip zip("http://127.0.0.1:29191/test.zip");
 
     //    ASSERT_TRUE(zip.extract(_path + "/plugin_test/target/", "test").ok());
     Status st = (zip.extract(_path + "/plugin_test/target/", "test"));
     ASSERT_TRUE(st.ok()) << st.to_string();
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test"));
-    ASSERT_TRUE(FileUtils::check_exist(_path + "/plugin_test/target/test/test.txt"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/test"));
+    ASSERT_TRUE(fs::path_exist(_path + "/plugin_test/target/test/test.txt"));
 
     auto file = *Env::Default()->new_random_access_file(_path + "/plugin_test/target/test/test.txt");
 
@@ -133,19 +133,19 @@ TEST_F(PluginZipTest, http_normal) {
 
     std::set<std::string> dirs;
     std::set<std::string> files;
-    ASSERT_TRUE(FileUtils::list_dirs_files(_path + "/plugin_test/target", &dirs, &files).ok());
+    ASSERT_TRUE(fs::list_dirs_files(_path + "/plugin_test/target", &dirs, &files).ok());
 
     ASSERT_EQ(1, dirs.size());
     ASSERT_EQ(1, files.size());
 
-    FileUtils::remove_all(_path + "/plugin_test/target/");
+    fs::remove_all(_path + "/plugin_test/target/");
 }
 
 TEST_F(PluginZipTest, already_install) {
     // This test case will finish very soon, sleep 1 second to ensure that EvHttpServer worker has started
     // before this unit test case finished, or there may cause an ASAN error.
     sleep(1);
-    FileUtils::remove_all(_path + "/plugin_test/target");
+    fs::remove_all(_path + "/plugin_test/target");
 
     PluginZip zip("http://127.0.0.1:29191/test.zip");
     ASSERT_FALSE(zip.extract(_path + "/plugin_test/", "source").ok());

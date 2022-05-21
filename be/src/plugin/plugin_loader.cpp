@@ -25,12 +25,12 @@
 #include <cstring>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "http/http_client.h"
 #include "plugin/plugin_zip.h"
 #include "util/dynamic_util.h"
-#include "util/file_utils.h"
 #include "util/md5.h"
 #include "util/time.h"
 
@@ -57,7 +57,7 @@ Status PluginLoader::close_valid() {
 Status DynamicPluginLoader::install() {
     // check already install
     std::string so_path = _install_path + "/" + _name + "/" + _so_name;
-    if (!FileUtils::check_exist(so_path)) {
+    if (!fs::path_exist(so_path)) {
         // no, need download zip install
         PluginZip zip(_source);
 
@@ -87,7 +87,7 @@ Status DynamicPluginLoader::install() {
 Status DynamicPluginLoader::open_plugin() {
     // check .so file
     std::string so_path = _install_path + "/" + _name + "/" + _so_name;
-    if (!FileUtils::check_exist(so_path)) {
+    if (!fs::path_exist(so_path)) {
         return Status::InternalError("plugin install not found " + _so_name);
     }
 
@@ -128,7 +128,7 @@ Status DynamicPluginLoader::uninstall() {
     RETURN_IF_ERROR(close_plugin());
 
     // remove plugin install path
-    RETURN_IF_ERROR(FileUtils::remove_all(_install_path + "/" + _name));
+    RETURN_IF_ERROR(fs::remove_all(_install_path + "/" + _name));
 
     return Status::OK();
 }

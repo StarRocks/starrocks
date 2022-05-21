@@ -168,6 +168,15 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     return nullptr;
 }
 
+int64_t ScanOperator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
+}
+
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
         return Status::OK();
@@ -226,9 +235,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
-                    // for big query check
-                    COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
-                                   _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
+                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
@@ -254,6 +261,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     if (!status.ok() && !status.is_end_of_file()) {
                         set_scan_status(status);
                     }
+                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }

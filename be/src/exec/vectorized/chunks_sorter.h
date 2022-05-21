@@ -72,6 +72,9 @@ struct DataSegment {
 using DataSegments = std::vector<DataSegment>;
 
 class SortedRuns;
+class ChunksSorter;
+using ChunksSorterPtr = std::shared_ptr<ChunksSorter>;
+using ChunksSorters = std::vector<ChunksSorterPtr>;
 
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
@@ -80,13 +83,14 @@ public:
 
     /**
      * Constructor.
-     * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
-     * @param is_asc         Orders on each column.
-     * @param is_null_first  NULL values should at the head or tail.
-     * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
+     * @param sort_exprs            The order-by columns or columns with expression. This sorter will use but not own the object.
+     * @param is_asc_order          Orders on each column.
+     * @param is_null_first         NULL values should at the head or tail.
+     * @param size_of_chunk_batch   In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn);
+    ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                 const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
+                 const std::string& sort_keys, const bool is_topn);
     virtual ~ChunksSorter();
 
     static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,
@@ -113,7 +117,8 @@ public:
 
     bool sink_complete();
 
-    // pull_chunk for pipeline.
+    // Pull chunk version for pipeline.
+    // Return false if there is no more chunks
     virtual bool pull_chunk(ChunkPtr* chunk) = 0;
 
     virtual int64_t mem_usage() const = 0;

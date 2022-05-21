@@ -100,19 +100,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
-    TTabletId tablet_id = scan_range->tablet_id;
-    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
-    std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-    if (!_tablet) {
-        std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-           << ", reason=" << err;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
+    ASSIGN_OR_RETURN(_tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+
     return Status::OK();
 }
 
@@ -386,6 +377,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 
     SCOPED_TIMER(_scan_timer);
     do {
+        RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));
 
         TRY_CATCH_ALLOC_SCOPE_START()
@@ -432,12 +424,6 @@ int64_t OlapChunkSource::last_spent_cpu_time_ns() {
     _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
     _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
     return _last_spent_cpu_time_ns - time_ns;
-}
-
-int64_t OlapChunkSource::last_scan_rows_num() {
-    int64_t temp = _last_scan_rows_num;
-    _last_scan_rows_num = 0;
-    return temp;
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {

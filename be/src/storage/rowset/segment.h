@@ -145,6 +145,10 @@ public:
 
     uint32_t num_rows() const { return _num_rows; }
 
+    // Load and decode short key index.
+    // May be called multiple times, subsequent calls will no op.
+    Status load_index(MemTracker* mem_tracker);
+
 private:
     Segment(const Segment&) = delete;
     const Segment& operator=(const Segment&) = delete;
@@ -156,9 +160,6 @@ private:
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
-    // Load and decode short key index.
-    // May be called multiple times, subsequent calls will no op.
-    Status _load_index(MemTracker* mem_tracker);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::Schema& schema,
                                              const vectorized::SegmentReadOptions& read_options);

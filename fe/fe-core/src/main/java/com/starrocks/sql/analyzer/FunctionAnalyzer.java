@@ -121,12 +121,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.DENSE_RANK)
-                || fnName.getFunction().equals(FunctionSet.RANK)
-                || fnName.getFunction().equals(FunctionSet.ROW_NUMBER)
-                || fnName.getFunction().equals(FunctionSet.FIRST_VALUE)
-                || fnName.getFunction().equals(FunctionSet.LAST_VALUE)
-                || fnName.getFunction().equals(FunctionSet.FIRST_VALUE_REWRITE)) {
+        if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function");
             }
@@ -147,9 +142,9 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_OVERLAP)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
             if (functionCallExpr.getChildren().size() != 2) {
-                throw new SemanticException("array_overlap only support 2 parameters");
+                throw new SemanticException("arrays_overlap only support 2 parameters");
             }
         }
 
@@ -167,7 +162,8 @@ public class FunctionAnalyzer {
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equals(FunctionSet.SUM)
                 || fnName.getFunction().equals(FunctionSet.AVG))
-                && ((!arg.getType().isNumericType() && !arg.getType().isBoolean() && !arg.getType().isNull() &&
+                && ((!arg.getType().isNumericType() && !arg.getType().isBoolean()
+                && !arg.getType().isStringType() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(

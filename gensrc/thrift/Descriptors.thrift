@@ -101,6 +101,8 @@ enum TSchemaTableType {
     SCH_USER_PRIVILEGES,
     SCH_VARIABLES,
     SCH_VIEWS,
+    SCH_TASKS,
+    SCH_TASK_RUNS,
     SCH_INVALID
 }
 

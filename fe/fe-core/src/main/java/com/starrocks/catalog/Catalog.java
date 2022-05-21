@@ -32,4 +32,5 @@ public abstract class Catalog implements Writable {
 
     public void readFields(DataInput in) throws IOException {
     }
+
 }

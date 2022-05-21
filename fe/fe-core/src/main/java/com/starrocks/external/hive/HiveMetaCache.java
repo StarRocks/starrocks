@@ -42,7 +42,7 @@ public class HiveMetaCache {
     private static final long MAX_NAMES_CACHE_SIZE = 0L;
     private static final long REFRESH_TABLE_SCHEMA_SECONDS = 60;
     private final HiveMetaClient client;
-    private String resourceName;
+    private final String resourceName;
 
 
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>

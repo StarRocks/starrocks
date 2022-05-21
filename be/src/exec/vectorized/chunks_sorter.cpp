@@ -19,18 +19,19 @@ static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_co
                                         std::vector<DataSegment>& data_segments,
                                         const std::vector<int>& sort_order_flags,
                                         const std::vector<int>& null_first_flags) {
-    for (size_t i = 0; i < data_segments.size(); ++i) {
+    size_t dats_segment_size = data_segments.size();
+
+    for (size_t i = 0; i < dats_segment_size; ++i) {
         size_t rows = data_segments[i].chunk->num_rows();
         compare_results_array[i].resize(rows, 0);
     }
 
-    size_t dats_segment_size = data_segments.size();
-    size_t size = order_by_columns.size();
+    size_t order_by_column_size = order_by_columns.size();
 
     for (size_t i = 0; i < dats_segment_size; i++) {
         std::vector<Datum> rhs_values;
         auto& segment = data_segments[i];
-        for (size_t col_idx = 0; col_idx < size; col_idx++) {
+        for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
             rhs_values.push_back(order_by_columns[col_idx]->get(row_to_sort));
         }
         compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_order_flags,

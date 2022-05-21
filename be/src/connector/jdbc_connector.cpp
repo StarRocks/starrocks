@@ -73,6 +73,7 @@ void JDBCDataSource::close(RuntimeState* state) {
 Status JDBCDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     RETURN_IF_ERROR(_scanner->reset_jni_env());
     bool eos = false;
+    _init_chunk(chunk, 0);
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
     } while (!eos && (*chunk)->num_rows() == 0);

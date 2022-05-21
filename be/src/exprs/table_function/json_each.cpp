@@ -49,9 +49,8 @@ std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool*
                 offset++;
                 arr_idx++;
             }
-        } else {
-            continue;
         }
+
         offset_column->append(offset);
     }
 

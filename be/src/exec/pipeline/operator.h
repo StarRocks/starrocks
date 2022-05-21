@@ -118,6 +118,9 @@ public:
     std::vector<ExprContext*>& runtime_in_filters();
 
     RuntimeFilterProbeCollector* runtime_bloom_filters();
+    const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
+
+    virtual int64_t global_rf_wait_timeout_ns() const;
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
@@ -139,11 +142,10 @@ public:
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 
     // The different operators have their own independent logic for calculating Cost
-    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns_counter->value(); }
     virtual int64_t get_last_growth_cpu_time_ns() {
-        int64_t growth_time = _total_cost_cpu_time_ns_counter->value() - _last_growth_cpu_time_ns;
-        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns_counter->value();
-        return growth_time;
+        int64_t res = _last_growth_cpu_time_ns;
+        _last_growth_cpu_time_ns = 0;
+        return res;
     }
 
     RuntimeState* runtime_state();
@@ -193,8 +195,9 @@ protected:
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 
-    RuntimeProfile::Counter* _total_cost_cpu_time_ns_counter = nullptr;
-    int64_t _last_growth_cpu_time_ns = 0;
+    // Some extra cpu cost of this operator that not accounted by pipeline driver,
+    // such as OlapScanOperator( use separated IO thread to execute the IO task)
+    std::atomic_int64_t _last_growth_cpu_time_ns = 0;
 
 private:
     void _init_rf_counters(bool init_bloom);
@@ -245,12 +248,18 @@ public:
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
-        if (_runtime_filter_collector) {
-            return _runtime_filter_collector->get_rf_probe_collector();
-        } else {
+        if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
+        return _runtime_filter_collector->get_rf_probe_collector();
     }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
+        if (_runtime_filter_collector == nullptr) {
+            return nullptr;
+        }
+        return _runtime_filter_collector->get_rf_probe_collector();
+    }
+
     const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }
