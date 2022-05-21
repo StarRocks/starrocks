@@ -10,6 +10,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -37,7 +38,11 @@ public class FrontendOptionsTest {
     }
 
     @Test
-    public void enableFQDNTest() throws UnknownHostException {
+    public void enableFQDNTest() throws UnknownHostException, 
+                                        NoSuchFieldException, 
+                                        SecurityException, 
+                                        IllegalArgumentException, 
+                                        IllegalAccessException {
 
         new MockUp<InetAddress>() {
             @Mock
@@ -55,12 +60,17 @@ public class FrontendOptionsTest {
             }
         };
 
-        Config.enable_fqdn = true;
-        FrontendOptions frontendOptions = new FrontendOptions();
-        frontendOptions.init();
-        InetAddress localAddr = FrontendOptions.getLocalHost();
-        Assert.assertTrue(localAddr.getHostAddress().equals("127.0.0.10"));
-        Assert.assertTrue(localAddr.getCanonicalHostName().equals("sandbox"));
+
+        Field field = FrontendOptions.class.getDeclaredField("localAddr");
+        field.setAccessible(true);
+        field.set(null, addr);
+        Field field1 = FrontendOptions.class.getDeclaredField("useFqdn");
+        field1.setAccessible(true);
+        
+        field1.set(null, true);
+        Assert.assertTrue(FrontendOptions.getLocalHostAddress().equals("sandbox"));
+        field1.set(null, false);
+        Assert.assertTrue(FrontendOptions.getLocalHostAddress().equals("127.0.0.10"));
     }
 
 }

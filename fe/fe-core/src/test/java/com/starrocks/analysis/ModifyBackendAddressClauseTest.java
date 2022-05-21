@@ -13,8 +13,8 @@ public class ModifyBackendAddressClauseTest {
     @Test
     public void testCreateClause() {
         ModifyBackendAddressClause clause1 = new ModifyBackendAddressClause("originalHost-test", "sandbox");
-        Assert.assertEquals("originalHost-test", clause1.getToBeModifyHost());
-        Assert.assertEquals("sandbox", clause1.getFqdn());
+        Assert.assertEquals("originalHost-test", clause1.getSrcHost());
+        Assert.assertEquals("sandbox", clause1.getDestHost());
     }
 
     @Test

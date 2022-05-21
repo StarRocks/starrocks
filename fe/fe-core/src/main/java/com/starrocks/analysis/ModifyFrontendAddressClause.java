@@ -8,27 +8,27 @@ import com.starrocks.sql.ast.AstVisitor;
 
 public class ModifyFrontendAddressClause extends FrontendClause {
 
-    protected String toBeModifiedHost;
+    protected String srcHost;
     // Although the FQDN is declared here, 
     // the value of this field may still be an IP
-    protected String fqdn;
+    protected String destHost;
     
     public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
         super(hostPort, role);
     }
 
-    public ModifyFrontendAddressClause(String toBeModifiedHost, String fqdn) {
+    public ModifyFrontendAddressClause(String srcHost, String destHost) {
         super("", FrontendNodeType.UNKNOWN);
-        this.toBeModifiedHost = toBeModifiedHost;
-        this.fqdn = fqdn;
+        this.srcHost = srcHost;
+        this.destHost = destHost;
     }
     
-    public String getToBeModifyHost() {
-        return toBeModifiedHost;
+    public String getSrcHost() {
+        return srcHost;
     }
 
-    public String getFqdn() {
-        return fqdn;
+    public String getDestHost() {
+        return destHost;
     }
 
     @Override

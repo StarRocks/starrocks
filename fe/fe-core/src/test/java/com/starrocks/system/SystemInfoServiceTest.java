@@ -2,6 +2,7 @@
 
 package com.starrocks.system;
 
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -11,6 +12,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -32,9 +34,14 @@ public class SystemInfoServiceTest {
     EditLog editLog;
 
     @Before
-    public void setUp() {
+    public void setUp() throws NoSuchFieldException, 
+                               SecurityException, 
+                               IllegalArgumentException, 
+                               IllegalAccessException {
         service = new SystemInfoService();
-        Config.enable_fqdn = true;
+        Field field = FrontendOptions.class.getDeclaredField("useFqdn");
+        field.setAccessible(true);
+        field.set(null, true);
     }
 
     private void mockFunc() {

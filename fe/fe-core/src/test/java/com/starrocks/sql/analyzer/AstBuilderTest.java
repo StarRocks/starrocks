@@ -33,7 +33,7 @@ public class AstBuilderTest {
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyBackendAddressClause clause = (ModifyBackendAddressClause) field.get(statement);
-        Assert.assertTrue(clause.getToBeModifyHost().equals("127.0.0.1") && clause.getFqdn().equals("testHost"));
+        Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 
     @Test
@@ -48,6 +48,6 @@ public class AstBuilderTest {
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);
-        Assert.assertTrue(clause.getToBeModifyHost().equals("127.0.0.1") && clause.getFqdn().equals("testHost"));
+        Assert.assertTrue(clause.getSrcHost().equals("127.0.0.1") && clause.getDestHost().equals("testHost"));
     }
 }

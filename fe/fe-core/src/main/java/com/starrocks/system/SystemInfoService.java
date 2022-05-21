@@ -41,7 +41,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -51,6 +50,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -178,8 +178,8 @@ public class SystemInfoService {
     }
 
     public ShowResultSet modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
-        String willBeModifiedHost = modifyBackendAddressClause.getToBeModifyHost();
-        String fqdn = modifyBackendAddressClause.getFqdn();
+        String willBeModifiedHost = modifyBackendAddressClause.getSrcHost();
+        String fqdn = modifyBackendAddressClause.getDestHost();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
         if (null == candidateBackends || candidateBackends.size() == 0) {
             throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
@@ -356,17 +356,26 @@ public class SystemInfoService {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
+
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            return null;
+        }
+
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         for (Backend backend : idToBackend.values()) {
-            String ip = "";
-            if (!NetUtils.validIPAddress(backend.getHost())) {
-                try {
-                    ip = InetAddress.getByName(backend.getHost()).getHostAddress();
-                } catch (UnknownHostException e) {
-                    LOG.info("fqdn [{}] can't cast to ip", backend.getHost());
-                }
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
+            } catch (UnknownHostException e) {
+                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                continue;
             }
-            if ((backend.getHost().equals(host) || ip.equals(host)) && backend.getBePort() == bePort) {
+            boolean hostOk = (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second));
+            if (hostOk && (backend.getBePort() == bePort)) {
                 return backend;
             }
         }
@@ -731,7 +740,7 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && !Config.enable_fqdn) {
+            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw

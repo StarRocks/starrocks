@@ -25,10 +25,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -139,7 +139,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static boolean isJoin(List<InetSocketAddress> allFeHosts, Frontend fe) {
         for (InetSocketAddress addr : allFeHosts) {
             String realHost = "";
-            if (NetUtils.validIPAddress(fe.getHost())) {
+            if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
                 realHost = addr.getAddress().getHostAddress();
             } else {
                 realHost = addr.getAddress().getHostName();
