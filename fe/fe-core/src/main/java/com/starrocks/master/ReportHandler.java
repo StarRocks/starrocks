@@ -161,15 +161,30 @@ public class ReportHandler extends Daemon {
         }
 
         if (request.isSetDisks()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TASK_REPORT);
+                return result;
+            }
             disks = request.getDisks();
             reportType = ReportType.DISK_REPORT;
         }
 
         if (request.isSetTablets()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
+                return result;
+            }
             tablets = request.getTablets();
             reportVersion = request.getReport_version();
             reportType = ReportType.TABLET_REPORT;
         } else if (request.isSetTablet_list()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
+                return result;
+            }
             // the 'tablets' member will be deprecated in future.
             tablets = buildTabletMap(request.getTablet_list());
             reportVersion = request.getReport_version();
@@ -181,6 +196,11 @@ public class ReportHandler extends Daemon {
         }
 
         if (request.isSetActive_workgroups()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.WORKGROUP_REPORT);
+                return result;
+            }
             activeWorkGroups = request.active_workgroups;
             reportType = ReportType.WORKGROUP_REPORT;
         }
@@ -205,6 +225,14 @@ public class ReportHandler extends Daemon {
         LOG.info("receive report from be {}. type: {}, current queue size: {}",
                 backend.getId(), reportType, reportQueue.size());
         return result;
+    }
+
+    private void buildErrorResult(TStatus tStatus, String msg) {
+        tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
+        List<String> errorMsgs = Lists.newArrayList();
+        errorMsgs.add(msg);
+        tStatus.setError_msgs(errorMsgs);
+        LOG.warn(errorMsgs);
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
