@@ -76,6 +76,14 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         return tblRef.getName().getDb();
     }
 
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
+    }
+
+    public void setTblRef(TableRef tblRef) {
+        this.tblRef = tblRef;
+    }
+
     public String getTblName() {
         return tblRef.getName().getTbl();
     }

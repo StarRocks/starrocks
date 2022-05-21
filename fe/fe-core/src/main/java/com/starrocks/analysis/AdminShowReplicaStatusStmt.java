@@ -146,6 +146,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return tblRef.getName().getDb();
     }
 
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
+    }
+
     public String getTblName() {
         return tblRef.getName().getTbl();
     }
