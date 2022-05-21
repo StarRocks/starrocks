@@ -29,6 +29,8 @@ import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.proc.ProcResult;
+import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -42,6 +44,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ResourceMgrTest {
@@ -185,6 +188,38 @@ public class ResourceMgrTest {
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         stmt.analyze(analyzer);
         mgr.alterResource(stmt);
+    }
+
+    @Test
+    public void testReplayCreateResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Auth auth) throws UserException {
+        ResourceMgr mgr = new ResourceMgr();
+        type = "hive";
+        name = "hive0";
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                result = editLog;
+                globalStateMgr.getAuth();
+                result = auth;
+                auth.checkResourcePriv(ConnectContext.get(), name, PrivPredicate.SHOW);
+                result = true;
+            }
+        };
+
+        addHiveResource(mgr, editLog, globalStateMgr, auth);
+
+        Resource hiveRes = new HiveResource(name);
+        Map<String, String> properties = new HashMap<>();
+        String newUris = "thrift://10.10.44.xxx:9083";
+        properties.put("hive.metastore.uris", newUris);
+        hiveRes.setProperties(properties);
+        mgr.replayCreateResource(hiveRes);
+
+        ProcResult result = mgr.getProcNode().fetchResult();
+        String uris = result.getRows().get(0).get(3);
+
+        Assert.assertEquals(newUris, uris);
     }
 
     private CreateResourceStmt addHiveResource(ResourceMgr mgr, EditLog editLog,
