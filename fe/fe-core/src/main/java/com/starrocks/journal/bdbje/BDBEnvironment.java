@@ -43,15 +43,18 @@ import com.sleepycat.je.rep.StateChangeListener;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -89,9 +92,12 @@ public class BDBEnvironment {
 
     private final File envHome;
     private final String selfNodeName;
-    private final String selfNodeHostPort;
+    private String selfNodeHostPort;
     private final String helperHostPort;
     private final boolean isElectable;
+
+    // haveTriedToChangeLocalAdddr means try to change loacl addr(ip/fqdn) to start the current node
+    private boolean haveTriedToChangeLocalAdddr = false;
 
     public BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
                           String helperHostPort, boolean isElectable) {
@@ -217,6 +223,12 @@ public class BDBEnvironment {
                 close();
             } catch (DatabaseException e) {
                 LOG.warn("database exception", e);
+                if (e.getMessage().contains("Conflicting hostnames")) {
+                    if (!haveTriedToChangeLocalAdddr) {
+                        haveTriedToChangeLocalAdddr = true;
+                        tryToStartNodeByChangingLocalAdddr();
+                    }
+                }
                 if (i < RETRY_TIME - 1) {
                     try {
                         Thread.sleep(5 * 1000);

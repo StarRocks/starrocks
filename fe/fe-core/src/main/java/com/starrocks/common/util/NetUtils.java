@@ -21,6 +21,9 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.Pair;
+import org.apache.commons.validator.routines.InetAddressValidator;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -61,24 +64,21 @@ public class NetUtils {
         return flag;
     }
 
-    public static boolean validIPAddress(String hostname) {
-        String[] nums = hostname.split("\\.", -1);
-        for (String x : nums) {
-            if (x.length() == 0 || x.length() > 3) { 
-                return false; 
+    public static Pair<String, String> getIpAndFqdnByHost(String host) throws UnknownHostException {
+
+        String ip = "";
+        String fqdn = "";
+        if (InetAddressValidator.getInstance().isValidInet4Address(host)) {
+            // ipOrFqdn is ip
+            ip = host;
+        } else {
+            // ipOrFqdn is fqdn
+            ip = InetAddress.getByName(host).getHostAddress();
+            if (null == ip) {
+                ip = "";
             }
-            if (x.charAt(0) == '0' && x.length() != 1) { 
-                return false; 
-            }
-            for (char ch : x.toCharArray()) {
-                if (!Character.isDigit(ch)) { 
-                    return false;
-                }
-            }
-            if (Integer.parseInt(x) > 255) { 
-                return false; 
-            }
+            fqdn = host;
         }
-        return true;
+        return new Pair<String, String>(ip, fqdn);
     }
 }

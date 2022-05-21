@@ -11,10 +11,10 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.system.SystemInfoService;
+import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -60,32 +60,29 @@ public class AlterSystemStmtAnalyzer {
 
         @Override
         public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, ConnectContext context) {
-            try {
-                String fqdn = clause.getFqdn();
-                // if fqdn is a domain name need to determine whether it is a legitimate domain name
-                if (NetUtils.validIPAddress(fqdn)) {
-                    throw new SemanticException("the host you want to set could't be an ip");
-                }
-                InetAddress.getByName(fqdn);
-            } catch (UnknownHostException e) {
-                throw new SemanticException("unknown host " + e.getMessage());
-            }
+            checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
             return null;
         }
 
         @Override
         public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
+            checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+            return null;
+        }
+
+        private void checkModifyHostClause(String srcHost, String destHost) {
             try {
-                String fqdn = clause.getFqdn();
-                // if fqdn is a domain name need to determine whether it is a legitimate domain name
-                if (NetUtils.validIPAddress(fqdn)) {
+                if (!InetAddressValidator.getInstance().isValidInet4Address(srcHost)) {
+                    InetAddress.getByName(srcHost);
+                }
+                // if destHost is a domain name need to determine whether it is a legitimate domain name
+                if (InetAddressValidator.getInstance().isValidInet4Address(destHost)) {
                     throw new SemanticException("the host you want to set could't be an ip");
                 }
-                InetAddress.getByName(fqdn);
+                InetAddress.getByName(destHost);
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());
             }
-            return null;
         }
     }
 }

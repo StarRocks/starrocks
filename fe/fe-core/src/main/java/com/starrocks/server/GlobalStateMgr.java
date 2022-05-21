@@ -1750,8 +1750,8 @@ public class GlobalStateMgr {
     }
 
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        String toBeModifyHost = modifyFrontendAddressClause.getToBeModifyHost();
-        String fqdn = modifyFrontendAddressClause.getFqdn();
+        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
+        String fqdn = modifyFrontendAddressClause.getDestHost();
         if (toBeModifyHost.equals(selfNode.first) && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not modify current master node.");
         }
@@ -2499,6 +2499,10 @@ public class GlobalStateMgr {
 
     public Pair<String, Integer> getSelfNode() {
         return nodeMgr.getSelfNode();
+    }
+
+    public void setSelfNode(Pair<String, Integer> newSelfNode) {
+        this.selfNode = newSelfNode;
     }
 
     public String getNodeName() {

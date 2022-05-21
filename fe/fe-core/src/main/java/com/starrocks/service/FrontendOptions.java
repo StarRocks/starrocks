@@ -39,20 +39,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FrontendOptions {
+    
     private static final Logger LOG = LogManager.getLogger(FrontendOptions.class);
 
     private static final String PRIORITY_CIDR_SEPARATOR = ";";
-
     @VisibleForTesting
     static final List<String> priorityCidrs = Lists.newArrayList();
     private static InetAddress localAddr = InetAddress.getLoopbackAddress();
+    private static boolean useFqdn = false;
 
     public static void init() throws UnknownHostException {
         localAddr = null;
-        if (Config.enable_fqdn) {
-            localAddr = InetAddress.getLocalHost();
-            return;
-        }
         if (!"0.0.0.0".equals(Config.frontend_address)) {
             if (!InetAddressValidator.getInstance().isValidInet4Address(Config.frontend_address)) {
                 throw new UnknownHostException("invalid frontend_address: " + Config.frontend_address);
@@ -61,9 +58,21 @@ public class FrontendOptions {
             LOG.info("use configured address. {}", localAddr);
             return;
         }
+        if (Config.start_use_ip_first) {
+            initAddrUseIp();
+            return;
+        }
+        initAddrUseFqdn();
+    }
 
+    private static void initAddrUseFqdn() throws UnknownHostException {
+        useFqdn = true;
+        localAddr = InetAddress.getLocalHost();
+    }
+
+    private static void initAddrUseIp() {
+        useFqdn = false;
         analyzePriorityCidrs();
-
         // if not set frontend_address, get a non-loopback ip
         List<InetAddress> hosts = new ArrayList<>();
         NetUtils.getHosts(hosts);
@@ -106,8 +115,20 @@ public class FrontendOptions {
         return localAddr;
     }
 
+    public static void changeFrontendOptionAddr() throws UnknownHostException {
+        if (useFqdn) {
+            initAddrUseIp();
+            return;
+        }
+        initAddrUseFqdn();
+    }
+
+    public static boolean isUseFqdn() {
+        return useFqdn;
+    }
+
     public static String getLocalHostAddress() {
-        if (Config.enable_fqdn) {
+        if (useFqdn) {
             return localAddr.getCanonicalHostName();
         }
         return localAddr.getHostAddress();
@@ -141,7 +162,6 @@ public class FrontendOptions {
         priorityCidrs.addAll(priorNetworks);
     }
 
-
     @VisibleForTesting
     static boolean isInPriorNetwork(String ip) {
         ip = ip.trim();
@@ -163,6 +183,5 @@ public class FrontendOptions {
         }
         return false;
     }
-
 }
 
