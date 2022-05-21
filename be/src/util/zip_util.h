@@ -21,10 +21,10 @@
 
 #pragma once
 
+#include <minizip/unzip.h>
+
 #include <string>
 #include <utility>
-
-#include <minizip/unzip.h>
 
 #include "common/status.h"
 
