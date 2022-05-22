@@ -3,7 +3,8 @@ Logo
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?duration=3000&color=497d8c&lines=Real-time+Analytics+Made+Easy%EF%BC%81)](https://git.io/typing-svg)
 
-[![forthebadge](https://forthebadge.com/images/badges/made-with-c-plus-plus.svg)] [![forthebadge](https://forthebadge.com/images/badges/built-by-developers.svg)]
+![forthebadge](https://forthebadge.com/images/badges/made-with-c-plus-plus.svg)![forthebadge](https://forthebadge.com/images/badges/built-by-developers.svg)
+
 
 [![open issues](https://img.shields.io/github/issues-raw/StarRocks/starrocks)](https://github.com/StarRocks/starrocks/issues)
 [![commit activity](https://img.shields.io/github/commit-activity/m/StarRocks/starrocks)](http://www.gnu.org/licenses/agpl-3.0)
