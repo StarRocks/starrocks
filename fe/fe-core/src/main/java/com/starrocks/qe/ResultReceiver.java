@@ -22,6 +22,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Status;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
@@ -118,11 +119,11 @@ public class ResultReceiver {
                 }
             }
         } catch (RpcException e) {
-            LOG.warn("fetch result rpc exception, finstId={}", finstId, e);
+            LOG.warn("fetch result rpc exception, finstId={}", DebugUtil.printId(finstId), e);
             status.setRpcStatus(e.getMessage());
             SimpleScheduler.addToBlacklist(backendId);
         } catch (ExecutionException e) {
-            LOG.warn("fetch result execution exception, finstId={}", finstId, e);
+            LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
                 status.setStatus(new Status(TStatusCode.TIMEOUT, e.getMessage()));
@@ -131,7 +132,7 @@ public class ResultReceiver {
                 SimpleScheduler.addToBlacklist(backendId);
             }
         } catch (TimeoutException e) {
-            LOG.warn("fetch result timeout, finstId={}", finstId, e);
+            LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
             status.setStatus("query timeout");
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
