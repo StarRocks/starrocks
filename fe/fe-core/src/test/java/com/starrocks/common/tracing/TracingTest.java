@@ -11,13 +11,13 @@ import io.opentelemetry.semconv.trace.attributes.SemanticAttributes;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class TraceingTest {
+public class TracingTest {
 
     @Test
     public void basicTest() {
         try {
-        Traceing.initTracer();
-        OpenTelemetry openTelemetry = Traceing.getTracer();
+        Tracing.initTracing();
+        OpenTelemetry openTelemetry = Tracing.getTracer();
         Tracer tracer = openTelemetry.getTracer("TracerTest");
         Span rootSpan = tracer.spanBuilder("root").startSpan();
         rootSpan.setAttribute(SemanticAttributes.HTTP_METHOD, "PUT");
@@ -25,6 +25,7 @@ public class TraceingTest {
         Thread.sleep(2000);
         rootSpan.end();
         Assert.assertFalse( rootSpan.isRecording());
+        Assert.assertFalse(rootSpan.getSpanContext().isSampled());
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }

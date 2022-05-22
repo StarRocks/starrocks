@@ -20,7 +20,7 @@ public class Tracing {
     private static String SERVICE_NAME = "STARROCKS_FE";
     private static OpenTelemetry openTelemetry = OpenTelemetry.noop();
 
-    public static void initTracer() {
+    public static void initTracing() {
         if (Config.jaeger_server_endpoint.isEmpty()) {
             return;
         }

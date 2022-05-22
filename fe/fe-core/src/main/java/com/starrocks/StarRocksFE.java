@@ -93,7 +93,7 @@ public class StarRocksFE {
             Log4jConfig.initLogging();
 
             // Init the tracer.
-            Tracing.initTracer();
+            Tracing.initTracing();
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
