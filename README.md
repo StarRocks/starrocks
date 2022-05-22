@@ -1,5 +1,4 @@
-
-Logo
+<p align="center"> Logo <p>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?duration=3000&color=497d8c&lines=Real-time+Analytics+Made+Easy%EF%BC%81)](https://git.io/typing-svg)
 
