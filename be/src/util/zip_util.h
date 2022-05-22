@@ -21,11 +21,12 @@
 
 #pragma once
 
+#include <minizip/unzip.h>
+
 #include <string>
 #include <utility>
 
 #include "common/status.h"
-#include "util/minizip/unzip.h"
 
 namespace starrocks {
 
