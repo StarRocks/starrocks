@@ -16,7 +16,7 @@ import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
 import java.util.concurrent.TimeUnit;
 
-public class Traceing {
+public class Tracing {
     private static String SERVICE_NAME = "STARROCKS_FE";
     private static OpenTelemetry openTelemetry = OpenTelemetry.noop();
 
@@ -34,9 +34,11 @@ public class Traceing {
                 Resource.create(Attributes.of(AttributeKey.stringKey("service.name"), SERVICE_NAME));
         // Send a batch of spans if ScheduleDelay time or MaxExportBatchSize is reached.
         BatchSpanProcessor spanProcessor =
-                BatchSpanProcessor.builder(jaegerExporter).
-                        setScheduleDelay(600, TimeUnit.MILLISECONDS).build();
-        // Set to process the spans by the Jaeger Exporter
+                BatchSpanProcessor.builder(jaegerExporter)
+                        .setScheduleDelay(Config.tracing_schedule_delay_time_ms, TimeUnit.MILLISECONDS)
+                        .setMaxExportBatchSize(Config.tracing_max_export_batch_size)
+                        .build();
+        // Set to process the spans by the Jaeger Exporter.
         SdkTracerProvider tracerProvider = SdkTracerProvider.builder().addSpanProcessor(spanProcessor)
                 .setResource(Resource.getDefault().merge(serviceNameResource)).build();
         openTelemetry =
