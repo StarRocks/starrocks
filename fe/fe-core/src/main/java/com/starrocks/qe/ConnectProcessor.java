@@ -31,7 +31,6 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -88,14 +87,13 @@ public class ConnectProcessor {
 
     // COM_INIT_DB: change current database of this session.
     private void handleInitDb() {
-        String dbName = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
+        String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         if (Strings.isNullOrEmpty(ctx.getClusterName())) {
             ctx.getState().setError("Please enter cluster");
             return;
         }
-        dbName = ClusterNamespace.getFullName(ctx.getClusterName(), dbName);
         try {
-            ctx.getGlobalStateMgr().changeDb(ctx, dbName);
+            ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
         } catch (DdlException e) {
             ctx.getState().setError(e.getMessage());
             return;

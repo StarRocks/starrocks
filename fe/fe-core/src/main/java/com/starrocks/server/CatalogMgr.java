@@ -62,8 +62,10 @@ public class CatalogMgr {
         // TODO edit log
     }
 
+    // TODO @caneGuy we should put internal catalog into catalogmgr
     public boolean catalogExists(String catalogName) {
-        return catalogs.containsKey(catalogName);
+        return catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME) ||
+                catalogs.containsKey(catalogName);
     }
 
     public static boolean isInternalCatalog(String name) {

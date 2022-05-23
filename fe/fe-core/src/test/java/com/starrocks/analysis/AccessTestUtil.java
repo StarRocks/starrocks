@@ -150,11 +150,11 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    globalStateMgr.changeDb((ConnectContext) any, "blockDb");
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
 
                     globalStateMgr.getBrokerMgr();
@@ -280,7 +280,7 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = auth;
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
                     result = new DdlException("failed");
 
