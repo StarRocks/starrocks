@@ -350,6 +350,7 @@ public class MockedBackend {
                 pQueryStatistics.scanRows = 0L;
                 pQueryStatistics.scanBytes = 0L;
                 pQueryStatistics.cpuCostNs = 0L;
+                pQueryStatistics.memCostBytes = 0L;
 
                 result.status = pStatus;
                 result.packetSeq = 0L;
