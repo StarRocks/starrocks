@@ -201,6 +201,8 @@ void ESDataSource::_init_counter() {
 }
 
 Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    // Notice that some variables are not initialized
+    // if `_no_data == true` because of short-circuits logic.
     if (_no_data || (_line_eof && _batch_eof)) {
         return Status::EndOfFile("");
     }
