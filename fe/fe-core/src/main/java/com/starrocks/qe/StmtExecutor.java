@@ -101,7 +101,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
@@ -367,8 +366,6 @@ public class StmtExecutor {
 
                 // Record planner costs in audit log
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
-                CostEstimate costs = execPlan.getEstimatedCost();
-                context.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
 
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
@@ -999,6 +996,9 @@ public class StmtExecutor {
         }
         if (statisticsForAuditLog.scanRows == null) {
             statisticsForAuditLog.scanRows = 0L;
+        }
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
         }
         return statisticsForAuditLog;
     }
