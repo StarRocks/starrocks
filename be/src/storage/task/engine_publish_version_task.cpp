@@ -37,7 +37,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
           _tablet_info(tablet_info),
           _rowset(rowset) {}
 
-Status EnginePublishVersionTask::finish() {
+Status EnginePublishVersionTask::execute() {
     VLOG(1) << "begin to publish version on tablet. "
             << "tablet_id=" << _tablet_info.tablet_id << ", schema_hash=" << _tablet_info.schema_hash
             << ", version=" << _version << ", transaction_id=" << _transaction_id;

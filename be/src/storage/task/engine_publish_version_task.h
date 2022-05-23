@@ -33,7 +33,7 @@ public:
                              const TabletInfo& tablet_info, const RowsetSharedPtr& rowset);
     ~EnginePublishVersionTask() override = default;
 
-    Status finish() override;
+    Status execute() override;
 
 private:
     const TTransactionId _transaction_id;
