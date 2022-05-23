@@ -2575,6 +2575,15 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
+    public Table getTable(String dbName, String tblName) {
+        Database database = getDb(dbName);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tblName);
+    }
+
+    @Override
     public Database getDb(String name) {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);

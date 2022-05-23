@@ -2,6 +2,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
@@ -21,6 +22,11 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public List<String> listDbNames() throws DdlException {
         return metaCache.getAllDatabaseNames();
+    }
+
+    @Override
+    public Database getDb(String dbName) {
+        return metaCache.getDb(dbName);
     }
 
     @Override
