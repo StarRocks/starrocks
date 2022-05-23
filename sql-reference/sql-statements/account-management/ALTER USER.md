@@ -14,7 +14,7 @@ user_identity:
 auth_option: {
 IDENTIFIED BY 'auth_string'
 IDENTIFIED WITH auth_plugin
-DENTIFIED  WITH auth_plugin BY 'auth_string'
+IDENTIFIED  WITH auth_plugin BY 'auth_string'
 IDENTIFIED WITH auth_plugin AS 'auth_string'
 }
 ```
