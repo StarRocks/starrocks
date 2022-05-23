@@ -39,7 +39,7 @@ StarRocks can be easily deployed, maintained, and scaled out due to its simple a
 
 ## Documentation
 
-[Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy)｜ [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)｜[FAQs](https://docs.starrocks.com/en-us/main/faq/Deploy_faq)
+[Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy)｜ [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)｜[FAQs](https://docs.starrocks.com/en-us/main/faq/Deploy_faq)｜[Blogs](https://www.starrocks.com/en-US/blog)
 
 <br>
   
@@ -61,7 +61,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. We require signed contributor's license agreement (aka CLA) to accept your pull request. Complete your CLA [here](https://cla-assistant.io/StarRocks/starrocks).
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-[License] Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQs](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
+**[License]** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQs](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
   
 <br>
   
