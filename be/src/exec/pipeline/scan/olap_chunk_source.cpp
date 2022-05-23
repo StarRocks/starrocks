@@ -121,7 +121,7 @@ void OlapChunkSource::_decide_chunk_size() {
     }
 }
 
-Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
