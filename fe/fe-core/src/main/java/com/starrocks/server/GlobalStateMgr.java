@@ -2736,19 +2736,15 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
+        // check auth for internal catalog
+        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+                !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
+        }
 
-            if (localMetastore.getDb(dbName) == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
-        } else {
-            if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
-            }
+        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, dbName);
         }
 
         ctx.setDatabase(dbName);
