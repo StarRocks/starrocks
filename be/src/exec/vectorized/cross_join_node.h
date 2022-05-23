@@ -3,7 +3,11 @@
 #pragma once
 
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
+#include "exprs/expr_context.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -28,6 +32,17 @@ public:
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
+
+    // rewrite conjuncts as RuntimeFilter according to could_rewrite.
+    // now we only support rewrites with chunk rows of 1.
+    //
+    // eg: if input chunk is [col3: 1, col4: 2]
+    // slot1 > if (slot3 > 1, col3, col4) will be rewrited as slot1 > 4
+    //
+    // TODO: support multi rows rewrite
+    static StatusOr<std::list<ExprContext*>> rewrite_runtime_filter(
+            ObjectPool* pool, const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, Chunk* chunk,
+            const std::vector<ExprContext*>& ctxs);
 
 private:
     Status _build(RuntimeState* state);
@@ -93,6 +108,8 @@ private:
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
 
     std::vector<uint32_t> _buf_selective;
+
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 } // namespace vectorized
 } // namespace starrocks

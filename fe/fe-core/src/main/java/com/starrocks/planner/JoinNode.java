@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
-public abstract class JoinNode extends PlanNode {
+public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
     protected final TableRef innerRef;
@@ -157,10 +157,11 @@ public abstract class JoinNode extends PlanNode {
         }
     }
 
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
-                                    PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
-                                    JoinOperator joinOp) {
+    @Override
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        JoinOperator joinOp = getJoinOp();
+        PlanNode inner = getChild(1);
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
