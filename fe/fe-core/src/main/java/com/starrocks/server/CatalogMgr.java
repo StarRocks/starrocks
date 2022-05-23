@@ -68,7 +68,7 @@ public class CatalogMgr {
                 catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 
-    public boolean checkIfInternal(String catalogName) {
+    public boolean checkIsInternal(String catalogName) {
         return catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 
