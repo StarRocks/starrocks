@@ -551,6 +551,11 @@ public class RoutineLoadManager implements Writable {
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
                 .build());
+        if (job.needRemove()) {
+            LOG.warn("remove expired job {}", job);
+            idToRoutineLoadJob.remove(operation.getId());
+            unprotectedRemoveJobFromDb(job);
+        }
     }
 
     /**
@@ -611,6 +616,10 @@ public class RoutineLoadManager implements Writable {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             RoutineLoadJob routineLoadJob = RoutineLoadJob.read(in);
+            if (routineLoadJob.needRemove()) {
+                LOG.warn("discard expired job [{}]", routineLoadJob.getId());
+                continue;
+            }
             idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
             Map<String, List<RoutineLoadJob>> map = dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId());
             if (map == null) {

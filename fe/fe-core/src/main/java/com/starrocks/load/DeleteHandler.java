@@ -901,6 +901,10 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.warn("discard expired delete info {}", deleteInfo);
+            return;
+        }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
         updateTableDeleteInfo(globalStateMgr, dbId, deleteInfo.getTableId());
@@ -917,6 +921,10 @@ public class DeleteHandler implements Writable {
     public void replayMultiDelete(MultiDeleteInfo deleteInfo, GlobalStateMgr globalStateMgr) {
         // add to deleteInfos
         if (deleteInfo == null) {
+            return;
+        }
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.warn("discard expired delete info {}", deleteInfo);
             return;
         }
         long dbId = deleteInfo.getDbId();
@@ -974,22 +982,29 @@ public class DeleteHandler implements Writable {
         return checksum;
     }
 
+    private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
+        return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
+    }
+
+    private boolean isDeleteInfoExpired(MultiDeleteInfo deleteInfo, long currentTimeMs) {
+        return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
+    }
+
     public void removeOldDeleteInfo() {
         long currentTimeMs = System.currentTimeMillis();
         Iterator<Entry<Long, List<MultiDeleteInfo>>> logIterator = dbToDeleteInfos.entrySet().iterator();
         while (logIterator.hasNext()) {
+
             List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
             lock.writeLock().lock();
             try {
                 deleteInfos.sort((o1, o2) -> Long.signum(o1.getCreateTimeMs() - o2.getCreateTimeMs()));
-                int labelKeepMaxSecond = Config.label_keep_max_second;
                 int numJobsToRemove = deleteInfos.size() - Config.label_keep_max_num;
 
                 Iterator<MultiDeleteInfo> iterator = deleteInfos.iterator();
                 while (iterator.hasNext()) {
                     MultiDeleteInfo deleteInfo = iterator.next();
-                    if ((currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > labelKeepMaxSecond ||
-                            numJobsToRemove > 0) {
+                    if (isDeleteInfoExpired(deleteInfo, currentTimeMs) || numJobsToRemove > 0) {
                         iterator.remove();
                         --numJobsToRemove;
                     }
