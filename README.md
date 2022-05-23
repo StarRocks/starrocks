@@ -9,16 +9,22 @@
 [![commit activity](https://img.shields.io/github/commit-activity/m/StarRocks/starrocks)](http://www.gnu.org/licenses/agpl-3.0)
 [![Discourse](https://img.shields.io/discourse/topics?server=https%3A%2F%2Fforum.starrocks.com%2F)](https://forum.starrocks.com/)
 
-[Website](https://www.starrocks.com/EN-US/index) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Slack](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw) · [Twitter](https://twitter.com/StarRocksLabs) · [YouTube](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) \download
+[Website](https://www.starrocks.com/EN-US/index) · [Download](https://www.starrocks.com/en-US/download/community) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Slack](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw) · [Twitter](https://twitter.com/StarRocksLabs) · [YouTube](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) 
 
-StarRocks is a next-gen data platform for real-time data analytics. It provides blazing fast query speed which is 5 to 10 times faster than previous systems. It also supports MySQL protocols and standard SQL syntax so it can be smoothly integrated into your favorite BI tools. StarRocks doesn't rely on external systems, so it can be easily deployed, maintained, and scaled out.
+StarRocks is a next-gen data platform for real-time data analytics. Its blazing-fast query speed is 5 to 10 times faster than previous systems. 
+StarRocks can smoothly integrate into your favorite BI tools by supporting MySQL protocols and standard SQL syntax.
+StarRocks can be easily deployed, maintained, and scaled out due to its simple architecture that doesn't rely on any external systems.
 
-
+<br>
+  
 ## Design Overview
 
 ![App Screenshot](https://camo.githubusercontent.com/b53355f4cb764125160d949b37626b2afcde57fcfda09a45fc1eebc77604a465/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f313430302f312a466a6b38753661333966766567565f71325f5a5279772e706e67)
-StarRocks’s streamlined architecture is mainly composed of two modules： Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of meta-data and data. 
 
+  StarRocks’s streamlined architecture is mainly composed of two modules： Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data. 
+
+<br>
+  
 ## Features
 
 *  **🚀 Native vectorized SQL engine:** StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses, which is 5 to 10 times faster than previous systems.
@@ -29,16 +35,21 @@ StarRocks’s streamlined architecture is mainly composed of two modules： Fron
 * **✨ Intelligent materialized view:** The materialized view of StarRocks can be automatically updated during the data import and automatically selected when the query is executed.
 * **⏩ Convenient query federation:** StarRocks allows direct access to data from Hive, MySQL and Elasticsearch without importing.
 
+<br>
 
 ## Documentation
 
 [Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy)｜ [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)｜[FAQs](https://docs.starrocks.com/en-us/main/faq/Deploy_faq)
 
+<br>
+  
 ## Support
 -   Check out the  xxx bootcamps/tutorials to get started with StarRocks.
--   Join our  [Slack community](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)  to chat to our engineers about your use cases, questions, and support queries; for Chinese users, you can also join our [discourse forum](https://forum.starrocks.com/).
+-   Join our  [Slack community](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)  to chat to our engineers about your use cases, questions, and support queries; for Chinese users, you can also join our [Discourse Forum](https://forum.starrocks.com/).
 -   Subscribe to the latest video tutorials on our  [YouTube channel](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured).
 
+<br>  
+  
 ## Contribute to StarRocks
 
 We welcome all kinds of contributions from the community, individuals and partners. We owe our success to your active involvement.
@@ -50,7 +61,10 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. We require signed contributor's license agreement (aka CLA) to accept your pull request. Complete your CLA [here](https://cla-assistant.io/StarRocks/starrocks).
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-
+[License] Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQs](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
+  
+<br>
+  
 ## Used By
 
 This project is used by the following companies. Learn more about their use cases:
@@ -58,6 +72,7 @@ This project is used by the following companies. Learn more about their use case
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 
+<br>
 
 ## Acknowledgements
 
