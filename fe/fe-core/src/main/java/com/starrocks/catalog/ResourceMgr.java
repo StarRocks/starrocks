@@ -102,8 +102,19 @@ public class ResourceMgr implements Writable {
         }
     }
 
+    /**
+     * Replay create or alter resource log
+     * When we replay alter resource log
+     * <p>1. Overwrite the resource </p>
+     * <p>2. Clear cache in memory </p>
+     * @param resource
+     */
     public void replayCreateResource(Resource resource) {
         nameToResource.put(resource.getName(), resource);
+        if (resource instanceof HiveResource || resource instanceof HudiResource) {
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+        }
+        LOG.info("replay create/alter resource log success. resource name: {}", resource.getName());
     }
 
     public void dropResource(DropResourceStmt stmt) throws DdlException {
@@ -155,7 +166,7 @@ public class ResourceMgr implements Writable {
     }
 
     /**
-     * alter resource statement only support external hive now .
+     * alter resource statement only support external hive/hudi now .
      *
      * @param stmt
      * @throws DdlException
