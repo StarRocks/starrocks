@@ -22,7 +22,8 @@ public class CTEAnchorImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         PhysicalCTEAnchorOperator anchor =
-                new PhysicalCTEAnchorOperator(((LogicalCTEAnchorOperator) input.getOp()).getCteId());
+                new PhysicalCTEAnchorOperator(((LogicalCTEAnchorOperator) input.getOp()).getCteId(),
+                        input.getOp().getProjection());
         return Lists.newArrayList(OptExpression.create(anchor, input.getInputs()));
     }
 }
