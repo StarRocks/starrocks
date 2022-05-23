@@ -148,7 +148,7 @@ mysql> set global batch_size = 4096;
   
 * Add `metadata_failure_recovery=true` to `fe.conf`
   
-* Copy the metadata directory `starrocks-meta` of the online Master FE to the test environment.
+* Copy the metadata directory `starrocks-meta` of the online leader FE to the test environment.
 
 * Change `cluster_id` in the `starrocks-meta/image/VERSION` file (this is the file copied to the test environment)
 

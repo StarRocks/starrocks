@@ -37,7 +37,7 @@
   + [Precise De-duplication with Bitmap](/using_starrocks/Using_bitmap.md)
   + [Approximate De-duplication with HLL](/using_starrocks/Using_HLL.md)
   + [Materialized View](/using_starrocks/Materialized_view.md)
-  + [Colocation Join](/using_starrocks/Colocation_join.md)
+  + [Colocate Join](/using_starrocks/Colocation_join.md)
   + [External Table](/using_starrocks/External_table.md)
   + [Array](/using_starrocks/Array.md)
   + [Window Function](/using_starrocks/Window_function.md)
@@ -151,7 +151,7 @@
       + [STOP ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
     + Data Type
-      + Numeric Data Type
+      + Numeric
         + [BIGINT](/sql-reference/sql-statements/data-types/BIGINT.md)
         + [LARGEINT](/sql-reference/sql-statements/data-types/LARGEINT.md)
         + [SMALLINT](/sql-reference/sql-statements/data-types/SMALLINT.md)
@@ -161,14 +161,14 @@
         + [DOUBLE](/sql-reference/sql-statements/data-types/DOUBLE.md)
         + [FLOAT](/sql-reference/sql-statements/data-types/FLOAT.md)
         + [INT](/sql-reference/sql-statements/data-types/INT.md)
-      + String Data Type
+      + String
         + [CHAR](/sql-reference/sql-statements/data-types/CHAR.md)
         + [VARCHAR](/sql-reference/sql-statements/data-types/VARCHAR.md)
         + [STRING](/sql-reference/sql-statements/data-types/STRING.md)
-      + Date Data Type
+      + Date
         + [DATE](/sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](/sql-reference/sql-statements/data-types/DATETIME.md)
-      + Other Data Tpye
+      + Others
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
     + Auxiliary Commands
@@ -298,7 +298,7 @@
     + Crytographic Functions
       + [md5](/sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](/sql-reference/sql-functions/crytographic-functions/sha2.md)
-  + [System Variable](/reference/System_variable.md)
+  + [System Variables](/reference/System_variable.md)
   + [Error Code](/reference/Error_code.md)
   + [System Limit](/reference/System_limit.md)
 + Administration
@@ -321,11 +321,11 @@
     + [Blacklist](/administration/Blacklist.md)
     + [Memory Management](/administration/Memory_management.md)
     + [Load Balance](/administration/Load_balance.md)
-+ FAQs
++ FAQ
   + [Deploy](/faq/Deploy_faq.md)
   + Data Migration
     + Data Ingestion
-      + [Data Ingestion FAQ](/faq/loading/Loading_faq.md)
+      + [Data Ingestion](/faq/loading/Loading_faq.md)
       + [Stream Load](/faq/loading/Stream_load_faq.md)
       + [Routine Load](/faq/loading/Routine_load_faq.md)
       + [Broker Load](/faq/loading/Broker_load_faq.md)
@@ -333,8 +333,8 @@
       + [Flink connector](/faq/loading/Flink_connector_faq.md)
       + [DataX](/faq/loading/DataX_faq.md)
     + [Data Export](/faq/Exporting_faq.md)
-  + [SQL FAQs](/faq/Sql_faq.md)
-  + [Other FAQs](/faq/Others.md)
+  + [SQL](/faq/Sql_faq.md)
+  + [Others](/faq/Others.md)
 + Benchmark
   + [SSB Benchmark](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](/benchmarking/TPC-H_Benchmarking.md)

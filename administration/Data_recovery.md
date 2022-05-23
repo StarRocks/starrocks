@@ -1,4 +1,4 @@
-# Data Deletion Recovery
+# Data Recovery
 
 StarRocks supports data recovery for mistakenly deleted databases/tables/partitions. After `drop table` or `drop database`, StarRocks will not physically delete the data immediately, but keep it in Trash for a period of time (1 day by default). Administrators can recover the mistakenly deleted data with the `RECOVER` command.
 

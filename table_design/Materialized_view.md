@@ -1,12 +1,12 @@
 # Materialized View
 
-## Termnology
+## Terminology
 
 1. Duplicate model: The data model stores detailed data in StarRocks. The model can be specified during table build, and the data in the metric columns will not be aggregated.
 2. Base table: The table created by `CREATE TABLE` in StarRocks.
 3. Materialized Views table: Pre-calculated data set that contains results of a query. Abbreviated as MV.
 
-## Usage Scenarios
+## Use Scenarios
 
 In a practical business scenario, there are usually two coexisting use cases: 1) aggregation analysis of fixed dimensions and 2) analysis of arbitrary dimensions of the original detailed data.
 
@@ -28,7 +28,7 @@ In the existing StarRocks data model, if you create only one table with aggregat
 
 Queries that use aggregation functions such as `sum` and `count` can be executed more efficiently in tables that already contain aggregated data. You would want the improved efficiency when querying large amounts of data. The data in the table is materialized in a storage node and can be kept consistent with the base table in incremental updates. After a user creates a MVs table, the query optimizer will select and query the most efficient MVs table instead of using the base table. Since the data in MVs tables is typically much smaller than the base table, queries are more efficient.
 
-### **Build a materialized view：**
+### **Build a materialized view**
 
 ~~~sql
 CREATE MATERIALIZED VIEW materialized_view_name
@@ -39,7 +39,7 @@ GROUP BY id ORDER BY id’
 
 The creation of a materialized view is currently an asynchronous operation. The command for materialized view creation returns immediately, but the creation may still be running. You can use the `DESC "base_table_name" ALL` command to see the current materialized view of the base table. You can use the `SHOW ALTER TABLE MATERIALIZED VIEW FROM "database_name"` command to check the status of the current and the historical materialized views.
 
-* **Restrictions:**
+* **Restrictions**
 
   * The `partition column` in the base table must be one of  the `group by` columns of the created materialized view
   * Currently, only single-table materialized views are supported. No multi-table joins.
@@ -52,7 +52,7 @@ The creation of a materialized view is currently an asynchronous operation. The 
 
 `DROP MATERIALIZED VIEW [IF EXISTS] [db_name]. <mv_name>`
 
-### **View materialized views:**
+### **View materialized views**
 
 * View all materialized views under this database
 
@@ -61,7 +61,7 @@ The creation of a materialized view is currently an asynchronous operation. The 
 * View the table structure of the specified materialized view
 
 `DESC table_name all`
-( `DESC/DESCRIBUE mv_name` is no longer supported)
+( `DESC/DESCRIBE mv_name` is no longer supported)
 
 * View the processing progress of a materialized view
 

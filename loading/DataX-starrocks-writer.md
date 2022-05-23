@@ -1,4 +1,6 @@
-# Introduction
+# DataX writer
+
+## Introduction
 
 The StarRocksWriter plugin allows writing data to StarRocks' destination table. Specifically,StarRocksWriter imports data to StarRocks in CSV or JSON format via stream load, and internally caches and bulk imports the data read by `reader` to StarRocks for better write performance. The overall data flow is `source -> Reader -> DataX channel -> Writer -> StarRocks`.
 

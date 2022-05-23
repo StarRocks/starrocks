@@ -1,4 +1,6 @@
-# Background
+# Use HLL for approximate count distinct
+
+## Background
 
 In a real-world scenario, the pressure to de-duplicate the data increases as the volume of data increases. When the size of data reaches a certain level, the cost of accurate de-duplication is relatively high. In this case, users usually use approximate algorithms to reduce the computational pressure. HyperLogLog (HLL), which will be introduced in this section, is an approximate de-duplication algorithm that has excellent space complexity O(mloglogn) and time complexity O(n). What’s more, the error rate of the computation result can be controlled to about 1%-10%, depending on the size of the data set and the hash function used.
 
