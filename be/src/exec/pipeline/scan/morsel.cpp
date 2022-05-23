@@ -110,10 +110,8 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 }
 
 rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) {
-    std::string index_key;
-    index_key = lower ? key.short_key_encode(segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(segment->num_short_keys(), KEY_MAXIMAL_MARKER);
-
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
     uint32_t start_block_id;
     auto start_iter = segment->lower_bound(index_key);
     if (start_iter.valid()) {
@@ -130,16 +128,13 @@ rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const v
         start_block_id = segment->last_block();
     }
 
-    rowid_t start = start_block_id * segment->num_rows_per_block();
-
-    return start;
+    return start_block_id * segment->num_rows_per_block();
 }
 
 rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower,
                                                        rowid_t end) {
-    std::string index_key;
-    index_key = lower ? key.short_key_encode(segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(segment->num_short_keys(), KEY_MAXIMAL_MARKER);
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 
     auto end_iter = segment->upper_bound(index_key);
     if (end_iter.valid()) {
