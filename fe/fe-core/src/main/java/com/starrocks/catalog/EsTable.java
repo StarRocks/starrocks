@@ -68,6 +68,8 @@ public class EsTable extends Table {
     public static final String KEYWORD_SNIFF = "enable_keyword_sniff";
     public static final String MAX_DOCVALUE_FIELDS = "max_docvalue_fields";
 
+    public static final String WAN_ONLY = "es.nodes.wan.only";
+
     private String hosts;
     private String[] seeds;
     private String userName = "";
@@ -100,6 +102,8 @@ public class EsTable extends Table {
     // Here we have a slightly conservative value of 20, but at the same time we also provide configurable parameters for expert-using
     // @see `MAX_DOCVALUE_FIELDS`
     private static final int DEFAULT_MAX_DOCVALUE_FIELDS = 20;
+
+    private boolean wanOnly = false;
 
     // version would be used to be compatible with different ES Cluster
     public EsMajorVersion majorVersion = null;
@@ -139,6 +143,10 @@ public class EsTable extends Table {
 
     public boolean isKeywordSniffEnable() {
         return enableKeywordSniff;
+    }
+
+    public boolean wanOnly() {
+        return wanOnly;
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -231,6 +239,14 @@ public class EsTable extends Table {
                 maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
             }
         }
+
+        if (properties.containsKey(WAN_ONLY)) {
+            try {
+                wanOnly = Boolean.parseBoolean(properties.get(WAN_ONLY).trim());
+            } catch (Exception e) {
+                wanOnly = false;
+            }
+        }
         tableContext.put("hosts", hosts);
         tableContext.put("userName", userName);
         tableContext.put("passwd", passwd);
@@ -243,6 +259,7 @@ public class EsTable extends Table {
         tableContext.put("enableDocValueScan", String.valueOf(enableDocValueScan));
         tableContext.put("enableKeywordSniff", String.valueOf(enableKeywordSniff));
         tableContext.put("maxDocValueFields", String.valueOf(maxDocValueFields));
+        tableContext.put("es.nodes.wan.only", String.valueOf(wanOnly));
     }
 
     @Override
@@ -340,6 +357,11 @@ public class EsTable extends Table {
                     maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
                 }
             }
+            if (tableContext.containsKey(WAN_ONLY)) {
+                wanOnly = Boolean.parseBoolean(tableContext.get(wanOnly));
+            } else {
+                wanOnly = false;
+            }
 
             PartitionType partType = PartitionType.valueOf(Text.readString(in));
             if (partType == PartitionType.UNPARTITIONED) {
@@ -374,6 +396,7 @@ public class EsTable extends Table {
             tableContext.put("transport", transport);
             tableContext.put("enableDocValueScan", "false");
             tableContext.put(KEYWORD_SNIFF, "true");
+            tableContext.put(WAN_ONLY, "false");
         }
     }
 

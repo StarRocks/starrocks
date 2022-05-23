@@ -23,6 +23,7 @@ package com.starrocks.external.elasticsearch;
 
 import com.starrocks.catalog.EsTable;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -42,6 +43,15 @@ public class PartitionPhase implements SearchPhase {
     public void execute(SearchContext context) throws StarRocksESException {
         shardPartitions = client.searchShards(context.sourceIndex());
         nodesInfo = client.getHttpNodes();
+        if (!context.wanOnly()) {
+            nodesInfo = client.getHttpNodes();
+        } else {
+            nodesInfo = new HashMap<>();
+            String[] seeds = context.esTable().getSeeds();
+            for (int i = 0; i < seeds.length; i++) {
+                nodesInfo.put(String.valueOf(i), new EsNodeInfo(String.valueOf(i), seeds[i]));
+            }
+        }
     }
 
     @Override
