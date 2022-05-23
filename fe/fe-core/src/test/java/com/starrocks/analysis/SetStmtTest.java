@@ -132,7 +132,7 @@ public class SetStmtTest {
     }
 
     @Test
-    public void testSetLoadMemLimit() throws UserException {
+    public void testSetNonNegativeLongVariable() throws UserException {
         List<String> fields = Lists.newArrayList(
                 SessionVariable.LOAD_MEM_LIMIT,
                 SessionVariable.QUERY_MEM_LIMIT,
