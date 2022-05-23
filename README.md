@@ -1,5 +1,8 @@
-<p align="center"> Logo <p>
 
+  <a href="https://www.starrocks.com/en-US/index">
+    <img  height="180" src="https://github.com/kateshaowanjou/starrocks/blob/main/a9f9c004-e568-4a94-bb02-8815e1290eea.png">
+ 
+  
 [Download](https://www.starrocks.com/en-US/download/community) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) 
   
 ![c++](https://img.shields.io/badge/Made%20with-C%2B%2B-red)
