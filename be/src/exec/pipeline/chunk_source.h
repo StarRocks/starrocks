@@ -42,9 +42,21 @@ public:
     virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
+
+    // Some statistic of chunk source
     virtual int64_t last_spent_cpu_time_ns() { return 0; }
-    virtual int64_t last_scan_rows_num() { return 0; }
-    virtual int64_t last_scan_bytes() { return 0; }
+
+    virtual int64_t last_scan_rows_num() {
+        int64_t res = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return res;
+    }
+
+    virtual int64_t last_scan_bytes() {
+        int64_t res = _last_scan_bytes;
+        _last_scan_bytes = 0;
+        return res;
+    }
 
 protected:
     RuntimeProfile* _runtime_profile;
