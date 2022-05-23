@@ -52,7 +52,7 @@ std::vector<TInternalScanRange*> PhysicalSplitMorselQueue::olap_scan_ranges() co
     return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
-void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<OlapScanRange*>& key_ranges) {
+void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
     for (const auto& key_range : key_ranges) {
         if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
             continue;

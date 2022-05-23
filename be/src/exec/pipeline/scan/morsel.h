@@ -86,7 +86,7 @@ public:
 
     virtual std::vector<TInternalScanRange*> olap_scan_ranges() const = 0;
 
-    virtual void set_key_ranges(const std::vector<OlapScanRange*>& key_ranges) {}
+    virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
     virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) {}
     virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {}
 
@@ -131,7 +131,7 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
-    void set_key_ranges(const std::vector<OlapScanRange*>& key_ranges) override;
+    void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
     void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
     void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
         _tablet_rowsets = tablet_rowsets;
