@@ -25,6 +25,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         this.cteId = cteId;
     }
 
+    private LogicalCTEAnchorOperator(LogicalCTEAnchorOperator.Builder builder) {
+        super(OperatorType.LOGICAL_CTE_ANCHOR, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.cteId = builder.cteId;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         return expressionContext.getChildLogicalProperty(1).getOutputColumns();
@@ -69,5 +74,22 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         return "LogicalCTEAnchorOperator{" +
                 "cteId='" + cteId + '\'' +
                 '}';
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalCTEAnchorOperator, LogicalCTEAnchorOperator.Builder> {
+        private int cteId;
+
+        @Override
+        public LogicalCTEAnchorOperator build() {
+            return new LogicalCTEAnchorOperator(this);
+        }
+
+        @Override
+        public LogicalCTEAnchorOperator.Builder withOperator(LogicalCTEAnchorOperator operator) {
+            super.withOperator(operator);
+            this.cteId = operator.cteId;
+            return this;
+        }
     }
 }
