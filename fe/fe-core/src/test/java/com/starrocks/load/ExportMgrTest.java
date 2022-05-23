@@ -1,9 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.load;
 
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeMetaVersion;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -17,9 +18,25 @@ import java.io.FileOutputStream;
 import java.util.UUID;
 
 public class ExportMgrTest {
+    @Mocked
+    GlobalStateMgr globalStateMgr;
 
     @Test
     public void testExpiredJob() throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getCurrentStateJournalVersion();
+                minTimes = 0;
+                result = FeMetaVersion.VERSION_CURRENT;
+            }
+        };
         Config.history_job_keep_max_second = 10;
         ExportMgr mgr = new ExportMgr();
 
@@ -65,10 +82,13 @@ public class ExportMgrTest {
 
         // 7. load image, will filter job1
         ExportMgr newMgr = new ExportMgr();
+        Assert.assertEquals(0, newMgr.getIdToJob().size());
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         checksum = 0;
         long loadChecksum = newMgr.loadExportJob(dis, checksum);
-        Assert.assertEquals(1, mgr.getIdToJob().size());
+        Assert.assertEquals(1, newMgr.getIdToJob().size());
         Assert.assertEquals(saveChecksum, loadChecksum);
+
+        tempFile.delete();
     }
 }

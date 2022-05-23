@@ -378,6 +378,7 @@ public class ExportMgr {
                 // discard expired job right away
                 if (isJobExpired(job, currentTimeMs)) {
                     LOG.warn("discard expired job: {}", job);
+                    continue;
                 }
                 unprotectAddJob(job);
             }
