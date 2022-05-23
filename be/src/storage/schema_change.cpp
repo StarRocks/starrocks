@@ -63,8 +63,7 @@ public:
     explicit ChunkSorter(ChunkAllocator* allocator);
     virtual ~ChunkSorter();
 
-    bool sort(ChunkPtr& chunk, TabletSharedPtr new_tablet);
-    size_t allocated_rows() const { return _max_allocated_rows; }
+    bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
@@ -615,18 +614,12 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
 ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
         : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
 
-ChunkSorter::~ChunkSorter() {
-    if (_swap_chunk != nullptr) {
-        _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
-        _swap_chunk = nullptr;
-    }
-}
+ChunkSorter::~ChunkSorter() = default;
 
-bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
+bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
     Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
-        _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
-        Status st = _chunk_allocator->allocate(_swap_chunk, chunk->num_rows(), new_schema);
+        Status st = ChunkAllocator::allocate(_swap_chunk, chunk->num_rows(), new_schema);
         if (_swap_chunk == nullptr || !st.ok()) {
             LOG(WARNING) << "allocate swap chunk for sort failed: " << st.to_string();
             return false;
@@ -659,50 +652,25 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
 
 ChunkAllocator::ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation)
         : _tablet_schema(tablet_schema), _memory_limitation(memory_limitation) {
-    _row_len = tablet_schema.row_size();
+    // Before the first chunk is readed, for the Varchar type, we can't get the actual size,
+    // so we can only conservatively estimate a value for variable length type.
+    // Then later, row_len will be adjusted according to the Chunk that has been read.
+    _row_len = tablet_schema.estimate_row_size(8);
 }
 
-ChunkAllocator::~ChunkAllocator() {
-    if (_memory_allocated != 0) {
-        LOG(WARNING) << "memory leak in ChunkAllocator. memory_size=" << _memory_allocated;
-    }
-}
-
-bool ChunkAllocator::is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows) const {
-    if (num_rows <= allocated_rows) {
-        return true;
-    }
-    size_t chunk_size = _row_len * (num_rows - allocated_rows);
-    return _memory_allocated + chunk_size < _memory_limitation;
+bool ChunkAllocator::is_memory_enough_to_sort(size_t num_rows) const {
+    size_t chunk_size = _row_len * num_rows;
+    return static_cast<double>(_memory_allocated + chunk_size) < static_cast<double>(_memory_limitation) * 0.8;
 }
 
 Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema) {
-    size_t mem_size = _row_len * num_rows;
-
-    if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
-        std::string msg =
-                Substitute("ChunkAllocator::allocate() memory exceed, memory_limitation:$0, memory_allocate:$1 ",
-                           _memory_limitation, _memory_allocated + mem_size);
-        LOG(WARNING) << msg;
-        return Status::MemoryLimitExceeded(msg);
-    }
-
     chunk = ChunkHelper::new_chunk(schema, num_rows);
     if (chunk == nullptr) {
         LOG(WARNING) << "ChunkAllocator allocate chunk failed.";
         return Status::InternalError("allocate chunk failed");
     }
 
-    _memory_allocated += mem_size;
     return Status::OK();
-}
-
-void ChunkAllocator::release(ChunkPtr& chunk, size_t num_rows) {
-    if (chunk == nullptr) {
-        VLOG(3) << "null chunk released.";
-        return;
-    }
-    _memory_allocated -= std::max(chunk->num_rows(), num_rows) * _row_len;
 }
 
 ChunkMerger::ChunkMerger(TabletSharedPtr tablet) : _tablet(std::move(tablet)), _aggregator(nullptr) {}
@@ -1021,21 +989,13 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    DeferOp release_chunkarr([this, &chunk_arr] {
-        for (auto& it : chunk_arr) {
-            this->_chunk_allocator->release(it, it->num_rows());
-        }
-    });
     StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+
+    double total_bytes = 0;
+    double row_count = 0;
+
     while (!bg_worker_stopped) {
-#ifndef BE_TEST
-        Status st = CurrentThread::mem_tracker()->check_mem_limit("SortSchemaChange");
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
-            return false;
-        }
-#endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
         Status status = reader->do_get_next(base_chunk.get());
@@ -1053,8 +1013,8 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
         //   1. We need to allocate a new chunk to save the data after convert
         //   2. We maybe need to allocate a new swap_chunk to save the sort result
         // So we should check that both of the above conditions are met
-        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), chunk_sorter.allocated_rows()) ||
-            !_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), 0)) {
+        _chunk_allocator->set_cur_mem_usage(CurrentThread::mem_tracker()->consumption());
+        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows() * 2)) {
             VLOG(3) << "do internal sorting because of memory limit";
             if (chunk_arr.empty()) {
                 LOG(WARNING) << "Memory limitation is too small for Schema Change."
@@ -1067,10 +1027,6 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
                 return false;
             }
 
-            for (auto& chunk : chunk_arr) {
-                _chunk_allocator->release(chunk, chunk->num_rows());
-            }
-
             chunk_arr.clear();
         }
 
@@ -1081,16 +1037,18 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
 
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            _chunk_allocator->release(new_chunk, base_chunk->num_rows());
             std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
                                              base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return false;
         }
 
+        total_bytes += static_cast<double>(new_chunk->memory_usage());
+        row_count += static_cast<double>(new_chunk->num_rows());
+        _chunk_allocator->set_row_len(std::max(static_cast<size_t>(total_bytes / row_count), static_cast<size_t>(1)));
+
         if (new_chunk->num_rows() > 0) {
             if (!chunk_sorter.sort(new_chunk, new_tablet)) {
-                _chunk_allocator->release(new_chunk, base_chunk->num_rows());
                 LOG(WARNING) << "chunk data sort failed";
                 return false;
             }
@@ -1221,7 +1179,7 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
         }
     }
 
-    ChunkMerger merger(tablet);
+    ChunkMerger merger(std::move(tablet));
     if (!merger.merge(chunk_arr, new_rowset_writer)) {
         LOG(WARNING) << "merge chunk arr failed";
         return false;
@@ -1250,7 +1208,8 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
 
     Status status = _do_process_alter_tablet_v2(request);
     LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+              << " duration: " << timer.elapsed_time() / 1000000
+              << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
     return status;
 }
 
