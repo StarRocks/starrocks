@@ -38,7 +38,6 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
-#include "util/load_error_hub.h"
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
@@ -104,10 +103,6 @@ RuntimeState::~RuntimeState() {
         _error_log_file->close();
         delete _error_log_file;
         _error_log_file = nullptr;
-    }
-
-    if (_error_hub != nullptr) {
-        _error_hub->close();
     }
 
     if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
@@ -341,24 +336,10 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
 
     if (!out.str().empty()) {
         (*_error_log_file) << out.str() << std::endl;
-        export_load_error(out.str());
     }
 }
 
 const int64_t HUB_MAX_ERROR_NUM = 10;
-
-void RuntimeState::export_load_error(const std::string& err_msg) {
-    if (_error_hub == nullptr) {
-        if (_load_error_hub_info == nullptr) {
-            return;
-        }
-        LoadErrorHub::create_hub(_exec_env, _load_error_hub_info.get(), _error_log_file_path, &_error_hub);
-    }
-
-    LoadErrorHub::ErrorMsg err(_load_job_id, err_msg);
-    // TODO(lingbin): think if should check return value?
-    _error_hub->export_error(err);
-}
 
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {

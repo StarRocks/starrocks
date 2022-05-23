@@ -70,9 +70,6 @@ set(UTIL_FILES
   error_util.cc
   spinlock.cc
   filesystem_util.cc
-  load_error_hub.cpp
-  broker_load_error_hub.cpp
-  null_load_error_hub.cpp
   time.cpp
 # coding_util.cpp
   cidr.cpp
@@ -114,11 +111,6 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set_source_files_properties(json.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
     set_source_files_properties(json_converter.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
 endif()
-
-
-set(UTIL_FILES ${UTIL_FILES}
-    mysql_load_error_hub.cpp
-)
 
 add_library(Util STATIC
     ${UTIL_FILES}

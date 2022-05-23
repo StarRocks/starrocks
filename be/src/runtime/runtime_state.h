@@ -209,12 +209,6 @@ public:
 
     int64_t load_job_id() const { return _load_job_id; }
 
-    // we only initialize object for load jobs
-    void set_load_error_hub_info(const TLoadErrorHubInfo& hub_info) {
-        TLoadErrorHubInfo* info = new TLoadErrorHubInfo(hub_info);
-        _load_error_hub_info.reset(info);
-    }
-
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
     // is_summary is true, means we are going to write the summary line
@@ -245,8 +239,6 @@ public:
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
-
-    void export_load_error(const std::string& error_msg);
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -375,11 +367,9 @@ private:
     std::vector<std::string> _export_output_files;
 
     int64_t _load_job_id = 0;
-    std::unique_ptr<TLoadErrorHubInfo> _load_error_hub_info;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
-    std::unique_ptr<LoadErrorHub> _error_hub;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
     // prohibit copies
