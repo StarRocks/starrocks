@@ -61,7 +61,7 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     int64_t mem_limit = per_instance_mem_limit;
     // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
     static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
-    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop < mem_limit) {
+    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
         mem_limit *= total_fragments() * pipeline_dop;
     } else {
         mem_limit = MEM_LIMIT_MAX;
