@@ -1,16 +1,15 @@
 <p align="center"> Logo <p>
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?duration=3000&color=497d8c&lines=Real-time+Analytics+Made+Easy%EF%BC%81)](https://git.io/typing-svg)
-
-![forthebadge](https://forthebadge.com/images/badges/made-with-c-plus-plus.svg)![forthebadge](https://forthebadge.com/images/badges/built-by-developers.svg)
-
-
+[Download](https://www.starrocks.com/en-US/download/community) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) 
+  
+![c++](https://img.shields.io/badge/Made%20with-C%2B%2B-red)
 [![open issues](https://img.shields.io/github/issues-raw/StarRocks/starrocks)](https://github.com/StarRocks/starrocks/issues)
 [![commit activity](https://img.shields.io/github/commit-activity/m/StarRocks/starrocks)](http://www.gnu.org/licenses/agpl-3.0)
-[![Discourse](https://img.shields.io/discourse/topics?server=https%3A%2F%2Fforum.starrocks.com%2F)](https://forum.starrocks.com/)
-
-[Website](https://www.starrocks.com/EN-US/index) · [Download](https://www.starrocks.com/en-US/download/community) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Slack](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw) · [Twitter](https://twitter.com/StarRocksLabs) · [YouTube](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) 
-
+[![Website](https://img.shields.io/badge/Visit%20StarRocks-Website-green)](https://www.starrocks.com/en-US/index)
+[![Slack](https://img.shields.io/badge/Join-Slack-ff69b4)](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)
+[![Twitter]( https://img.shields.io/twitter/follow/StarRocksLabs?style=social)](https://twitter.com/StarRocksLabs) 
+ 
+  
 StarRocks is a next-gen data platform for real-time data analytics. Its blazing-fast query speed is 5 to 10 times faster than previous systems. 
 StarRocks can smoothly integrate into your favorite BI tools by supporting MySQL protocols and standard SQL syntax.
 StarRocks can be easily deployed, maintained, and scaled out due to its simple architecture that doesn't rely on any external systems.
