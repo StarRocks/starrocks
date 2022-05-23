@@ -142,6 +142,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return true;
     }
 
+    public TableRef getTblRef() {
+        return tblRef;
+    }
+
     public String getDbName() {
         return tblRef.getName().getDb();
     }
@@ -158,12 +162,24 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return partitions;
     }
 
+    public void setPartitions(List<String> partitions) {
+        this.partitions = partitions;
+    }
+
     public Operator getOp() {
         return op;
     }
 
+    public void setOp(Operator op) {
+        this.op = op;
+    }
+
     public ReplicaStatus getStatusFilter() {
         return statusFilter;
+    }
+
+    public void setStatusFilter(ReplicaStatus statusFilter) {
+        this.statusFilter = statusFilter;
     }
 
     public Expr getWhere() {

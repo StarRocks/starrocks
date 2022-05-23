@@ -2,11 +2,13 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
@@ -19,6 +21,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
+import java.util.List;
 import java.util.Map;
 
 public class AdminStmtAnalyzer {
@@ -113,6 +116,16 @@ public class AdminStmtAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
 
+            List<String> partitions = Lists.newArrayList();
+            PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();
+            if (partitionNames != null) {
+                if (partitionNames.isTemp()) {
+                    throw new SemanticException("Do not support showing replica status of temporary partitions");
+                }
+                partitions.addAll(partitionNames.getPartitionNames());
+                adminShowReplicaStatusStmt.setPartitions(partitions);
+            }
+
             if (!analyzeWhere(adminShowReplicaStatusStmt)) {
                 throw new SemanticException(
                         "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
@@ -138,6 +151,7 @@ public class AdminStmtAnalyzer {
             if (op != BinaryPredicate.Operator.EQ && op != BinaryPredicate.Operator.NE) {
                 return false;
             }
+            adminShowReplicaStatusStmt.setOp(op);
 
             Expr leftChild = binaryPredicate.getChild(0);
             if (!(leftChild instanceof SlotRef)) {
@@ -156,11 +170,11 @@ public class AdminStmtAnalyzer {
 
             try {
                 statusFilter = Replica.ReplicaStatus.valueOf(((StringLiteral) rightChild).getStringValue().toUpperCase());
+                if (statusFilter == null) {
+                    return false;
+                }
+                adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
             } catch (Exception e) {
-                return false;
-            }
-
-            if (statusFilter == null) {
                 return false;
             }
 
