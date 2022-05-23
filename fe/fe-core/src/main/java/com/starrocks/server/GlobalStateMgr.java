@@ -101,6 +101,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -2722,14 +2723,13 @@ public class GlobalStateMgr {
         String[] parts = identifier.split("\\.");
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
-        } else if (parts.length == 1) {
-            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
-                    ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
         } else {
-            String newCatalogName = parts[0];
+            String newCatalogName = parts.length == 1 ?
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
+                String dbIdentifier = parts.length == 1 ? identifier : parts[1];
                 dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
-                        ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
+                        ClusterNamespace.getFullName(ctx.getClusterName(), dbIdentifier) : dbIdentifier;
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
             }
@@ -2744,7 +2744,8 @@ public class GlobalStateMgr {
         }
 
         if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, dbName);
+            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
         ctx.setDatabase(dbName);
