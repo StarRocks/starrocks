@@ -83,7 +83,7 @@ public class TaskManagerTest {
 
         taskManager.createTask(task, true);
         // taskManager.executeTask(taskList.get(0).getName());
-        TaskManager.TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun);

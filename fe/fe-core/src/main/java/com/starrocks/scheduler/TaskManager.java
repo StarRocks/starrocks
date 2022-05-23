@@ -15,7 +15,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.QueryableReentrantLock;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -41,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -106,25 +104,25 @@ public class TaskManager implements Writable {
             return;
         }
         try {
-            Iterator<Long> pendingIter = taskRunManager.pendingTaskRunMap.keySet().iterator();
+            Iterator<Long> pendingIter = taskRunManager.getPendingTaskRunMap().keySet().iterator();
             while (pendingIter.hasNext()) {
-                Queue<TaskRun> taskRuns = taskRunManager.pendingTaskRunMap.get(pendingIter.next());
+                Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().get(pendingIter.next());
                 for (TaskRun taskRun : taskRuns) {
                     taskRun.getStatus().setErrorMessage("Fe restart abort the task");
                     taskRun.getStatus().setErrorCode(-1);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
-                    taskRunManager.taskRunHistory.addHistory(taskRun.getStatus());
+                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
                 }
                 pendingIter.remove();
             }
-            Iterator<Long> runningIter = taskRunManager.runningTaskRunMap.keySet().iterator();
+            Iterator<Long> runningIter = taskRunManager.getRunningTaskRunMap().keySet().iterator();
             while (runningIter.hasNext()) {
-                TaskRun taskRun = taskRunManager.runningTaskRunMap.get(runningIter.next());
+                TaskRun taskRun = taskRunManager.getRunningTaskRunMap().get(runningIter.next());
                 taskRun.getStatus().setErrorMessage("Fe restart abort the task");
                 taskRun.getStatus().setErrorCode(-1);
                 taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                 runningIter.remove();
-                taskRunManager.taskRunHistory.addHistory(taskRun.getStatus());
+                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
             }
         } finally {
             unlock();
@@ -299,20 +297,20 @@ public class TaskManager implements Writable {
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
         if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.pendingTaskRunMap.values()) {
+            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
                 taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
             }
-            taskRunList.addAll(taskRunManager.runningTaskRunMap.values().stream().map(TaskRun::getStatus)
+            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
                     .collect(Collectors.toList()));
-            taskRunList.addAll(taskRunManager.taskRunHistory.getAllHistory());
+            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory());
         } else {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.pendingTaskRunMap.values()) {
+            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
                 taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus)
                         .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
             }
-            taskRunList.addAll(taskRunManager.runningTaskRunMap.values().stream().map(TaskRun::getStatus)
+            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
                     .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-            taskRunList.addAll(taskRunManager.taskRunHistory.getAllHistory().stream()
+            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory().stream()
                     .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
 
         }
@@ -330,18 +328,18 @@ public class TaskManager implements Writable {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                Queue<TaskRun> taskRuns = taskRunManager.pendingTaskRunMap.computeIfAbsent(taskRun.getTaskId(),
+                Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().computeIfAbsent(taskRun.getTaskId(),
                         u -> Queues.newConcurrentLinkedQueue());
                 taskRuns.offer(taskRun);
                 break;
             // this will happen in build image
             case RUNNING:
                 status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.taskRunHistory.addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case FAILED:
             case SUCCESS:
-                taskRunManager.taskRunHistory.addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
         }
     }
@@ -352,20 +350,20 @@ public class TaskManager implements Writable {
         Long taskId = statusChange.getTaskId();
         if (fromStatus == Constants.TaskRunState.PENDING) {
             if (toStatus == Constants.TaskRunState.RUNNING) {
-                Queue<TaskRun> taskRunQueue = taskRunManager.pendingTaskRunMap.get(taskId);
+                Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
                 if (taskRunQueue != null && taskRunQueue.size() != 0) {
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     pendingTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-                    taskRunManager.runningTaskRunMap.put(taskId, pendingTaskRun);
+                    taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
                     if (taskRunQueue.size() == 0) {
-                        taskRunManager.pendingTaskRunMap.remove(taskId);
+                        taskRunManager.getPendingTaskRunMap().remove(taskId);
                     }
                 }
             }
         } else if (fromStatus == Constants.TaskRunState.RUNNING) {
             if (toStatus == Constants.TaskRunState.SUCCESS ||
                     toStatus == Constants.TaskRunState.FAILED) {
-                TaskRun taskRun = taskRunManager.runningTaskRunMap.remove(taskId);
+                TaskRun taskRun = taskRunManager.getRunningTaskRunMap().remove(taskId);
                 // will not happen, but defensive programming
                 if (taskRun == null) {
                     return;
@@ -376,7 +374,7 @@ public class TaskManager implements Writable {
                 }
                 taskRun.getStatus().setState(toStatus);
                 taskRun.getStatus().setFinishTime(statusChange.getFinishTime());
-                taskRunManager.taskRunHistory.addHistory(taskRun.getStatus());
+                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
             }
         }
     }
@@ -386,7 +384,7 @@ public class TaskManager implements Writable {
         for (String queryId : queryIdList) {
             index.put(queryId, null);
         }
-        taskRunManager.taskRunHistory.getAllHistory().removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+        taskRunManager.getTaskRunHistory().getAllHistory().removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
     public void removeOldTaskInfo() {
@@ -411,7 +409,7 @@ public class TaskManager implements Writable {
     public void removeOldTaskRunHistory() {
         long currentTimeMs = System.currentTimeMillis();
 
-        Deque<TaskRunStatus> taskRunHistory = taskRunManager.taskRunHistory.getAllHistory();
+        Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
         List<String> historyToDelete = Lists.newArrayList();
 
         if (!tryLock()) {
@@ -449,85 +447,4 @@ public class TaskManager implements Writable {
         public List<TaskRunStatus> runStatus;
     }
 
-    static class TaskRunManager {
-
-        // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
-        // so the map value is FIFO queue
-        private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
-
-        // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
-        // so the map value is not queue
-        private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
-
-        // include SUCCESS/FAILED/CANCEL taskRun
-        private final TaskRunHistory taskRunHistory = new TaskRunHistory();
-
-        // Use to execute actual TaskRun
-        private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
-
-        public SubmitResult submitTaskRun(TaskRun taskRun) {
-            // duplicate submit
-            if (taskRun.getStatus() != null) {
-                return null;
-            }
-
-            if (pendingTaskRunMap.keySet().size() > Config.pending_task_run_num_limit) {
-                return new SubmitResult(null, SubmitResult.SubmitStatus.Rejected);
-            }
-
-            String queryId = UUIDUtil.genUUID().toString();
-            TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-            long taskId = taskRun.getTaskId();
-
-            Queue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId, u -> Queues.newConcurrentLinkedQueue());
-            taskRuns.offer(taskRun);
-            return new SubmitResult(queryId, SubmitResult.SubmitStatus.Submitted);
-        }
-
-        // check if a running TaskRun is complete and remove it from running TaskRun map
-        public void checkRunningTaskRun() {
-            Iterator<Long> runningIterator = runningTaskRunMap.keySet().iterator();
-            while (runningIterator.hasNext()) {
-                Long taskId = runningIterator.next();
-                TaskRun taskRun = runningTaskRunMap.get(taskId);
-                if (taskRun == null) {
-                    LOG.warn("failed to get running TaskRun by taskId:{}", taskId);
-                    runningIterator.remove();
-                    return;
-                }
-                Future<?> future = taskRun.getFuture();
-                if (future.isDone()) {
-                    runningIterator.remove();
-                    taskRunHistory.addHistory(taskRun.getStatus());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                            Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
-                    GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
-                }
-            }
-        }
-
-        // schedule the pending TaskRun that can be run into running TaskRun map
-        public void scheduledPendingTaskRun() {
-            Iterator<Long> pendingIterator = pendingTaskRunMap.keySet().iterator();
-            while (pendingIterator.hasNext()) {
-                Long taskId = pendingIterator.next();
-                TaskRun runningTaskRun = runningTaskRunMap.get(taskId);
-                if (runningTaskRun == null) {
-                    Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
-                    if (taskRunQueue.size() == 0) {
-                        pendingIterator.remove();
-                    } else {
-                        TaskRun pendingTaskRun = taskRunQueue.poll();
-                        taskRunExecutor.executeTaskRun(pendingTaskRun);
-                        runningTaskRunMap.put(taskId, pendingTaskRun);
-                        TaskRunStatusChange statusChange =
-                                new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                                        Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
-                    }
-                }
-            }
-        }
-    }
 }
