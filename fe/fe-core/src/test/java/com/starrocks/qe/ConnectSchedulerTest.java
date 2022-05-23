@@ -67,41 +67,6 @@ public class ConnectSchedulerTest {
     }
 
     @Test
-    public void testSubmit(@Mocked ConnectProcessor processor) throws Exception {
-        // mock new processor
-        new Expectations() {
-            {
-                processor.loop();
-                result = new Delegate() {
-                    void fakeLoop() {
-                        LOG.warn("starts loop");
-                        // Make cancel thread to work
-                        succSubmit.incrementAndGet();
-                        try {
-                            Thread.sleep(2000);
-                        } catch (InterruptedException e) {
-                            LOG.warn("sleep exception");
-                        }
-                    }
-                };
-            }
-        };
-
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        for (int i = 0; i < 2; ++i) {
-            ConnectContext context = new ConnectContext(socketChannel);
-            if (i == 1) {
-                context.setCatalog(AccessTestUtil.fetchBlockCatalog());
-            } else {
-                context.setCatalog(AccessTestUtil.fetchAdminCatalog());
-            }
-            context.setQualifiedUser("root");
-            Assert.assertTrue(scheduler.submit(context));
-            Assert.assertEquals(i, context.getConnectionId());
-        }
-    }
-
-    @Test
     public void testProcessException(@Mocked ConnectProcessor processor) throws Exception {
         new Expectations() {
             {
