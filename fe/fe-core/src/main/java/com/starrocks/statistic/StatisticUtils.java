@@ -33,6 +33,7 @@ public class StatisticUtils {
         context.getSessionVariable().setReportSuccess(false);
         int parallel = context.getSessionVariable().getStatisticCollectParallelism();
         if (null != ConnectContext.get()) {
+            // from current session, may execute analyze stmt
             parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallelism();
         }
         context.getSessionVariable().setParallelExecInstanceNum(parallel);
