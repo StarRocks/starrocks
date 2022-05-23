@@ -130,6 +130,7 @@ private:
     RuntimeProfile::Counter* _latency_timer = nullptr;
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
+    TRuntimeFilterBuildJoinMode::type _join_mode;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

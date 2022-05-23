@@ -184,6 +184,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
+    _join_mode = desc.build_join_mode;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -192,6 +193,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
             not_found = false;
             RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
         }
+    }
+
+    if (desc.__isset.bucketseq_to_instance) {
+        _runtime_filter_ctx.bucketseq_to_partition = desc.bucketseq_to_instance;
     }
 
     if (not_found) {

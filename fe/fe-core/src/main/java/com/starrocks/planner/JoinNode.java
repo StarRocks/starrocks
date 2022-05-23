@@ -443,8 +443,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         PARTITIONED("PARTITIONED"),
         // The hash algorithms of the two bucket shuffle ways are different
         LOCAL_HASH_BUCKET("BUCKET_SHUFFLE"),
-        SHUFFLE_HASH_BUCKET("BUCKET_SHUFFLE(S)"),
         COLOCATE("COLOCATE"),
+        SHUFFLE_HASH_BUCKET("BUCKET_SHUFFLE(S)"),
         REPLICATED("REPLICATED");
 
         private final String description;
