@@ -512,7 +512,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.PERCENTILE_UNION:
                         if (functionCallExpr.getChild(0) instanceof FunctionCallExpr) {
                             CastExpr castExpr = new CastExpr(new TypeDef(Type.VARCHAR), baseSlotRef);
-                            castExpr.setImplicit(true);
                             List<Expr> params = Lists.newArrayList();
                             params.add(castExpr);
                             FunctionCallExpr defineExpr = new FunctionCallExpr(FunctionSet.PERCENTILE_HASH, params);

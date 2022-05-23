@@ -87,7 +87,12 @@ Status EngineCloneTask::execute() {
         if (Tablet::check_migrate(tablet)) {
             return Status::Corruption("Fail to check migrate tablet");
         }
-        auto st = _do_clone(tablet.get());
+        Status st;
+        if (tablet->updates() != nullptr) {
+            st = _do_clone_primary_tablet(tablet.get());
+        } else {
+            st = _do_clone(tablet.get());
+        }
         _set_tablet_info(st, false);
     } else {
         auto st = _do_clone(nullptr);
@@ -113,12 +118,42 @@ static string version_list_to_string(const std::vector<Version>& versions) {
     return str.str();
 }
 
+static string version_range_list_to_string(const std::vector<int64_t>& versions) {
+    std::ostringstream str;
+    for (size_t i = 0; i < versions.size(); i += 2) {
+        str << "[" << versions[i] << "," << (i + 1 < versions.size() ? versions[i + 1] : -1) << "]";
+    }
+    return str.str();
+}
+
+Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
+    Status st;
+    string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
+    DeferOp defer([&]() { (void)fs::remove_all(download_path); });
+    vector<int64_t> missing_version_ranges;
+    st = tablet->updates()->get_missing_version_ranges(missing_version_ranges);
+    if (st.ok()) {
+        LOG(INFO) << "Cloning existing tablet. "
+                  << " tablet:" << _clone_req.tablet_id << " type:" << KeysType_Name(tablet->keys_type())
+                  << " missing_version_ranges=" << version_range_list_to_string(missing_version_ranges);
+        st = _clone_copy(*tablet->data_dir(), download_path, _error_msgs, nullptr, &missing_version_ranges);
+        if (st.ok()) {
+            st = _finish_clone_primary(tablet, download_path);
+        }
+    }
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load snapshot:" << st << " tablet:" << tablet->tablet_id();
+        _error_msgs->push_back(st.to_string());
+    }
+    return st;
+}
+
 Status EngineCloneTask::_do_clone(Tablet* tablet) {
     Status status;
     // try to repair a tablet with missing version
     if (tablet != nullptr) {
         string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
-        DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
+        DeferOp defer([&]() { (void)fs::remove_all(download_path); });
 
         std::vector<Version> missed_versions;
         tablet->calc_missed_versions(_clone_req.committed_version, &missed_versions);
@@ -176,20 +211,20 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
 
         status = _clone_copy(*store, schema_hash_dir, _error_msgs, nullptr);
         if (!status.ok()) {
-            (void)FileUtils::remove_all(tablet_dir);
+            (void)fs::remove_all(tablet_dir);
             return status;
         }
 
-        if (FileUtils::check_exist(clone_header_file)) {
-            DCHECK(!FileUtils::check_exist(clone_meta_file));
+        if (fs::path_exist(clone_header_file)) {
+            DCHECK(!fs::path_exist(clone_meta_file));
             status = tablet_manager->load_tablet_from_dir(store, tablet_id, schema_hash, schema_hash_dir, false);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
             }
-        } else if (FileUtils::check_exist(clone_meta_file)) {
-            DCHECK(!FileUtils::check_exist(clone_header_file));
+        } else if (fs::path_exist(clone_meta_file)) {
+            DCHECK(!fs::path_exist(clone_header_file));
             status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
@@ -205,10 +240,10 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         if (!status.ok() /*&& status != STARROCKS_CREATE_TABLE_EXIST*/) {
             //                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ always true now
             LOG(WARNING) << "Removing " << tablet_dir;
-            (void)FileUtils::remove_all(tablet_dir);
+            (void)fs::remove_all(tablet_dir);
         } else {
-            (void)FileUtils::remove(clone_meta_file);
-            (void)FileUtils::remove(clone_header_file);
+            (void)fs::remove(clone_meta_file);
+            (void)fs::remove(clone_header_file);
         }
         return status;
     }
@@ -259,7 +294,8 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
 }
 
 Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_path, std::vector<string>* error_msgs,
-                                    const std::vector<Version>* missed_versions) {
+                                    const std::vector<Version>* missed_versions,
+                                    const std::vector<int64_t>* missing_version_ranges) {
     std::string local_path = local_data_path + "/";
     const auto& token = _master_info.token;
 
@@ -273,7 +309,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         int32_t snapshot_format = 0;
         std::string snapshot_path;
         st = _make_snapshot(src.host, src.be_port, _clone_req.tablet_id, _clone_req.schema_hash, timeout_s,
-                            missed_versions, &snapshot_path, &snapshot_format);
+                            missed_versions, missing_version_ranges, &snapshot_path, &snapshot_format);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to make snapshot from " << src.host << ": " << st.to_string()
                          << " tablet:" << _clone_req.tablet_id;
@@ -316,7 +352,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
 
 Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId tablet_id, TSchemaHash schema_hash,
                                        int timeout_s, const std::vector<Version>* missed_versions,
-                                       std::string* snapshot_path, int32_t* snapshot_format) {
+                                       const std::vector<int64_t>* missing_version_ranges, std::string* snapshot_path,
+                                       int32_t* snapshot_format) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot will stop.");
@@ -333,6 +370,13 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
             // NOTE: assume missing version composed of singleton delta.
             DCHECK_EQ(version.first, version.second);
             request.missing_version.push_back(version.first);
+        }
+    }
+    if (missing_version_ranges != nullptr) {
+        DCHECK(!missing_version_ranges->empty());
+        request.__isset.missing_version_ranges = true;
+        for (auto v : *missing_version_ranges) {
+            request.missing_version_ranges.push_back(v);
         }
     }
     if (timeout_s > 0) {
@@ -389,8 +433,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     // for example, BE clone from BE 1 to download file 1 with version (2,2), but clone from BE 1 failed
     // then it will try to clone from BE 2, but it will find the file 1 already exist, but file 1 with same
     // name may have different versions.
-    RETURN_IF_ERROR(FileUtils::remove_all(local_path));
-    RETURN_IF_ERROR(FileUtils::create_dir(local_path));
+    RETURN_IF_ERROR(fs::remove_all(local_path));
+    RETURN_IF_ERROR(fs::create_directories(local_path));
 
     // Get remote dir file list
     string file_list_str;
@@ -518,10 +562,10 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         }
 
         // remove the cloned meta file
-        (void)FileUtils::remove(header_file);
+        (void)fs::remove(header_file);
 
         std::set<std::string> clone_files;
-        res = FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files);
+        res = fs::list_dirs_files(clone_dir, nullptr, &clone_files);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list directory " << clone_dir << ": " << res;
             break;
@@ -529,7 +573,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
         std::set<string> local_files;
         std::string tablet_dir = tablet->schema_hash_path();
-        res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files);
+        res = fs::list_dirs_files(tablet_dir, nullptr, &local_files);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list tablet directory " << tablet_dir << ": " << res;
             break;
@@ -576,7 +620,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     // clear linked files if errors happen
     if (!res.ok()) {
-        FileUtils::remove_paths(linked_success_files);
+        fs::remove(linked_success_files);
     }
 
     return res;
@@ -733,22 +777,20 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files));
+    RETURN_IF_ERROR(fs::list_dirs_files(clone_dir, nullptr, &clone_files));
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
     const std::string& tablet_dir = tablet->schema_hash_path();
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files));
+    RETURN_IF_ERROR(fs::list_dirs_files(tablet_dir, nullptr, &local_files));
 
     // Files that are found in both |clone_files| and |local_files|.
     std::vector<std::string> duplicate_files;
     std::set_intersection(clone_files.begin(), clone_files.end(), local_files.begin(), local_files.end(),
                           std::back_inserter(duplicate_files));
     for (const auto& fname : duplicate_files) {
-        std::string md5sum1;
-        std::string md5sum2;
-        RETURN_IF_ERROR(FileUtils::md5sum(clone_dir + "/" + fname, &md5sum1));
-        RETURN_IF_ERROR(FileUtils::md5sum(tablet_dir + "/" + fname, &md5sum2));
+        ASSIGN_OR_RETURN(auto md5sum1, fs::md5sum(clone_dir + "/" + fname));
+        ASSIGN_OR_RETURN(auto md5sum2, fs::md5sum(tablet_dir + "/" + fname));
         if (md5sum1 != md5sum2) {
             LOG(WARNING) << "duplicated file `" << fname << "` with different md5sum";
             return Status::InternalError("duplicate file with different md5");
@@ -770,7 +812,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         tablet->updates()->remove_expired_versions(time(nullptr));
     }
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << clone_dir;
-    auto st = FileUtils::remove_all(clone_dir);
+    auto st = fs::remove_all(clone_dir);
     LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << clone_dir << ": " << st;
     return Status::OK();
 }

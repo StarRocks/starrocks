@@ -719,6 +719,9 @@ CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
+// Config for opentelemetry tracing.
+CONF_String(jaeger_endpoint, "");
+
 } // namespace config
 
 } // namespace starrocks

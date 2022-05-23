@@ -14,6 +14,7 @@ namespace starrocks {
 namespace pipeline {
 class RuntimeFilterHolder;
 using RuntimeFilterHolderPtr = std::unique_ptr<RuntimeFilterHolder>;
+// TODO: rename RuntimeInFilter
 using RuntimeInFilter = starrocks::ExprContext;
 using RuntimeBloomFilter = starrocks::vectorized::RuntimeFilterBuildDescriptor;
 using RuntimeBloomFilterProbeDescriptor = starrocks::vectorized::RuntimeFilterProbeDescriptor;

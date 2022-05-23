@@ -27,8 +27,8 @@
 #include <sstream>
 #include <string>
 
+#include "fs/fs_util.h"
 #include "storage/olap_define.h"
-#include "util/file_utils.h"
 
 #ifndef BE_TEST
 #define BE_TEST
@@ -42,8 +42,8 @@ class KVStoreTest : public testing::Test {
 public:
     virtual void SetUp() {
         _root_path = "./ut_dir/kv_store_test";
-        FileUtils::remove_all(_root_path);
-        FileUtils::create_dir(_root_path);
+        fs::remove_all(_root_path);
+        fs::create_directories(_root_path);
 
         _kv_store = new KVStore(_root_path);
         Status st = _kv_store->init();
@@ -53,7 +53,7 @@ public:
 
     virtual void TearDown() {
         delete _kv_store;
-        FileUtils::remove_all(_root_path);
+        fs::remove_all(_root_path);
     }
 
 private:

@@ -77,11 +77,12 @@ private:
 class ChunkAllocator {
 public:
     ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation);
-    virtual ~ChunkAllocator();
+    virtual ~ChunkAllocator() = default;
 
-    Status allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema);
-    void release(ChunkPtr& chunk, size_t num_rows);
-    bool is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows) const;
+    static Status allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema);
+    bool is_memory_enough_to_sort(size_t num_rows) const;
+    void set_cur_mem_usage(size_t mem_usage) { _memory_allocated = mem_usage; }
+    void set_row_len(size_t row_len) { _row_len = row_len; }
 
 private:
     const TabletSchema& _tablet_schema;
