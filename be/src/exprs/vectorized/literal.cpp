@@ -6,6 +6,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 
@@ -127,6 +128,11 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         DCHECK(false) << "Vectorized engine not implement type: " << _type.type;
         break;
     }
+}
+
+VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& type)
+        : Expr(type, false), _value(std::move(value)) {
+    DCHECK(_value->is_constant());
 }
 
 #undef CASE_TYPE_COLUMN

@@ -797,6 +797,10 @@ struct TDecodeNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> string_functions
 }
 
+struct TCrossJoinNode {
+    1: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+}
+
 struct TTableFunctionNode {
     1: optional Exprs.TExpr table_function
     2: optional list<Types.TSlotId> param_columns
@@ -872,6 +876,8 @@ struct TPlanNode {
 
   // generic scan node with connector.
   61: optional TConnectorScanNode connector_scan_node;
+
+  62: optional TCrossJoinNode cross_join_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

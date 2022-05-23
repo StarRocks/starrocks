@@ -7,6 +7,7 @@
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
@@ -115,6 +116,36 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
+}
+
+StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct,
+                                                                      Chunk* chunk) {
+    auto left_child = conjunct->root()->get_child(0);
+    auto right_child = conjunct->root()->get_child(1);
+    // all of the child(1) in expr is in build chunk
+    ASSIGN_OR_RETURN(auto res, conjunct->evaluate(right_child, chunk));
+    DCHECK_EQ(res->size(), 1);
+    ColumnPtr col;
+    if (res->is_constant()) {
+        col = res;
+    } else if (res->is_nullable()) {
+        if (res->is_null(0)) {
+            col = ColumnHelper::create_const_null_column(1);
+        } else {
+            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+            col = std::make_shared<ConstColumn>(data_col, 1);
+        }
+    } else {
+        col = std::make_shared<ConstColumn>(res, 1);
+    }
+
+    auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));
+    auto new_expr = conjunct->root()->clone(pool);
+    auto new_left = left_child->clone(pool);
+    new_expr->clear_children();
+    new_expr->add_child(new_left);
+    new_expr->add_child(literal);
+    return pool->add(new ExprContext(new_expr));
 }
 
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {

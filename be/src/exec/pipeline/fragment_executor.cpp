@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/vectorized/cross_join_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"

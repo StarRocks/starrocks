@@ -36,7 +36,7 @@ public:
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         // Used to notify cross_join_left_operator.
-        _cross_join_context->finish_one_right_sinker();
+        RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(state));
         return Status::OK();
     }
 
