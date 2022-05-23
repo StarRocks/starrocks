@@ -31,6 +31,7 @@ import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,7 +42,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -522,5 +525,18 @@ public class SmallFileMgr implements Writable {
                 e.printStackTrace();
             }
         }
+    }
+
+    public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_52) {
+            readFields(in);
+        }
+        LOG.info("finished replay smallFiles from image");
+        return checksum;
+    }
+
+    public long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
     }
 }

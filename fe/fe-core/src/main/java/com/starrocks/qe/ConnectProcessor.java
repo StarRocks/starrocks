@@ -147,6 +147,8 @@ public class ConnectProcessor {
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
                 .setScanRows(statistics == null ? 0 : statistics.scanRows)
+                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs)
+                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());

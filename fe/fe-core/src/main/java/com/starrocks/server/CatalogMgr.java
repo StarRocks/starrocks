@@ -7,6 +7,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -16,6 +17,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.CreateCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.List;
 import java.util.Map;
@@ -52,7 +54,8 @@ public class CatalogMgr {
         // TODO edit log
     }
 
-    public synchronized void dropCatalog(String catalogName) {
+    public synchronized void dropCatalog(DropCatalogStmt stmt) {
+        String catalogName = stmt.getName();
         Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
         connectorMgr.removeConnector(catalogName);
         catalogs.remove(catalogName);
@@ -61,6 +64,10 @@ public class CatalogMgr {
 
     public boolean catalogExists(String catalogName) {
         return catalogs.containsKey(catalogName);
+    }
+
+    public static boolean isInternalCatalog(String name) {
+        return name.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 
     public void replayCreateCatalog(CreateCatalogLog log) throws DdlException {
@@ -80,7 +87,7 @@ public class CatalogMgr {
 
     public void replayDropCatalog(DropCatalogLog log) {
         String catalogName = log.getCatalogName();
-        dropCatalog(catalogName);
+        dropCatalog(new DropCatalogStmt(catalogName));
     }
 
     public List<List<String>> getCatalogsInfo() {

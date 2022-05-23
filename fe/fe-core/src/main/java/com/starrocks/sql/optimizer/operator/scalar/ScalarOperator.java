@@ -23,7 +23,7 @@ public abstract class ScalarOperator implements Cloneable {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T cast() {
+    public <T extends ScalarOperator> T cast() {
         return (T) this;
     }
 

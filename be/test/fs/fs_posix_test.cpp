@@ -25,8 +25,8 @@
 
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -34,8 +34,8 @@ class PosixFileSystemTest : public testing::Test {
 public:
     PosixFileSystemTest() {}
     virtual ~PosixFileSystemTest() {}
-    void SetUp() override { ASSERT_TRUE(FileUtils::create_dir("./ut_dir/fs_posix").ok()); }
-    void TearDown() override { ASSERT_TRUE(FileUtils::remove_all("./ut_dir").ok()); }
+    void SetUp() override { ASSERT_TRUE(fs::create_directories("./ut_dir/fs_posix").ok()); }
+    void TearDown() override { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
 };
 
 TEST_F(PosixFileSystemTest, random_access) {
@@ -122,7 +122,7 @@ TEST_F(PosixFileSystemTest, random_access) {
 
 TEST_F(PosixFileSystemTest, iterate_dir) {
     const std::string dir_path = "./ut_dir/fs_posix/iterate_dir";
-    FileUtils::remove_all(dir_path);
+    fs::remove_all(dir_path);
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path));
 
     ASSERT_OK(FileSystem::Default()->create_dir_if_missing(dir_path + "/abc"));
@@ -140,7 +140,7 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
     }
     {
         std::vector<std::string> children;
-        ASSERT_OK(FileUtils::list_files(FileSystem::Default(), dir_path, &children));
+        ASSERT_OK(FileSystem::Default()->get_children(dir_path, &children));
         ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
