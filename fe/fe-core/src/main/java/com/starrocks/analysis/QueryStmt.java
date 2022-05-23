@@ -31,6 +31,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.Operator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -290,7 +291,7 @@ public abstract class QueryStmt extends StatementBase {
                     " in nested queries.");
         }
 
-        sortInfo = new SortInfo(orderingExprs, isAscOrder, nullsFirstParams);
+        sortInfo = new SortInfo(null, Operator.DEFAULT_LIMIT, orderingExprs, isAscOrder, nullsFirstParams);
         // order by w/o limit and offset in inline views, set operands and insert statements
         // are ignored.
         if (!hasLimit() && !hasOffset() && !analyzer.isRootAnalyzer()) {

@@ -2,6 +2,7 @@
 
 #include "exec/vectorized/topn_node.h"
 
+#include <any>
 #include <memory>
 
 #include "column/column_helper.h"
@@ -9,6 +10,9 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
+#include "exec/pipeline/sort/local_partition_topn_context.h"
+#include "exec/pipeline/sort/local_partition_topn_sink.h"
+#include "exec/pipeline/sort/local_partition_topn_source.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/vectorized/chunks_sorter.h"
@@ -21,7 +25,7 @@
 namespace starrocks::vectorized {
 
 TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {
+        : ExecNode(pool, tnode, descs), _tnode(tnode) {
     _sort_keys = tnode.sort_node.__isset.sql_sort_keys ? tnode.sort_node.sql_sort_keys : "NONE";
     _offset = tnode.sort_node.__isset.offset ? tnode.sort_node.offset : 0;
     _materialized_tuple_desc = nullptr;
@@ -195,7 +199,12 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     using namespace pipeline;
 
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
     bool is_merging = _analytic_partition_exprs.empty();
+    int64_t partition_limit = -1;
+    if (is_partition) {
+        partition_limit = _tnode.sort_node.partition_limit;
+    }
 
     if (!is_merging) {
         // prepend local shuffle to PartitionSortSinkOperator
@@ -205,36 +214,67 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
-    auto sort_context_factory = std::make_shared<SortContextFactory>(
-            runtime_state(), is_merging, _limit, degree_of_parallelism, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
-            _is_asc_order, _is_null_first);
+    std::any context_factory;
+    if (is_partition) {
+        context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
+                degree_of_parallelism, _tnode.sort_node.partition_exprs, _sort_exec_exprs, _is_asc_order,
+                _is_null_first, _sort_keys, _offset, partition_limit, _order_by_types, _materialized_tuple_desc,
+                child(0)->row_desc(), _row_descriptor);
+    } else {
+        context_factory = std::make_shared<SortContextFactory>(
+                runtime_state(), is_merging, _limit, degree_of_parallelism, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+                _is_asc_order, _is_null_first);
+    }
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
-            context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
-            _sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
-            _row_descriptor, _analytic_partition_exprs);
+    OperatorFactoryPtr sink_operator;
+    if (is_partition) {
+        const auto& local_partition_topn_context_factory =
+                std::any_cast<std::shared_ptr<LocalPartitionTopnContextFactory>>(context_factory);
+        sink_operator = std::make_shared<LocalPartitionTopnSinkOperatorFactory>(context->next_operator_id(), id(),
+                                                                                local_partition_topn_context_factory);
+    } else {
+        const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
+        sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
+                context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
+                _is_null_first, _sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc,
+                child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
+    }
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
-    auto local_merge_sort_source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(
-            context->next_operator_id(), id(), sort_context_factory);
+    SourceOperatorFactoryPtr source_operator;
+    if (is_partition) {
+        const auto& local_partition_topn_context_factory =
+                std::any_cast<std::shared_ptr<LocalPartitionTopnContextFactory>>(context_factory);
+        source_operator = std::make_shared<LocalPartitionTopnSourceOperatorFactory>(
+                context->next_operator_id(), id(), local_partition_topn_context_factory);
+    } else {
+        const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
+        source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                                sort_context_factory);
+    }
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(local_merge_sort_source_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    operators_sink_with_sort.emplace_back(std::move(partition_sort_sink_operator));
+    operators_sink_with_sort.emplace_back(std::move(sink_operator));
     context->add_pipeline(operators_sink_with_sort);
     if (is_merging) {
-        // local_merge_sort_source_operator's instance count must be 1
-        local_merge_sort_source_operator->set_degree_of_parallelism(1);
+        if (is_partition) {
+            source_operator->set_degree_of_parallelism(degree_of_parallelism);
+        } else {
+            // source_operator's instance count must be 1
+            source_operator->set_degree_of_parallelism(1);
+        }
     } else {
         // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
-        local_merge_sort_source_operator->set_degree_of_parallelism(degree_of_parallelism);
+        source_operator->set_degree_of_parallelism(degree_of_parallelism);
     }
-    operators_source_with_sort.emplace_back(std::move(local_merge_sort_source_operator));
-    if (limit() != -1) {
+    operators_source_with_sort.emplace_back(std::move(source_operator));
+    // TODO(HCF) other type of limit
+    if (!is_partition && limit() != -1) {
         operators_source_with_sort.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
