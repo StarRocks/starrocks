@@ -711,7 +711,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
 Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
                                                     const TPublishVersionRequest publish_version_req,
-                                                    std::set<TTabletId>* tablet_ids, size_t* tablet_n,
+                                                    std::set<TTabletId>* tablet_ids,
                                                     std::vector<TTabletId>* error_tablet_ids) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -870,10 +870,9 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         std::vector<TTabletId> error_tablet_ids;
         Status status;
 
-        size_t tablet_n = 0;
         error_tablet_ids.clear();
-        status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_ids, &tablet_n,
-                                              &error_tablet_ids);
+        status =
+                _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_ids, &error_tablet_ids);
 
         int64_t publish_latency = MonotonicMillis() - start_ts;
         batch_publish_latency += publish_latency;
@@ -884,12 +883,13 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
             LOG(WARNING) << "Fail to publish version. signature:" << publish_version_task->signature
-                         << " related tablet num: " << tablet_n << " time: " << publish_latency << "ms";
+                         << " related tablet num: " << tablet_ids.size()
+                         << " error tablet num:" << error_tablet_ids.size() << " time: " << publish_latency << "ms";
             finish_task_request.__set_error_tablet_ids(error_tablet_ids);
         } else {
             LOG(INFO) << "publish_version success. signature:" << publish_version_task->signature
                       << " txn: " << publish_version_task->publish_version_req.transaction_id
-                      << " related tablet num: " << tablet_n << " time: " << publish_latency << "ms";
+                      << " related tablet num: " << tablet_ids.size() << " time: " << publish_latency << "ms";
         }
 
         status.to_thrift(&finish_task_request.task_status);
