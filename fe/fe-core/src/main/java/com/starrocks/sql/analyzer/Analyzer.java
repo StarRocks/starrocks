@@ -157,19 +157,19 @@ public class Analyzer {
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            GrantRevokeRoleAnalyzer.analyze(stmt, session);
+            PrivilegeAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            GrantRevokeImpersonateAnalyzer.analyze(stmt, session);
+            PrivilegeAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
-            ExecuteAsAnalyzer.analyze(stmt, session);
+            PrivilegeAnalyzer.analyze(stmt, session);
             return null;
         }
 

@@ -40,9 +40,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -52,6 +54,7 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -2260,5 +2263,92 @@ public class AuthTest {
         Assert.assertTrue(nameSet.contains(emptyPrivilegeUser.toString()));
         Assert.assertTrue(nameSet.contains(onePrivilegeUser.toString()));
         Assert.assertTrue(nameSet.contains(manyPrivilegeUser.toString()));
+    }
+
+    @Test
+    public void testImpersonateReplay(@Mocked EditLog editLog) throws Exception {
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+
+        List<ImpersonatePrivInfo> infos = new ArrayList<>();
+        new Expectations(editLog) {
+            {
+                editLog.logGrantImpersonate((ImpersonatePrivInfo)any);
+                minTimes = 0;
+                result = new Delegate() {
+                    void recordInfo(ImpersonatePrivInfo info) {
+                        infos.add(info);
+                    }
+                };
+            }
+            {
+                editLog.logRevokeImpersonate((ImpersonatePrivInfo)any);
+                minTimes = 0;
+                result = new Delegate() {
+                    void recordInfo(ImpersonatePrivInfo info) {
+                        infos.add(info);
+                    }
+                };
+            }
+            {
+                editLog.logCreateUser((PrivInfo)any);
+                minTimes = 0;
+            }
+        };
+
+        // 1. prepare
+        // 1.1create harry, gregory
+        UserIdentity harry = new UserIdentity("Harry", "%");
+        harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        UserIdentity gregory = new UserIdentity("Gregory", "%");
+        gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        List<UserIdentity> userToBeCreated = new ArrayList<>();
+        userToBeCreated.add(harry);
+        userToBeCreated.add(gregory);
+        for (UserIdentity userIdentity : userToBeCreated) {
+            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+        }
+
+
+        // 2. grant impersonate to gregory on harry
+        // 2.1 grant
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+        GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 2.2 check
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
+
+        // 3. check log grant
+        Assert.assertEquals(1, infos.size());
+
+        // 4. replay grant
+        Auth newAuth = new Auth();
+        Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
+        newAuth.replayGrantImpersonate(infos.get(0));
+        Assert.assertTrue(newAuth.canImpersonate(harry, gregory));
+        infos.clear();
+        Assert.assertEquals(0, infos.size());
+
+        // 5. revoke impersonate to greogory from harry
+        RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.revokeImpersonate(revokeStmt);
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+
+        // 6. check log revoke
+        Assert.assertEquals(1, infos.size());
+
+        // 7. replay revoke
+        newAuth.replayRevokeImpersonate(infos.get(0));
+        Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
     }
  }
