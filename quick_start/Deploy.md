@@ -1,4 +1,4 @@
-# Deployment
+# Deploy StarRocks
 
 Manual deployment allows users to quickly leverage StarRocks to do operation and maintenance tasks.
 

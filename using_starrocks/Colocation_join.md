@@ -1,21 +1,21 @@
-# Colocation Join
+# Colocate Join
 
 For shuffle join and broadcast join, if the join condition is met, the data rows of the two joining tables are merged into a single node to complete the join. Neither of these two join methods can avoid latency or overhead caused by data network transmission between nodes.
 
 The core idea is to keep bucketing key, number of copies, and copy placement consistent for tables in the same Colocation Group. If the join column is a bucketing key, the computing node only needs to do local join without getting data from other nodes.
 
-This document introduces the principle, implementation, usage, and considerations of Colocation Join.
+This document introduces the principle, implementation, usage, and considerations of Colocate Join.
 
-## Terminology Explanation
+## Terminology
 
 * **Colocation Group (CG)**: A CG will contain one or more Tables. The Tables within a CG have the same bucketing and replica placement, and are described using the Colocation Group Schema.
 * **Colocation Group Schema (CGS)**: A CGS contains the bucketing key, number of buckets, and number of replicas of a CG.
 
 ## Principle
 
-The Colocation Join function is to form a CG with a set of Tables having the same CGS, and ensure that the corresponding bucket copies of these Tables will fall on the same set of BE nodes. When the tables in the CG perform Join operations on the bucketed columns, the local data can be joined directly, saving time from transferring data between nodes.
+Colocate Join is to form a CG with a set of Tables having the same CGS, and ensure that the corresponding bucket copies of these Tables will fall on the same set of BE nodes. When the tables in the CG perform Join operations on the bucketed columns, the local data can be joined directly, saving time from transferring data between nodes.
 
-Bucket Seq is obtained by `hash(key) mod buckets`. Suppose a Table has 8 buckets, then there are \[0, 1, 2, 3, 4, 5, 6, 7\] 8 buckets, and each Bucket has one or more sub-tables, the number of sub-tables depends on the number of partitions. If it is a multi-partitioned table, there will be multiple Tablets.
+Bucket Seq is obtained by `hash(key) mod buckets`. Suppose a Table has 8 buckets, then there are \[0, 1, 2, 3, 4, 5, 6, 7\] 8 buckets, and each Bucket has one or more sub-tables, the number of sub-tables depends on the number of partitions. If it is a multi-partitioned table, there will be multiple tablets.
 
 In order to have the same data distribution, tables within the same CG must comply with the following.
 
@@ -37,7 +37,7 @@ The consistent data distribution and mapping guarantee that the data rows with t
 
 ### Table creation
 
-When creating a table, you can specify the attribute `"colocate_with" = "group_name"` in PROPERTIES to indicate that the table is a Colocation Join table and belongs to a specified Colocation Group.
+When creating a table, you can specify the attribute `"colocate_with" = "group_name"` in PROPERTIES to indicate that the table is a Colocate Join table and belongs to a specified Colocation Group.
 
 For example:
 
@@ -58,7 +58,7 @@ The Group belongs to a Database, and the name of the Group is unique within the 
 
  A complete deletion is a deletion from the Recycle Bin. Normally, after a table is deleted with the `DROP TABLE` command, by default it will stay in the recycle bin for a day before being deleted). When the last table in a Group is completely deleted, the Group will also be deleted automatically.
 
-### View Group information
+### View group information
 
 The following command allows you to view the Group information that already exists in the cluster.
 
@@ -120,21 +120,21 @@ You can also remove the Colocation properties of a table with the following comm
 ALTER TABLE tbl SET ("colocate_with" = "");
 ~~~
 
-### Other Related Operations
+### Other related operations
 
 When adding a partition using `ADD PARTITION` or modifying the number of copies to a table with the Colocation attribute, StarRocks checks if the operation will violate the Colocation Group Schema and rejects it if it does.
 
-## Colocation Replica Balancing and Repair
+## Colocation replica balancing and repair
 
 The replicas distribution of a Colocation table needs to follow the distribution rules specified in the Group schema, so it differs from normal sharding in terms of replica repair and balancing.
 
-The Group itself has a `stable` property. When `stable` is `true`, it means that no changes are being made to table slices in the Group and the Colocation feature is working properly. When `stable` is `false`, it means that some table slices in the current Group are being repaired or migrated, and the Colocation Join of the affected tables will degrade to a normal Join.
+The Group itself has a `stable` property. When `stable` is `true`, it means that no changes are being made to table slices in the Group and the Colocation feature is working properly. When `stable` is `false`, it means that some table slices in the current Group are being repaired or migrated, and the Colocate Join of the affected tables will degrade to a normal Join.
 
 ### Replica repair
 
 Replicas can only be stored on the specified BE node. StarRocks will look for the least loaded BE to replace an unavailable BE (e.g.,down, decommission),. After the replacement, all the bucketing data slices on the old BE are repaired. During migration, the Group is marked as **Unstable**.
 
-### Replica Balancing
+### Replica balancing
 
 StarRocks tries to distribute the Colocation table slices evenly across all BE nodes. Balancing for normal tables is at the  replica level, that is, each replica individually finds a lower-load BE node. Balancing for Colocation tables is at the Bucket level, that is, all replicas within a Bucket are migrated together. We use a simple balancing algorithm that distributes `BucketsSequnce` evenly across all BE nodes without considering the actual size of the replicas but only the number of replicas. The exact algorithm can be found in the code comments in `ColocateTableBalancer.java`.
 
@@ -226,7 +226,7 @@ DESC SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
 +----------------------------------------------------+
 ~~~
 
-If a Colocation Join takes effect, the Hash Join node displays `colocate: true`.
+If a Colocate Join takes effect, the Hash Join node displays `colocate: true`.
 
 If it doesn’t take effect, the query plan is as follows:
 
@@ -298,15 +298,15 @@ Whether to disable automatic Colocation replica balancing for StarRocks. The def
 
 * **disable_colocate_join**
 
-    You can disable colocation join at session granularity by changing this variable.
+    You can disable Colocate join at session granularity by changing this variable.
 
 * **disable_colocate_join**
 
-    The colocation join function can be disabled by changing this variable.
+    The Colocate join function can be disabled by changing this variable.
 
 ### HTTP Restful API
 
-StarRocks provides several HTTP Restful APIs related to Colocation Join for viewing and modifying Colocation Groups.
+StarRocks provides several HTTP Restful APIs related to Colocate Join for viewing and modifying Colocation Groups.
 
 This API is implemented on the FE and can be accessed using `fe_host:fe_http_port` with ADMIN permissions.
 

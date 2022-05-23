@@ -1,4 +1,6 @@
-# Design Background
+# Use flink-connector-starrocks to load data into StarRocks
+
+## Design Background
 
 The official flink-connector-jdbc provided by Flink is not enough to meet the import performance requirements, so we have added a new flink-connector-starrocks that is implemented internally by caching and bulk import by stream load.
 

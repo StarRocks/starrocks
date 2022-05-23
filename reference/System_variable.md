@@ -144,9 +144,9 @@ Used to control whether the aggregation node enables streaming aggregation for c
 
 * forward_to_master
 
-Used to set whether some commands will be forwarded to the Master FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the Master node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the Master FE node.
+Used to set whether some commands will be forwarded to the leader FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the Master node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the leader FE node.
 
-For example, if the `SHOW BACKENDS;` commend is not forwarded to the Master FE node, only basic information (e.g., whether the node is alive or not) can be seen. Forwarding to the Master FE can get more detailed information including the node start time, last heartbeat time, etc.
+For example, if the `SHOW BACKENDS;` commend is not forwarded to the leader FE node, only basic information (e.g., whether the node is alive or not) can be seen. Forwarding to the leader FE can get more detailed information including the node start time, last heartbeat time, etc.
 
 The commands affected by this parameter are as follows:
 
@@ -166,7 +166,7 @@ Forwarding to Master allows users to view the boot time and last heartbeat infor
 * ADMIN SHOW REPLICA DISTRIBUTION;
 * ADMIN SHOW REPLICA STATUS;
 
-Forwarding to Master allows users to view the tablet information stored in the Master FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the Master FE.
+Forwarding to Master allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
 
 * Show PROC;
 

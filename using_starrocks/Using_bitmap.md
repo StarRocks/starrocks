@@ -1,4 +1,6 @@
-# Background
+# Use Bitmap for exact count distinct
+
+## Background
 
 There are usually two ways to conduct  accurate de-duplication analysis in StarRocks.
 

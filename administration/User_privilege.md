@@ -1,4 +1,4 @@
-# User Permissions
+# User Privilege
 
 Based on MySQL's permission management mechanism, StarRocks permission management system supports fine-grained permission control at table level, role-based access control, and whitelisting.
 

@@ -18,7 +18,7 @@ Please strictly follow the steps below:
 1. Stop all FE processes. To avoid unanticipated problems, prevent anyone from accessing the data when the recovery is in progress.
 2. Find the FE node with the latest metadata
     a. Back up all FE `meta_dir` directories first
-    b. Usually, the metadata of Master FE is up-to-date.
+    b. Usually, the metadata of the leader FE is up-to-date.
     c. make sure the metadata is up-to-date by checking the suffix of the `image.xxxx` file in `meta_dir/image` directory. The bigger the suffix, the newer the metadata is.
     d. `mate_dir path` can be found in `fe.conf`
     ! [8-1](. /assets/8-1.png)

@@ -140,7 +140,7 @@ ADMIN REPAIR TABLE tbl [PARTITION (p1, p2, ...)] ;
 
 This command tells TC to give `VERY_HIGH` priority to the problematic Tablet  so it can be repaired first.
 
-> Note: This command does not guarantee a successful repair, and the priority will change with the scheduling of TS. This information will be lost when Master FE is switched or restarted.
+> Note: This command does not guarantee a successful repair, and the priority will change with the scheduling of TS. This information will be lost when the leader FE is changed or restarted.
 
 Prioritization can be canceled with the following command.
 
@@ -186,7 +186,7 @@ In addition, by default, two slots for each disk are allocated for replica balan
 
 ## View replica status
 
-The replica status is **only present in the**Master FE node. Therefore, the following commands need to be executed by connecting directly to the Master FE.
+The replica status is **only present in the leader FE node**. Therefore, the following commands need to be executed by connecting directly to the leader FE.
 
 ### View replica status
 

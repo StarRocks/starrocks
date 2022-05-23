@@ -1,4 +1,4 @@
-# StarRocks System Architecture
+# Architecture
 
 ## System Architecture Diagram
 
