@@ -26,8 +26,8 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
-import com.starrocks.utframe.UtFrameUtils;
 
 import mockit.Expectations;
 import mockit.Mock;
@@ -143,13 +143,18 @@ public class EditLogTest {
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        Field field1 = globalStateMgr.getClass().getDeclaredField("frontends");
+        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
+        Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
 
         ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
         Frontend fe1 = new Frontend(FrontendNodeType.MASTER, "testName", "127.0.0.1", 1000);
         frontends.put("testName", fe1);
-        field1.set(globalStateMgr, frontends);
+        field1.set(nodeMgr, frontends);
+
+        Field field2 = globalStateMgr.getClass().getDeclaredField("nodeMgr");
+        field2.setAccessible(true);
+        field2.set(globalStateMgr, nodeMgr);
         return globalStateMgr;
     }
 
