@@ -1413,8 +1413,9 @@ public class PlanFragmentBuilder {
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
-                return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(), topN.getOrderSpec(),
-                        topN.getLimit(), topN.getOffset(), inputFragment);
+                return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
+                        topN.getPartitionLimit(), topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
+                        inputFragment);
             } else {
                 return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
             }
@@ -1447,7 +1448,7 @@ public class PlanFragmentBuilder {
         }
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
-                                                      List<ColumnRefOperator> partitionByColumns,
+                                                      List<ColumnRefOperator> partitionByColumns, long partitionLimit,
                                                       OrderSpec orderSpec, long limit, long offset,
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
@@ -1504,7 +1505,7 @@ public class PlanFragmentBuilder {
             }
 
             sortTuple.computeMemLayout();
-            SortInfo sortInfo = new SortInfo(partitionExprs, sortExprs,
+            SortInfo sortInfo = new SortInfo(partitionExprs, partitionLimit, sortExprs,
                     orderSpec.getOrderDescs().stream().map(Ordering::isAscending).collect(Collectors.toList()),
                     orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
             sortInfo.setMaterializedTupleInfo(sortTuple, resolvedTupleExprs);

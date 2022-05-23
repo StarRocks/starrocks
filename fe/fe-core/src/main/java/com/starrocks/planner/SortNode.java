@@ -94,7 +94,7 @@ public class SortNode extends PlanNode {
 
     public SortNode(PlanNodeId id, PlanNode input, SortInfo info, boolean useTopN,
                     boolean isDefaultLimit, long offset) {
-        super(id, useTopN ? "TOP-N" : "SORT");
+        super(id, useTopN ? "TOP-N" : (info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
         this.info = info;
         this.useTopN = useTopN;
         this.isDefaultLimit = isDefaultLimit;
@@ -109,7 +109,8 @@ public class SortNode extends PlanNode {
      * Clone 'inputSortNode' for distributed Top-N
      */
     public SortNode(PlanNodeId id, SortNode inputSortNode, PlanNode child) {
-        super(id, inputSortNode, inputSortNode.useTopN ? "TOP-N" : "SORT");
+        super(id, inputSortNode, inputSortNode.useTopN ? "TOP-N" :
+                (inputSortNode.info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
         this.info = inputSortNode.info;
         this.useTopN = inputSortNode.useTopN;
         this.isDefaultLimit = inputSortNode.isDefaultLimit;
@@ -175,6 +176,7 @@ public class SortNode extends PlanNode {
 
         if (info.getPartitionExprs() != null) {
             msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
+            msg.sort_node.setPartition_limit(info.getPartitionLimit());
         }
         // TODO(lingbin): remove blew codes, because it is duplicate with TSortInfo
         msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
@@ -221,6 +223,7 @@ public class SortNode extends PlanNode {
         }
         if (!start) {
             output.append("\n");
+            output.append(detailPrefix).append("partition limit: ").append(info.getPartitionLimit()).append("\n");
         }
         output.append(detailPrefix).append("order by: ");
         Iterator<Expr> orderExpr = info.getOrderingExprs().iterator();

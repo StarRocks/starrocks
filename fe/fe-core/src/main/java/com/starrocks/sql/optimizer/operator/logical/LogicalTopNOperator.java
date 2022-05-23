@@ -19,36 +19,39 @@ import java.util.Objects;
 
 public class LogicalTopNOperator extends LogicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
+    private final long partitionLimit;
     private final List<Ordering> orderByElements;
     private final long offset;
     private final SortPhase sortPhase;
     private boolean isSplit = false;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
-        this(DEFAULT_LIMIT, null, null, null, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL, false);
+        this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL, false);
     }
 
     public LogicalTopNOperator(List<Ordering> orderByElements, long limit, long offset) {
-        this(limit, null, null, null, orderByElements, offset, SortPhase.FINAL, false);
+        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, SortPhase.FINAL, false);
     }
 
     public LogicalTopNOperator(List<Ordering> orderByElements, long limit, long offset,
                                SortPhase sortPhase) {
-        this(limit, null, null, null, orderByElements, offset, sortPhase, false);
+        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, sortPhase, false);
     }
 
     private LogicalTopNOperator(Builder builder) {
         this(builder.getLimit(), builder.getPredicate(), builder.getProjection(), builder.partitionByColumns,
-                builder.orderByElements, builder.offset, builder.sortPhase, builder.isSplit);
+                builder.partitionLimit, builder.orderByElements, builder.offset, builder.sortPhase, builder.isSplit);
     }
 
     private LogicalTopNOperator(long limit,
                                 ScalarOperator predicate, Projection projection,
                                 List<ColumnRefOperator> partitionByColumns,
+                                long partitionLimit,
                                 List<Ordering> orderByElements, long offset,
                                 SortPhase sortPhase, boolean isSplit) {
         super(OperatorType.LOGICAL_TOPN, limit, predicate, projection);
         this.partitionByColumns = partitionByColumns;
+        this.partitionLimit = partitionLimit;
         this.orderByElements = orderByElements;
         this.offset = offset;
         this.sortPhase = sortPhase;
@@ -81,6 +84,10 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
+    }
+
+    public long getPartitionLimit() {
+        return partitionLimit;
     }
 
     public List<Ordering> getOrderByElements() {
@@ -136,6 +143,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     public static class Builder
             extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
         private List<ColumnRefOperator> partitionByColumns;
+        private long partitionLimit;
         private List<Ordering> orderByElements;
         private long offset;
         private SortPhase sortPhase;
@@ -158,6 +166,11 @@ public class LogicalTopNOperator extends LogicalOperator {
 
         public LogicalTopNOperator.Builder setPartitionByColumns(List<ColumnRefOperator> partitionByColumns) {
             this.partitionByColumns = partitionByColumns;
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setPartitionLimit(long partitionLimit) {
+            this.partitionLimit = partitionLimit;
             return this;
         }
 

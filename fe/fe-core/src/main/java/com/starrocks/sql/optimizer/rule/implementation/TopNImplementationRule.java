@@ -29,6 +29,7 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.getLimit(),
                         logicalTopN.getOffset(),
                         logicalTopN.getPartitionByColumns(),
+                        logicalTopN.getPartitionLimit(),
                         logicalTopN.getSortPhase(),
                         logicalTopN.isSplit(),
                         false,

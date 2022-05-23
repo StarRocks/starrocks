@@ -10,7 +10,7 @@ namespace starrocks::pipeline {
 
 LocalPartitionTopnContext::LocalPartitionTopnContext(
         const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
-        std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset, int64_t limit,
+        std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset, int64_t partition_limit,
         const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
         const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc)
         : _t_partition_exprs(t_partition_exprs),
@@ -19,7 +19,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(
           _is_null_first(is_null_first),
           _sort_keys(sort_keys),
           _offset(offset),
-          _limit(limit),
+          _partition_limit(partition_limit),
           _order_by_types(order_by_types),
           _materialized_tuple_desc(materialized_tuple_desc),
           _parent_node_row_desc(parent_node_row_desc),
@@ -61,7 +61,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     for (int i = 0; i < num_partitions; ++i) {
         _chunks_sorters[i] = std::make_shared<vectorized::ChunksSorterTopn>(
                 state, &_sort_exec_exprs.lhs_ordering_expr_ctxs(), &_is_asc_order, &_is_null_first, _sort_keys, _offset,
-                _limit, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_limit));
+                _partition_limit, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
     }
     RETURN_IF_ERROR(
             _chunks_partitioner->accept([this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
@@ -100,9 +100,9 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_so
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
         SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-        const std::string& sort_keys, int64_t offset, int64_t limit, const std::vector<OrderByType>& order_by_types,
-        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-        const RowDescriptor& parent_node_child_row_desc)
+        const std::string& sort_keys, int64_t offset, int64_t partition_limit,
+        const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
+        const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc)
         : _ctxs(degree_of_parallelism),
           _t_partition_exprs(t_partition_exprs),
           _sort_exec_exprs(sort_exec_exprs),
@@ -110,7 +110,7 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _is_null_first(is_null_first),
           _sort_keys(sort_keys),
           _offset(offset),
-          _limit(limit),
+          _partition_limit(partition_limit),
           _order_by_types(order_by_types),
           _materialized_tuple_desc(materialized_tuple_desc),
           _parent_node_row_desc(parent_node_row_desc),
@@ -121,8 +121,9 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
 
     if (_ctxs[driver_sequence] == nullptr) {
         _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(
-                _t_partition_exprs, _sort_exec_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset, _limit,
-                _order_by_types, _materialized_tuple_desc, _parent_node_row_desc, _parent_node_child_row_desc);
+                _t_partition_exprs, _sort_exec_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset,
+                _partition_limit, _order_by_types, _materialized_tuple_desc, _parent_node_row_desc,
+                _parent_node_child_row_desc);
     }
 
     return _ctxs[driver_sequence].get();

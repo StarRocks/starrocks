@@ -22,6 +22,7 @@ import java.util.Set;
 public class PhysicalTopNOperator extends PhysicalOperator {
     private final long offset;
     private final List<ColumnRefOperator> partitionByColumns;
+    private final long partitionLimit;
     private final SortPhase sortPhase;
     private final boolean isSplit;
     private final boolean isEnforced;
@@ -29,6 +30,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
                                 List<ColumnRefOperator> partitionByColumns,
+                                long partitionLimit,
                                 SortPhase sortPhase,
                                 boolean isSplit,
                                 boolean isEnforced,
@@ -38,6 +40,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.limit = limit;
         this.offset = offset;
         this.partitionByColumns = partitionByColumns;
+        this.partitionLimit = partitionLimit;
         this.sortPhase = sortPhase;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
@@ -47,6 +50,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
+    }
+
+    public long getPartitionLimit() {
+        return partitionLimit;
     }
 
     public SortPhase getSortPhase() {

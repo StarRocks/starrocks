@@ -201,6 +201,10 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
     bool is_merging = _analytic_partition_exprs.empty();
+    int64_t partition_limit = -1;
+    if (is_partition) {
+        partition_limit = _tnode.sort_node.partition_limit;
+    }
 
     if (!is_merging) {
         // prepend local shuffle to PartitionSortSinkOperator
@@ -214,7 +218,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
                 degree_of_parallelism, _tnode.sort_node.partition_exprs, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc,
+                _is_null_first, _sort_keys, _offset, partition_limit, _order_by_types, _materialized_tuple_desc,
                 child(0)->row_desc(), _row_descriptor);
     } else {
         context_factory = std::make_shared<SortContextFactory>(

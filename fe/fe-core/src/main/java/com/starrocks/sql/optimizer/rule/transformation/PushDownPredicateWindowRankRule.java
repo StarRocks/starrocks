@@ -7,6 +7,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -100,7 +101,7 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
 
         BinaryPredicateOperator lessPredicate = lessPredicates.get(0);
         ConstantOperator rightChild = lessPredicate.getChild(1).cast();
-        long limit = rightChild.getBigint();
+        long limitValue = rightChild.getBigint();
 
         List<ColumnRefOperator> partitionByColumns = windowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
@@ -113,9 +114,12 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
         // OutputPropertyDeriver will generate PhysicalPropertySet.EMPTY if sortPhase is SortPhase.PARTIAL
-        SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
+        final SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
+        final long limit = partitionByColumns.isEmpty() ? limitValue : Operator.DEFAULT_LIMIT;
+        final long partitionLimit = partitionByColumns.isEmpty() ? Operator.DEFAULT_LIMIT : limitValue;
         OptExpression newTopNOptExp = OptExpression.create(new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
+                .setPartitionLimit(partitionLimit)
                 .setOrderByElements(windowOperator.getEnforceSortColumns())
                 .setLimit(limit)
                 .setSortPhase(sortPhase)

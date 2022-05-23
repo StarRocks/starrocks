@@ -331,11 +331,11 @@ public class WindowTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            assertContains(plan, "  1:TOP-N\n" +
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 4");
+                    "  |  offset: 0");
         }
         {
             // TODO(hcf) Do not support multi partition by right now, this test need to be updated when supported

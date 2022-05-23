@@ -54,6 +54,7 @@ public class SortInfo {
 
     // Only used in local partition topn
     private List<Expr> partitionExprs_;
+    private long partitionLimit_;
     private List<Expr> orderingExprs_;
     private final List<Boolean> isAscOrder_;
     // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
@@ -68,11 +69,12 @@ public class SortInfo {
     // sortTupleDesc_.
     private List<Expr> sortTupleSlotExprs_;
 
-    public SortInfo(List<Expr> partitionExprs, List<Expr> orderingExprs, List<Boolean> isAscOrder,
+    public SortInfo(List<Expr> partitionExprs, long partitionLimit, List<Expr> orderingExprs, List<Boolean> isAscOrder,
                     List<Boolean> nullsFirstParams) {
         Preconditions.checkArgument(orderingExprs.size() == isAscOrder.size());
         Preconditions.checkArgument(orderingExprs.size() == nullsFirstParams.size());
         partitionExprs_ = partitionExprs;
+        partitionLimit_ = partitionLimit;
         orderingExprs_ = orderingExprs;
         isAscOrder_ = isAscOrder;
         nullsFirstParams_ = nullsFirstParams;
@@ -84,6 +86,7 @@ public class SortInfo {
      */
     private SortInfo(SortInfo other) {
         partitionExprs_ = Expr.cloneList(other.partitionExprs_);
+        partitionLimit_ = other.partitionLimit_;
         orderingExprs_ = Expr.cloneList(other.orderingExprs_);
         isAscOrder_ = Lists.newArrayList(other.isAscOrder_);
         nullsFirstParams_ = Lists.newArrayList(other.nullsFirstParams_);
@@ -112,6 +115,10 @@ public class SortInfo {
 
     public List<Expr> getPartitionExprs() {
         return partitionExprs_;
+    }
+
+    public long getPartitionLimit() {
+        return partitionLimit_;
     }
 
     public List<Expr> getOrderingExprs() {
