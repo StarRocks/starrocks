@@ -1132,8 +1132,10 @@ public class GlobalStateMgr {
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
-            checksum = auth.readAsGson(dis, checksum);
-            remoteChecksum = dis.readLong();
+            if (dis.available() > 0) {
+                checksum = auth.readAsGson(dis, checksum);
+                remoteChecksum = dis.readLong();
+            }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
