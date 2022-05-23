@@ -183,9 +183,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         probeRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
-    public void fillLocalRfWaitingSet(Set<Integer> hashJoinNodeIds) {
+    public void fillLocalRfWaitingSet(Set<Integer> runtimeFilterBuildNode) {
         for (RuntimeFilterDescription filter : probeRuntimeFilters) {
-            if (hashJoinNodeIds.contains(filter.getBuildPlanNodeId())) {
+            if (runtimeFilterBuildNode.contains(filter.getBuildPlanNodeId())) {
                 localRfWaitingSet.add(filter.getBuildPlanNodeId());
             }
         }
