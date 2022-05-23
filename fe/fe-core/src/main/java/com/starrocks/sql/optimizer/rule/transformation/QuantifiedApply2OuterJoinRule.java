@@ -356,6 +356,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         }
 
         /*
+         * Correlation sub-query only need to consider the data related to the correlation key.
          * 1. build cross join if un-correlation sub-query
          * 2. build left join if correlation sub-query
          */
