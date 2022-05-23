@@ -44,6 +44,7 @@ import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 
 
@@ -237,18 +238,27 @@ public class GlobalStateMgrTest {
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        Field field1 = globalStateMgr.getClass().getDeclaredField("frontends");
-        field1.setAccessible(true);
+        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
 
+        Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
+        field1.setAccessible(true);
         ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
         Frontend fe1 = new Frontend(FrontendNodeType.MASTER, "testName", "127.0.0.1", 1000);
         frontends.put("testName", fe1);
-        field1.set(globalStateMgr, frontends);
+        field1.set(nodeMgr, frontends);
 
         Pair<String, Integer> selfNode = new Pair<String,Integer>("test-address", 1000);
-        Field field2 = globalStateMgr.getClass().getDeclaredField("selfNode");
+        Field field2 = nodeMgr.getClass().getDeclaredField("selfNode");
         field2.setAccessible(true);
-        field2.set(globalStateMgr, selfNode);
+        field2.set(nodeMgr, selfNode);
+
+        Field field3 = nodeMgr.getClass().getDeclaredField("role");
+        field3.setAccessible(true);
+        field3.set(nodeMgr, FrontendNodeType.MASTER);
+
+        Field field4 = globalStateMgr.getClass().getDeclaredField("nodeMgr");
+        field4.setAccessible(true);
+        field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
     }
@@ -347,14 +357,7 @@ public class GlobalStateMgrTest {
     @Test(expected = DdlException.class)
     public void testUpdateModifyCurrentMasterException() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        Pair<String, Integer> selfNode = new Pair<String,Integer>("test", 1000);
-        Field fieldSelfNode = globalStateMgr.getClass().getDeclaredField("selfNode");
-        fieldSelfNode.setAccessible(true);
-        fieldSelfNode.set(globalStateMgr, selfNode);
-        Field fieldFeType = globalStateMgr.getClass().getDeclaredField("feType");
-        fieldFeType.setAccessible(true);
-        fieldFeType.set(globalStateMgr, FrontendNodeType.MASTER);
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
         globalStateMgr.modifyFrontendHost(clause);
     }

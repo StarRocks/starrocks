@@ -66,6 +66,7 @@ import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
@@ -1736,31 +1737,7 @@ public class GlobalStateMgr {
     }
 
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
-        String fqdn = modifyFrontendAddressClause.getDestHost();
-        if (toBeModifyHost.equals(selfNode.first) && feType == FrontendNodeType.MASTER) {
-            throw new DdlException("can not modify current master node.");
-        }
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            Frontend preUpdateFe = getFeByHost(toBeModifyHost);
-            if (preUpdateFe == null) {
-                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
-            }
-            // step 1 update the fe information stored in bdb
-            ((BDBHA) getHaProtocol()).updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
-            // step 2 update the fe information stored in memory
-            preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
-            frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
-            
-            // editLog
-            editLog.logUpdateFrontend(preUpdateFe);
-            LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
-        } finally {
-            unlock();
-        }
+        nodeMgr.modifyFrontendHost(modifyFrontendAddressClause);
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
@@ -2284,24 +2261,12 @@ public class GlobalStateMgr {
         nodeMgr.replayAddFrontend(fe);
     }
 
-    public void replayDropFrontend(Frontend frontend) {
-        nodeMgr.replayDropFrontend(frontend);
+    public void replayUpdateFrontend(Frontend frontend) {
+        nodeMgr.replayUpdateFrontend(frontend);
     }
 
-    public void replayUpdateFrontend(Frontend frontend) {
-        tryLock(true);
-        try {
-            Frontend fe = frontends.get(frontend.getNodeName());
-            if (fe == null) {
-                LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
-                return;
-            }
-            fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
-            frontends.put(fe.getNodeName(), fe);
-            LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
-        } finally {
-            unlock();
-        }
+    public void replayDropFrontend(Frontend frontend) {
+        nodeMgr.replayDropFrontend(frontend);
     }
 
     public int getClusterId() {
@@ -2480,7 +2445,7 @@ public class GlobalStateMgr {
     }
 
     public void setSelfNode(Pair<String, Integer> newSelfNode) {
-        this.selfNode = newSelfNode;
+        nodeMgr.setSelfNode(newSelfNode);
     }
 
     public String getNodeName() {
