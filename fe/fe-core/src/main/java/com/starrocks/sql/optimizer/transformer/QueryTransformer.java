@@ -13,6 +13,7 @@ import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -274,6 +275,24 @@ class QueryTransformer {
                 WindowTransformer.reorderWindowOperator(windowOperators, columnRefFactory, subOpt);
         for (WindowTransformer.PartitionGroup partitionGroup : partitionGroups) {
             for (WindowTransformer.SortGroup sortGroup : partitionGroup.getSortGroups()) {
+                // Put rank classic window functions of same sort group to the end
+                sortGroup.getWindowOperators().sort((w1, w2) -> {
+                    List<CallOperator> leftCallOperators = Lists.newArrayList(w1.getWindowCall().values());
+                    List<CallOperator> rightCallOperators = Lists.newArrayList(w2.getWindowCall().values());
+                    boolean isLeftRank = leftCallOperators.size() == 1 &&
+                            FunctionSet.ROW_NUMBER.equalsIgnoreCase(leftCallOperators.get(0).getFnName());
+                    boolean isRightRank = rightCallOperators.size() == 1 &&
+                            FunctionSet.ROW_NUMBER.equalsIgnoreCase(rightCallOperators.get(0).getFnName());
+                    if (isLeftRank && isRightRank) {
+                        return 0;
+                    } else if (isLeftRank) {
+                        return 1;
+                    } else if (isRightRank) {
+                        return -1;
+                    } else {
+                        return 0;
+                    }
+                });
                 for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
                     LogicalWindowOperator newLogicalWindowOperator =
                             new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)

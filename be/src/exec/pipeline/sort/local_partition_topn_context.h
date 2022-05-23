@@ -27,7 +27,7 @@ class LocalPartitionTopnContext {
 public:
     LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-                              const std::string& sort_keys, int64_t offset, int64_t limit,
+                              const std::string& sort_keys, int64_t offset, int64_t partition_limit,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
                               const RowDescriptor& parent_node_row_desc,
                               const RowDescriptor& parent_node_child_row_desc);
@@ -70,7 +70,7 @@ private:
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;
     int64_t _offset;
-    int64_t _limit;
+    int64_t _partition_limit;
     const std::vector<OrderByType>& _order_by_types;
     TupleDescriptor* _materialized_tuple_desc;
     const RowDescriptor& _parent_node_row_desc;
@@ -86,7 +86,7 @@ public:
     LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
                                      SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset,
-                                     int64_t limit, const std::vector<OrderByType>& order_by_types,
+                                     int64_t partition_limit, const std::vector<OrderByType>& order_by_types,
                                      TupleDescriptor* materialized_tuple_desc,
                                      const RowDescriptor& parent_node_row_desc,
                                      const RowDescriptor& parent_node_child_row_desc);
@@ -104,7 +104,7 @@ private:
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;
     int64_t _offset;
-    int64_t _limit;
+    int64_t _partition_limit;
     const std::vector<OrderByType>& _order_by_types;
     TupleDescriptor* _materialized_tuple_desc;
     const RowDescriptor& _parent_node_row_desc;

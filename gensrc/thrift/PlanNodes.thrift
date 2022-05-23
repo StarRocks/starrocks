@@ -554,6 +554,8 @@ struct TSortNode {
   // in order to eliminate time-consuming LocalMergeSortSourceOperator and parallelize
   // AnalyticNode
   22: optional list<Exprs.TExpr> analytic_partition_exprs
+  23: optional list<Exprs.TExpr> partition_exprs
+  24: optional i64 partition_limit
 }
 
 enum TAnalyticWindowType {
