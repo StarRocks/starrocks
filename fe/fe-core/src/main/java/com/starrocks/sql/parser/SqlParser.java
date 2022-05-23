@@ -46,6 +46,10 @@ public class SqlParser {
         return statements;
     }
 
+    public static StatementBase parseFirstStatement(String originSql, long sqlMode) {
+        return parse(originSql, sqlMode).get(0);
+    }
+
     public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
         com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);

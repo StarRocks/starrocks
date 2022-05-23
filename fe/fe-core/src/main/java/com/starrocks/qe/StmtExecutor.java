@@ -52,6 +52,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -767,8 +768,21 @@ public class StmtExecutor {
         job.setProperties(analyzeStmt.getProperties());
 
         try {
-            statisticExecutor.collectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                    analyzeStmt.isSample(), job.getSampleCollectRows());
+            if (Config.enable_collect_full_statistics && job.getType().equals(Constants.AnalyzeType.FULL)) {
+                List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
+                for (Partition partition : partitions) {
+                    statisticExecutor.fullCollectStatisticSyncV2(db.getId(), table.getId(),
+                            partition.getId(), analyzeStmt.getColumnNames());
+                }
+            } else {
+                if (analyzeStmt.isSample()) {
+                    statisticExecutor.sampleCollectStatisticSync(db.getId(), table.getId(),
+                            analyzeStmt.getColumnNames(), job.getSampleCollectRows());
+                } else {
+                    statisticExecutor.fullCollectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames());
+                }
+            }
+
             GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
         } catch (Exception e) {
             job.setReason(e.getMessage());

@@ -726,7 +726,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() != null);
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null);
     }
 
     @Override
@@ -740,7 +740,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.DATABASE() != null) {
-            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null,
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() == null,
                     properties);
         } else if (context.TABLE() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
@@ -752,9 +752,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 columnNames = columns.stream().map(Identifier::getValue).collect(toList());
             }
 
-            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() != null, properties);
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() == null, properties);
         } else {
-            return new CreateAnalyzeJobStmt(context.FULL() != null, properties);
+            return new CreateAnalyzeJobStmt(context.FULL() == null, properties);
         }
     }
 
