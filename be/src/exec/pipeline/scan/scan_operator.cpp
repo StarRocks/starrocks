@@ -338,7 +338,8 @@ void ScanOperator::_merge_chunk_source_profiles() {
 
 bool ScanOperator::_try_to_increase_committed_scan_tasks() {
     int old_num = _num_committed_scan_tasks.fetch_add(1);
-    if (old_num >= _max_scan_concurrency) {
+    // _max_scan_concurrency takes effect, only when it is positive.
+    if (_max_scan_concurrency > 0 && old_num >= _max_scan_concurrency) {
         _decrease_committed_scan_tasks();
         return false;
     }
