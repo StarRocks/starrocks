@@ -7,6 +7,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -63,6 +64,10 @@ public class CatalogMgr {
 
     public boolean catalogExists(String catalogName) {
         return catalogs.containsKey(catalogName);
+    }
+
+    public static boolean isInternalCatalog(String name) {
+        return name.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 
     public void replayCreateCatalog(CreateCatalogLog log) throws DdlException {

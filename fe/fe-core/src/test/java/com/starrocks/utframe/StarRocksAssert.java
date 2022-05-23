@@ -190,7 +190,7 @@ public class StarRocksAssert {
 
     // With catalog
     public StarRocksAssert withCatalog(String sql) throws Exception {
-        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
         return this;
     }
