@@ -2675,6 +2675,17 @@ public class LocalMetastore implements ConnectorMetadata {
         return Lists.newArrayList(fullNameToDb.keySet());
     }
 
+    @Override
+    public List<String> listTableNames(String dbName) throws DdlException {
+        Database database = getDb(dbName);
+        if (database != null) {
+            return database.getTables().stream()
+                    .map(Table::getName).collect(Collectors.toList());
+        } else {
+            throw new DdlException("Database " + dbName + " doesn't exist");
+        }
+    }
+
     public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
         final Cluster cluster = nameToCluster.get(clusterName);
         if (cluster == null) {
