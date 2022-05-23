@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
@@ -12,11 +13,12 @@ import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
-import com.starrocks.server.GlobalStateMgr;
+// import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,6 +33,8 @@ public class StarOSAgent {
 
     private StarClient client;
     private long serviceId;
+    private Map<String, Long> workerToId;
+    private Map<Long, Long> workerToBackend;
 
     public StarOSAgent() {
         client = new StarClient();
@@ -44,6 +48,9 @@ public class StarOSAgent {
             }
         }
         client.connectServer(Config.starmgr_address);
+
+        workerToId = Maps.newHashMap();
+        workerToBackend = Maps.newHashMap();
     }
 
     public List<Long> createShards(int numShards) {
@@ -81,11 +88,14 @@ public class StarOSAgent {
             WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
             String ipPort = workerInfo.getIpPort();
             String host = ipPort.split(":")[0];
-            long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(host);
-            if (backendId == -1) {
+            long workerId = workerToId.get(ipPort);
+            // String host = ipPort.split(":")[0];
+            // long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(host);
+            if (!workerToBackend.containsKey(workerId)) {
                 LOG.warn("Backend does not exists. host: {}", host);
                 continue;
             }
+            long backendId = workerToBackend.get(workerId);
             backendIds.add(backendId);
         }
         return backendIds;
@@ -132,7 +142,10 @@ public class StarOSAgent {
         LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
     }
 
-    public long addWorker(String workerIpPort) {
+    public long addWorker(long backendId, String workerIpPort) {
+        if (workerToId.containsKey(workerIpPort)) {
+            return workerToId.get(workerIpPort);
+        }
         long workerId = -1;
         try {
             workerId = client.addWorker(serviceId, workerIpPort);
@@ -140,6 +153,7 @@ public class StarOSAgent {
             LOG.warn(e);
             System.exit(-1);
         }
+        workerToBackend.put(workerId, backendId);
         return workerId;
     }
 

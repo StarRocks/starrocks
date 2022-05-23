@@ -103,17 +103,24 @@ public class Backend implements Writable {
     // additional backendStatus information for BE, display in JSON format
     private BackendStatus backendStatus = new BackendStatus();
 
+    // port of starlet on BE
+    private volatile int starletPort;
+
+    private AtomicBoolean workerAdded;
+
     public Backend() {
         this.host = "";
         this.version = "";
         this.lastUpdateMs = 0;
         this.lastStartTime = 0;
         this.isAlive = new AtomicBoolean();
+        this.workerAdded = new AtomicBoolean();
         this.isDecommissioned = new AtomicBoolean(false);
 
         this.bePort = 0;
         this.httpPort = 0;
         this.beRpcPort = 0;
+        this.starletPort = 0;
         this.disksRef = ImmutableMap.of();
 
         this.ownerClusterName = "";
@@ -174,9 +181,14 @@ public class Backend implements Writable {
         return brpcPort;
     }
 
+    public int getStarletPort() {
+        return starletPort;
+    }
+
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
     }
+
 
     // for test only
     public void updateOnce(int bePort, int httpPort, int beRpcPort) {
@@ -634,6 +646,11 @@ public class Backend implements Writable {
             if (this.brpcPort != hbResponse.getBrpcPort()) {
                 isChanged = true;
                 this.brpcPort = hbResponse.getBrpcPort();
+            }
+
+            if (Config.integrate_staros && this.starletPort != hbResponse.getStarletPort()) {
+                isChanged = true;
+                this.starletPort = hbResponse.getStarletPort();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

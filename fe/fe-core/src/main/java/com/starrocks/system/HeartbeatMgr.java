@@ -184,6 +184,10 @@ public class HeartbeatMgr extends MasterDaemon {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
                         }
+                    } else {
+                        // addWorker
+                        String starletHost = be.getHost() + be.getStarletPort();
+                        GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), starletHost);
                     }
                     return isChanged;
                 }
@@ -238,6 +242,7 @@ public class HeartbeatMgr extends MasterDaemon {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
+                    int starletPort = tBackendInfo.getStarlet_port();
                     int brpcPort = -1;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
@@ -254,8 +259,13 @@ public class HeartbeatMgr extends MasterDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
-                            version, cpuCores);
+                    if (Config.integrate_staros) {
+                        return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, starletPort,
+                                System.currentTimeMillis(), version, cpuCores);
+                    } else {
+                        return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
+                                version, cpuCores);
+                    }
                 } else {
                     return new BackendHbResponse(backendId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"

@@ -33,6 +33,9 @@ CONF_Int32(be_port, "9060");
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
 
+// The port for starlet
+CONF_Int32(starlet_port, "8069");
+
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
 
