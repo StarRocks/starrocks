@@ -694,8 +694,8 @@ bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_
     return true;
 }
 
-bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                   TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 

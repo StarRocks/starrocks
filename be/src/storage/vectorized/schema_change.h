@@ -57,7 +57,8 @@ public:
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
 
-    static const MaterializeTypeConverter* _get_materialize_type_converter(std::string materialized_function, FieldType type);
+    static const MaterializeTypeConverter* _get_materialize_type_converter(std::string materialized_function,
+                                                                           FieldType type);
 
 private:
     // @brief column-mapping specification of new schema
