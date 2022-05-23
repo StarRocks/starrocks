@@ -47,8 +47,8 @@ public class Config extends ConfigBase {
      * sys_log_verbose_modules:
      * Verbose modules. VERBOSE level is implemented by log4j DEBUG level.
      * eg:
-     * sys_log_verbose_modules = com.starrocks.catalog
-     * This will only print debug log of files in package com.starrocks.catalog and all its sub packages.
+     * sys_log_verbose_modules = com.starrocks.globalStateMgr
+     * This will only print debug log of files in package com.starrocks.globalStateMgr and all its sub packages.
      * <p>
      * sys_log_roll_interval:
      * DAY:  log suffix is yyyyMMdd
@@ -429,18 +429,28 @@ public class Config extends ConfigBase {
     @ConfField
     public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
+    /**
+     * the timeout for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_timeout_ms = 10000;
+
+    /**
+     * the retry times for thrift rpc call
+     */
+    @ConfField(mutable = true)
+    public static int thrift_rpc_retry_times = 3;
+
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
-    // The number of concurrent requests BRPC can processed
+
+    // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
+    // each request must borrow a connection from the pool.
     @ConfField
-    public static int brpc_number_of_concurrent_requests_processed = 4096;
+    public static int brpc_connection_pool_size = 16;
 
     // BRPC idle wait time (ms)
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
-
-    // enable using a share channel for BRPC client
-    @ConfField
-    public static boolean enable_brpc_share_channel = true;
 
     /**
      * FE mysql server port
@@ -805,7 +815,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
@@ -888,7 +898,7 @@ public class Config extends ConfigBase {
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
     /**
-     * The tryLock timeout configuration of catalog lock.
+     * The tryLock timeout configuration of globalStateMgr lock.
      * Normally it does not need to change, unless you need to test something.
      */
     @ConfField(mutable = true)
@@ -1270,6 +1280,12 @@ public class Config extends ConfigBase {
     public static int max_agent_tasks_send_per_be = 10000;
 
     /**
+     * min num of thread to refresh hive meta
+     */
+    @ConfField
+    public static int hive_meta_cache_refresh_min_threads = 50;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField
@@ -1329,6 +1345,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_custom_worker_thread = false;
+
+    /**
+     * size of iceberg worker pool
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_worker_num_threads = 64;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -1399,9 +1427,49 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean use_staros = false;
+    @ConfField
+    public static String starmgr_address = "127.0.0.1:6090";
+    @ConfField
+    public static boolean integrate_staros = false;
+
     /**
      * default bucket number when create OLAP table without buckets info
      */
     @ConfField(mutable = true)
     public static int default_bucket_num = 10;
+
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_mv = false;
+  
+    @ConfField
+    public static boolean enable_dict_optimize_routine_load = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_dict_optimize_stream_load = true;
+
+    /**
+     * If set to true, the following rules will apply to see if the password is secure upon the creation of a user.
+     * 1. The length of the password should be no less than 8.
+     * 2. The password should contain at least one digit, one lowercase letter, one uppercase letter
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_validate_password = false;
+
+    /**
+     * If set to false, changing the password to the previous one is not allowed.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_password_reuse = true;
+    /**
+     * If set to false, when the load is empty, success is returned.
+     * Otherwise, `all partitions have no load data` is returned.
+     */
+    @ConfField(mutable = true)
+    public static boolean empty_load_as_error = true;
+
+    /**
+     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     */
+    @ConfField(mutable = true)
+    public static int quorom_publish_wait_time_ms = 500;
 }

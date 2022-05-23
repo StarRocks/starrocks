@@ -22,13 +22,13 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.io.DataInput;
@@ -128,14 +128,6 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
 
     public UserIdentity getUserIdent() {
         return userIdentity;
-    }
-
-    public boolean match(UserIdentity userIdent, boolean exactMatch) {
-        if (exactMatch) {
-            return origUser.equals(userIdent.getQualifiedUser()) && origHost.equals(userIdent.getHost());
-        } else {
-            return origUser.equals(userIdent.getQualifiedUser()) && hostPattern.match(userIdent.getHost());
-        }
     }
 
     public abstract boolean keyMatch(PrivEntry other);
@@ -246,7 +238,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
         privSet = PrivBitSet.read(in);
 
         isSetByDomainResolver = in.readBoolean();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_69) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_69) {
             isDomain = in.readBoolean();
         }
 

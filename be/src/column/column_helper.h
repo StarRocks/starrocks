@@ -168,9 +168,10 @@ public:
         return dst_column->clone_shared();
     }
 
+    // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
-    // If is_const is true, you must pass the size arg
+    // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
 
     /**
@@ -206,6 +207,10 @@ public:
         return std::static_pointer_cast<Type>(value);
     }
 
+    template <typename Type>
+    static inline const Type* as_raw_column(const Column* value) {
+        return down_cast<const Type*>(value);
+    }
     /**
      * Cast columnPtr to special type Column*
      * Plz sure actual column type by yourself
@@ -218,6 +223,12 @@ public:
     template <PrimitiveType Type>
     static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
         return cast_to_raw<Type>(value)->get_data().data();
+    }
+
+    template <PrimitiveType Type>
+    static inline RunTimeCppType<Type> get_const_value(const Column* col) {
+        const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
+        return cast_to_raw<Type>(c)->get_data()[0];
     }
 
     template <PrimitiveType Type>
@@ -253,6 +264,13 @@ public:
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static bool is_all_const(const Columns& columns);
+
+    // Returns
+    //  1. whether all the columns are constant.
+    //  2. the number of the packed rows. If all the columns are constant, it will be 1,
+    //     which could reduce unnecessary calculations.
+    //     Don't forget to resize the result constant columns if necessary.
+    static std::pair<bool, size_t> num_packed_rows(const Columns& columns);
 
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);

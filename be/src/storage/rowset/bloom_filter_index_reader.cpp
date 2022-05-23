@@ -28,7 +28,7 @@
 
 namespace starrocks {
 
-Status BloomFilterIndexReader::load(fs::BlockManager* block_mgr, const std::string& file_name,
+Status BloomFilterIndexReader::load(FileSystem* fs, const std::string& file_name,
                                     const BloomFilterIndexPB* bloom_filter_index_meta, bool use_page_cache,
                                     bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
@@ -36,7 +36,7 @@ Status BloomFilterIndexReader::load(fs::BlockManager* block_mgr, const std::stri
     _hash_strategy = bloom_filter_index_meta->hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = bloom_filter_index_meta->bloom_filter();
 
-    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, bf_index_meta);
+    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, file_name, bf_index_meta);
     RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();
 }

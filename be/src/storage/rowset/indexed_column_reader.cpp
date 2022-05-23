@@ -21,6 +21,7 @@
 
 #include "storage/rowset/indexed_column_reader.h"
 
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/key_coder.h"
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
@@ -42,14 +43,13 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     RETURN_IF_ERROR(get_block_compression_codec(_meta.compression(), &_compress_codec));
     _validx_key_coder = get_key_coder(_type_info->type());
 
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    RETURN_IF_ERROR(_block_mgr->open_block(_file_name, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_file_name));
     // read and parse ordinal index page when exists
     if (_meta.has_ordinal_index_meta()) {
         if (_meta.ordinal_index_meta().is_root_data_page()) {
             _sole_data_page = PagePointer(_meta.ordinal_index_meta().root_page());
         } else {
-            RETURN_IF_ERROR(load_index_page(rblock.get(), _meta.ordinal_index_meta().root_page(),
+            RETURN_IF_ERROR(load_index_page(read_file.get(), _meta.ordinal_index_meta().root_page(),
                                             &_ordinal_index_page_handle, &_ordinal_index_reader));
             _has_index_page = true;
         }
@@ -60,7 +60,7 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
         if (_meta.value_index_meta().is_root_data_page()) {
             _sole_data_page = PagePointer(_meta.value_index_meta().root_page());
         } else {
-            RETURN_IF_ERROR(load_index_page(rblock.get(), _meta.value_index_meta().root_page(),
+            RETURN_IF_ERROR(load_index_page(read_file.get(), _meta.value_index_meta().root_page(),
                                             &_value_index_page_handle, &_value_index_reader));
             _has_index_page = true;
         }
@@ -69,19 +69,19 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     return Status::OK();
 }
 
-Status IndexedColumnReader::load_index_page(fs::ReadableBlock* rblock, const PagePointerPB& pp, PageHandle* handle,
+Status IndexedColumnReader::load_index_page(RandomAccessFile* read_file, const PagePointerPB& pp, PageHandle* handle,
                                             IndexPageReader* reader) {
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(read_page(rblock, PagePointer(pp), handle, &body, &footer));
+    RETURN_IF_ERROR(read_page(read_file, PagePointer(pp), handle, &body, &footer));
     RETURN_IF_ERROR(reader->parse(body, footer.index_page_footer()));
     return Status::OK();
 }
 
-Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePointer& pp, PageHandle* handle, Slice* body,
-                                      PageFooterPB* footer) const {
+Status IndexedColumnReader::read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle,
+                                      Slice* body, PageFooterPB* footer) const {
     PageReadOptions opts;
-    opts.rblock = rblock;
+    opts.read_file = read_file;
     opts.page_pointer = pp;
     opts.codec = _compress_codec;
     OlapReaderStatistics tmp_stats;
@@ -94,20 +94,16 @@ Status IndexedColumnReader::read_page(fs::ReadableBlock* rblock, const PagePoint
 }
 
 Status IndexedColumnReader::new_iterator(std::unique_ptr<IndexedColumnIterator>* iter) {
-    std::unique_ptr<fs::ReadableBlock> block;
-    Status st = _block_mgr->open_block(_file_name, &block);
-    LOG_IF(WARNING, !st.ok()) << "Fail to open block=" << _file_name << ", " << st.to_string();
-    if (st.ok()) {
-        iter->reset(new IndexedColumnIterator(this, std::move(block)));
-    }
-    return st;
+    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(_file_name));
+    iter->reset(new IndexedColumnIterator(this, std::move(file)));
+    return Status::OK();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader,
-                                             std::unique_ptr<fs::ReadableBlock> rblock)
+                                             std::unique_ptr<RandomAccessFile> read_file)
         : _reader(reader),
-          _rblock(std::move(rblock)),
+          _read_file(std::move(read_file)),
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 
@@ -115,7 +111,7 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     PageHandle handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer));
+    RETURN_IF_ERROR(_reader->read_page(_read_file.get(), pp, &handle, &body, &footer));
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
     return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);

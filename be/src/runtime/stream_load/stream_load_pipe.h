@@ -25,6 +25,7 @@
 #include <deque>
 #include <mutex>
 
+#include "io/input_stream.h"
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
@@ -41,10 +42,14 @@ public:
     ~StreamLoadPipe() override = default;
 
     Status append_and_flush(const char* data, size_t size) {
-        ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(size + 1));
-        buf->put_bytes(data, size);
-        buf->flip();
-        return _append(buf);
+        RETURN_IF_ERROR(append(data, size));
+        if (_write_buf != nullptr) {
+            ByteBufferPtr buf;
+            std::swap(buf, _write_buf);
+            buf->flip();
+            return _append(buf);
+        }
+        return Status::OK();
     }
 
     Status append(const char* data, size_t size) override {
@@ -70,13 +75,9 @@ public:
         return Status::OK();
     }
 
-    Status append(const ByteBufferPtr& buf) override {
-        if (_write_buf != nullptr) {
-            _write_buf->flip();
-            RETURN_IF_ERROR(_append(_write_buf));
-            _write_buf.reset();
-        }
-        return _append(buf);
+    bool exhausted() override {
+        std::unique_lock<std::mutex> l(_lock);
+        return _buf_queue.empty();
     }
 
     /* read_one_messages returns data that is written by append in one time.
@@ -185,41 +186,8 @@ public:
     }
 
 private:
-    // read the next buffer from _buf_queue
-    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* out, size_t* out_cap, size_t* out_sz, size_t padding) {
-        std::unique_lock<std::mutex> l(_lock);
-        while (!_cancelled && !_finished && _buf_queue.empty()) {
-            _get_cond.wait(l);
-        }
-        // cancelled
-        if (_cancelled) {
-            return _err_st;
-        }
-        // finished
-        if (_buf_queue.empty()) {
-            DCHECK(_finished);
-            out->reset();
-            *out_sz = 0;
-            *out_cap = 0;
-            return Status::OK();
-        }
-        auto buf = _buf_queue.front();
-        *out_sz = buf->remaining();
-
-        if (*out_cap < *out_sz + padding) {
-            out->reset(new uint8_t[*out_sz + padding]);
-            *out_cap = *out_sz + padding;
-        }
-        buf->get_bytes((char*)(out->get()), *out_sz);
-
-        _buf_queue.pop_front();
-        _buffered_bytes -= buf->limit;
-        _put_cond.notify_one();
-        return Status::OK();
-    }
-
     Status _append(const ByteBufferPtr& buf) {
-        {
+        if (buf != nullptr && buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check
             while (!_cancelled && !_buf_queue.empty() && _buffered_bytes + buf->remaining() > _max_buffered_bytes) {
@@ -230,8 +198,8 @@ private:
             }
             _buf_queue.push_back(buf);
             _buffered_bytes += buf->remaining();
+            _get_cond.notify_one();
         }
-        _get_cond.notify_one();
         return Status::OK();
     }
 
@@ -250,6 +218,22 @@ private:
     ByteBufferPtr _write_buf;
     ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
+};
+
+// TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.
+class StreamLoadPipeInputStream : public io::InputStream {
+public:
+    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file);
+    ~StreamLoadPipeInputStream() override;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override;
+
+    Status skip(int64_t n) override;
+
+    std::shared_ptr<StreamLoadPipe> pipe() { return _pipe; }
+
+private:
+    std::shared_ptr<StreamLoadPipe> _pipe;
 };
 
 } // namespace starrocks

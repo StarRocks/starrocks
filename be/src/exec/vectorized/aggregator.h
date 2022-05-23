@@ -90,8 +90,8 @@ public:
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
-    const vectorized::HashMapVariant& hash_map_variant() { return _hash_map_variant; }
-    const vectorized::HashSetVariant& hash_set_variant() { return _hash_set_variant; }
+    const vectorized::AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
+    const vectorized::AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
     const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* get_results_timer() { return _get_results_timer; }
@@ -190,8 +190,8 @@ private:
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
 
     // The key is all group by column, the value is all agg function column
-    vectorized::HashMapVariant _hash_map_variant;
-    vectorized::HashSetVariant _hash_set_variant;
+    vectorized::AggHashMapVariant _hash_map_variant;
+    vectorized::AggHashSetVariant _hash_set_variant;
     std::any _it_hash;
 
     // The offset of the n-th aggregate function in a row of aggregate functions.
@@ -471,8 +471,8 @@ private:
     void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
                             const vectorized::Columns& agg_result_columns);
 
-    void _evaluate_group_by_exprs(vectorized::Chunk* chunk);
-    Status _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);
+    void _reset_exprs(vectorized::Chunk* chunk);
+    Status _evaluate_exprs(vectorized::Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>

@@ -25,13 +25,13 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private final Map<ColumnRefOperator, Column> minMaxColumnRefMap;
 
     public PhysicalIcebergScanOperator(Table table,
-                                    Map<ColumnRefOperator, Column> columnRefMap,
-                                    List<ScalarOperator> conjuncts,
-                                    List<ScalarOperator> minMaxConjuncts,
-                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
+                                       Map<ColumnRefOperator, Column> columnRefMap,
+                                       List<ScalarOperator> conjuncts,
+                                       List<ScalarOperator> minMaxConjuncts,
+                                       Map<ColumnRefOperator, Column> minMaxColumnRefMap,
+                                       long limit,
+                                       ScalarOperator predicate,
+                                       Projection projection) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, table, columnRefMap, limit, predicate, projection);
         this.conjuncts = conjuncts;
         this.minMaxConjuncts = minMaxConjuncts;

@@ -73,7 +73,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         } else if (firstPartitionColumnType.isIntegerType()) {
             return buildNumberTypePartition(properties);
         } else {
-            throw new AnalysisException("Unsupported batch partition build type.");
+            throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
         }
     }
 

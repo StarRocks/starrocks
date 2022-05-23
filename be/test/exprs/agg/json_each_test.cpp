@@ -13,15 +13,24 @@ namespace starrocks::vectorized {
 
 class JsonEachTest : public testing::Test {
 public:
-    void test_impl(std::string input, std::vector<std::tuple<std::string, std::string>> expected) {
+    void test_impl(std::vector<std::string> inputs, std::vector<std::tuple<std::string, std::string>> expected) {
         const TableFunction* func =
                 get_table_function("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, TFunctionBinaryType::BUILTIN);
 
         RuntimeState* rt_state = nullptr;
         // input
         auto json_column = JsonColumn::create();
-        json_column->append(JsonValue::parse(input).value());
-        Columns input_columns{json_column};
+        for (auto& input : inputs) {
+            if (input != "null" && input != "empty") {
+                json_column->append(JsonValue::parse(input).value());
+            } else {
+                json_column->append_nulls(1);
+            }
+        }
+        Columns input_columns;
+        if (!inputs.empty()) {
+            input_columns.push_back(json_column);
+        }
         TableFunctionState* func_state;
         bool eos;
 
@@ -33,7 +42,6 @@ public:
 
         // check
         ASSERT_TRUE(eos);
-        ASSERT_EQ(2, offset_column->size());
         ASSERT_EQ(2, result_columns.size());
         ASSERT_EQ(expected.size(), result_columns[0]->size());
         auto result_key = ColumnHelper::cast_to<TYPE_VARCHAR>(result_columns[0]);
@@ -61,7 +69,24 @@ TEST_F(JsonEachTest, json_each_object) {
         {"k5", "{}"},
     };
     // clang-format on
-    test_impl(input, expect);
+    test_impl(std::vector<std::string>{input}, expect);
+}
+
+TEST_F(JsonEachTest, json_each_object_null) {
+    std::string input = R"(null)";
+    // clang-format off
+    std::vector<std::tuple<std::string, std::string>> expect = {
+    };
+    // clang-format on
+    test_impl(std::vector<std::string>{input}, expect);
+}
+
+TEST_F(JsonEachTest, json_each_object_empty) {
+    // clang-format off
+    std::vector<std::tuple<std::string, std::string>> expect = {
+    };
+    // clang-format on
+    test_impl(std::vector<std::string>{}, expect);
 }
 
 TEST_F(JsonEachTest, json_each_array) {
@@ -76,6 +101,16 @@ TEST_F(JsonEachTest, json_each_array) {
         {"5", R"({"a": 1})"},
     };
     // clang-format on
-    test_impl(input, expect);
+    test_impl(std::vector<std::string>{input}, expect);
 }
+
+TEST_F(JsonEachTest, json_each_hybrid) {
+    // clang-format off
+    std::vector<std::tuple<std::string, std::string>> expect = {
+        {"0", "1"},
+    };
+    // clang-format on
+    test_impl(std::vector<std::string>{R"( 3.14 )", R"( [1] )", R"( [] )", R"( {} )"}, expect);
+}
+
 } // namespace starrocks::vectorized

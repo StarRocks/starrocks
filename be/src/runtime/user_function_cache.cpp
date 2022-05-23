@@ -30,12 +30,12 @@
 #include <vector>
 
 #include "common/status.h"
-#include "env/env.h"
 #include "fmt/compile.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "util/download_util.h"
 #include "util/dynamic_util.h"
-#include "util/file_utils.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -163,14 +163,14 @@ int UserFunctionCache::get_function_type(const std::string& url) {
 
 Status UserFunctionCache::_load_cached_lib() {
     // create library directory if not exist
-    RETURN_IF_ERROR(FileUtils::create_dir(_lib_dir));
+    RETURN_IF_ERROR(fs::create_directories(_lib_dir));
 
     for (int i = 0; i < kLibShardNum; ++i) {
         std::string sub_dir = _lib_dir + "/" + std::to_string(i);
-        RETURN_IF_ERROR(FileUtils::create_dir(sub_dir));
+        RETURN_IF_ERROR(fs::create_directories(sub_dir));
 
         auto scan_cb = [this, &sub_dir](std::string_view file) {
-            if (is_dot_or_dotdot(file)) {
+            if (file == "." || file == "..") {
                 return true;
             }
             auto st = _load_entry_from_lib(sub_dir, std::string(file));
@@ -179,7 +179,7 @@ Status UserFunctionCache::_load_cached_lib() {
             }
             return true;
         };
-        RETURN_IF_ERROR(Env::Default()->iterate_dir(sub_dir, scan_cb));
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(sub_dir, scan_cb));
     }
     return Status::OK();
 }

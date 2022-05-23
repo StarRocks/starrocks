@@ -3,13 +3,14 @@
 #include "storage/schema_change.h"
 
 #include "column/datum_convert.h"
+#include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
+#include "storage/wrapper_field.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 
 namespace starrocks::vectorized {
@@ -483,11 +484,12 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     CreateSrcTablet(1003);
     StorageEngine* engine = StorageEngine::instance();
     TCreateTabletReq create_tablet_req;
-    SetCreateTabletReq(&create_tablet_req, 1004, TKeysType::DUP_KEYS);
+    SetCreateTabletReq(&create_tablet_req, 1004, TKeysType::UNIQUE_KEYS);
     AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
     AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
     AddColumn(&create_tablet_req, "v1", TPrimitiveType::BIGINT, false);
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
+    AddColumn(&create_tablet_req, "v3", TPrimitiveType::HLL, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
     TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
@@ -513,6 +515,12 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     column_mapping->ref_column = 3;
     column_mapping->ref_base_reader_column_index = 3;
     indexs->emplace_back(3);
+    column_mapping = chunk_changer.get_mutable_column_mapping(4);
+    column_mapping->ref_column = -1;
+    const TabletColumn& hll_column_schema = new_tablet->tablet_schema().column(4);
+    column_mapping->default_value = WrapperField::create(hll_column_schema);
+    ASSERT_TRUE(column_mapping->default_value != nullptr);
+    column_mapping->default_value->from_string("");
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
             &chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);

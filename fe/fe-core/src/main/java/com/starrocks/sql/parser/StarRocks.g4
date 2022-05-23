@@ -12,101 +12,307 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                                        #statementDefault
-    | explainDesc queryStatement                                                            #explain
-    | explainDesc? INSERT INTO qualifiedName partitionNames?
-        (WITH LABEL label=identifier)? columnAliases?
-        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
-    | CREATE TABLE (IF NOT EXISTS)? qualifiedName
+    // Query Statement
+    : queryStatement                                                                        #query
+
+    // Table Statement
+    | createTableAsSelectStatement                                                          #createTableAsSelect
+    | alterTableStatement                                                                   #alterTable
+    | dropTableStatement                                                                    #dropTable
+    | showTableStatement                                                                    #showTables
+    | showColumnStatement                                                                   #showColumn
+    | showTableStatusStatement                                                              #showTableStatus
+    | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
+
+    // View Statement
+    | createViewStatement                                                                   #createView
+    | alterViewStatement                                                                    #alterView
+    | dropViewStatement                                                                     #dropView
+
+    // Task Statement
+    | submitTaskStatement                                                                   #submitTask
+
+    // Materialized View Statement
+    | createMaterializedViewStatement                                                       #createMaterializedView
+    | showMaterializedViewStatement                                                         #showMaterializedView
+    | dropMaterializedViewStatement                                                         #dropMaterializedView
+
+    // Catalog Statement
+    | createExternalCatalogStatement                                                        #createCatalog
+    | dropExternalCatalogStatement                                                          #dropCatalog
+    | showCatalogsStatement                                                                 #showCatalogs
+
+    // DML Statement
+    | insertStatement                                                                       #insert
+    | updateStatement                                                                       #update
+    | deleteStatement                                                                       #delete
+
+    // Admin Set Statement
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+
+    // Cluster Mangement Statement
+    | alterSystemStatement                                                                  #alterSystem
+
+    // Analyze Statement
+    | analyzeStatement                                                                      #analyze
+    | createAnalyzeStatement                                                                #createAnalyze
+    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | showAnalyzeStatement                                                                  #showAnalyze
+
+    // Work Group Statement
+    | createWorkGroupStatement                                                              #createWorkGroup
+    | dropWorkGroupStatement                                                                #dropWorkGroup
+    | alterWorkGroupStatement                                                               #alterWorkGroup
+    | showWorkGroupStatement                                                                #showWorkGroup
+
+    // Other statement
+    | USE schema=identifier                                                                 #use
+    | showDatabasesStatement                                                                #showDatabases
+    | showVariablesStatement                                                                #showVariables
+    | GRANT identifierOrString TO user                                                      #grantRole
+    | REVOKE identifierOrString FROM user                                                   #revokeRole
+    ;
+
+// ------------------------------------------- Table Statement ---------------------------------------------------------
+
+createTableAsSelectStatement
+    : CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
-        AS queryStatement                                                                   #createTableAsSelect
-    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
-    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
-    | USE schema=identifier                                                                 #use
-    | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
-    | CREATE VIEW (IF NOT EXISTS)? qualifiedName
+        AS queryStatement
+        ;
+
+dropTableStatement
+    : DROP TABLE (IF EXISTS)? qualifiedName FORCE?
+    ;
+
+alterTableStatement
+    : ALTER TABLE qualifiedName alterClause (',' alterClause)*
+    ;
+
+createIndexStatement
+    : CREATE INDEX indexName=identifier
+        ON qualifiedName identifierList indexType?
+        comment?
+    ;
+
+dropIndexStatement
+    : DROP INDEX indexName=identifier ON qualifiedName
+    ;
+
+indexType
+    : USING BITMAP
+    ;
+
+showTableStatement
+    : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showColumnStatement
+    : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTableStatusStatement
+    : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+// ------------------------------------------- View Statement ----------------------------------------------------------
+
+createViewStatement
+    : CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                                                          #createView
-    | ALTER VIEW qualifiedName
-        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        AS queryStatement                                                                   #alterView
-    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
-    | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+        comment? AS queryStatement
     ;
 
-explainDesc
-    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+alterViewStatement
+    : ALTER VIEW qualifiedName
+    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    AS queryStatement
     ;
 
-partitionDesc
-    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+dropViewStatement
+    : DROP VIEW (IF EXISTS)? qualifiedName
     ;
 
-rangePartitionDesc
-    : singleRangePartition
-    | multiRangePartition
+// ------------------------------------------- Task Statement ----------------------------------------------------------
+
+submitTaskStatement
+    : SUBMIT hint* TASK qualifiedName?
+    AS createTableAsSelectStatement
     ;
 
-singleRangePartition
-    : PARTITION identifier VALUES partitionKeyDesc
+// ------------------------------------------- Materialized View Statement ---------------------------------------------
+
+createMaterializedViewStatement
+    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    comment?
+    (PARTITION BY primaryExpression)?
+    distributionDesc?
+    refreshSchemeDesc?
+    properties?
+    AS queryStatement
     ;
 
-multiRangePartition
-    : START '(' string ')' END '(' string ')' EVERY '(' interval ')'
-    | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
+showMaterializedViewStatement
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
     ;
 
-partitionKeyDesc
-    : LESS THAN (MAXVALUE | partitionValueList)
-    | '[' partitionValueList ',' partitionValueList ']'
+dropMaterializedViewStatement
+    : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
     ;
 
-partitionValueList
-    : '(' partitionValue (',' partitionValue)* ')'
+// ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
+
+alterSystemStatement
+    : ALTER SYSTEM alterClause
     ;
 
-partitionValue
-    : MAXVALUE | string
+// ------------------------------------------- Catalog Statement -------------------------------------------------------
+
+createExternalCatalogStatement
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
     ;
 
-distributionDesc
-    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+dropExternalCatalogStatement
+    : DROP EXTERNAL CATALOG catalogName=identifierOrString
     ;
 
-properties
-    : PROPERTIES '(' property (',' property)* ')'
+showCatalogsStatement
+    : SHOW CATALOGS
     ;
 
-property
-    : key=string '=' value=string
+
+// ------------------------------------------- Alter Clause ------------------------------------------------------------
+
+alterClause
+    : createIndexClause
+    | dropIndexClause
+    | tableRenameClause
+
+    | addBackendClause
+    | dropBackendClause
+    | addFrontendClause
+    | dropFrontendClause
     ;
 
-comment
-    : COMMENT string
+createIndexClause
+    : ADD INDEX indexName=identifier identifierList indexType? comment?
     ;
 
-columnNameWithComment
-    : identifier comment?
+dropIndexClause
+    : DROP INDEX indexName=identifier
     ;
 
-outfile
-    : INTO OUTFILE file=string fileFormat? properties?
+tableRenameClause
+    : RENAME identifier
     ;
 
-fileFormat
-    : FORMAT AS (identifier | string)
+addBackendClause
+   : ADD FREE? BACKEND (TO identifier)? string (',' string)*
+   ;
+
+dropBackendClause
+   : DROP BACKEND string (',' string)* FORCE?
+   ;
+
+addFrontendClause
+   : ADD (FOLLOWER | OBSERVER) string
+   ;
+
+dropFrontendClause
+   : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+// ------------------------------------------- DML Statement -----------------------------------------------------------
+
+insertStatement
+    : explainDesc? INSERT INTO qualifiedName partitionNames?
+        (WITH LABEL label=identifier)? columnAliases?
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
+
+updateStatement
+    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    ;
+
+deleteStatement
+    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Analyze Statement -------------------------------------------------------
+
+analyzeStatement
+    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+createAnalyzeStatement
+    : CREATE ANALYZE FULL? ALL properties?
+    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
+    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+dropAnalyzeJobStatement
+    : DROP ANALYZE INTEGER_VALUE
+    ;
+
+showAnalyzeStatement
+    : SHOW ANALYZE
+    ;
+
+// ------------------------------------------- Work Group Statement ----------------------------------------------------
+
+createWorkGroupStatement
+    : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
+        TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
+    ;
+
+dropWorkGroupStatement
+    : DROP RESOURCE GROUP identifier
+    ;
+
+alterWorkGroupStatement
+    : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
+    | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | ALTER RESOURCE GROUP identifier DROP ALL
+    | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
+    ;
+
+showWorkGroupStatement
+    : SHOW RESOURCE GROUP identifier
+    | SHOW RESOURCE GROUPS ALL?
+    ;
+
+classifier
+    : '(' expression (',' expression)* ')'
+    ;
+
+// ------------------------------------------- Other Statement ---------------------------------------------------------
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showVariablesStatement
+    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
+    ;
+
+// ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : query outfile?;
+    : explainDesc? queryBody outfile?;
 
-query
+queryBody
     : withClause? queryNoWith
     ;
 
@@ -131,7 +337,7 @@ queryPrimary
     ;
 
 subquery
-    : '(' query  ')'
+    : '(' queryBody  ')'
     ;
 
 rowConstructor
@@ -172,7 +378,7 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' query ')'
+    : name=identifier (columnAliases)? AS '(' queryBody ')'
     ;
 
 setQuantifier
@@ -246,14 +452,7 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
-expressionsWithDefault
-    : '(' expressionOrDefault (',' expressionOrDefault)* ')'
-    ;
-
-expressionOrDefault
-    : expression | DEFAULT
-    ;
-
+// ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
  * Operator precedences are shown in the following list, from highest precedence to the lowest.
@@ -274,6 +473,14 @@ expressionOrDefault
  * = (assignment)
  */
 
+expressionsWithDefault
+    : '(' expressionOrDefault (',' expressionOrDefault)* ')'
+    ;
+
+expressionOrDefault
+    : expression | DEFAULT
+    ;
+
 expression
     : booleanExpression                                                                   #expressionDefault
     | NOT expression                                                                      #logicalNot
@@ -285,7 +492,7 @@ booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
     | left = booleanExpression comparisonOperator right = predicate                       #comparison
-    | booleanExpression comparisonOperator '(' query ')'                                  #scalarSubquery
+    | booleanExpression comparisonOperator '(' queryBody ')'                              #scalarSubquery
     ;
 
 predicate
@@ -294,7 +501,7 @@ predicate
 
 predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expression (',' expression)* ')'                                        #inList
-    | NOT? IN '(' query ')'                                                               #inSubquery
+    | NOT? IN '(' queryBody ')'                                                           #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
@@ -332,7 +539,7 @@ primaryExpression
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
-    | EXISTS '(' query ')'                                                                #exists
+    | EXISTS '(' queryBody ')'                                                            #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
@@ -382,6 +589,7 @@ informationFunctionExpression
 
 specialFunctionExpression
     : CHAR '(' expression ')'
+    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
@@ -390,7 +598,9 @@ specialFunctionExpression
     | MINUTE '(' expression ')'
     | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
+    | QUARTER '(' expression ')'
     | REGEXP '(' expression ',' expression ')'
+    | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'
@@ -405,10 +615,108 @@ windowFunction
     : name = ROW_NUMBER '(' ')'
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
+    | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
     | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
     | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    ;
+
+whenClause
+    : WHEN condition=expression THEN result=expression
+    ;
+
+over
+    : OVER '('
+        (PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (ORDER BY sortItem (',' sortItem)*)?
+        windowFrame?
+      ')'
+    ;
+
+windowFrame
+    : frameType=RANGE start=frameBound
+    | frameType=ROWS start=frameBound
+    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound
+    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound
+    ;
+
+frameBound
+    : UNBOUNDED boundType=PRECEDING                 #unboundedFrame
+    | UNBOUNDED boundType=FOLLOWING                 #unboundedFrame
+    | CURRENT ROW                                   #currentRowBound
+    | expression boundType=(PRECEDING | FOLLOWING)  #boundedFrame
+    ;
+
+// ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+explainDesc
+    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    ;
+
+partitionDesc
+    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    ;
+
+rangePartitionDesc
+    : singleRangePartition
+    | multiRangePartition
+    ;
+
+singleRangePartition
+    : PARTITION identifier VALUES partitionKeyDesc
+    ;
+
+multiRangePartition
+    : START '(' string ')' END '(' string ')' EVERY '(' interval ')'
+    | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
+    ;
+
+partitionKeyDesc
+    : LESS THAN (MAXVALUE | partitionValueList)
+    | '[' partitionValueList ',' partitionValueList ']'
+    ;
+
+partitionValueList
+    : '(' partitionValue (',' partitionValue)* ')'
+    ;
+
+partitionValue
+    : MAXVALUE | string
+    ;
+
+distributionDesc
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    ;
+
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | MANUAL)
+    ;
+
+properties
+    : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+property
+    : key=string '=' value=string
+    ;
+
+comment
+    : COMMENT string
+    ;
+
+columnNameWithComment
+    : identifier comment?
+    ;
+
+outfile
+    : INTO OUTFILE file=string fileFormat? properties?
+    ;
+
+fileFormat
+    : FORMAT AS (identifier | string)
     ;
 
 string
@@ -429,7 +737,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
     ;
 
 type
@@ -472,32 +780,6 @@ decimalType
     : DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128
     ;
 
-whenClause
-    : WHEN condition=expression THEN result=expression
-    ;
-
-over
-    : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
-        (ORDER BY sortItem (',' sortItem)*)?
-        windowFrame?
-      ')'
-    ;
-
-windowFrame
-    : frameType=RANGE start=frameBound
-    | frameType=ROWS start=frameBound
-    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound
-    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound
-    ;
-
-frameBound
-    : UNBOUNDED boundType=PRECEDING                 #unboundedFrame
-    | UNBOUNDED boundType=FOLLOWING                 #unboundedFrame
-    | CURRENT ROW                                   #currentRowBound
-    | expression boundType=(PRECEDING | FOLLOWING)  #boundedFrame
-    ;
-
 qualifiedName
     : identifier ('.' identifier)*
     ;
@@ -511,6 +793,17 @@ identifier
 
 identifierList
     : '(' identifier (',' identifier)* ')'
+    ;
+
+identifierOrString
+    : identifier
+    | string
+    ;
+
+user
+    : identifierOrString                                     # userWithoutHost
+    | identifierOrString '@' identifierOrString              # userWithHost
+    | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket
     ;
 
 assignment
@@ -528,25 +821,31 @@ number
     ;
 
 nonReserved
-    : AVG | ADMIN
-    | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
-    | DATA | DATABASE | DATE | DATETIME | DAY
-    | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
-    | GLOBAL
-    | HASH | HOUR
-    | INTERVAL
-    | LAST | LESS | LOCAL | LOGICAL
-    | MAX | MIN | MINUTE | MONTH | MERGE
-    | NONE | NULLS
-    | OFFSET
-    | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
-    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
-    | UNBOUNDED | USER
-    | VIEW | VERBOSE
-    | WEEK
+    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
+    | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
+    | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | END | ENGINE | ENGINES | ERRORS | EVENTS | EXTERNAL | EXTRACT | EVERY
+    | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+    | GLOBAL | GRANTS
+    | HASH | HELP | HLL_UNION | HOUR
+    | IDENTIFIED | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | NAME | NAMES | NEGATIVE | NO | NULLS
+    | OBSERVER | OFFSET | ONLY | OPEN
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
+    | PROPERTIES | PROPERTY
+    | QUARTER | QUERY | QUOTA
+    | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
+    | RESOURCE | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
+    | SUBMIT | SYNC
+    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
+    | TRIGGERS | TRUNCATE | TYPE | TYPES
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | VALUE | VARIABLES | VIEW | VERBOSE
+    | WARNINGS | WEEK | WORK | WRITE
     | YEAR
     ;

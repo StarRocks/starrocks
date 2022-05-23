@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "env/env.h"
-#include "env/env_memory.h"
+#include "fs/fs.h"
+#include "fs/fs_memory.h"
 #include "io/string_input_stream.h"
 
 namespace starrocks {

@@ -97,8 +97,6 @@ public enum AggregateType {
         primitiveTypeList.clear();
 
         EnumSet<PrimitiveType> replaceObject = EnumSet.allOf(PrimitiveType.class);
-        replaceObject.remove(PrimitiveType.HLL);
-        replaceObject.remove(PrimitiveType.PERCENTILE);
         replaceObject.remove(PrimitiveType.INVALID_TYPE);
         compatibilityMap.put(REPLACE, EnumSet.copyOf(replaceObject));
 
@@ -146,7 +144,8 @@ public enum AggregateType {
     }
 
     public boolean checkCompatibility(Type type) {
-        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) || (this.isReplaceFamily() && type.isArrayType());
+        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
+                (this.isReplaceFamily() && type.isArrayType());
     }
 
     public boolean isReplaceFamily() {

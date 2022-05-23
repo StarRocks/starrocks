@@ -7,6 +7,7 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/exec_env.h"
 #include "runtime/mysql_result_writer.h"
+#include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 
@@ -45,6 +46,13 @@ void ResultSinkOperator::close(RuntimeState* state) {
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
+            auto query_statistic = std::make_shared<QueryStatistics>();
+            QueryContext* query_ctx = state->query_ctx();
+            query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
+            query_statistic->add_cpu_costs(query_ctx->cpu_cost());
+            query_statistic->set_returned_rows(_num_written_rows);
+            _sender->set_query_statistics(query_statistic);
+
             Status final_status = _fragment_ctx->final_status();
             if (!st.ok() && final_status.ok()) {
                 final_status = st;
@@ -67,7 +75,7 @@ bool ResultSinkOperator::need_input() const {
     if (is_finished()) {
         return false;
     }
-    if (!_fetch_data_result) {
+    if (_fetch_data_result.empty()) {
         return true;
     }
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
@@ -84,10 +92,9 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     if (!_last_error.ok()) {
         return _last_error;
     }
-    DCHECK(!_fetch_data_result);
+    DCHECK(_fetch_data_result.empty());
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->process_chunk(chunk.get());
-
+    auto status = mysql_writer->process_chunk_for_pipeline(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
         return mysql_writer->try_add_batch(_fetch_data_result).status();

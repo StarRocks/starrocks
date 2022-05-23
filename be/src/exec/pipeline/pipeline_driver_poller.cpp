@@ -27,7 +27,7 @@ void PipelineDriverPoller::shutdown() {
 
 void PipelineDriverPoller::run_internal() {
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
-    typeof(this->_blocked_drivers) local_blocked_drivers;
+    DriverList local_blocked_drivers;
     int spin_count = 0;
     std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
@@ -62,6 +62,8 @@ void PipelineDriverPoller::run_internal() {
                 // The state of driver shouldn't be changed.
                 LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                driver->fragment_ctx()->cancel(Status::TimedOut(fmt::format(
+                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_expire_seconds())));
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

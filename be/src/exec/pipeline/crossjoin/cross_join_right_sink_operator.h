@@ -15,8 +15,7 @@ public:
     CrossJoinRightSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                const int32_t driver_sequence,
                                const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : Operator(factory, id, "cross_join_right_sink", plan_node_id),
-              _driver_sequence(driver_sequence),
+            : Operator(factory, id, "cross_join_right_sink", plan_node_id, driver_sequence),
               _cross_join_context(cross_join_context) {
         _cross_join_context->ref();
     }
@@ -37,7 +36,7 @@ public:
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         // Used to notify cross_join_left_operator.
-        _cross_join_context->finish_one_right_sinker();
+        RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(state));
         return Status::OK();
     }
 
@@ -46,7 +45,6 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    const int32_t _driver_sequence;
     bool _is_finished = false;
 
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;

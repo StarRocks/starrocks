@@ -457,7 +457,8 @@ enum TAggregationOp {
   LAG,
   HLL_C,
   BITMAP_UNION,
-  ANY_VALUE
+  ANY_VALUE,
+  NTILE
 }
 
 //struct TAggregateFunctionCall {
@@ -796,11 +797,21 @@ struct TDecodeNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> string_functions
 }
 
+struct TCrossJoinNode {
+    1: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+}
+
 struct TTableFunctionNode {
     1: optional Exprs.TExpr table_function
     2: optional list<Types.TSlotId> param_columns
     3: optional list<Types.TSlotId> outer_columns
     4: optional list<Types.TSlotId> fn_result_columns
+}
+
+struct TConnectorScanNode {  
+  1: optional string connector_name
+  // // Scan node for hdfs
+  // 2: optional THdfsScanNode hdfs_scan_node
 }
 
 // This is essentially a union of all messages corresponding to subclasses
@@ -862,6 +873,11 @@ struct TPlanNode {
   59: optional bool need_create_tuple_columns;
   // Scan node for jdbc
   60: optional TJDBCScanNode jdbc_scan_node;
+
+  // generic scan node with connector.
+  61: optional TConnectorScanNode connector_scan_node;
+
+  62: optional TCrossJoinNode cross_join_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -3,10 +3,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -44,18 +44,16 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        boolean hasNoGroup = agg.getGroupingKeys().isEmpty();
+        // check cbo is enabled and hasNoGroup is true
+        if (context.getSessionVariable().isCboCteReuse() && hasNoGroup) {
+            return false;
+        }
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
-        boolean hasMultiColumns = false;
-        for (CallOperator callOperator : distinctAggOperatorList) {
-            if (callOperator.getChildren().size() > 1) {
-                hasMultiColumns = true;
-                break;
-            }
-        }
-
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
         return (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }
@@ -148,7 +146,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     private CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
                 oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-        Function fn = Catalog.getCurrentCatalog().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fn.getReturnType(), oldFunctionCall.getChildren(),
@@ -159,7 +157,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     private CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_SUM),
                 oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-        Function fn = Catalog.getCurrentCatalog().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fn.getReturnType(), oldFunctionCall.getChildren(), fn),

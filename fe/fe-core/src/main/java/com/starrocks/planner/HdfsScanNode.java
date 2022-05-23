@@ -44,7 +44,6 @@ public class HdfsScanNode extends ScanNode {
     private HiveTable hiveTable = null;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
-
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();

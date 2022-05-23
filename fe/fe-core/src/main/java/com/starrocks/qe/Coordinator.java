@@ -30,7 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
@@ -71,6 +70,7 @@ import com.starrocks.proto.PStatus;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -89,7 +89,6 @@ import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
@@ -101,6 +100,7 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -117,6 +117,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -192,7 +193,7 @@ public class Coordinator {
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
-    private final TResourceInfo tResourceInfo;
+    private final ConnectContext connectContext;
     private final boolean needReport;
     private final String clusterName;
     // force schedule local be for HybridBackendSelector
@@ -217,6 +218,7 @@ public class Coordinator {
                        TDescriptorTable descTable) {
         this.isBlockQuery = false;
         this.queryId = context.getExecutionId();
+        this.connectContext = context;
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.descTable = descTable;
@@ -235,8 +237,6 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.tResourceInfo = new TResourceInfo(context.getQualifiedUser(),
-                context.getSessionVariable().getResourceGroup());
         this.needReport = context.getSessionVariable().isReportSucc();
         this.clusterName = context.getClusterName();
         this.nextInstanceId = new TUniqueId();
@@ -251,6 +251,7 @@ public class Coordinator {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
+        this.connectContext = null;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -259,7 +260,6 @@ public class Coordinator {
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
-        this.tResourceInfo = new TResourceInfo("", "");
         this.needReport = true;
         this.clusterName = cluster;
         this.nextInstanceId = new TUniqueId();
@@ -351,7 +351,7 @@ public class Coordinator {
             queryProfile.addChild(fragmentProfiles.get(i));
         }
 
-        this.idToBackend = Catalog.getCurrentSystemInfo().getIdToBackend();
+        this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         if (LOG.isDebugEnabled()) {
             LOG.debug("idToBackend size={}", idToBackend.size());
             for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
@@ -438,7 +438,7 @@ public class Coordinator {
             // set the broker address for OUTFILE sink
             ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
             if (resultSink.isOutputFileSink() && resultSink.needBroker()) {
-                FsBroker broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(resultSink.getBrokerName(),
+                FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(resultSink.getBrokerName(),
                         execBeAddr.getHostname());
                 resultSink.setBrokerAddr(broker.ip, broker.port);
                 LOG.info("OUTFILE through broker: {}:{}", broker.ip, broker.port);
@@ -450,7 +450,7 @@ public class Coordinator {
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(addressToBackendID.values());
-            Catalog.getCurrentCatalog().getLoadManager().initJobProgress(jobId, queryId, instanceIds,
+            GlobalStateMgr.getCurrentState().getLoadManager().initJobProgress(jobId, queryId, instanceIds,
                     relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId), addressToBackendID.keySet());
         }
@@ -472,9 +472,10 @@ public class Coordinator {
 
             // Disable pipeline engine for `INSERT INTO`.
             // TODO: remove this when load supports pipeline engine.
-            boolean isEnablePipelineEngine = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
+            boolean isEnablePipelineEngine = connectContext != null &&
+                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
+            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
@@ -531,7 +532,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -658,8 +659,8 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        boolean enablePipelineEngine = ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isEnablePipelineEngine();
+        boolean enablePipelineEngine = connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine();
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -712,8 +713,8 @@ public class Coordinator {
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
 
-        if (ConnectContext.get() != null) {
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        if (connectContext != null) {
+            SessionVariable sessionVariable = connectContext.getSessionVariable();
             topParams.runtimeFilterParams.setRuntime_filter_max_size(
                     sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
         }
@@ -1115,7 +1116,7 @@ public class Coordinator {
     }
 
     private TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
-        Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new UserException("Backend not found. Check if any backend is down or not");
@@ -1124,7 +1125,7 @@ public class Coordinator {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
-        Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new UserException("Backend not found. Check if any backend is down or not");
@@ -1146,8 +1147,8 @@ public class Coordinator {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean dopAdaptionEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+            boolean dopAdaptionEnabled = connectContext != null &&
+                    connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     fragment.getPlanRoot().canUsePipeLine();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -1216,7 +1217,7 @@ public class Coordinator {
                 }
 
                 if (dopAdaptionEnabled) {
-                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     maxParallelism = hostSet.size();
                     fragment.setPipelineDop(degreeOfParallelism);
@@ -1224,8 +1225,8 @@ public class Coordinator {
 
                 // AddAll() soft copy()
                 int exchangeInstances = -1;
-                if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null) {
-                    exchangeInstances = ConnectContext.get().getSessionVariable().getExchangeInstanceParallel();
+                if (connectContext != null && connectContext.getSessionVariable() != null) {
+                    exchangeInstances = connectContext.getSessionVariable().getExchangeInstanceParallel();
                 }
                 if (exchangeInstances > 0 && maxParallelism > exchangeInstances) {
                     // random select some instance
@@ -1308,7 +1309,7 @@ public class Coordinator {
                 }
                 // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
                 if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
-                    int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
                     FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
                     int numBackends = param.scanRangeAssignment.size();
                     int numInstances = param.instanceExecParams.size();
@@ -1509,14 +1510,14 @@ public class Coordinator {
                 params.instanceExecParams.add(instanceParam);
             }
         }
-        boolean dopAdaptionEnabled = ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+        boolean dopAdaptionEnabled = connectContext != null &&
+                connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
                 params.fragment.getPlanRoot().canUsePipeLine();
         // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
         if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
             int numInstances = params.instanceExecParams.size();
             int numBackends = addressToScanRanges.size();
-            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+            int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
             int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
             params.fragment.setPipelineDop(pipelineDop);
         }
@@ -1598,6 +1599,10 @@ public class Coordinator {
         // and returned_all_results_ is true.
         // (UpdateStatus() initiates cancellation, if it hasn't already been initiated)
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+            ConnectContext ctx = connectContext;
+            if (ctx != null) {
+                ctx.setErrorCode(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
+            }
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());
@@ -1622,7 +1627,7 @@ public class Coordinator {
         }
 
         if (params.isSetLoaded_rows()) {
-            Catalog.getCurrentCatalog().getLoadManager().updateJobPrgress(
+            GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
                     params.done);
         }
@@ -1691,7 +1696,7 @@ public class Coordinator {
     }
 
     public void mergeIsomorphicProfiles() {
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         if (!sessionVariable.isReportSucc()) {
             return;
@@ -1786,7 +1791,7 @@ public class Coordinator {
      * Check the state of backends in needCheckBackendExecStates.
      * return true if all of them are OK. Otherwise, return false.
      */
-    private boolean checkBackendState() {
+    public boolean checkBackendState() {
         for (BackendExecState backendExecState : needCheckBackendExecStates) {
             if (!backendExecState.isBackendStateHealthy()) {
                 queryStatus = new Status(TStatusCode.INTERNAL_ERROR,
@@ -2068,6 +2073,7 @@ public class Coordinator {
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
+                                               Set<Long> dbIds,
                                                boolean isEnablePipelineEngine) throws Exception {
             // add instance number in file name prefix when export job
             DataSink sink = fragment.getSink();
@@ -2079,9 +2085,23 @@ public class Coordinator {
             }
 
             WorkGroup workgroup = null;
-            if (ConnectContext.get() != null) {
-                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
-                        ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
+            if (connectContext != null) {
+                SessionVariable sessionVariable = connectContext.getSessionVariable();
+
+                if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
+                    // Specify the resource group through variable
+                    String rgName = sessionVariable.getResourceGroup();
+                    WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+                    if (wg == null) {
+                        throw new UserException("Invalid resource_group: " + rgName);
+                    } else {
+                        workgroup = wg;
+                    }
+                } else {
+                    // Specify the resource group through classifier
+                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                            connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
+                }
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -2119,7 +2139,6 @@ public class Coordinator {
 
                 params.setDesc_tbl(descTable);
                 params.setParams(new TPlanFragmentExecParams());
-                params.setResource_info(tResourceInfo);
                 params.setFunc_version(3);
                 params.params.setUse_vectorized(true);
                 params.params.setQuery_id(queryId);
@@ -2150,8 +2169,8 @@ public class Coordinator {
                         fragment.isTransferQueryStatisticsWithEveryBatch());
                 params.params.setInstances_number(hostToNumbers.get(instanceExecParams.get(i).host));
                 // For broker load, the ConnectContext.get() is null
-                if (ConnectContext.get() != null) {
-                    SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+                if (connectContext != null) {
+                    SessionVariable sessionVariable = connectContext.getSessionVariable();
 
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(true);
@@ -2163,11 +2182,11 @@ public class Coordinator {
                         params.setEnable_resource_group(enableResourceGroup);
                         if (enableResourceGroup) {
                             // session variable workgroup_id is just for verification of resource isolation.
-                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
+                            long workgroupId = connectContext.getSessionVariable().getWorkGroupId();
                             if (workgroupId > 0) {
                                 TWorkGroup wg = new TWorkGroup();
                                 wg.setName("");
-                                wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
+                                wg.setId(connectContext.getSessionVariable().getWorkGroupId());
                                 wg.setVersion(0);
                                 params.setWorkgroup(wg);
                             } else if (workgroup != null) {

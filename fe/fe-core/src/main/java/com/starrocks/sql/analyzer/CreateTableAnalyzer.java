@@ -13,7 +13,6 @@ import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -29,6 +28,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.Relation;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -58,7 +58,7 @@ public class CreateTableAnalyzer {
 
         FeNameFormat.verifyTableName(tableName.getTbl());
 
-        if (!Catalog.getCurrentCatalog().getAuth()
+        if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(), PrivPredicate.CREATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }
@@ -114,7 +114,8 @@ public class CreateTableAnalyzer {
                     // The OLAP table must has at least one short key and the float and double should not be short key.
                     // So the float and double could not be the first column in OLAP table.
                     if (keysColumnNames.isEmpty()) {
-                        throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
+                        throw new SemanticException("Data type of first column cannot be %s",
+                                columnDefs.get(0).getType());
                     }
                     keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
                 }
@@ -240,14 +241,16 @@ public class CreateTableAnalyzer {
             }
         } else {
             if (partitionDesc != null || distributionDesc != null) {
-                throw new SemanticException("Create %s table should not contain partition or distribution desc", engineName);
+                throw new SemanticException("Create %s table should not contain partition or distribution desc",
+                        engineName);
             }
         }
 
         for (ColumnDef columnDef : columnDefs) {
             Column col = columnDef.toColumn();
             if (keysDesc != null &&
-                    (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
+                    (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS ||
+                            keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                             keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
                 if (!col.isKey()) {
                     col.setAggregationTypeImplicit(true);
@@ -278,7 +281,8 @@ public class CreateTableAnalyzer {
                         }
                     }
                     if (!found) {
-                        throw new SemanticException("BITMAP column does not exist in table. invalid column: %s", indexColName);
+                        throw new SemanticException("BITMAP column does not exist in table. invalid column: %s",
+                                indexColName);
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
@@ -316,7 +320,6 @@ public class CreateTableAnalyzer {
             }
         }
     }
-
 
     private static Relation analyzeTableName(TableName tableName, ConnectContext session) {
         String db = tableName.getDb();

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
@@ -17,7 +18,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/schema.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks::vectorized {
 
@@ -184,8 +184,8 @@ class MemTableTest : public ::testing::Test {
 public:
     void MySetUp(const string& schema_desc, const string& slot_desc, int nkey, KeysType ktype, const string& root) {
         _root_path = root;
-        FileUtils::remove_all(_root_path);
-        FileUtils::create_dir(_root_path);
+        fs::remove_all(_root_path);
+        fs::create_directories(_root_path);
         _mem_tracker.reset(new MemTracker(-1, "root"));
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
@@ -208,7 +208,7 @@ public:
 
     void TearDown() override {
         LOG(INFO) << "remove dir " << _root_path;
-        FileUtils::remove_all(_root_path);
+        fs::remove_all(_root_path);
     }
 
     std::string _root_path;

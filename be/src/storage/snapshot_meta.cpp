@@ -2,7 +2,7 @@
 
 #include "storage/snapshot_meta.h"
 
-#include "env/output_stream_wrapper.h"
+#include "fs/output_stream_wrapper.h"
 #include "gutil/endian.h"
 #include "util/coding.h"
 #include "util/raw_container.h"
@@ -11,9 +11,9 @@ namespace starrocks {
 
 Status SnapshotMeta::serialize_to_file(const std::string& file_path) {
     std::unique_ptr<WritableFile> f;
-    ASSIGN_OR_RETURN(f, Env::Default()->new_writable_file(file_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(f, FileSystem::Default()->new_writable_file(opts, file_path));
     RETURN_IF_ERROR(serialize_to_file(f.get()));
-    RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
     return Status::OK();
 }

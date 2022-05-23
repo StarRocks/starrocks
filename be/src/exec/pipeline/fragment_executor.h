@@ -3,6 +3,8 @@
 #pragma once
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -16,16 +18,37 @@ namespace pipeline {
 class FragmentContext;
 class PipelineBuilderContext;
 class QueryContext;
+
 class FragmentExecutor {
 public:
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
     Status execute(ExecEnv* exec_env);
 
 private:
+    void _fail_cleanup();
+    int32_t _calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const;
+
+    // Several steps of prepare a fragment
+    // 1. query context
+    // 2. fragment context
+    // 3. workgroup
+    // 4. runtime state
+    // 5. exec plan
+    // 6. pipeline driver
+    Status _prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_fragment_ctx(const TExecPlanFragmentParams& request);
+    Status _prepare_workgroup(const TExecPlanFragmentParams& request);
+    Status _prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_global_dict(const TExecPlanFragmentParams& request);
+    Status _prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+
     void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
                                           const TDataSink& t_datasink, DataSink* datasink);
+
     QueryContext* _query_ctx = nullptr;
-    FragmentContext* _fragment_ctx = nullptr;
+    FragmentContextPtr _fragment_ctx = nullptr;
+    workgroup::WorkGroupPtr _wg = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

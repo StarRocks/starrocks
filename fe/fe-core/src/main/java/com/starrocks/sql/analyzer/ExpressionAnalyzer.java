@@ -14,6 +14,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
@@ -23,6 +24,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
@@ -56,6 +58,7 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -372,6 +375,17 @@ public class ExpressionAnalyzer {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "ADD");
                 } else if (subDateFunctions.contains(node.getFuncName().toUpperCase())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "SUB");
+                } else if (node.getFuncName().toLowerCase().equals(FunctionSet.DATE_FLOOR)) {
+                    funcOpName = FunctionSet.DATE_FLOOR;
+                    if (!(node.getChild(1) instanceof IntLiteral)) {
+                        throw new ParsingException(
+                                funcOpName + " requires second parameter must be a constant interval");
+                    }
+                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                        throw new ParsingException(
+                                funcOpName + " requires second parameter must be greater than 0");
+                    }
+                    node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "DIFF");
@@ -830,6 +844,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitDefaultValueExpr(DefaultValueExpr node, Scope context) {
             node.setType(Type.VARCHAR);
+            return null;
+        }
+
+        @Override
+        public Void visitCloneExpr(CloneExpr node, Scope context) {
             return null;
         }
     }

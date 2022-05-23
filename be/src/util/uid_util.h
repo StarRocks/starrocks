@@ -61,6 +61,7 @@ struct UniqueId {
     int64_t hi = 0;
     int64_t lo = 0;
 
+    UniqueId() : hi(0), lo(0) {}
     UniqueId(int64_t hi_, int64_t lo_) : hi(hi_), lo(lo_) {}
     UniqueId(const TUniqueId& tuid) : hi(tuid.hi), lo(tuid.lo) {}
     UniqueId(const PUniqueId& puid) : hi(puid.hi()), lo(puid.lo()) {}

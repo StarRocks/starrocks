@@ -3,15 +3,12 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -64,6 +61,27 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testDateFloor() {
+        analyzeSuccess("select date_floor(th, interval 1 year) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 month) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 day) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 week) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 quarter) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 hour) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 minute) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 second) from tall");
+
+        analyzeFail("select date_floor(ta, th) from tall",
+                "date_floor requires second parameter must be a constant interval");
+
+        analyzeFail("select date_floor(NULL, NULL) from tall",
+                "date_floor requires second parameter must be a constant interval");
+
+        analyzeFail("select date_floor(ta, -1) from tall",
+                "date_floor requires second parameter must be greater than 0");
+    }
+
+    @Test
     public void testApproxCountDistinctWithMetricType() {
         analyzeFail("select approx_count_distinct(h1) from test_object");
         analyzeFail("select ndv(h1) from test_object");
@@ -91,7 +109,8 @@ public class AnalyzeFunctionTest {
 
     @Test
     public void testTimestampArithmeticExpr() {
-        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
+        QueryStatement queryStatement =
+                (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
@@ -135,7 +154,8 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
-        queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
+        queryStatement = (QueryStatement) analyzeSuccess(
+                "select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
@@ -143,7 +163,8 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
-        queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
+        queryStatement = (QueryStatement) analyzeSuccess(
+                "select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
     }
@@ -151,6 +172,7 @@ public class AnalyzeFunctionTest {
     @Test
     public void testSpecialFunction() {
         analyzeSuccess("select char('A')");
+        analyzeSuccess("select CURRENT_TIMESTAMP()");
         analyzeSuccess("select day('2022-01-01 00:00:00')");
         analyzeSuccess("select hour('2022-01-01 00:00:00')");
         analyzeSuccess("select minute('2022-01-01 00:00:00')");
@@ -158,6 +180,7 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select second('2022-01-01 00:00:00')");
         //analyzeSuccess("select week('2022-01-01 00:00:00')");
         analyzeSuccess("select year('2022-01-01 00:00:00')");
+        analyzeSuccess("select quarter('2022-01-01 00:00:00')");
 
         analyzeSuccess("select password('root')");
 

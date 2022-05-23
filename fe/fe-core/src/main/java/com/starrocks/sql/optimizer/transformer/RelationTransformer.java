@@ -16,6 +16,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -48,6 +49,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -86,7 +88,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -130,7 +131,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
         if (!root.getRoot().getOp().hasLimit() &&
                 selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-            LogicalLimitOperator limitOperator = new LogicalLimitOperator(selectLimit);
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.local(selectLimit);
             root = root.withNewRoot(limitOperator);
             return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
@@ -327,7 +328,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         LimitElement limit = setOperationRelation.getLimit();
         if (limit != null) {
-            LogicalLimitOperator limitOperator = new LogicalLimitOperator(limit.getLimit(), limit.getOffset());
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
             root = root.withNewRoot(limitOperator);
         }
         return new LogicalPlan(root, outputColumns, null);
@@ -424,6 +425,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(),
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
+            ((IcebergTable) node.getTable()).refreshTable();
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), node.getTable().getType(),
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
@@ -578,7 +580,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
 
-            List<BinaryPredicateOperator> eqPredicate = JoinPredicateUtils.getEqConj(
+            List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
 
@@ -633,6 +635,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
         expr.setFn(tableFunction);
         ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
+
+        if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
+            throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
+        }
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         for (ScalarOperator scalarOperator : operator.getChildren()) {

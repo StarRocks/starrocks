@@ -29,6 +29,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
 
 /*
  * DbPrivTable saves all database level privs
@@ -41,13 +43,14 @@ public class DbPrivTable extends PrivTable {
      * saved in 'savedPrivs'.
      */
     public void getPrivs(UserIdentity currentUser, String db, PrivBitSet savedPrivs) {
-        DbPrivEntry matchedEntry = null;
-        for (PrivEntry entry : entries) {
-            DbPrivEntry dbPrivEntry = (DbPrivEntry) entry;
+        List<PrivEntry> userPrivEntryList = map.get(currentUser);
+        if (userPrivEntryList == null) {
+            return;
+        }
 
-            if (!dbPrivEntry.match(currentUser, true)) {
-                continue;
-            }
+        DbPrivEntry matchedEntry = null;
+        for (PrivEntry entry : userPrivEntryList) {
+            DbPrivEntry dbPrivEntry = (DbPrivEntry) entry;
 
             // check db
             if (!dbPrivEntry.isAnyDb() && !dbPrivEntry.getDbPattern().match(db)) {
@@ -65,19 +68,12 @@ public class DbPrivTable extends PrivTable {
     }
 
     /*
-     * Check if user@host has specified privilege on any database
+     * Check if current user has specified privilege on any database
      */
-    public boolean hasPriv(String host, String user, PrivPredicate wanted) {
-        for (PrivEntry entry : entries) {
-            DbPrivEntry dbPrivEntry = (DbPrivEntry) entry;
-            // check host
-            if (!dbPrivEntry.isAnyHost() && !dbPrivEntry.getHostPattern().match(host)) {
-                continue;
-            }
-            // check user
-            if (!dbPrivEntry.isAnyUser() && !dbPrivEntry.getUserPattern().match(user)) {
-                continue;
-            }
+    public boolean hasPriv(UserIdentity currentUser, PrivPredicate wanted) {
+        Iterator<PrivEntry> iter = getReadOnlyIteratorByUser(currentUser);
+        while (iter.hasNext()) {
+            DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
             // check priv
             if (dbPrivEntry.privSet.satisfy(wanted)) {
                 return true;
@@ -87,8 +83,9 @@ public class DbPrivTable extends PrivTable {
     }
 
     public boolean hasClusterPriv(ConnectContext ctx, String clusterName) {
-        for (PrivEntry entry : entries) {
-            DbPrivEntry dbPrivEntry = (DbPrivEntry) entry;
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
+        while (iter.hasNext()) {
+            DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
             if (dbPrivEntry.getOrigDb().startsWith(clusterName)) {
                 return true;
             }

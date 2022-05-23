@@ -1,10 +1,8 @@
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -21,15 +19,15 @@ import java.util.List;
 
 public class CreateFunctionTest {
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test
@@ -47,6 +45,7 @@ public class CreateFunctionTest {
         retTypes.add(Type.VARCHAR);
 
         final TableFunction tableFunction = new TableFunction(functionName, colNames, argTypes, retTypes);
+        tableFunction.setFunctionId(-1024);
 
         final ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer(4096);
         final ByteBufOutputStream byteBufOutputStream = new ByteBufOutputStream(byteBuf);
@@ -58,8 +57,10 @@ public class CreateFunctionTest {
         newFunction.readFields(byteBufInputStream);
 
         Assert.assertEquals(newFunction.getFunctionName().getFunction(), fn);
+        Assert.assertEquals(newFunction.getFunctionId(), tableFunction.getFunctionId());
         Assert.assertEquals(newFunction.getDefaultColumnNames(), colNames);
         Assert.assertEquals(Arrays.asList(newFunction.getArgs()), argTypes);
+        Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
         Assert.assertEquals(newFunction.getTableFnReturnTypes(), retTypes);
     }
 

@@ -14,6 +14,7 @@ namespace starrocks {
 namespace pipeline {
 class RuntimeFilterHolder;
 using RuntimeFilterHolderPtr = std::unique_ptr<RuntimeFilterHolder>;
+// TODO: rename RuntimeInFilter
 using RuntimeInFilter = starrocks::ExprContext;
 using RuntimeBloomFilter = starrocks::vectorized::RuntimeFilterBuildDescriptor;
 using RuntimeBloomFilterProbeDescriptor = starrocks::vectorized::RuntimeFilterProbeDescriptor;
@@ -177,6 +178,7 @@ public:
     }
 
     RuntimeFilterProbeCollector* get_rf_probe_collector() { return &_rf_probe_collector; }
+    const RuntimeFilterProbeCollector* get_rf_probe_collector() const { return &_rf_probe_collector; }
 
 private:
     // a refcount, low 32 bit used count the close invocation times, and the high 32 bit used to count the

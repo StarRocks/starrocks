@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -23,7 +23,6 @@ import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getDatetimeFromLong;
-import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
@@ -43,7 +42,7 @@ public class ExpressionStatisticCalculator {
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
             this.inputStatistics = statistics;
-            this.rowCount = rowCount;
+            this.rowCount = Math.max(1.0, rowCount);
         }
 
         @Override
@@ -65,7 +64,7 @@ public class ExpressionStatisticCalculator {
             if (operator.isNull()) {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             }
-            OptionalDouble value = doubleValueFromConstant(operator);
+            OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getTypeSize(), 1);
@@ -113,8 +112,10 @@ public class ExpressionStatisticCalculator {
 
             try {
                 if (cast.getChild(0).getType().isDateType()) {
-                    max = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
-                    min = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
+                    max = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
+                    min = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
                     max = max.castTo(cast.getType());
                     min = min.castTo(cast.getType());
@@ -165,29 +166,36 @@ public class ExpressionStatisticCalculator {
         }
 
         private ColumnStatistic unaryExpressionCalculate(CallOperator callOperator, ColumnStatistic columnStatistic) {
-            double value;
+            double aggFunDistinctValue = Math.max(1.0, Math.min(rowCount, columnStatistic.getDistinctValuesCount()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.MAX:
-                    value = columnStatistic.getMaxValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.MIN:
-                    value = columnStatistic.getMinValue();
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
                 case FunctionSet.ANY_VALUE:
-                    value = (columnStatistic.getMaxValue() - columnStatistic.getMinValue()) / 2;
-                    return new ColumnStatistic(value, value, 0, callOperator.getType().getTypeSize(), 1);
+                case FunctionSet.AVG:
+                    double maxValue = columnStatistic.getMaxValue();
+                    double minValue = columnStatistic.getMinValue();
+                    return new ColumnStatistic(minValue, maxValue, 0, columnStatistic.getAverageRowSize(),
+                            aggFunDistinctValue);
+                case FunctionSet.SUM:
+                    double sumFunMinValue = columnStatistic.getMinValue() > 0 ? columnStatistic.getMinValue() :
+                            columnStatistic.getMinValue() * rowCount / aggFunDistinctValue;
+                    double sumFunMaxValue = columnStatistic.getMaxValue() < 0 ? columnStatistic.getMaxValue() :
+                            columnStatistic.getMaxValue() * rowCount / aggFunDistinctValue;
+                    sumFunMaxValue = Math.max(sumFunMaxValue, sumFunMinValue);
+                    return new ColumnStatistic(sumFunMinValue, sumFunMaxValue, 0,
+                            columnStatistic.getAverageRowSize(), aggFunDistinctValue);
                 case FunctionSet.YEAR:
-                    int minValue = 1700;
-                    int maxValue = 2100;
+                    int minYearValue = 1700;
+                    int maxYearValue = 2100;
                     try {
-                        minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
-                        maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
+                        minYearValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
+                        maxYearValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
                     } catch (DateTimeException e) {
                         LOG.debug("get date type column statistics min/max failed. " + e);
                     }
-                    return new ColumnStatistic(minValue, maxValue, 0,
+                    return new ColumnStatistic(minYearValue, maxYearValue, 0,
                             callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1)));
+                            Math.min(columnStatistic.getDistinctValuesCount(), (maxYearValue - minYearValue + 1)));
                 case FunctionSet.MONTH:
                     return new ColumnStatistic(1, 12, 0,
                             callOperator.getType().getTypeSize(),
@@ -212,10 +220,6 @@ public class ExpressionStatisticCalculator {
                     // use child column averageRowSize instead call operator type size
                     return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
                             columnStatistic.getAverageRowSize(), rowCount);
-                // use child column statistics for now
-                case FunctionSet.SUM:
-                case FunctionSet.AVG:
-                    return columnStatistic;
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -249,14 +253,14 @@ public class ExpressionStatisticCalculator {
                             callOperator.getType().getTypeSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
-                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     double divideMaxValue = Math.max(Math.max(
-                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
                             callOperator.getType().getTypeSize(),
@@ -288,34 +292,5 @@ public class ExpressionStatisticCalculator {
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
         }
-    }
-
-    private static OptionalDouble doubleValueFromConstant(ConstantOperator constantOperator) {
-        if (Type.BOOLEAN.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getBoolean() ? 1.0 : 0.0);
-        } else if (Type.TINYINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getTinyInt());
-        } else if (Type.SMALLINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getSmallint());
-        } else if (Type.INT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getInt());
-        } else if (Type.BIGINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getBigint());
-        } else if (Type.LARGEINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getLargeInt().doubleValue());
-        } else if (Type.FLOAT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getFloat());
-        } else if (Type.DOUBLE.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getDouble());
-        } else if (Type.DATE.equals(constantOperator.getType())) {
-            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDate()));
-        } else if (Type.DATETIME.equals(constantOperator.getType())) {
-            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDatetime()));
-        } else if (Type.TIME.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getTime());
-        } else if (constantOperator.getType().isDecimalOfAnyVersion()) {
-            return OptionalDouble.of(constantOperator.getDecimal().doubleValue());
-        }
-        return OptionalDouble.empty();
     }
 }

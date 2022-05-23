@@ -52,11 +52,11 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
             if (false) {
             }
 #define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) {                                     \
+    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
                 *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
     }
-            APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+            APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
             _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
@@ -82,10 +82,10 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
     if (false) {
     }
-#define HASH_SET_METHOD(NAME)                                                                             \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME) _aggregator->it_hash() = \
+#define HASH_SET_METHOD(NAME)                                                                                \
+    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) _aggregator->it_hash() = \
             _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
@@ -111,10 +111,10 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     if (false) {
     }
 #define HASH_SET_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == HashSetVariant::Type::NAME)                                  \
+    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME)                               \
             _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
                     *_aggregator->hash_set_variant().NAME, chunk_size, chunk);
-    APPLY_FOR_VARIANT_ALL(HASH_SET_METHOD)
+    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
     size_t old_size = (*chunk)->num_rows();

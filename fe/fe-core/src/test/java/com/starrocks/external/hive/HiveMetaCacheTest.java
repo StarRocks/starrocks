@@ -141,7 +141,8 @@ public class HiveMetaCacheTest {
         Assert.assertTrue(
                 partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
-        HivePartitionKeysKey newPartitionKeysKey = new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
+        HivePartitionKeysKey newPartitionKeysKey =
+                new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("11", "22", "33");
         PartitionKey newPartitionKey = Utils.createPartitionKey(partValues, partColumns);
         HivePartitionKey newHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
@@ -211,7 +212,8 @@ public class HiveMetaCacheTest {
         Assert.assertTrue(
                 partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
-        HivePartitionKeysKey dropPartitionKeysKey = new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
+        HivePartitionKeysKey dropPartitionKeysKey =
+                new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("1", "2", "3");
         PartitionKey dropPartitionKey = Utils.createPartitionKey(partValues, partColumns);
         HivePartitionKey dropHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
@@ -266,7 +268,8 @@ public class HiveMetaCacheTest {
         }
 
         @Override
-        public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName, List<Column> partColumns, boolean isHudiTable)
+        public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName, List<Column> partColumns,
+                                                        boolean isHudiTable)
                 throws DdlException {
             clientMethodGetPartitionKeysCalledTimes++;
             try {

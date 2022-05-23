@@ -77,7 +77,8 @@ public class FunctionSet {
     public static final String RETENTION = "retention";
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
-    public static final String ARRAY_OVERLAP = "array_overlap";
+    public static final String ARRAYS_OVERLAP = "arrays_overlap";
+    public static final String WINDOW_FUNNEL = "window_funnel";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -87,6 +88,7 @@ public class FunctionSet {
     public static final String LAST_VALUE = "last_value";
     public static final String DENSE_RANK = "dense_rank";
     public static final String RANK = "rank";
+    public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
 
     // Scalar functions:
@@ -130,6 +132,7 @@ public class FunctionSet {
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String DATE_TRUNC = "date_trunc";
+    public static final String DATE_FLOOR = "date_floor";
 
     // string functions
     public static final String SUBSTRING = "substring";
@@ -252,6 +255,16 @@ public class FunctionSet {
                     .add("uuid")
                     .add("sleep")
                     .build();
+
+    public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.DENSE_RANK)
+            .add(FunctionSet.RANK)
+            .add(FunctionSet.NTILE)
+            .add(FunctionSet.ROW_NUMBER)
+            .add(FunctionSet.FIRST_VALUE)
+            .add(FunctionSet.LAST_VALUE)
+            .add(FunctionSet.FIRST_VALUE_REWRITE)
+            .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -428,7 +441,7 @@ public class FunctionSet {
         addBuiltInFunction(fn);
     }
 
-    // Populate all the aggregate builtins in the catalog.
+    // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {
@@ -561,6 +574,8 @@ public class FunctionSet {
         String[] sumNames = {"sum", "sum_distinct"};
         for (String name : sumNames) {
             addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.TINYINT), Type.BIGINT, Type.BIGINT, false, true, false));
@@ -576,8 +591,6 @@ public class FunctionSet {
                     Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
@@ -727,6 +740,12 @@ public class FunctionSet {
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
 
+	// Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATE, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
+
         // analytic functions
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin("rank",
@@ -736,6 +755,8 @@ public class FunctionSet {
                 Collections.emptyList(), Type.BIGINT, Type.VARCHAR));
         addBuiltin(AggregateFunction.createAnalyticBuiltin("row_number",
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
+        addBuiltin(AggregateFunction.createAnalyticBuiltin("ntile",
+                Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
 
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));

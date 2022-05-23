@@ -17,6 +17,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -27,15 +28,15 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.starrocks.analysis.Expr.pushNegationToOperands;
-import static com.starrocks.sql.analyzer.AggregationAnalyzer.verifyOrderByAggregations;
-import static com.starrocks.sql.analyzer.AggregationAnalyzer.verifySourceAggregations;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class SelectAnalyzer {
@@ -92,11 +93,37 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
-            verifySourceAggregations(groupByExpressions, sourceExpressions, sourceScope, analyzeState);
+            new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
+                    .verify(sourceExpressions);
 
             if (orderByElements.size() > 0) {
-                verifyOrderByAggregations(groupByExpressions, orderByExpressions, sourceScope, sourceAndOutputScope,
-                        analyzeState);
+                new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
+                        .verify(orderByExpressions);
+            }
+        }
+
+        // If columnNotInGroupBy is not empty, it means that the case where
+        // MODE_ONLY_FULL_GROUP_BY is false needs to be handled.
+        // Change the columns that are not in group by to any_value aggregate function
+        if (!analyzeState.getColumnNotInGroupBy().isEmpty()) {
+            Map<Expr, Expr> notInGroupByMap = new HashMap<>();
+
+            for (Expr g : analyzeState.getColumnNotInGroupBy()) {
+                FunctionCallExpr anyValue = new FunctionCallExpr(FunctionSet.ANY_VALUE, Lists.newArrayList(g));
+                ExpressionAnalyzer.analyzeExpression(anyValue, analyzeState, sourceScope, session);
+                analyzeState.getAggregate().add(anyValue);
+                notInGroupByMap.put(g, anyValue);
+            }
+
+            analyzeState.setOutputExpression(outputExpressions.stream()
+                    .map(e -> e.accept(new NotFullGroupByRewriter(notInGroupByMap), null))
+                    .collect(Collectors.toList()));
+            orderByElements.forEach(orderByElement -> orderByElement.setExpr(
+                    orderByElement.getExpr().accept(new NotFullGroupByRewriter(notInGroupByMap), null)));
+            orderByExpressions =
+                    orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
+            if (havingClause != null) {
+                analyzeState.setHaving(analyzeState.getHaving().accept(new NotFullGroupByRewriter(notInGroupByMap), null));
             }
         }
 
@@ -222,10 +249,10 @@ public class SelectAnalyzer {
             }
         }
 
-        List<Expr> outputExpr = outputExpressionBuilder.build();
-        analyzeState.setOutputExpression(outputExpr);
+        List<Expr> outputExpressions = outputExpressionBuilder.build();
+        analyzeState.setOutputExpression(outputExpressions);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
-        return outputExpressionBuilder.build();
+        return outputExpressions;
     }
 
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
@@ -496,6 +523,50 @@ public class SelectAnalyzer {
             Optional<ResolvedField> resolvedField = outputScope.tryResolveFeild(slotRef);
             if (resolvedField.isPresent()) {
                 return outputExprs.get(resolvedField.get().getRelationFieldIndex());
+            }
+            return slotRef;
+        }
+    }
+
+    private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
+        private final Map<Expr, Expr> columnsNotInGroupBy;
+
+        public NotFullGroupByRewriter(Map<Expr, Expr> columnsNotInGroupBy) {
+            this.columnsNotInGroupBy = columnsNotInGroupBy;
+        }
+
+        @Override
+        public Expr visit(ParseNode expr) {
+            return visit(expr, null);
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitAnalyticExpr(AnalyticExpr expr, Void context) {
+            for (int i = 0; i < expr.getFnCall().getChildren().size(); ++i) {
+                expr.getFnCall().setChild(i, visit(expr.getChild(i)));
+            }
+
+            List<OrderByElement> orderByElements = expr.getOrderByElements();
+            orderByElements.forEach(orderByElement -> orderByElement.setExpr(visit(orderByElement.getExpr())));
+
+            for (int i = 0; i < expr.getPartitionExprs().size(); ++i) {
+                expr.getPartitionExprs().set(i, visit(expr.getPartitionExprs().get(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            if (columnsNotInGroupBy.containsKey(slotRef)) {
+                return columnsNotInGroupBy.get(slotRef);
             }
             return slotRef;
         }

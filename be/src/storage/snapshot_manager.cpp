@@ -25,7 +25,7 @@
 #include <map>
 #include <set>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
@@ -99,6 +99,18 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
         LOG(INFO) << "make incremental snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;
         res = snapshot_incremental(tablet, request.missing_version, timeout_s);
+    } else if (request.__isset.missing_version_ranges) {
+        if (tablet->updates() == nullptr) {
+            string msg = strings::Substitute(
+                    "non-primary tablet does not support snapshot by missing_version_ranges tablet:$0",
+                    request.tablet_id);
+            LOG(INFO) << msg;
+            return Status::NotSupported(msg);
+        }
+        LOG(INFO) << "make primary snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
+                  << " missing_version_ranges:" << JoinInts(request.missing_version_ranges, ",")
+                  << " timeout:" << timeout_s;
+        res = snapshot_primary(tablet, request.missing_version_ranges, timeout_s);
     } else if (request.__isset.version) {
         LOG(INFO) << "make full snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << request.version << " timeout:" << timeout_s;
@@ -111,7 +123,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     if (!res.ok()) {
         return res.status();
     } else {
-        return FileUtils::canonicalize(*res, snapshot_path);
+        return fs::canonicalize(*res, snapshot_path);
     }
 }
 
@@ -126,10 +138,10 @@ Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     auto stores = StorageEngine::instance()->get_stores();
     for (auto store : stores) {
         std::string abs_path;
-        RETURN_IF_ERROR(FileUtils::canonicalize(store->path(), &abs_path));
+        RETURN_IF_ERROR(fs::canonicalize(store->path(), &abs_path));
         if (snapshot_path.compare(0, abs_path.size(), abs_path) == 0 &&
             snapshot_path.compare(abs_path.size(), SNAPSHOT_PREFIX.size(), SNAPSHOT_PREFIX) == 0) {
-            (void)FileUtils::remove_all(snapshot_path);
+            (void)fs::remove_all(snapshot_path);
             LOG(INFO) << "success to release snapshot path. [path='" << snapshot_path << "']";
             return Status::OK();
         }
@@ -144,8 +156,8 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     std::string cloned_header_file = clone_dir + "/" + std::to_string(tablet_id) + ".hdr";
     std::string cloned_meta_file = clone_dir + "/meta";
 
-    bool has_header_file = FileUtils::check_exist(cloned_header_file);
-    bool has_meta_file = FileUtils::check_exist(cloned_meta_file);
+    bool has_header_file = fs::path_exist(cloned_header_file);
+    bool has_meta_file = fs::path_exist(cloned_meta_file);
     if (has_header_file && has_meta_file) {
         return Status::InternalError("found both header and meta file");
     }
@@ -326,42 +338,63 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         return Status::RuntimeError("empty snapshot_id_path");
     }
     std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
-    (void)FileUtils::remove_all(snapshot_dir);
-    RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
+    (void)fs::remove_all(snapshot_dir);
+    RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
 
-    // 3. Link files to snapshot directory.
+    // If tablet is PrimaryKey tablet, we should dump snapshot meta file first and then link files
+    // to snapshot directory
+    // The reason is tablet clone assumes rowset file is immutable, but during rowset apply for partial update,
+    // rowset file may be changed.
+    // When doing partial update, if dump snapshot meta file first, there are four conditions as below
+    //  1. rowset status is committed in meta, rowset file is partial rowset
+    //  2. rowset status is committed in meta, rowset file is `partial rowset` when we link files, and rowset apply
+    //     success after link files.
+    //  3. rowset status is committed in meta, rowset file is full rowset
+    //  4. rowset status is applied in meta, rowset file is full rowset
+    // case1 and case4 is normal case, we don't need do additional process.
+    // case2 is almost the same as case1. In normal case, partial rowset files will be delete after rowset apply. But
+    // we do a hard link of partial rowset files, so the partial rowset files will not be delete until snapshot dir is
+    // deleted. So the src BE will download the partial rowset files.
+    // case3 is a bit trick. If the rowset status is committed in meta but the rowset file is full rowset. The src be
+    // will download the full rowset file and apply it again. But we handle this contingency in partial rowset apply,
+    // because if BE crash before update meta, we also need apply this rowset again after BE restart.
+
+    // 3. Build snapshot header/meta file.
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
-            return st;
-        }
         snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
     }
 
-    // 4. Build snapshot header/meta file.
     if (tablet->updates() == nullptr) {
         snapshot_tablet_meta->revise_inc_rs_metas(std::move(snapshot_rowset_metas));
         snapshot_tablet_meta->revise_rs_metas(std::vector<RowsetMetaSharedPtr>());
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
         if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
         }
-        return snapshot_id_path;
     } else {
         auto st =
                 make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet, snapshot_rowset_metas,
                                              0 /*snapshot_version, unused*/, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return st;
         }
-        return snapshot_id_path;
     }
+
+    // 4. Link files to snapshot directory.
+    for (const auto& rowset : snapshot_rowsets) {
+        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to link rowset file:" << st;
+            (void)fs::remove_all(snapshot_id_path);
+            return st;
+        }
+    }
+
+    return snapshot_id_path;
 }
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
@@ -386,8 +419,8 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         return Status::RuntimeError("empty snapshot_id_path");
     }
     std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
-    (void)FileUtils::remove_all(snapshot_dir);
-    RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
+    (void)fs::remove_all(snapshot_dir);
+    RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
 
     // 3. Link files to snapshot directory.
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
@@ -395,7 +428,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return st;
         }
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
@@ -408,7 +441,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
         if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
         }
         return snapshot_id_path;
@@ -416,11 +449,91 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas,
                                                snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
-            (void)FileUtils::remove_all(snapshot_id_path);
+            (void)fs::remove_all(snapshot_id_path);
             return st;
         }
         return snapshot_id_path;
     }
+}
+
+StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& tablet,
+                                                        const std::vector<int64_t>& missing_version_ranges,
+                                                        int64_t timeout_s) {
+    // this is an optimized version of snapshot specifically for primary tablet
+    // 1. it will try to do incremental snapshot at best, to catch source tablet's max version
+    // 2. if it can not catch source tablet's max version, it will switch to full snapshot at src's max version
+    // 3. if it's missing_version_ranges is greater than src's max version, just return error
+    SnapshotTypePB snapshot_type = SNAPSHOT_TYPE_INCREMENTAL;
+    int64_t full_snapshot_version = 0;
+    std::vector<RowsetSharedPtr> snapshot_rowsets;
+
+    // 1. get missing rowsets for snapshot
+    std::shared_lock rdlock(tablet->get_header_lock());
+    auto st = tablet->updates()->get_rowsets_for_incremental_snapshot(missing_version_ranges, snapshot_rowsets);
+    if (st.ok() && snapshot_rowsets.empty()) {
+        snapshot_type = SNAPSHOT_TYPE_FULL;
+        full_snapshot_version = tablet->updates()->max_version();
+        st = tablet->updates()->get_applied_rowsets(full_snapshot_version, &snapshot_rowsets);
+        LOG(INFO) << "incremental_snapshot switch to full_snaphost tablet:" << tablet->tablet_id()
+                  << " version:" << full_snapshot_version << " #rowset:" << snapshot_rowsets.size();
+    }
+    rdlock.unlock();
+    if (!st.ok()) {
+        return st;
+    }
+
+    // 2. Create snapshot directory.
+    std::string snapshot_id_path = _calc_snapshot_id_path(tablet, timeout_s);
+    if (UNLIKELY(snapshot_id_path.empty())) {
+        return Status::RuntimeError("empty snapshot_id_path");
+    }
+    std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
+    (void)fs::remove_all(snapshot_dir);
+    RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
+
+    // If tablet is PrimaryKey tablet, we should dump snapshot meta file first and then link files
+    // to snapshot directory
+    // The reason is tablet clone assumes rowset file is immutable, but during rowset apply for partial update,
+    // rowset file may be changed.
+    // When doing partial update, if dump snapshot meta file first, there are four conditions as below
+    //  1. rowset status is committed in meta, rowset file is partial rowset
+    //  2. rowset status is committed in meta, rowset file is `partial rowset` when we link files, and rowset apply
+    //     success after link files.
+    //  3. rowset status is committed in meta, rowset file is full rowset
+    //  4. rowset status is applied in meta, rowset file is full rowset
+    // case1 and case4 is normal case, we don't need do additional process.
+    // case2 is almost the same as case1. In normal case, partial rowset files will be delete after rowset apply. But
+    // we do a hard link of partial rowset files, so the partial rowset files will not be delete until snapshot dir is
+    // deleted. So the src BE will download the partial rowset files.
+    // case3 is a bit trick. If the rowset status is committed in meta but the rowset file is full rowset. The src be
+    // will download the full rowset file and apply it again. But we handle this contingency in partial rowset apply,
+    // because if BE crash before update meta, we also need apply this rowset again after BE restart.
+
+    // 3. Build snapshot header/meta file.
+    std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+    snapshot_rowset_metas.reserve(snapshot_rowsets.size());
+    for (const auto& rowset : snapshot_rowsets) {
+        snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
+    }
+
+    st = make_snapshot_on_tablet_meta(snapshot_type, snapshot_dir, tablet, snapshot_rowset_metas, full_snapshot_version,
+                                      g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+    if (!st.ok()) {
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
+    }
+
+    // 4. Link files to snapshot directory.
+    for (const auto& rowset : snapshot_rowsets) {
+        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to link rowset file:" << st;
+            (void)fs::remove_all(snapshot_id_path);
+            return st;
+        }
+    }
+
+    return snapshot_id_path;
 }
 
 Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet) {
@@ -435,12 +548,12 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tabl
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
     std::string meta_path = tablet->schema_hash_path();
-    (void)FileUtils::remove_all(meta_path);
-    RETURN_IF_ERROR(FileUtils::create_dir(meta_path));
+    (void)fs::remove_all(meta_path);
+    RETURN_IF_ERROR(fs::create_directories(meta_path));
     auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas,
                                            snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
-        (void)FileUtils::remove(meta_path);
+        (void)fs::remove(meta_path);
         return st;
     }
     return Status::OK();
@@ -485,9 +598,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
     }
 
-    TabletMetaPB& meta_pb = snapshot_meta.tablet_meta();
-    tablet->tablet_meta()->to_meta_pb(&meta_pb);
     if (snapshot_type == SNAPSHOT_TYPE_FULL) {
+        TabletMetaPB& meta_pb = snapshot_meta.tablet_meta();
+        tablet->tablet_meta()->to_meta_pb(&meta_pb);
         // Construct a new UpdatesPB
         meta_pb.mutable_updates()->Clear();
         auto version = meta_pb.mutable_updates()->add_versions();
@@ -507,10 +620,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
     }
 
-    std::unique_ptr<WritableFile> f;
-    ASSIGN_OR_RETURN(f, Env::Default()->new_writable_file(snapshot_dir + "/meta"));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto f, FileSystem::Default()->new_writable_file(opts, snapshot_dir + "/meta"));
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(f.get()));
-    RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
     return Status::OK();
 }
@@ -518,7 +630,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
 // See `SnapshotManager::make_snapshot_on_tablet_meta` for the file format.
 StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& filename) {
     SnapshotMeta snapshot_meta;
-    ASSIGN_OR_RETURN(auto file, Env::Default()->new_random_access_file(filename));
+    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_random_access_file(filename));
     RETURN_IF_ERROR(snapshot_meta.parse_from_file(file.get()));
     return std::move(snapshot_meta);
 }
@@ -527,21 +639,21 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
     for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
-        old_rowset_id.init(rowset_meta_pb.rowset_id_v2());
+        old_rowset_id.init(rowset_meta_pb.rowset_id());
 
-        LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id_v2() << " with " << new_rowset_id;
+        LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id() << " with " << new_rowset_id;
 
         for (int seg_id = 0; seg_id < rowset_meta_pb.num_segments(); seg_id++) {
             auto old_path = BetaRowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = BetaRowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
-            RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
+            RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = BetaRowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
             auto new_path = BetaRowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
-            RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
+            RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
-        rowset_meta_pb.set_rowset_id_v2(new_rowset_id.to_string());
+        rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
     }
     return Status::OK();
 }

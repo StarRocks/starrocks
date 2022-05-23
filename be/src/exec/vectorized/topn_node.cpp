@@ -11,9 +11,9 @@
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_context.h"
-#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
+#include "exec/vectorized/chunks_sorter_heap_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -42,6 +42,13 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+        for (auto& expr : _analytic_partition_exprs) {
+            auto& type_desc = expr->root()->type();
+            if (!type_desc.support_groupby()) {
+                return Status::NotSupported(
+                        fmt::format("partition by type {} is not supported", type_desc.debug_string()));
+            }
+        }
     }
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
@@ -51,8 +58,12 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _order_by_types.resize(size);
         for (size_t i = 0; i < size; ++i) {
             const TExprNode& expr_node = tnode.sort_node.sort_info.sort_tuple_slot_exprs[i].nodes[0];
-            _order_by_types[i].type_desc = TypeDescriptor::from_thrift(expr_node.type);
+            auto type_desc = TypeDescriptor::from_thrift(expr_node.type);
+            _order_by_types[i].type_desc = type_desc;
             _order_by_types[i].is_nullable = expr_node.is_nullable || has_outer_join_child;
+            if (!type_desc.support_orderby()) {
+                return Status::NotSupported(fmt::format("order by type {} is not supported", type_desc.debug_string()));
+            }
         }
     }
 
@@ -140,12 +151,12 @@ Status TopNNode::close(RuntimeState* state) {
 Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
     if (_limit > 0) {
-        // HeapChunkSorter has higher performance when sorting fewer elements,
+        // ChunksSorterHeapSort has higher performance when sorting fewer elements,
         // after testing we think 1024 is a good threshold
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            _chunks_sorter =
-                    std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                      &_is_asc_order, &_is_null_first, _sort_keys, _offset, _limit);
+            _chunks_sorter = std::make_unique<ChunksSorterHeapSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                    &_is_asc_order, &_is_null_first, _sort_keys,
+                                                                    _offset, _limit);
         } else {
             _chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
@@ -195,7 +206,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
     auto sort_context_factory = std::make_shared<SortContextFactory>(
-            runtime_state(), is_merging, _limit, degree_of_parallelism, _is_asc_order, _is_null_first);
+            runtime_state(), is_merging, _limit, degree_of_parallelism, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+            _is_asc_order, _is_null_first);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));

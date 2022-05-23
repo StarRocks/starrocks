@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,10 +30,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatFlags;
 
 // change one variable.
@@ -92,7 +92,8 @@ public class SetVar {
         }
 
         if (type == SetType.GLOBAL) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "ADMIN");
             }
@@ -123,13 +124,6 @@ public class SetVar {
         }
 
         result = (LiteralExpr) literalExpr;
-
-        // Need to check if group is valid
-        if (variable.equalsIgnoreCase(SessionVariable.RESOURCE_VARIABLE)) {
-            if (!UserResource.isValidGroup(result.getStringValue())) {
-                throw new AnalysisException("Invalid resource group, now we support {low, normal, high}.");
-            }
-        }
 
         if (variable.equalsIgnoreCase(GlobalVariable.DEFAULT_ROWSET_TYPE)) {
             if (result != null && !HeartbeatFlags.isValidRowsetType(result.getStringValue())) {
@@ -177,6 +171,14 @@ public class SetVar {
                 }
             } catch (NumberFormatException ex) {
                 throw new AnalysisException(SessionVariable.SQL_SELECT_LIMIT + " is not a number");
+            }
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
+            String wgName = getValue().getStringValue();
+            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
+            if (wg == null) {
+                throw new AnalysisException("resource group not exists: " + wgName);
             }
         }
     }

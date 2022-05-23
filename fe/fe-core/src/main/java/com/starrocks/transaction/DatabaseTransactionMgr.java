@@ -27,7 +27,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -57,6 +56,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -126,7 +126,7 @@ public class DatabaseTransactionMgr {
     // count only the number of running routine load txns of database
     private int runningRoutineLoadTxnNums = 0;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private EditLog editLog;
 
@@ -136,6 +136,10 @@ public class DatabaseTransactionMgr {
 
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
+
+    private long lastCommitTs = 0;
+
+    private long commitTsInc = 0;
 
     protected void readLock() {
         this.transactionLock.readLock().lock();
@@ -153,11 +157,11 @@ public class DatabaseTransactionMgr {
         this.transactionLock.writeLock().unlock();
     }
 
-    public DatabaseTransactionMgr(long dbId, Catalog catalog, TransactionIdGenerator idGenerator) {
+    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr, TransactionIdGenerator idGenerator) {
         this.dbId = dbId;
-        this.catalog = catalog;
+        this.globalStateMgr = globalStateMgr;
         this.idGenerator = idGenerator;
-        this.editLog = catalog.getEditLog();
+        this.editLog = globalStateMgr.getEditLog();
     }
 
     public long getDbId() {
@@ -320,7 +324,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void checkDatabaseDataQuota() throws AnalysisException {
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist");
         }
@@ -357,7 +361,7 @@ public class DatabaseTransactionMgr {
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (null == db) {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
@@ -384,7 +388,8 @@ public class DatabaseTransactionMgr {
             return;
         }
 
-        if (tabletCommitInfos == null || tabletCommitInfos.isEmpty()) {
+        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
 
@@ -393,7 +398,7 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        TabletInvertedIndex tabletInvertedIndex = catalog.getTabletInvertedIndex();
+        TabletInvertedIndex tabletInvertedIndex = globalStateMgr.getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
         Map<Long, Set<Long>> tableToPartition = new HashMap<>();
         Map<Long, Set<String>> tableToInvalidDictCacheColumns = new HashMap<>();
@@ -463,10 +468,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-        if (tableToPartition.isEmpty()) {
-            // table or all partitions are being dropped
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-        }
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
@@ -508,7 +509,7 @@ public class DatabaseTransactionMgr {
                             for (long tabletBackend : tabletBackends) {
                                 Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                                 if (replica == null) {
-                                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
+                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
                                     throw new TransactionCommitFailedException("Not found replicas of tablet. "
                                             + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                                 }
@@ -532,7 +533,7 @@ public class DatabaseTransactionMgr {
                             if (successReplicaNum < quorumReplicaNum) {
                                 List<String> errorBackends = new ArrayList<String>();
                                 for (long backendId : errorBackendIdsForTablet) {
-                                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                                     errorBackends.add(backend.getId() + ":" + backend.getHost());
                                 }
 
@@ -650,12 +651,12 @@ public class DatabaseTransactionMgr {
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
-        Database db = catalog.getDb(txn.getDbId());
+        Database db = globalStateMgr.getDb(txn.getDbId());
         if (db == null) {
             return true;
         }
         db.readLock();
-
+        long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
@@ -685,6 +686,7 @@ public class DatabaseTransactionMgr {
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
+                    int replicaNum = partitionInfo.getReplicationNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
@@ -700,6 +702,10 @@ public class DatabaseTransactionMgr {
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
                                         ++successHealthyReplicaNum;
+                                    // replica report version has greater cur transaction commit version
+                                    // This can happen when the BE publish succeeds but fails to send a response to FE
+                                    } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                        ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
                                             && unfinishedBackends.contains(replica.getBackendId())) {
                                         errReplicas.add(replica.getId());
@@ -714,6 +720,15 @@ public class DatabaseTransactionMgr {
                                 }
                             }
                             if (successHealthyReplicaNum < quorumNum) {
+                                return false;
+                            }
+                            // quorum publish will make table unstable
+                            // so that we wait quorom_publish_wait_time_ms util all backend publish finish
+                            // before quorum publish
+                            if (successHealthyReplicaNum != replicaNum
+                                    && !unfinishedBackends.isEmpty()
+                                    && currentTs
+                                            - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
                                 return false;
                             }
                         }
@@ -743,7 +758,7 @@ public class DatabaseTransactionMgr {
             errorReplicaIds.addAll(originalErrorReplicas);
         }
 
-        Database db = catalog.getDb(transactionState.getDbId());
+        Database db = globalStateMgr.getDb(transactionState.getDbId());
         if (db == null) {
             writeLock();
             try {
@@ -910,8 +925,20 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
         }
+        // since we send publish order by commit timestamp
+        // so that we need handle timetamp fallback
+        // & same timestamp cause by granularity
+        // The probability of timestamp fallback after FE failover is small
+        // and it is not considered at present
+        long commitTs = System.currentTimeMillis();
+        if (commitTs <= lastCommitTs) {
+            commitTs = lastCommitTs + ++commitTsInc;
+        } else {
+            commitTsInc = 0;
+        }
+        lastCommitTs = commitTs;
+        transactionState.setCommitTime(commitTs);
         // update transaction state version
-        transactionState.setCommitTime(System.currentTimeMillis());
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
         transactionState.setErrorReplicas(errorReplicaIds);
         for (long tableId : tableToPartition.keySet()) {
@@ -1093,7 +1120,7 @@ public class DatabaseTransactionMgr {
         Preconditions.checkState(transactionState.getTransactionStatus() == TransactionStatus.ABORTED);
         // for aborted transaction, we don't know which backends are involved, so we have to send clear task
         // to all backends.
-        List<Long> allBeIds = Catalog.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
         AgentBatchTask batchTask = null;
         synchronized (clearTransactionTasks) {
             for (Long beId : allBeIds) {
@@ -1254,7 +1281,7 @@ public class DatabaseTransactionMgr {
         List<List<String>> infos = new ArrayList<List<String>>();
         readLock();
         try {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 throw new AnalysisException("Database[" + dbId + "] does not exist");
             }
@@ -1270,8 +1297,9 @@ public class DatabaseTransactionMgr {
                 for (Long tblId : tblIds) {
                     Table tbl = db.getTable(tblId);
                     if (tbl != null) {
-                        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), db.getFullName(),
-                                tbl.getName(), PrivPredicate.SHOW)) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkTblPriv(ConnectContext.get(), db.getFullName(),
+                                        tbl.getName(), PrivPredicate.SHOW)) {
                             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
                                     "SHOW TRANSACTION",
                                     ConnectContext.get().getQualifiedUser(),
@@ -1486,7 +1514,7 @@ public class DatabaseTransactionMgr {
         try {
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
-            Database db = catalog.getDb(transactionState.getDbId());
+            Database db = globalStateMgr.getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 LOG.info("replay a committed transaction {}", transactionState);
                 updateCatalogAfterCommitted(transactionState, db);

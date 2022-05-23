@@ -10,7 +10,6 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -79,7 +78,7 @@ public class MultiJoinNode {
          * means the predicate can't bind to any child, join reorder can't handle the predicate
          *
          * */
-        if (JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate)) {
+        if (Utils.isEqualBinaryPredicate(joinPredicate)) {
             atoms.add(node);
             return;
         }
@@ -104,7 +103,7 @@ public class MultiJoinNode {
         flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
         flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        Preconditions.checkState(!JoinPredicateUtils.isEqualBinaryPredicate(joinPredicate));
+        Preconditions.checkState(!Utils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
     }
 }

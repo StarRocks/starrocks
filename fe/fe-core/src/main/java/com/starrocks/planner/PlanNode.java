@@ -46,7 +46,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -184,9 +183,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         probeRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
-    public void fillLocalRfWaitingSet(Set<Integer> hashJoinNodeIds) {
+    public void fillLocalRfWaitingSet(Set<Integer> runtimeFilterBuildNode) {
         for (RuntimeFilterDescription filter : probeRuntimeFilters) {
-            if (hashJoinNodeIds.contains(filter.getBuildPlanNodeId())) {
+            if (runtimeFilterBuildNode.contains(filter.getBuildPlanNodeId())) {
                 localRfWaitingSet.add(filter.getBuildPlanNodeId());
             }
         }

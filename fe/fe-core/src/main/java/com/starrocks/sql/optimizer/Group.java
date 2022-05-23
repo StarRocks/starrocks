@@ -93,8 +93,10 @@ public class Group {
 
     public void addExpression(GroupExpression groupExpression) {
         if (groupExpression.getOp().isLogical()) {
+            Preconditions.checkState(!logicalExpressions.contains(groupExpression));
             logicalExpressions.add(groupExpression);
         } else {
+            Preconditions.checkState(!physicalExpressions.contains(groupExpression));
             physicalExpressions.add(groupExpression);
         }
         groupExpression.setGroup(this);
@@ -181,6 +183,17 @@ public class Group {
         }
     }
 
+    public void deleteBestExpression(GroupExpression groupExpression) {
+        for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
+                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
+            Pair<Double, GroupExpression> pair = entry.getValue();
+            if (pair.second.equals(groupExpression)) {
+                iterator.remove();
+            }
+        }
+    }
+
     public GroupExpression getBestExpression(PhysicalPropertySet physicalPropertySet) {
         if (hasBestExpression(physicalPropertySet)) {
             return lowestCostExpressions.get(physicalPropertySet).second;
@@ -218,6 +231,10 @@ public class Group {
             setBestExpressionWithStatistics(bestGroupExpression, entry.getValue().first, entry.getKey(),
                     other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
                             other.statistics);
+        }
+        // If statistics is null, use other statistics
+        if (statistics == null) {
+            statistics = other.statistics;
         }
         other.satisfyRequiredPropertyGroupExpressions.forEach(this::addSatisfyRequiredPropertyGroupExpressions);
     }
@@ -259,7 +276,12 @@ public class Group {
 
     @Override
     public String toString() {
-        return toPrettyString("", "");
+        StringBuilder sb = new StringBuilder();
+        sb.append("->  ").append("Group: ").append(id).append('\n');
+        for (GroupExpression expr : logicalExpressions) {
+            sb.append(expr).append('\n');
+        }
+        return sb.toString();
     }
 
     public String toPrettyString(String headlineIndent, String detailIndent) {

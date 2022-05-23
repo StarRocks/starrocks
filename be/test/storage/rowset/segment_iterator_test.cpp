@@ -7,12 +7,9 @@
 #include <unordered_map>
 
 #include "common/object_pool.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
-#include "storage/fs/block_manager.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
@@ -20,16 +17,14 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
 class SegmentIteratorTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
@@ -52,8 +47,7 @@ public:
     }
 
     const std::string kSegmentDir = "/segment_test";
-    std::shared_ptr<EnvMemory> _env = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
 };
@@ -82,11 +76,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     opts.num_rows_per_block = 10;
 
     std::string file_name = kSegmentDir + "/low_card_cols";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
@@ -133,12 +125,12 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     }
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     seg_options.stats = &stats;
 
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
@@ -150,7 +142,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;
-    seg_opts.block_mgr = _block_mgr;
+    seg_opts.fs = _fs;
     seg_opts.stats = &stats;
 
     auto* con = pool.add(new vectorized::ConjunctivePredicates());
@@ -211,11 +203,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     opts.num_rows_per_block = 1024;
 
     std::string file_name = kSegmentDir + "/no_dict";
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({file_name});
-    ASSERT_OK(_block_mgr->create_block(wblock_opts, &wblock));
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wblock), 0, &tablet_schema, opts);
+    SegmentWriter writer(std::move(wfile), 0, &tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = slice_num;
@@ -262,12 +252,12 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     }
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, &tablet_schema);
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _fs, file_name, 0, &tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
-    seg_options.block_mgr = _block_mgr;
+    seg_options.fs = _fs;
     seg_options.stats = &stats;
 
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
@@ -276,11 +266,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ColumnIterator* scalar_iter = nullptr;
     DeferOp defer([&]() { delete scalar_iter; });
     ColumnIteratorOptions iter_opts;
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    ASSERT_OK(_block_mgr->open_block(segment->file_name(), &rblock));
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
     iter_opts.use_page_cache = false;
-    iter_opts.rblock = rblock.get();
+    iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
     ASSERT_OK(segment->new_column_iterator(1, &scalar_iter));
@@ -293,7 +282,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;
-    seg_opts.block_mgr = _block_mgr;
+    seg_opts.fs = _fs;
     seg_opts.stats = &stats;
 
     vectorized::ColumnIdToGlobalDictMap dict_map;

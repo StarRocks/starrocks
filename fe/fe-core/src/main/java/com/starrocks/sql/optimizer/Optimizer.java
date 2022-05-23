@@ -5,12 +5,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rewrite.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -18,7 +21,6 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
-import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -26,6 +28,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
@@ -108,6 +111,12 @@ public class Optimizer {
         }
         OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
+        // set costs audio log before physicalRuleRewrite
+        // statistics won't set correctly after physicalRuleRewrite.
+        // we need set plan costs before physical rewrite stage.
+        final CostEstimate costs = Explain.buildCost(result);
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
+
         OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
         OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
         OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
@@ -164,26 +173,28 @@ public class Optimizer {
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
+        // Reorder predicates
+        result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
+                rootTaskContext);
         return result;
     }
 
     void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
-        CTEContext cteContext = context.getCteContext();
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
 
+        CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
         if (cteContext.hasInlineCTE()) {
             ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
+            cleanUpMemoGroup(memo);
         }
-
-        cleanUpMemoGroup(memo);
 
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
@@ -207,8 +218,8 @@ public class Optimizer {
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
-        //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another MergeTwoProjectRule
+        ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectLimitRule());
+
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
@@ -256,7 +267,6 @@ public class Optimizer {
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 
         cleanUpMemoGroup(memo);

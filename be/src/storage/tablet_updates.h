@@ -213,6 +213,11 @@ public:
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 
+    Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
+
+    Status get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
+                                                std::vector<RowsetSharedPtr>& rowsets);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -319,6 +324,13 @@ private:
                                      const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
+
+    void _check_creation_time_increasing();
+
+    // these functions is only used in ut
+    void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
+
+    void check_for_apply() { _check_for_apply(); }
 
 private:
     Tablet& _tablet;

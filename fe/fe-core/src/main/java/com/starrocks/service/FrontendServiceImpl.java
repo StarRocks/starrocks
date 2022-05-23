@@ -28,7 +28,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -67,6 +66,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -97,6 +100,9 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTaskInfoResult;
+import com.starrocks.thrift.TGetTaskRunInfoResult;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
@@ -128,9 +134,12 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -177,8 +186,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        Catalog catalog = Catalog.getCurrentCatalog();
-        List<String> dbNames = catalog.getDbNames();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
         UserIdentity currentUser = null;
@@ -188,7 +197,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         for (String fullName : dbNames) {
-            if (!catalog.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -221,7 +230,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // database privs should be checked in analysis phrase
 
-        Database db = Catalog.getCurrentCatalog().getDb(params.db);
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -231,7 +240,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             for (String tableName : db.getTableNamesWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
-                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, params.db,
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                         tableName, PrivPredicate.SHOW)) {
                     continue;
                 }
@@ -263,7 +272,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // database privs should be checked in analysis phrase
 
-        Database db = Catalog.getCurrentCatalog().getDb(params.db);
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
@@ -277,7 +286,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, params.db,
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                             table.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
@@ -297,7 +306,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         List<TableRef> tblRefs = new ArrayList<>();
                         view.getQueryStmt().collectTableRefs(tblRefs);
                         for (TableRef tblRef : tblRefs) {
-                            if (!Catalog.getCurrentCatalog().getAuth()
+                            if (!GlobalStateMgr.getCurrentState().getAuth()
                                     .checkTblPriv(currentUser, tblRef.getName().getDb(),
                                             tblRef.getName().getTbl(), PrivPredicate.SHOW)) {
                                 ddlSql = "";
@@ -320,13 +329,82 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
+        LOG.debug("get show task request: {}", params);
+        TGetTaskInfoResult result = new TGetTaskInfoResult();
+        List<TTaskInfo> tasksResult = Lists.newArrayList();
+        result.setTasks(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Task> taskList = taskManager.showTasks(params.db);
+
+        for (Task task : taskList) {
+            TTaskInfo info = new TTaskInfo();
+            info.setTask_name(task.getName());
+            info.setCreate_time(task.getCreateTime() / 1000);
+            // Now there are only MANUAL types of Tasks
+            info.setSchedule("MANUAL");
+            info.setDatabase(task.getDbName());
+            info.setDefinition(task.getDefinition());
+            tasksResult.add(info);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
+        LOG.debug("get show task run request: {}", params);
+        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
+        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
+        result.setTask_runs(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        for (TaskRunStatus status : taskRunList) {
+            TTaskRunInfo info = new TTaskRunInfo();
+            info.setQuery_id(status.getQueryId());
+            info.setTask_name(status.getTaskName());
+            info.setCreate_time(status.getCreateTime() / 1000);
+            info.setFinish_time(status.getFinishTime() / 1000);
+            info.setState(status.getState().toString());
+            info.setDefinition(status.getDefinition());
+            info.setError_code(status.getErrorCode());
+            info.setError_message(status.getErrorMessage());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+
+
+    @Override
     public TGetDBPrivsResult getDBPrivs(TGetDBPrivsParams params) throws TException {
         LOG.debug("get database privileges request: {}", params);
         TGetDBPrivsResult result = new TGetDBPrivsResult();
         List<TDBPrivDesc> tDBPrivs = Lists.newArrayList();
         result.setDb_privs(tDBPrivs);
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        List<DbPrivEntry> dbPrivEntries = Catalog.getCurrentCatalog().getAuth().getDBPrivEntries(currentUser);
+        List<DbPrivEntry> dbPrivEntries = GlobalStateMgr.getCurrentState().getAuth().getDBPrivEntries(currentUser);
         // flatten privileges
         for (DbPrivEntry entry : dbPrivEntries) {
             PrivBitSet savedPrivs = entry.getPrivSet();
@@ -367,7 +445,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTablePrivDesc> tTablePrivs = Lists.newArrayList();
         result.setTable_privs(tTablePrivs);
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        List<TablePrivEntry> tablePrivEntries = Catalog.getCurrentCatalog().getAuth().getTablePrivEntries(currentUser);
+        List<TablePrivEntry> tablePrivEntries =
+                GlobalStateMgr.getCurrentState().getAuth().getTablePrivEntries(currentUser);
         // flatten privileges
         for (TablePrivEntry entry : tablePrivEntries) {
             PrivBitSet savedPrivs = entry.getPrivSet();
@@ -410,7 +489,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TUserPrivDesc> tUserPrivs = Lists.newArrayList();
         result.setUser_privs(tUserPrivs);
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        Auth currAuth = Catalog.getCurrentCatalog().getAuth();
+        Auth currAuth = GlobalStateMgr.getCurrentState().getAuth();
         UserPrivTable userPrivTable = currAuth.getUserPrivTable();
         List<UserIdentity> userIdents = Lists.newArrayList();
         // users can only see the privileges of themself at this moment
@@ -436,7 +515,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     priv -> {
                         boolean isGrantable =
                                 Privilege.NODE_PRIV != priv // NODE_PRIV counld not be granted event with GRANT_PRIV
-                                        && userPrivTable.hasPriv(userIdent.getHost(), userIdent.getQualifiedUser(),
+                                        && userPrivTable.hasPriv(userIdent,
                                         PrivPredicate.GRANT);
                         TUserPrivDesc privDesc = new TUserPrivDesc();
                         privDesc.setIs_grantable(isGrantable);
@@ -482,11 +561,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             describeWithoutDbAndTable(currentUser, columns, limit);
             return result;
         }
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, params.db,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                 params.getTable_name(), PrivPredicate.SHOW)) {
             return result;
         }
-        Database db = Catalog.getCurrentCatalog().getDb(params.db);
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
             db.readLock();
             try {
@@ -502,18 +581,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // get describeTable without db name and table name parameter, so we need iterate over
     // dbs and tables, when reach limit, we break;
     private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        List<String> dbNames = catalog.getDbNames();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
                 continue;
             }
-            Database db = Catalog.getCurrentCatalog().getDb(fullName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, fullName,
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
                         continue;
                     }
@@ -533,7 +612,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
-                               boolean needSetDbAndTable, String db, String tbl) {
+                                  boolean needSetDbAndTable, String db, String tbl) {
         if (table != null) {
             String tableKeysType = "";
             if (TableType.OLAP.equals(table.getType())) {
@@ -616,7 +695,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFetchResourceResult fetchResource() throws TException {
-        return masterImpl.fetchResource();
+        throw new TException("not supported");
     }
 
     @Override
@@ -637,7 +716,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMasterOpResult forward(TMasterOpRequest params) throws TException {
         TNetworkAddress clientAddr = getClientAddr();
         if (clientAddr != null) {
-            Frontend fe = Catalog.getCurrentCatalog().getFeByHost(clientAddr.getHostname());
+            Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientAddr.getHostname());
             if (fe == null) {
                 LOG.warn("reject request from invalid host. client: {}", clientAddr);
                 throw new TException("request from invalid host was rejected.");
@@ -659,12 +738,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         final String fullUserName = ClusterNamespace.getFullName(cluster, user);
         final String fullDbName = ClusterNamespace.getFullName(cluster, db);
         List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!Catalog.getCurrentCatalog().getAuth().checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth()
+                .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
             throw new AuthenticationException("Access denied for " + fullUserName + "@" + clientIp);
         }
 
         Preconditions.checkState(currentUser.size() == 1);
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser.get(0), fullDbName, tbl, predicate)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), fullDbName, tbl, predicate)) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
         }
@@ -718,9 +798,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("empty label in begin request");
         }
         // check database
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
-        Database db = catalog.getDb(fullDbName);
+        Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;
             if (Strings.isNullOrEmpty(request.getCluster())) {
@@ -729,22 +809,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
-        Table table = null;
-        db.readLock();
-        try {
-            table = db.getTable(request.tbl);
-            if (table == null || table.getType() != TableType.OLAP) {
-                throw new UserException("unknown table, table=" + request.tbl);
-            }
-        } finally {
-            db.readUnlock();
-        }
-
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        return Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
@@ -792,9 +861,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // get database
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
-        Database db = catalog.getDb(fullDbName);
+        Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;
             if (Strings.isNullOrEmpty(request.getCluster())) {
@@ -808,7 +877,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // Otherwise, the publish will be successful but commit timeout in BE
         // It will results as error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
-        boolean ret = Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+        boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 timeoutMs, attachment);
@@ -863,6 +932,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnRollbackImpl(request);
+        } catch (TransactionNotFoundException e) {
+            LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
+            status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
+            status.addToError_msgs(e.getMessage());
         } catch (UserException e) {
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -890,12 +963,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
         }
         String dbName = ClusterNamespace.getFullName(cluster, request.getDb());
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("db " + request.getDb() + " does not exist");
         }
         long dbId = db.getId();
-        Catalog.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
     }
@@ -932,9 +1005,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
         }
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
-        Database db = catalog.getDb(fullDbName);
+        Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;
             if (Strings.isNullOrEmpty(request.getCluster())) {
@@ -959,7 +1032,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TExecPlanFragmentParams plan = planner.plan(streamLoadTask.getId());
             // add table indexes to transaction state
             TransactionState txnState =
-                    Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
             if (txnState == null) {
                 throw new UserException("txn does not exist: " + request.getTxnId());
             }
@@ -973,7 +1046,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TStatus snapshotLoaderReport(TSnapshotLoaderReportRequest request) throws TException {
-        if (Catalog.getCurrentCatalog().getBackupHandler().report(request.getTask_type(), request.getJob_id(),
+        if (GlobalStateMgr.getCurrentState().getBackupHandler().report(request.getTask_type(), request.getJob_id(),
                 request.getTask_id(), request.getFinished_num(), request.getTotal_num())) {
             return new TStatus(TStatusCode.OK);
         }
@@ -983,7 +1056,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TRefreshTableResponse refreshTable(TRefreshTableRequest request) throws TException {
         try {
-            Catalog.getCurrentCatalog().refreshExternalTable(request.getDb_name(),
+            GlobalStateMgr.getCurrentState().refreshExternalTable(request.getDb_name(),
                     request.getTable_name(),
                     request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
@@ -1037,7 +1110,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 configs.put(request.getKeys().get(i), request.getValues().get(i));
             }
 
-            Catalog.getCurrentCatalog().setFrontendConfig(configs);
+            GlobalStateMgr.getCurrentState().setFrontendConfig(configs);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

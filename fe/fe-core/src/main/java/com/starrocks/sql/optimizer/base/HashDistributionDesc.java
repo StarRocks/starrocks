@@ -10,15 +10,19 @@ import java.util.Objects;
 public class HashDistributionDesc {
     public enum SourceType {
         LOCAL, // hash property from scan node
-        // @Todo: Should modify Coordinator and PlanFragmentBuilder.
-        //  For sql: select * from t1 join[shuffle] (select x1, sum(1) from t1 group by x1) s on t1.x2 = s.x1;
-        //  Join check isn't bucket shuffle/shuffle depend on child is exchange node.
-        //  Join will mistake shuffle as bucket shuffle in PlanFragmentBuilder if aggregate node
-        //  use SHUFFLE_JOIN, and the hash algorithm is different which use for shuffle and bucket shuffle, then
-        //  the result will be error
+        // SHUFFLE AGG required contains column, like:
+        // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(a), satisfy
+        // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(b, a), satisfy
+        // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(c, b), satisfy
+        // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(b, c, a), satisfy
         SHUFFLE_AGG, // hash property from shuffle agg
+        // SHUFFLE JOIN required must equals and order same, it's much stricter than SHUFFLE_AGG
+        // e.g. required SHUFFLE_JOIN(a, b, c), child SHUFFLE_JOIN(a), not satisfy
+        // e.g. required SHUFFLE_JOIN(a, b, c), child SHUFFLE_JOIN(a, b), not satisfy
+        // e.g. required SHUFFLE_JOIN(a, b, c), child SHUFFLE_JOIN(b, c, a), not satisfy
+        // e.g. required SHUFFLE_JOIN(a, b, c), child SHUFFLE_JOIN(a, b, c), satisfy
         SHUFFLE_JOIN, // hash property from shuffle join
-        BUCKET_JOIN, // hash property from bucket join
+        BUCKET, // hash property from bucket
         SHUFFLE_ENFORCE // parent node which can not satisfy the requirement will enforce child this hash property
     }
 
@@ -49,6 +53,15 @@ public class HashDistributionDesc {
             return false;
         }
 
+        if (this.sourceType == SourceType.SHUFFLE_AGG && item.sourceType == SourceType.SHUFFLE_JOIN) {
+            return this.columns.size() == item.columns.size() && this.columns.equals(item.columns);
+        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && item.sourceType == SourceType.SHUFFLE_AGG) {
+            return item.columns.containsAll(this.columns);
+        } else if (!this.sourceType.equals(item.sourceType) &&
+                this.sourceType != HashDistributionDesc.SourceType.LOCAL) {
+            return false;
+        }
+
         // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
         if (SourceType.LOCAL.equals(sourceType) || SourceType.SHUFFLE_AGG.equals(sourceType)) {
             return item.columns.containsAll(this.columns);
@@ -65,8 +78,12 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.LOCAL;
     }
 
-    public boolean isJoinShuffle() {
-        return this.sourceType == SourceType.SHUFFLE_JOIN;
+    public boolean isShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_AGG || this.sourceType == SourceType.SHUFFLE_JOIN;
+    }
+
+    public boolean isAggShuffle() {
+        return this.sourceType == SourceType.SHUFFLE_AGG;
     }
 
     public boolean isShuffleEnforce() {
@@ -74,7 +91,7 @@ public class HashDistributionDesc {
     }
 
     public boolean isBucketJoin() {
-        return this.sourceType == SourceType.BUCKET_JOIN;
+        return this.sourceType == SourceType.BUCKET;
     }
 
     @Override

@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "column/datum_tuple.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -796,6 +796,139 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     EXPECT_EQ(1, chunk->num_rows());
 
     EXPECT_EQ("[NULL, '3.14', NULL, '1', NULL, '123', NULL, 3.14, NULL, 123, NULL]", chunk->debug_row(0));
+}
+
+TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.__isset.json_root = true;
+
+    range.jsonpaths = "[\"$.ip\", \"$.value\"]";
+    range.json_root = "$.keyname";
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['10.10.0.1', '10']", chunk->debug_row(0));
+    EXPECT_EQ("['10.10.0.2', '20']", chunk->debug_row(1));
+    EXPECT_EQ("['10.10.0.3', '30']", chunk->debug_row(2));
+    EXPECT_EQ("['10.10.0.4', '40']", chunk->debug_row(3));
+    EXPECT_EQ("['10.10.0.5', '50']", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = true;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['10.10.0.1', '10']", chunk->debug_row(0));
+    EXPECT_EQ("['10.10.0.2', '20']", chunk->debug_row(1));
+    EXPECT_EQ("['10.10.0.3', '30']", chunk->debug_row(2));
+    EXPECT_EQ("['10.10.0.4', '40']", chunk->debug_row(3));
+    EXPECT_EQ("['10.10.0.5', '50']", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = true;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['10.10.0.1', '10']", chunk->debug_row(0));
+    EXPECT_EQ("['10.10.0.2', '20']", chunk->debug_row(1));
+    EXPECT_EQ("['10.10.0.3', '30']", chunk->debug_row(2));
+    EXPECT_EQ("['10.10.0.4', '40']", chunk->debug_row(3));
+    EXPECT_EQ("['10.10.0.5', '50']", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_illegal_input) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
+    ranges.emplace_back(range);
+
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
+
+    ASSERT_OK(scanner->open());
+    ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
 }
 
 } // namespace starrocks::vectorized

@@ -27,9 +27,8 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "common/logging.h" // LOG
-#include "env/env.h"        // Env
+#include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
-#include "storage/fs/block_manager.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
 #include "storage/schema.h"
@@ -44,10 +43,10 @@ namespace starrocks {
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
 
-SegmentWriter::SegmentWriter(std::unique_ptr<fs::WritableBlock> wblock, uint32_t segment_id,
+SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id,
                              const TabletSchema* tablet_schema, const SegmentWriterOptions& opts)
-        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(opts), _wblock(std::move(wblock)) {
-    CHECK_NOTNULL(_wblock.get());
+        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(opts), _wfile(std::move(wfile)) {
+    CHECK_NOTNULL(_wfile.get());
 }
 
 SegmentWriter::~SegmentWriter() {}
@@ -148,8 +147,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
-        if (column.type() == FieldType::OLAP_FIELD_TYPE_CHAR && column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR,
-            _opts.global_dicts != nullptr) {
+        if (column.type() == FieldType::OLAP_FIELD_TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second;
@@ -158,7 +156,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
 
         std::unique_ptr<ColumnWriter> writer;
-        RETURN_IF_ERROR(ColumnWriter::create(opts, &column, _wblock.get(), &writer));
+        RETURN_IF_ERROR(ColumnWriter::create(opts, &column, _wfile.get(), &writer));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
     }
@@ -186,7 +184,7 @@ uint64_t SegmentWriter::estimate_segment_size() {
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
     RETURN_IF_ERROR(finalize_columns(index_size));
-    *footer_position = _wblock->bytes_appended();
+    *footer_position = _wfile->size();
     return finalize_footer(segment_file_size);
 }
 
@@ -212,12 +210,12 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // write data
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
-        uint64_t index_offset = _wblock->bytes_appended();
+        uint64_t index_offset = _wfile->size();
         RETURN_IF_ERROR(column_writer->write_ordinal_index());
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
-        *index_size += _wblock->bytes_appended() - index_offset;
+        *index_size += _wfile->size() - index_offset;
 
         // global dict
         if (!column_writer->is_global_dict_valid()) {
@@ -233,9 +231,9 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _column_indexes.clear();
 
     if (_has_key) {
-        uint64_t index_offset = _wblock->bytes_appended();
+        uint64_t index_offset = _wfile->size();
         RETURN_IF_ERROR(_write_short_key_index());
-        *index_size += _wblock->bytes_appended() - index_offset;
+        *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
     }
     return Status::OK();
@@ -243,9 +241,8 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 
 Status SegmentWriter::finalize_footer(uint64_t* segment_file_size) {
     RETURN_IF_ERROR(_write_footer());
-    RETURN_IF_ERROR(_wblock->finalize());
-    *segment_file_size = _wblock->bytes_appended();
-    return _wblock->close();
+    *segment_file_size = _wfile->size();
+    return _wfile->close();
 }
 
 Status SegmentWriter::_write_short_key_index() {
@@ -254,7 +251,7 @@ Status SegmentWriter::_write_short_key_index() {
     RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
     PagePointer pp;
     // short key index page is not compressed right now
-    RETURN_IF_ERROR(PageIO::write_page(_wblock.get(), body, footer, &pp));
+    RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
     pp.to_proto(_footer.mutable_short_key_index_page());
     return Status::OK();
 }
@@ -284,7 +281,7 @@ Status SegmentWriter::_write_footer() {
 }
 
 Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
-    RETURN_IF_ERROR(_wblock->appendv(&slices[0], slices.size()));
+    RETURN_IF_ERROR(_wfile->appendv(&slices[0], slices.size()));
     return Status::OK();
 }
 

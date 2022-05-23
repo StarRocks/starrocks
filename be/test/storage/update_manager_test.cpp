@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -15,7 +16,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 using namespace std;
 
@@ -25,11 +25,11 @@ class UpdateManagerTest : public testing::Test {
 public:
     void SetUp() override {
         _root_path = "./ut_dir/olap_update_manager_test";
-        FileUtils::remove_all(_root_path);
-        FileUtils::create_dir(_root_path);
+        fs::remove_all(_root_path);
+        fs::create_directories(_root_path);
         _meta.reset(new KVStore(_root_path));
         ASSERT_TRUE(_meta->init().ok());
-        ASSERT_TRUE(FileUtils::is_dir(_root_path + "/meta"));
+        ASSERT_TRUE(fs::is_directory(_root_path + "/meta").value());
         _root_mem_tracker.reset(new MemTracker(-1, "update"));
         _update_manager.reset(new UpdateManager(_root_mem_tracker.get()));
     }
@@ -103,7 +103,7 @@ public:
         _update_manager.reset();
         _root_mem_tracker.reset();
         _meta.reset();
-        FileUtils::remove_all(_root_path);
+        fs::remove_all(_root_path);
         if (_tablet) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();

@@ -73,6 +73,7 @@ public class IcebergUtil {
 
     /**
      * Get hdfs file format in StarRocks use iceberg file format.
+     *
      * @param format
      * @return HdfsFileFormat
      */
@@ -91,33 +92,28 @@ public class IcebergUtil {
     /**
      * Get current snapshot of iceberg table, return null if snapshot do not exist.
      * Refresh table is needed.
+     *
      * @param table
      * @return Optional<Snapshot>
      */
-    public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
+    public static Optional<Snapshot> getCurrentTableSnapshot(Table table) {
         return Optional.ofNullable(table.currentSnapshot());
     }
 
     /**
      * Get table scan for given table and snapshot, filter with given iceberg predicates.
      * Refresh table if needed.
+     *
      * @param table
      * @param snapshot
      * @param icebergPredicates
-     * @param refresh
      * @return
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates,
-                                         boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
-
+                                         List<Expression> icebergPredicates) {
+        // TODO: use planWith(executorService) after
+        // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
         Expression filterExpressions = Expressions.alwaysTrue();
         if (!icebergPredicates.isEmpty()) {
@@ -127,7 +123,7 @@ public class IcebergUtil {
         return tableScan.filter(filterExpressions);
     }
 
-    private static void refreshTable(Table table) {
+    public static void refreshTable(Table table) {
         try {
             if (table instanceof BaseTable) {
                 BaseTable baseTable = (BaseTable) table;
@@ -138,7 +134,7 @@ public class IcebergUtil {
                     throw new NoSuchTableException("No such table: %s", table.name());
                 }
             } else {
-                // table loaded by Catalog should be a base table
+                // table loaded by GlobalStateMgr should be a base table
                 throw new StarRocksIcebergException(String.format("Invalid table type of %s, it should be a BaseTable!",
                         table.name()));
             }
@@ -152,7 +148,6 @@ public class IcebergUtil {
     }
 
     /**
-     *
      * @param partitionSpec
      * @return
      */

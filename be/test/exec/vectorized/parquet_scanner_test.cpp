@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "common/status.h"
-#include "env/env_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -538,8 +537,3 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
 }
 
 } // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

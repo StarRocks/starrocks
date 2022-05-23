@@ -581,20 +581,7 @@ Version TabletMeta::max_version() const {
 }
 
 Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
-    for (auto& rs : _rs_metas) {
-        if (rs->version() == rs_meta->version()) {
-            if (rs->rowset_id() != rs_meta->rowset_id()) {
-                LOG(WARNING) << "version already exist. rowset_id=" << rs->rowset_id() << " version=" << rs->version()
-                             << ", tablet=" << full_name();
-                return Status::AlreadyExist("publish version");
-            } else {
-                // rowsetid,version is equal, it is a duplicate req, skip it
-                return Status::OK();
-            }
-        }
-    }
-
+    // consistency is guarantee by tablet
     _rs_metas.push_back(rs_meta);
     if (rs_meta->has_delete_predicate()) {
         add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
@@ -658,14 +645,7 @@ void TabletMeta::revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) 
 }
 
 Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // check RowsetMeta is valid
-    for (const auto& rs : _inc_rs_metas) {
-        if (rs->version() == rs_meta->version()) {
-            LOG(WARNING) << "rowset already exist. rowset_id=" << rs->rowset_id();
-            return Status::AlreadyExist("rowset meta already exist");
-        }
-    }
-
+    // consistency is guarantee by tablet
     _inc_rs_metas.push_back(rs_meta);
     return Status::OK();
 }
@@ -675,19 +655,12 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
             it = _stale_rs_metas.erase(it);
+            // version wouldn't be duplicate
+            break;
         } else {
             it++;
         }
     }
-}
-
-RowsetMetaSharedPtr TabletMeta::acquire_stale_rs_meta_by_version(const Version& version) const {
-    for (auto it : _stale_rs_metas) {
-        if (it->version() == version) {
-            return it;
-        }
-    }
-    return nullptr;
 }
 
 void TabletMeta::delete_inc_rs_meta_by_version(const Version& version) {
@@ -811,13 +784,13 @@ Status TabletMeta::set_partition_id(int64_t partition_id) {
 void TabletMeta::create_inital_updates_meta() {
     CHECK(!_updatesPB) << "_updates should be empty";
     _updatesPB = std::make_unique<TabletUpdatesPB>();
-    auto vm = _updatesPB->add_versions();
-    auto v = vm->mutable_version();
-    v->set_major(1);
-    v->set_minor(0);
-    vm->set_creation_time(creation_time());
-    _updatesPB->mutable_apply_version()->set_major(v->major());
-    _updatesPB->mutable_apply_version()->set_minor(v->minor());
+    auto edit_version_meta_pb = _updatesPB->add_versions();
+    auto edit_version_pb = edit_version_meta_pb->mutable_version();
+    edit_version_pb->set_major(1);
+    edit_version_pb->set_minor(0);
+    edit_version_meta_pb->set_creation_time(creation_time());
+    _updatesPB->mutable_apply_version()->set_major(edit_version_pb->major());
+    _updatesPB->mutable_apply_version()->set_minor(edit_version_pb->minor());
     _updatesPB->set_next_log_id(0);
     _updatesPB->set_next_rowset_id(0);
 }

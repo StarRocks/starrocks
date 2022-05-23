@@ -164,6 +164,7 @@ public:
     bool delete_flag() const { return rowset_meta()->delete_flag(); }
     int64_t num_segments() const { return rowset_meta()->num_segments(); }
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
+    bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0; }
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?

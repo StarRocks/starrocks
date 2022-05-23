@@ -39,6 +39,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
@@ -117,7 +118,8 @@ public class Column implements Writable {
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, ColumnDef.DefaultValueDef defaultValue,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+                  ColumnDef.DefaultValueDef defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, false, defaultValue, comment);
     }
@@ -440,7 +442,6 @@ public class Column implements Writable {
         return sb.toString();
     }
 
-
     public enum DefaultValueType {
         NULL,       // default value is not set or default value is null
         CONST,      // const expr e.g. default "1" or now() function
@@ -459,8 +460,6 @@ public class Column implements Writable {
         }
         return DefaultValueType.NULL;
     }
-
-
 
     // if the column have a default value or default expr can be calculated like now(). return calculated value
     // else for a batch of every row different like uuid(). return null
@@ -497,7 +496,7 @@ public class Column implements Writable {
         }
         if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
             LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
-                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                    .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
             return localDateTime.format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT));
         }
         return null;
@@ -514,8 +513,6 @@ public class Column implements Writable {
         }
         return FeConstants.null_string;
     }
-
-
 
     public String toSqlWithoutAggregateTypeName() {
         StringBuilder sb = new StringBuilder();
@@ -605,20 +602,20 @@ public class Column implements Writable {
         if (notNull) {
             aggregationType = AggregateType.valueOf(Text.readString(in));
 
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
                 isAggregationTypeImplicit = in.readBoolean();
             } else {
                 isAggregationTypeImplicit = false;
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             isKey = in.readBoolean();
         } else {
             isKey = (aggregationType == null);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             isAllowNull = in.readBoolean();
         } else {
             isAllowNull = false;
@@ -630,7 +627,7 @@ public class Column implements Writable {
         }
         stats = ColumnStats.read(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             comment = Text.readString(in);
         } else {
             comment = "";
@@ -638,7 +635,7 @@ public class Column implements Writable {
     }
 
     public static Column read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86) {
             Column column = new Column();
             column.readFields(in);
             return column;

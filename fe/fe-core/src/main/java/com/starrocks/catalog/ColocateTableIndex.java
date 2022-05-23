@@ -29,15 +29,21 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.TablePropertyInfo;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -157,7 +163,7 @@ public class ColocateTableIndex implements Writable {
                     groupId = assignedGroupId;
                 } else {
                     // generate a new one
-                    groupId = new GroupId(dbId, Catalog.getCurrentCatalog().getNextId());
+                    groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
@@ -192,7 +198,7 @@ public class ColocateTableIndex implements Writable {
             if (unstableGroups.add(groupId)) {
                 if (needEditLog) {
                     ColocatePersistInfo info = ColocatePersistInfo.createForMarkUnstable(groupId);
-                    Catalog.getCurrentCatalog().getEditLog().logColocateMarkUnstable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkUnstable(info);
                 }
                 LOG.info("mark group {} as unstable", groupId);
             }
@@ -210,7 +216,7 @@ public class ColocateTableIndex implements Writable {
             if (unstableGroups.remove(groupId)) {
                 if (needEditLog) {
                     ColocatePersistInfo info = ColocatePersistInfo.createForMarkStable(groupId);
-                    Catalog.getCurrentCatalog().getEditLog().logColocateMarkStable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkStable(info);
                 }
                 LOG.info("mark group {} as stable", groupId);
             }
@@ -445,7 +451,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = Catalog.getCurrentCatalog().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
         Preconditions.checkNotNull(tbl);
@@ -552,7 +558,7 @@ public class ColocateTableIndex implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_55) {
             Multimap<Long, Long> tmpGroup2Tables = ArrayListMultimap.create();
             Map<Long, Long> tmpTable2Group = Maps.newHashMap();
             Map<Long, Long> tmpGroup2Db = Maps.newHashMap();
@@ -655,7 +661,7 @@ public class ColocateTableIndex implements Writable {
 
         for (Map.Entry<Long, Long> entry : tmpGroup2Db.entrySet()) {
             GroupId groupId = new GroupId(entry.getValue(), entry.getKey());
-            Database db = Catalog.getCurrentCatalog().getDb(groupId.dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -698,9 +704,121 @@ public class ColocateTableIndex implements Writable {
             Preconditions.checkState(tabletOrderIdx < backends.size(), tabletOrderIdx + " vs. " + backends.size());
             backends.set(tabletOrderIdx, Lists.newArrayList(newBackends));
             ColocatePersistInfo info = ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backends);
-            Catalog.getCurrentCatalog().getEditLog().logColocateBackendsPerBucketSeq(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
         } finally {
             writeUnlock();
+        }
+    }
+
+    public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
+            GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
+        }
+        LOG.info("finished replay colocateTableIndex from image");
+        return checksum;
+    }
+
+    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    // the invoker should keep db write lock
+    public void modifyTableColocate(Database db, OlapTable table, String colocateGroup, boolean isReplay,
+                                    GroupId assignedGroupId)
+            throws DdlException {
+
+        String oldGroup = table.getColocateGroup();
+        GroupId groupId = null;
+        if (!Strings.isNullOrEmpty(colocateGroup)) {
+            String fullGroupName = db.getId() + "_" + colocateGroup;
+            ColocateGroupSchema groupSchema = getGroupSchema(fullGroupName);
+            if (groupSchema == null) {
+                // user set a new colocate group,
+                // check if all partitions all this table has same buckets num and same replication number
+                PartitionInfo partitionInfo = table.getPartitionInfo();
+                if (partitionInfo.getType() == PartitionType.RANGE) {
+                    int bucketsNum = -1;
+                    short replicationNum = -1;
+                    for (Partition partition : table.getPartitions()) {
+                        if (bucketsNum == -1) {
+                            bucketsNum = partition.getDistributionInfo().getBucketNum();
+                        } else if (bucketsNum != partition.getDistributionInfo().getBucketNum()) {
+                            throw new DdlException(
+                                    "Partitions in table " + table.getName() + " have different buckets number");
+                        }
+
+                        if (replicationNum == -1) {
+                            replicationNum = partitionInfo.getReplicationNum(partition.getId());
+                        } else if (replicationNum != partitionInfo.getReplicationNum(partition.getId())) {
+                            throw new DdlException(
+                                    "Partitions in table " + table.getName() + " have different replication number");
+                        }
+                    }
+                }
+            } else {
+                // set to an already exist colocate group, check if this table can be added to this group.
+                groupSchema.checkColocateSchema(table);
+            }
+
+            List<List<Long>> backendsPerBucketSeq = null;
+            if (groupSchema == null) {
+                // assign to a newly created group, set backends sequence.
+                // we arbitrarily choose a tablet backends sequence from this table,
+                // let the colocation balancer do the work.
+                backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+            }
+            // change group after getting backends sequence(if has), in case 'getArbitraryTabletBucketsSeq' failed
+            groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId);
+
+            if (groupSchema == null) {
+                Preconditions.checkNotNull(backendsPerBucketSeq);
+                addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            }
+
+            // set this group as unstable
+            markGroupUnstable(groupId, false /* edit log is along with modify table log */);
+            table.setColocateGroup(colocateGroup);
+        } else {
+            // unset colocation group
+            if (Strings.isNullOrEmpty(oldGroup)) {
+                // this table is not a colocate table, do nothing
+                return;
+            }
+
+            // when replayModifyTableColocate, we need the groupId info
+            String fullGroupName = db.getId() + "_" + oldGroup;
+            groupId = getGroupSchema(fullGroupName).getGroupId();
+
+            removeTable(table.getId());
+            table.setColocateGroup(null);
+        }
+
+        if (!isReplay) {
+            Map<String, String> properties = Maps.newHashMapWithExpectedSize(1);
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+            TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
+        }
+        LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
+                table.getName(), isReplay);
+    }
+
+    public void replayModifyTableColocate(TablePropertyInfo info) {
+        long tableId = info.getTableId();
+        Map<String, String> properties = info.getPropertyMap();
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        db.writeLock();
+        try {
+            OlapTable table = (OlapTable) db.getTable(tableId);
+            modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
+                    info.getGroupId());
+        } catch (DdlException e) {
+            // should not happen
+            LOG.warn("failed to replay modify table colocate", e);
+        } finally {
+            db.writeUnlock();
         }
     }
 }

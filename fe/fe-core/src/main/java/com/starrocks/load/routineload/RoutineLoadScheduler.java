@@ -23,14 +23,13 @@ package com.starrocks.load.routineload;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,7 +44,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
     @VisibleForTesting
     public RoutineLoadScheduler() {
         super();
-        routineLoadManager = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
     }
 
     public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
@@ -66,12 +65,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
         // update
         routineLoadManager.updateRoutineLoadJob();
         // get need schedule routine jobs
-        List<RoutineLoadJob> routineLoadJobList = null;
-        try {
-            routineLoadJobList = getNeedScheduleRoutineJobs();
-        } catch (LoadException e) {
-            LOG.warn("failed to get need schedule routine jobs", e);
-        }
+        List<RoutineLoadJob> routineLoadJobList = getNeedScheduleRoutineJobs();
 
         LOG.info("there are {} job need schedule", routineLoadJobList.size());
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
@@ -126,7 +120,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
         routineLoadManager.processTimeoutTasks();
     }
 
-    private List<RoutineLoadJob> getNeedScheduleRoutineJobs() throws LoadException {
+    private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
         return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
     }
 }

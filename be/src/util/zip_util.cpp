@@ -23,10 +23,10 @@
 
 #include <memory>
 
-#include "env/env.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
-#include "util/file_utils.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -45,7 +45,7 @@ Status ZipFile::close() {
     }
 
     for (auto& p : _clean_paths) {
-        RETURN_IF_ERROR(FileUtils::remove_all(p));
+        RETURN_IF_ERROR(fs::remove_all(p));
     }
 
     return Status::OK();
@@ -67,7 +67,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
 
     // 0.check target path
     std::string target = target_path + "/" + dir_name;
-    if (FileUtils::check_exist(target)) {
+    if (fs::path_exist(target)) {
         return Status::AlreadyExist("path already exists: " + target);
     }
 
@@ -75,7 +75,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
     std::string temp = target_path + "/.tmp_" + std::to_string(GetCurrentTimeMicros()) + "_" + dir_name;
     _clean_paths.push_back(temp);
 
-    RETURN_IF_ERROR(FileUtils::create_dir(temp));
+    RETURN_IF_ERROR(fs::create_directories(temp));
 
     // 2.unzip to temp directory
     for (int i = 0; i < global_info.number_entry; ++i) {
@@ -84,7 +84,7 @@ Status ZipFile::extract(const std::string& target_path, const std::string& dir_n
     }
 
     // 3.move to target directory
-    RETURN_IF_ERROR(Env::Default()->rename_file(temp, target));
+    RETURN_IF_ERROR(FileSystem::Default()->rename_file(temp, target));
     _clean_paths.clear();
 
     return Status::OK();
@@ -106,7 +106,7 @@ Status ZipFile::extract_file(const std::string& target_path) {
     std::string path = target_path + "/" + std::string(file_name);
 
     if (HasSuffixString(file_name, "/") || HasSuffixString(file_name, "\\")) {
-        return FileUtils::create_dir(path);
+        return fs::create_directories(path);
     }
 
     // is file, unzip
@@ -120,7 +120,8 @@ Status ZipFile::extract_file(const std::string& target_path) {
     ZPOS64_T file_size = std::min(file_info_inzip.uncompressed_size, DEFAULT_UNZIP_BUFFER);
     std::unique_ptr<char[]> file_data(new char[file_size]);
 
-    ASSIGN_OR_RETURN(auto wfile, Env::Default()->new_writable_file(path));
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto wfile, FileSystem::Default()->new_writable_file(opts, path));
 
     int size;
     do {

@@ -4,7 +4,7 @@
 
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "env/env.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "util/utf8_check.h"
@@ -17,7 +17,7 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     DCHECK(_buff.free_space() > 0);
     Slice s(_buff.limit(), _buff.free_space());
     auto res = _file->read(s.data, s.size);
-    // According to the specification of `Env::read`, when reached the end of
+    // According to the specification of `FileSystem::read`, when reached the end of
     // a file, the returned status will be OK instead of EOF, but here we check
     // EOF also for safety.
     if (res.status().is_end_of_file()) {

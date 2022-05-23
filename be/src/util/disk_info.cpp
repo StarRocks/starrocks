@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/util/disk_info.cpp
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -33,8 +29,8 @@
 #include <iostream>
 #include <sstream>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -165,7 +161,7 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
     std::vector<std::string> real_paths;
     for (auto& path : paths) {
         std::string p;
-        WARN_IF_ERROR(FileUtils::canonicalize(path, &p),
+        WARN_IF_ERROR(fs::canonicalize(path, &p),
                       "canonicalize path " + path + " failed, skip disk monitoring of this path");
         real_paths.emplace_back(std::move(p));
     }

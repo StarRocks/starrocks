@@ -887,10 +887,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testCastDatePredicate() throws Exception {
-        OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
+        OlapTable lineitem =
+                (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
-        connectContext.getCatalog().setStatisticStorage(mock);
+        connectContext.getGlobalStateMgr().setStatisticStorage(mock);
 
         // ===========================
         // To handle cast(int) in normal range
@@ -947,7 +948,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "     column statistics: \n" +
                 "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE");
 
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(100));
     }
 
     @Test
@@ -1112,5 +1113,100 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                         "and dt < timestamp('2021-12-29 00:00:00.0')";
         plan = getFragmentPlan(sql);
         assertContains(plan, "partitions=1/4");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild1() throws Exception {
+        String sql = "select * from (select v2, sum(v3) as x3 from t0 group by v2) j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v2 = j1.v3 and j0.x3 = j1.x2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild2() throws Exception {
+        String sql = "select * from t0 j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v3 = j1.v3 and j0.v2 = j1.x2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:AGGREGATE (merge finalize)");
+    }
+
+    @Test
+    public void testJoinDifferentAggChild3() throws Exception {
+        String sql = "select * from (select v2, sum(v3) as x3 from t0 group by v2) j0 join " +
+                "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v2 = j1.v3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  equal join conjunct: 2: v2 = 7: v3\n" +
+                "  |  \n" +
+                "  |----7:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: sum(8: sum)\n" +
+                "  |    |  group by: 7: v3\n" +
+                "  |    |  \n" +
+                "  |    6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:AGGREGATE (merge finalize)");
+    }
+
+    @Test
+    public void testOneStageAggJoinChild() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select xx.v2, sum(xx.v3) from (select * from t0 join t1 on t0.v2 = t1.v5) as xx group by xx.v2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
+    }
+
+    @Test
+    public void testStringMinMaxPredicate() throws Exception {
+        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having min > '123'";
+        String costPlan = getCostExplain(sql);
+
+        assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE");
+
+        sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, " * min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE");
+
+        sql = "select Min(C_NAME) as min, Max(C_NAME) as max from customer having max < '1234'";
+        costPlan = getCostExplain(sql);
+        assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE");
+        assertContains(costPlan, "having: [11: max, VARCHAR, true] < '1234'\n" +
+                "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testSQLSmithGenQuery() throws Exception {
+        String sql = "select * from " +
+                "  (select  \n" +
+                "          ref_0.id_decimal as c0, \n" +
+                "          ref_0.t1c as c1, \n" +
+                "          ref_0.id_datetime as c2\n" +
+                "        from \n" +
+                "          test_all_type as ref_0\n" +
+                "        where cast(null as DOUBLE) <= ref_0.t1f) as subq_0\n" +
+                "    left join part as ref_1\n" +
+                "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
+                "where subq_0.c1 <> subq_0.c1\n" +
+                "limit 63;";
+        String plan = getFragmentPlan(sql);
+        // check without error
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
     }
 }

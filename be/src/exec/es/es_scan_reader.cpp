@@ -28,8 +28,8 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/es/es_scroll_parser.h"
 #include "exec/es/es_scroll_query.h"
-#include "exec/vectorized/es_http_components.h"
 #include "fmt/compile.h"
 
 namespace starrocks {

@@ -30,8 +30,8 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     private static synchronized void initTableLevelLockCache(long evictionTimeout) {
         if (commitLockCache == null) {
             commitLockCache = Caffeine.newBuilder()
-               .expireAfterAccess(evictionTimeout, TimeUnit.MILLISECONDS)
-               .build();
+                    .expireAfterAccess(evictionTimeout, TimeUnit.MILLISECONDS)
+                    .build();
         }
     }
 
@@ -52,7 +52,8 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
         this.database = database;
         this.tableName = table;
         this.metadataRefreshMaxRetries =
-                conf.getInt(HIVE_ICEBERG_METADATA_REFRESH_MAX_RETRIES, HIVE_ICEBERG_METADATA_REFRESH_MAX_RETRIES_DEFAULT);
+                conf.getInt(HIVE_ICEBERG_METADATA_REFRESH_MAX_RETRIES,
+                        HIVE_ICEBERG_METADATA_REFRESH_MAX_RETRIES_DEFAULT);
         long tableLevelLockCacheEvictionTimeout =
                 conf.getLong(HIVE_TABLE_LEVEL_LOCK_EVICT_MS, HIVE_TABLE_LEVEL_LOCK_EVICT_MS_DEFAULT);
         initTableLevelLockCache(tableLevelLockCacheEvictionTimeout);

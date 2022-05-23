@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "fs/fs_util.h"
 #include "storage/data_dir.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
@@ -39,7 +40,6 @@
 #include "storage/snapshot_meta.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/file_utils.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -81,9 +81,18 @@ public:
     // On success, return the absolute path of the root directory of snapshot.
     StatusOr<std::string> snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version, int64_t timeout_s);
 
+    // On success, return the absolute path of the root directory of snapshot.
+    StatusOr<std::string> snapshot_primary(const TabletSharedPtr& tablet,
+                                           const std::vector<int64_t>& missing_version_ranges, int64_t timeout_s);
+
     Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
+
+    // this function is only used for ut
+    std::string calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {
+        return _calc_snapshot_id_path(tablet, timeout_s);
+    }
 
 private:
     SnapshotManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker), _snapshot_base_id(0) {}

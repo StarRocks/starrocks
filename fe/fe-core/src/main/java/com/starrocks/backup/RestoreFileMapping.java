@@ -124,7 +124,7 @@ public class RestoreFileMapping implements Writable {
         }
     }
 
-    // catalog ids -> repository ids
+    // globalStateMgr ids -> repository ids
     private Map<IdChain, IdChain> mapping = Maps.newHashMap();
     // tablet id -> is overwrite
     private Map<Long, Boolean> overwriteMap = Maps.newHashMap();

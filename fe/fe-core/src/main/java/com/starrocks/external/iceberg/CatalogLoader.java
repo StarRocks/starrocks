@@ -31,7 +31,8 @@ public interface CatalogLoader {
         return new HiveCatalogLoader(name, hadoopConf, properties);
     }
 
-    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String catalogImpl) {
+    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties,
+                                String catalogImpl) {
         return new CustomCatalogLoader(name, hadoopConf, properties, catalogImpl);
     }
 
@@ -47,23 +48,24 @@ public interface CatalogLoader {
             this.hadoopConf = new SerializableConfiguration(conf);
             this.uri = properties.get(CatalogProperties.URI);
             this.clientPoolSize = properties.containsKey(CatalogProperties.CLIENT_POOL_SIZE) ?
-                Integer.parseInt(properties.get(CatalogProperties.CLIENT_POOL_SIZE)) :
-                CatalogProperties.CLIENT_POOL_SIZE_DEFAULT;
+                    Integer.parseInt(properties.get(CatalogProperties.CLIENT_POOL_SIZE)) :
+                    CatalogProperties.CLIENT_POOL_SIZE_DEFAULT;
             this.properties = Maps.newHashMap(properties);
         }
 
         @Override
         public Catalog loadCatalog() {
-            return CatalogUtil.loadCatalog(IcebergHiveCatalog.class.getName(), catalogName, properties, hadoopConf.get());
+            return CatalogUtil.loadCatalog(IcebergHiveCatalog.class.getName(), catalogName, properties,
+                    hadoopConf.get());
         }
 
         @Override
         public String toString() {
             return MoreObjects.toStringHelper(this)
-                .add("catalogName", catalogName)
-                .add("uri", uri)
-                .add("clientPoolSize", clientPoolSize)
-                .toString();
+                    .add("catalogName", catalogName)
+                    .add("uri", uri)
+                    .add("clientPoolSize", clientPoolSize)
+                    .toString();
         }
     }
 
@@ -83,7 +85,7 @@ public interface CatalogLoader {
             this.properties = Maps.newHashMap(properties); // wrap into a hashmap for serialization
             this.name = name;
             this.catalogImpl = Preconditions.checkNotNull(catalogImpl,
-                    "Cannot initialize custom Catalog, impl class name is null");
+                    "Cannot initialize custom GlobalStateMgr, impl class name is null");
         }
 
         @Override

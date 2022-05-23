@@ -41,6 +41,8 @@ const int TIME_MAX_HOUR = 838;
 
 class TimestampValue {
 public:
+    using type = Timestamp;
+
     inline static TimestampValue create(int year, int month, int day, int hour, int minute, int second);
 
     inline Timestamp timestamp() const { return _timestamp; }
@@ -100,6 +102,15 @@ public:
     void trunc_to_year();
     void trunc_to_week(int days);
     void trunc_to_quarter();
+
+    void floor_to_second_period(int period);
+    void floor_to_minute_period(int period);
+    void floor_to_hour_period(int period);
+    void floor_to_day_period(int period);
+    void floor_to_month_period(int period);
+    void floor_to_year_period(int period);
+    void floor_to_week_period(int period);
+    void floor_to_quarter_period(int period);
 
     bool from_string(const char* date_str, size_t len);
 

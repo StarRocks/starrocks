@@ -23,53 +23,24 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.UserProperty;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.List;
 
 public class UserPropertyTest {
-    private FakeCatalog fakeCatalog;
-
-    @Test
-    public void testNormal() throws IOException, DdlException {
-        // mock catalog
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
-
-        UserProperty property = new UserProperty("root");
-        property.getResource().updateGroupShare("low", 991);
-        // To image
-        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-        DataOutputStream outputStream = new DataOutputStream(byteStream);
-        property.write(outputStream);
-        outputStream.flush();
-        DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(byteStream.toByteArray()));
-        UserProperty newProperty = UserProperty.read(inputStream);
-
-        Assert.assertEquals(991, newProperty.getResource().getShareByGroup().get("low").intValue());
-    }
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Test
     public void testUpdate() throws DdlException {
         List<Pair<String, String>> properties = Lists.newArrayList();
         properties.add(Pair.create("MAX_USER_CONNECTIONS", "100"));
-        properties.add(Pair.create("resource.cpu_share", "101"));
-        properties.add(Pair.create("quota.normal", "102"));
 
         UserProperty userProperty = new UserProperty();
         userProperty.update(properties);
         Assert.assertEquals(100, userProperty.getMaxConn());
-        Assert.assertEquals(101, userProperty.getResource().getResource().getByDesc("cpu_share"));
-        Assert.assertEquals(102, userProperty.getResource().getShareByGroup().get("normal").intValue());
 
         // fetch property
         List<List<String>> rows = userProperty.fetchProperty();
@@ -79,10 +50,6 @@ public class UserPropertyTest {
 
             if (key.equalsIgnoreCase("max_user_connections")) {
                 Assert.assertEquals("100", value);
-            } else if (key.equalsIgnoreCase("resource.cpu_share")) {
-                Assert.assertEquals("101", value);
-            } else if (key.equalsIgnoreCase("quota.normal")) {
-                Assert.assertEquals("102", value);
             }
         }
     }

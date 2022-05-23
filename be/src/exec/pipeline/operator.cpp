@@ -16,8 +16,9 @@ namespace starrocks::pipeline {
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
 
-Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
-        : _factory(factory), _id(id), _name(name), _plan_node_id(plan_node_id) {
+Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                   int32_t driver_sequence)
+        : _factory(factory), _id(id), _name(name), _plan_node_id(plan_node_id), _driver_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name;
@@ -39,15 +40,13 @@ Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = state->instance_mem_tracker();
+    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
     _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
-
-    _total_cost_cpu_time_ns_counter = ADD_TIMER(_common_metrics, "OperatorTotalCostCpuTime");
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
@@ -88,6 +87,18 @@ std::vector<ExprContext*>& Operator::runtime_in_filters() {
 
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
     return _factory->get_runtime_bloom_filters();
+}
+const RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() const {
+    return _factory->get_runtime_bloom_filters();
+}
+
+int64_t Operator::global_rf_wait_timeout_ns() const {
+    const auto* global_rf_collector = runtime_bloom_filters();
+    if (global_rf_collector == nullptr) {
+        return 0;
+    }
+
+    return 1000'000L * global_rf_collector->wait_timeout_ms();
 }
 
 const std::vector<SlotId>& Operator::filter_null_value_columns() const {
@@ -131,6 +142,10 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     }
 
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+}
+
+RuntimeState* Operator::runtime_state() {
+    return _factory->runtime_state();
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {
@@ -189,6 +204,23 @@ Status OperatorFactory::prepare(RuntimeState* state) {
 void OperatorFactory::close(RuntimeState* state) {
     if (_runtime_filter_collector) {
         _runtime_filter_collector->close(state);
+    }
+}
+
+void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+    for (auto& holder : holders) {
+        DCHECK(holder->is_ready());
+        auto* collector = holder->get_collector();
+
+        collector->rewrite_in_filters(_tuple_slot_mappings);
+
+        auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
+        for (auto* filter : in_filters) {
+            filter->prepare(state);
+            filter->open(state);
+            _runtime_in_filters.push_back(filter);
+        }
     }
 }
 

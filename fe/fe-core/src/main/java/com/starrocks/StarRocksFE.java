@@ -23,7 +23,6 @@ package com.starrocks;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.CommandLineOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
@@ -34,6 +33,7 @@ import com.starrocks.http.HttpServer;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.qe.QeService;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
 import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
@@ -103,9 +102,9 @@ public class StarRocksFE {
             FrontendOptions.init();
             ExecuteEnv.setup();
 
-            // init catalog and wait it be ready
-            Catalog.getCurrentCatalog().initialize(args);
-            Catalog.getCurrentCatalog().waitForReady();
+            // init globalStateMgr and wait it be ready
+            GlobalStateMgr.getCurrentState().initialize(args);
+            GlobalStateMgr.getCurrentState().waitForReady();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -235,7 +234,8 @@ public class StarRocksFE {
                     }
 
                     BDBToolOptions bdbOpts =
-                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion, starrocksMetaVersion);
+                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
+                                    starrocksMetaVersion);
                     return new CommandLineOptions(false, "", bdbOpts);
                 }
             } else {
@@ -265,7 +265,7 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            BDBTool bdbTool = new BDBTool(Catalog.getCurrentCatalog().getBdbDir(), cmdLineOpts.getBdbToolOpts());
+            BDBTool bdbTool = new BDBTool(GlobalStateMgr.getCurrentState().getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);
             } else {
@@ -276,26 +276,30 @@ public class StarRocksFE {
         // go on
     }
 
-    private static boolean createAndLockPidFile(String pidFilePath) throws IOException {
+    private static boolean createAndLockPidFile(String pidFilePath) {
         File pid = new File(pidFilePath);
-        try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
-            FileLock lock = file.getChannel().tryLock();
-            if (lock == null) {
-                return false;
+        for (int i = 0; i < 3; i++) {
+            try (RandomAccessFile file = new RandomAccessFile(pid, "rws")) {
+                if (i > 0) {
+                    Thread.sleep(10000);
+                }
+                FileLock lock = file.getChannel().tryLock();
+                if (lock == null) {
+                    throw new Exception("get pid file lock failed, lock is null");
+                }
+
+                pid.deleteOnExit();
+
+                String name = ManagementFactory.getRuntimeMXBean().getName();
+                file.setLength(0);
+                file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
+
+                return true;
+            } catch (Throwable t) {
+                LOG.warn("get pid file lock failed, retried: {}", i, t);
             }
-
-            pid.deleteOnExit();
-
-            String name = ManagementFactory.getRuntimeMXBean().getName();
-            file.setLength(0);
-            file.write(name.split("@")[0].getBytes(Charsets.UTF_8));
-
-            return true;
-        } catch (OverlappingFileLockException e) {
-            return false;
-        } catch (IOException e) {
-            throw e;
         }
+
+        return false;
     }
 }
-

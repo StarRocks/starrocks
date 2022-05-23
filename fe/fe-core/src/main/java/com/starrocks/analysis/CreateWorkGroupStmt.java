@@ -1,11 +1,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;
@@ -13,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 // WorkGroup create statement format
-// create resource_group [if not exists] [or replace] <name>
+// create resource group [if not exists] [or replace] <name>
 // to
 //  (user='foobar1', role='foo1', query_type in ('select'), source_ip='192.168.1.1/24'),
 //  (user='foobar2', role='foo2', query_type in ('insert'), source_ip='192.168.2.1/24')
@@ -27,7 +26,8 @@ public class CreateWorkGroupStmt extends DdlStmt {
     private Map<String, String> properties;
     private WorkGroup workgroup;
 
-    public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists, List<List<Predicate>> classifiers, Map<String, String> proeprties) {
+    public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                               List<List<Predicate>> classifiers, Map<String, String> proeprties) {
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;
@@ -70,9 +70,6 @@ public class CreateWorkGroupStmt extends DdlStmt {
         }
         if (workgroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");
-        }
-        if (workgroup.getConcurrencyLimit() == null) {
-            throw new SemanticException("property 'concurrent_limit' is absent");
         }
     }
 

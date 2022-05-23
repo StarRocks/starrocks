@@ -51,6 +51,13 @@ public:
         this->scan_bytes += stats_item.scan_bytes();
     }
 
+    void add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
+        this->scan_rows += scan_rows;
+        this->scan_bytes += scan_bytes;
+    }
+
+    void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
+
     void merge(QueryStatisticsRecvr* recvr);
 
     void clear() {
@@ -65,6 +72,7 @@ public:
         statistics->set_scan_rows(scan_rows);
         statistics->set_scan_bytes(scan_bytes);
         statistics->set_returned_rows(returned_rows);
+        statistics->set_cpu_cost_ns(cpu_ns);
         *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
     }
 
@@ -77,6 +85,7 @@ public:
 private:
     int64_t scan_rows{0};
     int64_t scan_bytes{0};
+    int64_t cpu_ns{0};
     // number rows returned by query.
     // only set once by result sink when closing.
     int64_t returned_rows{0};

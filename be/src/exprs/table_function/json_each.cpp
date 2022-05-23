@@ -12,8 +12,14 @@
 namespace starrocks::vectorized {
 
 std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool* eos) const {
-    Column* arg0 = state->get_columns()[0].get();
-    JsonColumn* json_column = down_cast<JsonColumn*>(ColumnHelper::get_data_column(arg0));
+    size_t num_input_rows = 0;
+    JsonColumn* json_column = nullptr;
+    if (!state->get_columns().empty()) {
+        Column* arg0 = state->get_columns()[0].get();
+        num_input_rows = arg0->size();
+        json_column = down_cast<JsonColumn*>(ColumnHelper::get_data_column(arg0));
+    }
+
     Columns result;
     auto key_column_ptr = BinaryColumn::create();
     auto value_column_ptr = JsonColumn::create();
@@ -21,9 +27,9 @@ std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool*
     result.emplace_back(value_column_ptr);
     auto offset_column = UInt32Column::create();
     int offset = 0;
-
     offset_column->append(offset);
-    for (int i = 0; i < json_column->size(); i++) {
+
+    for (int i = 0; i < num_input_rows; i++) {
         const JsonValue* json = json_column->get_object(i);
         DCHECK(!!json);
         vpack::Slice json_slice = json->to_vslice();
@@ -43,9 +49,8 @@ std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool*
                 offset++;
                 arr_idx++;
             }
-        } else {
-            continue;
         }
+
         offset_column->append(offset);
     }
 

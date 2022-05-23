@@ -4,11 +4,9 @@
 
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
-#include "env/env.h"
-#include "env/env_stream_pipe.h"
-#include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
 #include "exprs/vectorized/json_functions.h"
+#include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
 #include "util/raw_container.h"
@@ -94,7 +92,7 @@ private:
                              const std::string& col_name);
 
     // _build_slot_descs builds _slot_descs as the order of first json object and builds _slot_desc_dict;
-    void _build_slot_descs();
+    Status _build_slot_descs();
 
 private:
     RuntimeState* _state = nullptr;

@@ -33,6 +33,8 @@
 
 #include "common/status.h"
 #include "cumulative_compaction.h"
+#include "fs/fd_cache.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
@@ -45,7 +47,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/file_utils.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -81,7 +82,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
 
-          _file_cache(nullptr),
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
@@ -153,8 +153,6 @@ Status StorageEngine::_open() {
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
     _index_stream_lru_cache = new_lru_cache(config::index_stream_cache_capacity);
-
-    _file_cache.reset(new_lru_cache(config::file_descriptor_cache_capacity));
 
     starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
@@ -279,9 +277,6 @@ template std::vector<DataDir*> StorageEngine::get_stores<true>();
 Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
-    MonotonicStopWatch timer;
-    timer.start();
-
     // 1. update available capacity of each data dir
     // get all root path info and construct a path map.
     // path -> DataDirInfo
@@ -305,7 +300,6 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
         data_dir_infos->emplace_back(entry.second);
     }
 
-    timer.stop();
     return Status::OK();
 }
 
@@ -522,7 +516,6 @@ void StorageEngine::stop() {
     }
 
     SAFE_DELETE(_index_stream_lru_cache);
-    _file_cache.reset();
 
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
@@ -565,7 +558,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
 
 void StorageEngine::_start_clean_fd_cache() {
     VLOG(10) << "Cleaning file descriptor cache";
-    _file_cache->prune();
+    FdCache::Instance()->prune();
     VLOG(10) << "Cleaned file descriptor cache";
 }
 
@@ -575,7 +568,7 @@ void StorageEngine::compaction_check() {
         MonotonicStopWatch stop_watch;
         stop_watch.start();
         LOG(INFO) << "start to check compaction";
-        size_t num = compaction_check_one_round();
+        size_t num = _compaction_check_one_round();
         stop_watch.stop();
         LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
                   << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
@@ -587,7 +580,7 @@ void StorageEngine::compaction_check() {
 
 // Base compaction may be started by time(once every day now)
 // Compaction checker will check whether to schedule base compaction for tablets
-size_t StorageEngine::compaction_check_one_round() {
+size_t StorageEngine::_compaction_check_one_round() {
     size_t batch_size = 1000;
     int batch_sleep_time_ms = 1000;
     std::vector<TabletSharedPtr> tablets;
@@ -615,7 +608,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::cumulative_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -656,7 +649,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::base_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -695,7 +688,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::update_compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -869,7 +862,7 @@ void StorageEngine::_clean_unused_txns() {
 
 Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
     Status res = Status::OK();
-    if (!FileUtils::check_exist(scan_root)) {
+    if (!fs::path_exist(scan_root)) {
         // dir not existed. no need to sweep trash.
         return res;
     }
@@ -898,7 +891,7 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
             VLOG(10) << "get actual expire time " << actual_expire << " of dir: " << dir_name;
 
             if (difftime(local_now, mktime(&local_tm_create)) >= actual_expire) {
-                Status ret = FileUtils::remove_all(path_name);
+                Status ret = fs::remove_all(path_name);
                 if (!ret.ok()) {
                     LOG(WARNING) << "fail to remove file. path: " << path_name << ", error: " << ret.to_string();
                     res = Status::IOError(
@@ -915,19 +908,43 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
     return res;
 }
 
-void StorageEngine::start_delete_unused_rowset() {
-    std::lock_guard lock(_gc_mutex);
-    for (auto it = _unused_rowsets.begin(); it != _unused_rowsets.end();) {
-        if (it->second.use_count() != 1) {
-            ++it;
-        } else if (it->second->need_delete_file()) {
-            VLOG(3) << "start to remove rowset:" << it->second->rowset_id()
-                    << ", version:" << it->second->version().first << "-" << it->second->version().second;
-            Status status = it->second->remove();
-            VLOG(3) << "remove rowset:" << it->second->rowset_id() << " finished. status:" << status;
-            it = _unused_rowsets.erase(it);
+double StorageEngine::delete_unused_rowset() {
+    MonotonicStopWatch timer;
+    timer.start();
+    std::vector<RowsetSharedPtr> delete_rowsets;
+    constexpr int64_t batch_size = 4096;
+    double deleted_pct = 1;
+    delete_rowsets.reserve(batch_size);
+    {
+        std::lock_guard lock(_gc_mutex);
+        for (auto it = _unused_rowsets.begin(); it != _unused_rowsets.end();) {
+            if (it->second.use_count() != 1) {
+                ++it;
+            } else if (it->second->need_delete_file()) {
+                delete_rowsets.emplace_back(it->second);
+                it = _unused_rowsets.erase(it);
+            }
+            if (delete_rowsets.size() >= batch_size) {
+                deleted_pct = static_cast<double>(batch_size) / (_unused_rowsets.size() + batch_size);
+                break;
+            }
         }
     }
+
+    if (delete_rowsets.empty()) {
+        return deleted_pct;
+    }
+    auto collect_time = timer.elapsed_time() / (1000 * 1000);
+    for (auto& rowset : delete_rowsets) {
+        VLOG(3) << "start to remove rowset:" << rowset->rowset_id() << ", version:" << rowset->version().first << "-"
+                << rowset->version().second;
+        Status status = rowset->remove();
+        LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
+    }
+    LOG(INFO) << "remove " << delete_rowsets.size() << " rowsets collect cost " << collect_time << "ms total "
+              << timer.elapsed_time() / (1000 * 1000) << "ms";
+
+    return deleted_pct;
 }
 
 void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {

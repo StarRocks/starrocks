@@ -21,6 +21,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -46,7 +47,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -57,15 +57,20 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +100,7 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
-            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) && 
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) &&
                     !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 continue;
             }
@@ -177,11 +182,11 @@ public class Load {
      * 5. init slot descs and expr map for load plan
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-            Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-            Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
-            Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
-            boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
-            List<String> columnsFromPath) throws UserException {
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath) throws UserException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
                 columnsFromPath, false, false);
@@ -493,7 +498,8 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
-    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs) throws UserException {
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs)
+            throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
@@ -822,7 +828,7 @@ public class Load {
             }
             properties.remove("name");
 
-            if (!Catalog.getCurrentCatalog().getBrokerMgr().containsBroker(brokerName)) {
+            if (!GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(brokerName)) {
                 throw new DdlException("broker does not exist: " + brokerName);
             }
 
@@ -845,7 +851,7 @@ public class Load {
             loadErrorHubParam = LoadErrorHub.Param.createNullParam();
         }
 
-        Catalog.getCurrentCatalog().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
+        GlobalStateMgr.getCurrentState().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
 
         LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
@@ -866,8 +872,8 @@ public class Load {
         }
     }
 
-    public static void replayClearRollupInfo(ReplicaPersistInfo info, Catalog catalog) {
-        Database db = catalog.getDb(info.getDbId());
+    public static void replayClearRollupInfo(ReplicaPersistInfo info, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(info.getDbId());
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
@@ -877,6 +883,60 @@ public class Load {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
+        // load jobs
+        int jobSize = dis.readInt();
+        long newChecksum = checksum ^ jobSize;
+        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
+
+        // delete jobs
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
+            jobSize = dis.readInt();
+            newChecksum ^= jobSize;
+            Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
+        }
+
+        // load error hub info
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_24) {
+            LoadErrorHub.Param param = new LoadErrorHub.Param();
+            param.readFields(dis);
+            setLoadErrorHubInfo(param);
+        }
+
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
+            // 4. load delete jobs
+            int deleteJobSize = dis.readInt();
+            newChecksum ^= deleteJobSize;
+            Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
+        }
+
+        LOG.info("finished replay loadJob from image");
+        return newChecksum;
+    }
+
+    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
+        // 1. save load.dbToLoadJob
+        int jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 2. save delete jobs
+        jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 3. load error hub info
+        LoadErrorHub.Param param = getLoadErrorHubInfo();
+        param.write(dos);
+
+        // 4. save delete load job info
+        int deleteJobSize = 0;
+        checksum ^= deleteJobSize;
+        dos.writeInt(deleteJobSize);
+
+        return checksum;
     }
 
 }

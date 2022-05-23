@@ -6,7 +6,7 @@
 
 #include <filesystem>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -38,7 +38,7 @@ public:
 
         _snapshot_meta.rowset_metas()[0].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[0].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[0].set_rowset_id(1001);
+        _snapshot_meta.rowset_metas()[0].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[0].set_rowset_seg_id(1);
         _snapshot_meta.rowset_metas()[0].set_empty(false);
         _snapshot_meta.rowset_metas()[0].set_data_disk_size(1024);
@@ -52,7 +52,7 @@ public:
 
         _snapshot_meta.rowset_metas()[1].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[1].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[1].set_rowset_id(1002);
+        _snapshot_meta.rowset_metas()[1].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[1].set_rowset_seg_id(2);
         _snapshot_meta.rowset_metas()[1].set_empty(false);
         _snapshot_meta.rowset_metas()[1].set_data_disk_size(2048);
@@ -66,7 +66,7 @@ public:
 
         _snapshot_meta.rowset_metas()[2].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[2].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[2].set_rowset_id(1003);
+        _snapshot_meta.rowset_metas()[2].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[2].set_rowset_seg_id(5);
         _snapshot_meta.rowset_metas()[2].set_empty(false);
         _snapshot_meta.rowset_metas()[2].set_data_disk_size(2048);
@@ -92,12 +92,13 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(SnapshotMetaTest, test_serialize_and_parse) {
-    auto wf = *Env::Default()->new_writable_file("test_serialize_and_parse.meta");
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto wf = *FileSystem::Default()->new_writable_file(opts, "test_serialize_and_parse.meta");
     ASSERT_TRUE(_snapshot_meta.serialize_to_file(wf.get()).ok());
     wf->close();
     DeferOp defer([&]() { std::filesystem::remove("test_serialize_and_parse.meta"); });
 
-    auto rf = *Env::Default()->new_random_access_file("test_serialize_and_parse.meta");
+    auto rf = *FileSystem::Default()->new_random_access_file("test_serialize_and_parse.meta");
     SnapshotMeta meta;
     auto st = meta.parse_from_file(rf.get());
     ASSERT_TRUE(st.ok()) << st;

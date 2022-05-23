@@ -26,7 +26,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
-add_subdirectory(fs)
 
 add_library(Storage STATIC
     base_tablet.cpp
@@ -103,6 +102,7 @@ add_library(Storage STATIC
     rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
+    rowset/rowid_range_option.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp

@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -50,21 +51,21 @@ public class BackendTest {
     private int httpPort = 21237;
     private int beRpcPort = 21238;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
     private FakeEditLog fakeEditLog;
 
     @Before
     public void setUp() {
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
 
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
-        FakeCatalog.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
 
         backend = new Backend(backendId, host, heartbeatPort);
         backend.updateOnce(bePort, httpPort, beRpcPort);

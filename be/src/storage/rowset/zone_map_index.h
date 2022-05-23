@@ -36,10 +36,8 @@
 
 namespace starrocks {
 
-namespace fs {
-class BlockManager;
-class WritableBlock;
-} // namespace fs
+class FileSystem;
+class WritableFile;
 
 // Zone map index is represented by an IndexedColumn with ordinal index.
 // The IndexedColumn stores serialized ZoneMapPB for each data page.
@@ -58,7 +56,7 @@ public:
     // mark the end of one data page so that we can finalize the corresponding zone map
     virtual Status flush() = 0;
 
-    virtual Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
 
     virtual uint64_t size() const = 0;
 };
@@ -68,8 +66,8 @@ public:
     ZoneMapIndexReader() = default;
 
     // load all page zone maps into memory
-    Status load(fs::BlockManager* block_mgr, const std::string& filename, const ZoneMapIndexPB* index_meta,
-                bool use_page_cache, bool kept_in_memory);
+    Status load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB* index_meta, bool use_page_cache,
+                bool kept_in_memory);
 
     const std::vector<ZoneMapPB>& page_zone_maps() const { return _page_zone_maps; }
 

@@ -4,12 +4,13 @@
 
 #include <memory>
 
-#include "env/env.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/runtime_profile.h"

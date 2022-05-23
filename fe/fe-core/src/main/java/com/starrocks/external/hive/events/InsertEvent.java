@@ -18,8 +18,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- *  Metastore event handler for INSERT events. Handles insert events at both table and partition scopes.
- *  If partition is null, treat it as ALTER_TABLE event, otherwise as ALTER_PARTITION event.
+ * Metastore event handler for INSERT events. Handles insert events at both table and partition scopes.
+ * If partition is null, treat it as ALTER_TABLE event, otherwise as ALTER_PARTITION event.
  */
 public class InsertEvent extends MetastoreTableEvent {
     private static final Logger LOG = LogManager.getLogger(InsertEvent.class);
@@ -38,11 +38,12 @@ public class InsertEvent extends MetastoreTableEvent {
             insertPartition = insertMessage.getPtnObj();
             if (insertPartition != null) {
                 hivePartitionKeys.clear();
-                hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
+                hivePartitionKeys.add(
+                        new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
-                    "and there will be a corresponding Alter Event in next, InsertEvent is ignored here. {}",
+                            "and there will be a corresponding Alter Event in next, InsertEvent is ignored here. {}",
                     e.getMessage());
             throw new MetastoreNotificationException(debugString("Unable to "
                     + "parse insert message"), e);
@@ -73,12 +74,12 @@ public class InsertEvent extends MetastoreTableEvent {
     @Override
     protected boolean existInCache() {
         if (isPartitionTbl()) {
-            HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
-            return cache.tableExistInCache(tableKey);
-        } else {
             List<String> partVals = insertPartition.getValues();
             HivePartitionKey partitionKey = new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partVals);
             return cache.partitionExistInCache(partitionKey);
+        } else {
+            HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
+            return cache.tableExistInCache(tableKey);
         }
     }
 
@@ -103,7 +104,8 @@ public class InsertEvent extends MetastoreTableEvent {
                         getHivePartitionKey(), insertPartition.getSd(), insertPartition.getParameters());
             } else {
                 cache.alterTableByEvent(
-                        new HiveTableKey(dbName, tblName), getHivePartitionKey(), hmsTbl.getSd(), hmsTbl.getParameters());
+                        new HiveTableKey(dbName, tblName), getHivePartitionKey(), hmsTbl.getSd(),
+                        hmsTbl.getParameters());
             }
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",

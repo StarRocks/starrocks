@@ -27,6 +27,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -50,7 +51,7 @@ public class DatabaseTest {
     private long dbId = 10000;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
 
@@ -62,21 +63,25 @@ public class DatabaseTest {
                 editLog.logCreateTable((CreateTableInfo) any);
                 minTimes = 0;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
         };
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
+
+                globalStateMgr.getClusterId();
+                minTimes = 0;
+                result = 1;
             }
         };
     }

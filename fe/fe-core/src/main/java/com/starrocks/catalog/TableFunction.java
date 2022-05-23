@@ -52,9 +52,10 @@ public class TableFunction extends Function {
                 Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT));
 
         functionSet.addBuiltin(unnestFunction);
-        
-        TableFunction jsonEachFunction = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
-                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+
+        TableFunction jsonEachFunction =
+                new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
+                        Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEachFunction);
     }
 
@@ -101,6 +102,7 @@ public class TableFunction extends Function {
     @Override
     public String getProperties() {
         Map<String, String> properties = Maps.newHashMap();
+        properties.put("fid", getFunctionId() + "");
         properties.put(CreateFunctionStmt.FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName);

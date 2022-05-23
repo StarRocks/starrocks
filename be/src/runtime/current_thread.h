@@ -50,8 +50,12 @@ public:
     }
 
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
-
     const starrocks::TUniqueId& query_id() { return _query_id; }
+
+    void set_fragment_instance_id(const starrocks::TUniqueId& fragment_instance_id) {
+        _fragment_instance_id = fragment_instance_id;
+    }
+    void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
@@ -152,7 +156,10 @@ private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
     int64_t _cache_size = 0;
+    // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
+    TUniqueId _fragment_instance_id;
+    int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
 };

@@ -351,6 +351,7 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
+    [50370, 'date_floor', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::datetime_floor', 'TimeFunctions::datetime_floor_prepare', 'TimeFunctions::datetime_floor_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -471,6 +472,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array', False],
     [90600, 'bitmap_max', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
     [90700, 'bitmap_min', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
+    [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
+    [90900, 'array_to_bitmap', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::array_to_bitmap', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -490,11 +493,11 @@ vectorized_functions = [
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
-     
+
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
     [110004, "json_string", "VARCHAR", ["JSON"], "JsonFunctions::json_string", False],
-    [110005, "json_query", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query", 
+    [110005, "json_query", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     # [110006, "json_value", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_query"],
     [110007, "json_exists", "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::json_exists",
@@ -503,7 +506,7 @@ vectorized_functions = [
     [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array", False],
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
-    
+
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
     [120110, "aes_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt", False],
@@ -542,7 +545,7 @@ vectorized_functions = [
     [150001, 'array_append', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_append'],
     [150002, 'array_contains', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_contains'],
 
-    #sum    
+    #sum
     [150003, 'array_sum', 'BIGINT', ['ARRAY_BOOLEAN'], 'ArrayFunctions::array_sum_boolean'],
     [150004, 'array_sum', 'BIGINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_sum_tinyint'],
     [150005, 'array_sum', 'BIGINT', ['ARRAY_SMALLINT'], 'ArrayFunctions::array_sum_smallint'],
@@ -687,18 +690,18 @@ vectorized_functions = [
     [150200, 'array_concat', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', "..."], 'ArrayFunctions::array_concat_decimalv2'],
     [150201, 'array_concat', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', "..."],   'ArrayFunctions::array_concat_varchar'],
 
-    [150210, 'array_overlap', 'BOOLEAN',      ['ARRAY_DATE', 'ARRAY_DATE'],        'ArrayFunctions::array_overlap_date'],
-    [150211, 'array_overlap', 'BOOLEAN',  ['ARRAY_DATETIME', 'ARRAY_DATETIME'],    'ArrayFunctions::array_overlap_datetime'],
-    [150212, 'array_overlap', 'BOOLEAN',   ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'],     'ArrayFunctions::array_overlap_boolean'],
-    [150213, 'array_overlap', 'BOOLEAN',   ['ARRAY_TINYINT', 'ARRAY_TINYINT'],     'ArrayFunctions::array_overlap_tinyint'],
-    [150214, 'array_overlap', 'BOOLEAN',  ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'],    'ArrayFunctions::array_overlap_smallint'],
-    [150215, 'array_overlap', 'BOOLEAN',       ['ARRAY_INT', 'ARRAY_INT'],         'ArrayFunctions::array_overlap_int'],
-    [150216, 'array_overlap', 'BOOLEAN',    ['ARRAY_BIGINT', 'ARRAY_BIGINT'],      'ArrayFunctions::array_overlap_bigint'],
-    [150217, 'array_overlap', 'BOOLEAN',  ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'],    'ArrayFunctions::array_overlap_largeint'],
-    [150218, 'array_overlap', 'BOOLEAN',     ['ARRAY_FLOAT', 'ARRAY_FLOAT'],       'ArrayFunctions::array_overlap_float'],
-    [150219, 'array_overlap', 'BOOLEAN',    ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],      'ArrayFunctions::array_overlap_double'],
-    [150220, 'array_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],   'ArrayFunctions::array_overlap_decimalv2'],
-    [150221, 'array_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],     'ArrayFunctions::array_overlap_varchar'],
+    [150210, 'arrays_overlap', 'BOOLEAN',      ['ARRAY_DATE', 'ARRAY_DATE'],        'ArrayFunctions::array_overlap_date'],
+    [150211, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_DATETIME', 'ARRAY_DATETIME'],    'ArrayFunctions::array_overlap_datetime'],
+    [150212, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'],     'ArrayFunctions::array_overlap_boolean'],
+    [150213, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_TINYINT', 'ARRAY_TINYINT'],     'ArrayFunctions::array_overlap_tinyint'],
+    [150214, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'],    'ArrayFunctions::array_overlap_smallint'],
+    [150215, 'arrays_overlap', 'BOOLEAN',       ['ARRAY_INT', 'ARRAY_INT'],         'ArrayFunctions::array_overlap_int'],
+    [150216, 'arrays_overlap', 'BOOLEAN',    ['ARRAY_BIGINT', 'ARRAY_BIGINT'],      'ArrayFunctions::array_overlap_bigint'],
+    [150217, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'],    'ArrayFunctions::array_overlap_largeint'],
+    [150218, 'arrays_overlap', 'BOOLEAN',     ['ARRAY_FLOAT', 'ARRAY_FLOAT'],       'ArrayFunctions::array_overlap_float'],
+    [150219, 'arrays_overlap', 'BOOLEAN',    ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],      'ArrayFunctions::array_overlap_double'],
+    [150220, 'arrays_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],   'ArrayFunctions::array_overlap_decimalv2'],
+    [150221, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],     'ArrayFunctions::array_overlap_varchar'],
 
     [150230, 'array_intersect', 'ARRAY_DATE',      ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect_date'],
     [150231, 'array_intersect', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect_datetime'],
@@ -725,4 +728,7 @@ vectorized_functions = [
     [150259, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150260, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150261, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+
+    [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
+    [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
 ]

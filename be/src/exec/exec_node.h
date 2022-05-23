@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -214,8 +215,10 @@ public:
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
-    // local runtime filters that are conducted on this ExecNode are planned by FE.
+    // local runtime filters that are conducted on this ExecNode.
     const std::set<TPlanNodeId>& local_rf_waiting_set() const { return _local_rf_waiting_set; }
+
+    std::set<TPlanNodeId>& local_rf_waiting_set() { return _local_rf_waiting_set; }
 
     // initialize OperatorFactories' fields involving runtime filters.
     void init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
@@ -295,6 +298,7 @@ protected:
     void init_runtime_profile(const std::string& name);
 
     RuntimeState* runtime_state() { return _runtime_state; }
+    const RuntimeState* runtime_state() const { return _runtime_state; }
 
     // Executes _debug_action if phase matches _debug_phase.
     // 'phase' must not be INVALID.

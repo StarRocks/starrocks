@@ -375,6 +375,8 @@ struct Version {
     bool operator==(const Version& rhs) const { return first == rhs.first && second == rhs.second; }
 
     bool contains(const Version& other) const { return first <= other.first && second >= other.second; }
+
+    bool operator<(const Version& rhs) const { return second < rhs.second; }
 };
 
 typedef std::vector<Version> Versions;
@@ -391,14 +393,6 @@ struct HashOfVersion {
         seed = HashUtil::hash64(&version.second, sizeof(version.second), seed);
         return seed;
     }
-};
-
-// It is used to represent Graph vertex.
-struct Vertex {
-    int64_t value = 0;
-    std::list<int64_t> edges;
-
-    Vertex(int64_t v) : value(v) {}
 };
 
 class Field;

@@ -21,13 +21,13 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -52,7 +52,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
-    public static final String RESOURCE_VARIABLE = "resource_group";
+    public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
@@ -137,6 +137,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
+    // open predicate reorder
+    public static final String ENABLE_PREDICATE_REORDER = "enable_predicate_reorder";
+
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
@@ -189,6 +192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE = "enable_exchange_pass_through_expire";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -232,12 +236,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PROFILING)
     private boolean openProfile = false;
 
-    // Set sqlMode to empty string
+    // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE)
-    private long sqlMode = 0L;
+    private long sqlMode = 32L;
 
-    @VariableMgr.VarAttr(name = RESOURCE_VARIABLE)
-    private String resourceGroup = "normal";
+    // The specified resource group of this session
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
+    private String resourceGroup = "";
 
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
@@ -397,6 +402,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
+    private boolean enablePredicateReorder = false;
+
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = false;
 
@@ -469,8 +477,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = true;
+    // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
+    // and it will cause memory statistics problem of fragment instance,
+    // It also which will introduce the problem of cross-thread memory allocate and release,
+    // So i temporarily disable the enable_exchange_pass_through.
+    // I will turn on int after all the above problems are solved.
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE, alias = ENABLE_EXCHANGE_PASS_THROUGH,
+            show = ENABLE_EXCHANGE_PASS_THROUGH)
+    private boolean enableExchangePassThrough = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -692,6 +706,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void enableJoinReorder() {
         this.disableJoinReorder = false;
+    }
+
+    public boolean isEnablePredicateReorder() {
+        return enablePredicateReorder;
+    }
+
+    public void disablePredicateReorder() {
+        this.enablePredicateReorder = false;
+    }
+
+    public void enablePredicateReorder() {
+        this.enablePredicateReorder = true;
     }
 
     public boolean isAbleFilterUnusedColumnsInScanStage() {
@@ -1027,7 +1053,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_67) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_67) {
             codegenLevel = in.readInt();
             netBufferLength = in.readInt();
             sqlSafeUpdates = in.readInt();
@@ -1049,8 +1075,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             charsetClient = Text.readString(in);
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
-            resourceGroup = Text.readString(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_65) {
+            // Deprecated variable, keep it just for compatibility
+            // resourceGroup = Text.readString(in);
+            Text.readString(in);
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {
                 // read old version SQL mode
@@ -1060,15 +1088,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             isReportSucc = in.readBoolean();
             queryTimeoutS = in.readInt();
             maxExecMemByte = in.readLong();
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_37) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {
                 collationServer = Text.readString(in);
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_38) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_38) {
                 batchSize = in.readInt();
                 disableStreamPreaggregations = in.readBoolean();
                 parallelExecInstanceNum = in.readInt();
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_62) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_62) {
                 exchangeInstanceParallel = in.readInt();
             }
         } else {
@@ -1091,6 +1119,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 }
 
                 if (!root.has(attr.name())) {
+                    continue;
+                }
+                // Do not restore the session_only variable
+                if ((attr.flag() & VariableMgr.SESSION_ONLY) != 0) {
                     continue;
                 }
 

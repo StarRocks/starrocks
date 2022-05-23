@@ -9,15 +9,18 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
+#include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/block_compression.h"
 
 namespace starrocks {
 class RandomAccessFile;
 class BlockCompressionCodec;
+namespace vectorized {
+class HdfsScanStats;
+}
 
 } // namespace starrocks
 

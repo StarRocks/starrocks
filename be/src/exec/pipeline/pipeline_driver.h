@@ -8,12 +8,13 @@
 
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/morsel.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
@@ -163,7 +164,7 @@ public:
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
-    void set_morsel_queue(MorselQueuePtr morsel_queue) { _morsel_queue = std::move(morsel_queue); }
+    void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
     StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
@@ -215,7 +216,12 @@ public:
     }
 
     Operators& operators() { return _operators; }
-    SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+    ScanOperator* source_scan_operator() {
+        return _operators.empty() ? nullptr : dynamic_cast<ScanOperator*>(_operators.front().get());
+    }
+    SourceOperator* source_operator() {
+        return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
+    }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.
@@ -340,6 +346,9 @@ public:
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
+    inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
+    void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
+
 private:
     // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
     static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
@@ -358,12 +367,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
-    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
-        driver_acct().increment_schedule_times();
-        driver_acct().update_last_chunks_moved(total_chunks_moved);
-        driver_acct().update_accumulated_rows_moved(total_rows_moved);
-        driver_acct().update_last_time_spent(time_spent);
-    }
+    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
@@ -389,7 +393,7 @@ private:
     int32_t _driver_id;
     DriverAcct _driver_acct;
     // The first one is source operator
-    MorselQueuePtr _morsel_queue = nullptr;
+    MorselQueue* _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
@@ -399,6 +403,7 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
+    std::atomic<bool> _in_ready_queue{false};
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

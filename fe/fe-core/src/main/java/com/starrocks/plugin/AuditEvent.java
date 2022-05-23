@@ -57,10 +57,14 @@ public class AuditEvent {
     public String clientIp = "";
     @AuditField(value = "User")
     public String user = "";
+    @AuditField(value = "ResourceGroup")
+    public String resourceGroup = "default_wg";
     @AuditField(value = "Db")
     public String db = "";
     @AuditField(value = "State")
     public String state = "";
+    @AuditField(value = "ErrorCode")
+    public String errorCode = "";
     @AuditField(value = "Time")
     public long queryTime = -1;
     @AuditField(value = "ScanBytes")
@@ -69,6 +73,8 @@ public class AuditEvent {
     public long scanRows = -1;
     @AuditField(value = "ReturnRows")
     public long returnRows = -1;
+    @AuditField(value = "CpuCostNs")
+    public long cpuCostNs = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -81,6 +87,10 @@ public class AuditEvent {
     public String stmt = "";
     @AuditField(value = "Digest")
     public String digest = "";
+    @AuditField(value = "PlanCpuCost")
+    public double planCpuCosts = 0.0;
+    @AuditField(value = "PlanMemCost")
+    public double planMemCosts = 0.0;
 
     public static class AuditEventBuilder {
 
@@ -113,6 +123,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setResourceGroup(String resourceGroup) {
+            auditEvent.resourceGroup = resourceGroup;
+            return this;
+        }
+
         public AuditEventBuilder setDb(String db) {
             auditEvent.db = db;
             return this;
@@ -120,6 +135,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setState(String state) {
             auditEvent.state = state;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorCode(String errorCode) {
+            auditEvent.errorCode = errorCode;
             return this;
         }
 
@@ -140,6 +160,14 @@ public class AuditEvent {
 
         public AuditEventBuilder setReturnRows(long returnRows) {
             auditEvent.returnRows = returnRows;
+            return this;
+        }
+
+        /**
+         * Cpu cost in nanoseconds
+         */
+        public AuditEventBuilder setCpuCostNs(long cpuNs) {
+            auditEvent.cpuCostNs = cpuNs;
             return this;
         }
 
@@ -170,6 +198,16 @@ public class AuditEvent {
 
         public AuditEventBuilder setDigest(String digest) {
             auditEvent.digest = digest;
+            return this;
+        }
+
+        public AuditEventBuilder setPlanCpuCosts(double cpuCosts) {
+            auditEvent.planCpuCosts = cpuCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setPlanMemCosts(double memCosts) {
+            auditEvent.planMemCosts = memCosts;
             return this;
         }
 

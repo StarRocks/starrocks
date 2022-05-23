@@ -14,13 +14,18 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,9 +39,11 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-// WorkGroupMgr is employed by Catalog to manage WorkGroup in FE.
+// WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class WorkGroupMgr implements Writable {
-    private Catalog catalog;
+    private static final Logger LOG = LogManager.getLogger(WorkGroupMgr.class);
+
+    private GlobalStateMgr globalStateMgr;
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
     private Map<Long, WorkGroupClassifier> classifierMap = new HashMap<>();
@@ -45,9 +52,8 @@ public class WorkGroupMgr implements Writable {
     private Map<Long, Long> minVersionPerBe = new HashMap<>();
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-
-    WorkGroupMgr(Catalog catalog) {
-        this.catalog = catalog;
+    public WorkGroupMgr(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     private void readLock() {
@@ -80,17 +86,17 @@ public class WorkGroupMgr implements Writable {
                     return;
                 }
             }
-            wg.setId(catalog.getCurrentCatalog().getNextId());
+            wg.setId(globalStateMgr.getCurrentState().getNextId());
             for (WorkGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setWorkgroupId(wg.getId());
-                classifier.setId(catalog.getCurrentCatalog().getNextId());
+                classifier.setId(globalStateMgr.getCurrentState().getNextId());
                 classifierMap.put(classifier.getId(), classifier);
             }
             workGroupMap.put(wg.getName(), wg);
             id2WorkGroupMap.put(wg.getId(), wg);
             wg.setVersion(wg.getId());
             WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
-            catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+            globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
             workGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
@@ -100,9 +106,10 @@ public class WorkGroupMgr implements Writable {
     public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) {
         List<List<String>> rows;
         if (stmt.getName() != null) {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
+            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
         } else {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
+            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr()
+                    .showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
         }
         return rows;
     }
@@ -118,7 +125,7 @@ public class WorkGroupMgr implements Writable {
     private String getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
-        String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
+        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
         if (qualifiedRoleName != null) {
             //default_cluster:role
@@ -182,6 +189,21 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
+    }
+
+    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
     private void replayAddWorkGroup(WorkGroup workgroup) {
         addWorkGroupInternal(workgroup);
         WorkGroupOpEntry op = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, workgroup);
@@ -214,7 +236,7 @@ public class WorkGroupMgr implements Writable {
                 List<WorkGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (WorkGroupClassifier classifier : newAddedClassifiers) {
                     classifier.setWorkgroupId(wg.getId());
-                    classifier.setId(catalog.getCurrentCatalog().getNextId());
+                    classifier.setId(globalStateMgr.getCurrentState().getNextId());
                     classifierMap.put(classifier.getId(), classifier);
                 }
                 wg.getClassifiers().addAll(newAddedClassifiers);
@@ -239,9 +261,9 @@ public class WorkGroupMgr implements Writable {
                     wg.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 }
 
-                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuCoreSecondLimit();
+                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuSecondLimit();
                 if (bigQueryCpuCoreSecondLimit != null) {
-                    wg.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
+                    wg.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 }
 
                 Integer concurrentLimit = changedProperties.getConcurrencyLimit();
@@ -273,10 +295,10 @@ public class WorkGroupMgr implements Writable {
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterWorkGroupStmt.AlterProperties) {
-                wg.setVersion(catalog.getCurrentCatalog().getNextId());
+                wg.setVersion(globalStateMgr.getCurrentState().getNextId());
             }
             WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg);
-            catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+            globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
             workGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
@@ -299,9 +321,9 @@ public class WorkGroupMgr implements Writable {
     public void dropWorkGroupUnlocked(String name) {
         WorkGroup wg = workGroupMap.get(name);
         removeWorkGroupInternal(name);
-        wg.setVersion(catalog.getCurrentCatalog().getNextId());
+        wg.setVersion(globalStateMgr.getCurrentState().getNextId());
         WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
-        catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+        globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
         workGroupOps.add(workGroupOp.toThrift());
     }
 
@@ -388,17 +410,30 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType) {
+    public WorkGroup chooseWorkGroupByName(String wgName) {
+        readLock();
+        try {
+            return workGroupMap.get(wgName);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
         String user = getUnqualifiedUser(ctx);
         String role = getUnqualifiedRole(ctx);
         String remoteIp = ctx.getRemoteIP();
         List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp)).collect(Collectors.toList());
-        classifierList.sort(Comparator.comparingDouble(WorkGroupClassifier::weight));
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
+                .collect(Collectors.toList());
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+            WorkGroup workGroup = id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+            ctx.getAuditEventBuilder().setResourceGroup(workGroup.getName());
+            ctx.setWorkGroup(workGroup);
+            return workGroup;
         }
     }
 

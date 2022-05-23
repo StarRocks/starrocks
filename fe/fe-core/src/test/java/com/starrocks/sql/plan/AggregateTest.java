@@ -415,6 +415,19 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testIntersectCount() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select intersect_count(b1, v1, 999999) from test_object;";
+        String plan = getThriftPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "int_literal:TIntLiteral(value:999999), " +
+                "output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true)])], " +
+                "intermediate_tuple_id:2");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testMergeAggregateNormal() throws Exception {
         String sql;
         String plan;
@@ -665,7 +678,7 @@ public class AggregateTest extends PlanTestBase {
         sql = " SELECT c2, count(*) FROM (SELECT t1.c2 as c2 FROM db1.tbl3 as t1 INNER JOIN [shuffle] db1.tbl4 " +
                 "as t2 ON t1.c2=t2.c2 WHERE t1.c1<10) as t3 GROUP BY c2;";
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "AGGREGATE (merge finalize)"));
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "AGGREGATE (update finalize)"));
 
         sql = "SELECT c2, count(*) FROM db1.tbl5 GROUP BY c2;";
         plan = getFragmentPlan(sql);
@@ -872,5 +885,326 @@ public class AggregateTest extends PlanTestBase {
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
+    }
+
+    @Test
+    public void testOnlyFullGroupBy() throws Exception {
+        long sqlmode = connectContext.getSessionVariable().getSqlMode();
+        connectContext.getSessionVariable().setSqlMode(0);
+        String sql = "select v1, v2 from t0 group by v1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1, sum(v2) from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: any_value | 4: sum\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select max(v2) from t0 having v1 = 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: max\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 5: any_value = 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1, max(v2) from t0 having v1 = 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: any_value | 4: max\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v2), any_value(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 5: any_value = 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0"));
+
+        sql = "select v1 from t0 group by v2 order by v3";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: any_value\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  \n" +
+                "  4:MERGING-EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 5> 5: any_value ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 5> : 5: any_value\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(1: v1), any_value(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n"));
+
+        sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: any_value | 6: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 6> : 6: expr\n" +
+                "  |  \n" +
+                "  4:MERGING-EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 5> 5: any_value ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: any_value\n" +
+                "  |  <slot 5> : 5: any_value\n" +
+                "  |  <slot 6> : abs(4: any_value) + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(1: v1), any_value(3: v3)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0"));
+
+        sql = "select lead(v2) over(partition by v1) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v1 order by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
+        connectContext.getSessionVariable().setSqlMode(sqlmode);
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM");
+        assertContains(plan, "  18:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.");
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 13: t1b");
+        assertContains(plan, "  11:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 14: t1c");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup2() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b), count(distinct t1c), sum(t1c), max(t1b) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 14\n" +
+                "    RANDOM");
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(18: t1c), max(17: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 17> : 2: t1b\n" +
+                "  |  <slot 18> : 3: t1c");
+        assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 15: t1b\n" +
+                "  |  \n" +
+                "  7:Project\n" +
+                "  |  <slot 15> : 2: t1b");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup3() throws Exception {
+        String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b), multi_distinct_count(3: t1c)\n");
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup4() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select count(distinct t1b + 1), count(distinct t1c + 2) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 2");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testSumString() throws Exception {
+        String sql = "select sum(N_COMMENT) from nation";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(CAST(4: N_COMMENT AS DOUBLE))");
+    }
+
+    @Test
+    public void testGroupByConstant() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
+        String plan = getFragmentPlan(sql);
+        // check four phase aggregate
+        assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(19: count)\n" +
+                "  |  group by: 18: expr");
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
+        plan = getFragmentPlan(sql);
+        // check four phase aggregate
+        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(20: count)\n" +
+                "  |  group by: 18: expr");
+
+        sql = "select count(distinct L_ORDERKEY + 1) from lineitem group by 1.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(20: count)\n" +
+                "  |  group by: 18: expr");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 }

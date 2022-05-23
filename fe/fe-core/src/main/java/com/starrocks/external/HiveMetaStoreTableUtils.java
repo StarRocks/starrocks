@@ -4,30 +4,40 @@ package com.starrocks.external;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.IdGenerator;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.hive.Utils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
+    private static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableColumnStats")) {
-            Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
+            Map<String, HiveColumnStats> allColumnStats = GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getTableLevelColumnStats(hmsTable);
             Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
             for (String columnName : columnNames) {
@@ -52,13 +62,13 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
                                                               List<PartitionKey> partitionKeys) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
         }
     }
 
     public static HiveTableStats getTableStats(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableStats")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(hmsTable.getResourceName(),
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getTableStats(hmsTable.getResourceName(),
                     hmsTable.getDb(), hmsTable.getTable());
         }
     }
@@ -66,14 +76,14 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable,
                                                     List<PartitionKey> partitionKeys) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitions")) {
-            return Catalog.getCurrentCatalog().getHiveRepository()
+            return GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getPartitions(hmsTable, partitionKeys);
         }
     }
 
     public static Map<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionKeys")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getPartitionKeys(hmsTable);
+            return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionKeys(hmsTable);
         }
     }
 
@@ -82,6 +92,82 @@ public class HiveMetaStoreTableUtils {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionRowCount")) {
             return doGetPartitionStatsRowCount(hmsTable, partitions);
         }
+    }
+
+    public static Map<String, FieldSchema> getAllHiveColumns(Table table) {
+        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+        return allHiveColumns;
+    }
+
+    public static PrimitiveType convertColumnType(String hiveType) throws DdlException {
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        switch (typeUpperCase) {
+            case "TINYINT":
+                return PrimitiveType.TINYINT;
+            case "SMALLINT":
+                return PrimitiveType.SMALLINT;
+            case "INT":
+            case "INTEGER":
+                return PrimitiveType.INT;
+            case "BIGINT":
+                return PrimitiveType.BIGINT;
+            case "FLOAT":
+                return PrimitiveType.FLOAT;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                return PrimitiveType.DOUBLE;
+            case "DECIMAL":
+            case "NUMERIC":
+                return PrimitiveType.DECIMAL32;
+            case "TIMESTAMP":
+                return PrimitiveType.DATETIME;
+            case "DATE":
+                return PrimitiveType.DATE;
+            case "STRING":
+            case "VARCHAR":
+            case "BINARY":
+                return PrimitiveType.VARCHAR;
+            case "CHAR":
+                return PrimitiveType.CHAR;
+            case "BOOLEAN":
+                return PrimitiveType.BOOLEAN;
+            default:
+                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+        }
+    }
+
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog in the future.
+    public static HiveTable convertToSRTable(Table hiveTable, String resoureName) throws DdlException {
+        if (hiveTable.getTableType().equals("VIRTUAL_VIEW")) {
+            throw new DdlException("Hive view table is not supported.");
+        }
+
+        Map<String, FieldSchema> allHiveColumns = getAllHiveColumns(hiveTable);
+        List<Column> fullSchema = Lists.newArrayList();
+        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
+            FieldSchema fieldSchema = entry.getValue();
+            PrimitiveType srType = convertColumnType(fieldSchema.getType());
+            Column column = new Column(fieldSchema.getName(), ScalarType.createType(srType), true);
+            fullSchema.add(column);
+        }
+
+        // Adding some necessary properties to adapt initialization of HiveTable.
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(HiveTable.HIVE_DB, hiveTable.getDbName());
+        properties.put(HiveTable.HIVE_TABLE, hiveTable.getTableName());
+        properties.put(HiveTable.HIVE_METASTORE_URIS, resoureName);
+        properties.put(HiveTable.HIVE_RESOURCE, resoureName);
+
+        return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
+                fullSchema, properties, hiveTable);
     }
 
     public static long doGetPartitionStatsRowCount(HiveMetaStoreTableInfo hmsTable,
@@ -122,5 +208,12 @@ public class HiveMetaStoreTableUtils {
             }
         }
         return numRows;
+    }
+
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog
+    public static boolean isInternalCatalog(String resourceName) {
+        return !resourceName.startsWith("thrift://");
     }
 }

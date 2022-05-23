@@ -42,8 +42,10 @@ import java.util.TreeMap;
 public class RemoteScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
 
-    public static final RemoteScanPartitionPruneRule HIVE_SCAN = new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final RemoteScanPartitionPruneRule HUDI_SCAN = new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final RemoteScanPartitionPruneRule HIVE_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final RemoteScanPartitionPruneRule HUDI_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
 
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));

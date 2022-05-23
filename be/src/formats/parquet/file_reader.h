@@ -16,8 +16,7 @@ namespace starrocks {
 class RandomAccessFile;
 
 namespace vectorized {
-class HdfsScanStats;
-class HdfsFileReaderParam;
+class HdfsScannerContext;
 } // namespace vectorized
 
 } // namespace starrocks
@@ -31,7 +30,8 @@ public:
     FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
-    Status init(const starrocks::vectorized::HdfsFileReaderParam& param);
+    Status init(vectorized::HdfsScannerContext* scanner_ctx);
+
     Status get_next(vectorized::ChunkPtr* chunk);
 
 private:
@@ -40,18 +40,10 @@ private:
     // parse footer of parquet file
     Status _parse_footer();
 
-    // pre process schema columns, get the three type columns
-    // (1) columns of direct read
-    // (2) columns of convert typ
-    // (3) columns of not exist in parquet file
-    void _pre_process_schema();
+    void _prepare_read_columns();
 
-    // 1. get conjuncts that column is not exist in file, are used to filter file.
-    // 2. remove them from conjunct_ctxs_by_slot.
-    void _pre_process_conjunct_ctxs();
-
-    // filter file using not exist column conjuncts
-    Status _filter_file();
+    // init row group reader.
+    Status _init_group_reader();
 
     // create and inti group reader
     Status _create_and_init_group_reader(int row_group_number);
@@ -59,11 +51,8 @@ private:
     // create row group reader
     std::shared_ptr<GroupReader> _row_group(int i);
 
-    // init row group reader
-    Status _init_group_reader();
-
     // filter row group by min/max conjuncts
-    Status _filter_group(const tparquet::RowGroup& group, bool* is_filter);
+    StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
 
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
@@ -79,12 +68,6 @@ private:
 
     // only scan partition column + not exist column
     Status _exec_only_partition_scan(vectorized::ChunkPtr* chunk);
-
-    // append not exist column
-    void _append_not_exist_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
-
-    // append partition column
-    void _append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
 
     // get partition column idx in param.partition_columns
     int _get_partition_column_idx(const std::string& col_name) const;
@@ -116,7 +99,6 @@ private:
     RandomAccessFile* _file;
     uint64_t _file_size;
 
-    starrocks::vectorized::HdfsFileReaderParam _param;
     std::shared_ptr<FileMetaData> _file_metadata;
     vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
@@ -124,16 +106,13 @@ private:
     vectorized::Schema _schema;
 
     std::vector<GroupReaderParam::Column> _read_cols;
-
-    std::vector<SlotId> _empty_chunk_slot_ids;
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _is_only_partition_scan = false;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    // conjuncts that column is not exist in file
-    std::vector<ExprContext*> _not_exist_column_conjunct_ctxs;
+    vectorized::HdfsScannerContext* _scanner_ctx;
 };
 
 } // namespace starrocks::parquet

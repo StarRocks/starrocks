@@ -25,10 +25,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -74,12 +74,12 @@ public abstract class BaseAction implements IAction {
     private static final Logger LOG = LogManager.getLogger(BaseAction.class);
 
     protected ActionController controller;
-    protected Catalog catalog;
+    protected GlobalStateMgr globalStateMgr;
 
     public BaseAction(ActionController controller) {
         this.controller = controller;
         // TODO(zc): remove this instance
-        this.catalog = Catalog.getCurrentCatalog();
+        this.globalStateMgr = GlobalStateMgr.getCurrentState();
     }
 
     @Override
@@ -273,7 +273,7 @@ public abstract class BaseAction implements IAction {
     }
 
     protected void checkGlobalAuth(UserIdentity currentUser, PrivPredicate predicate) throws UnauthorizedException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(currentUser, predicate)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currentUser, predicate)) {
             throw new UnauthorizedException("Access denied; you need (at least one of) the "
                     + predicate.getPrivs().toString() + " privilege(s) for this operation");
         }
@@ -281,7 +281,7 @@ public abstract class BaseAction implements IAction {
 
     protected void checkDbAuth(UserIdentity currentUser, String db, PrivPredicate predicate)
             throws UnauthorizedException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(currentUser, db, predicate)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, db, predicate)) {
             throw new UnauthorizedException("Access denied; you need (at least one of) the "
                     + predicate.getPrivs().toString() + " privilege(s) for this operation");
         }
@@ -289,7 +289,7 @@ public abstract class BaseAction implements IAction {
 
     protected void checkTblAuth(UserIdentity currentUser, String db, String tbl, PrivPredicate predicate)
             throws UnauthorizedException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, db, tbl, predicate)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, db, tbl, predicate)) {
             throw new UnauthorizedException("Access denied; you need (at least one of) the "
                     + predicate.getPrivs().toString() + " privilege(s) for this operation");
         }
@@ -299,7 +299,7 @@ public abstract class BaseAction implements IAction {
     protected UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws UnauthorizedException {
         List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!Catalog.getCurrentCatalog().getAuth().checkPlainPassword(authInfo.fullUserName,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkPlainPassword(authInfo.fullUserName,
                 authInfo.remoteIp, authInfo.password, currentUser)) {
             throw new UnauthorizedException("Access denied for "
                     + authInfo.fullUserName + "@" + authInfo.remoteIp);

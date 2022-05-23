@@ -255,17 +255,19 @@ CONF_Bool(disable_column_pool, "false");
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
+// This config is to limit the max concurrency of running base compaction tasks.
+// -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
-CONF_mInt32(base_compaction_write_mbytes_per_sec, "5");
 
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
+// This config is to limit the max concurrency of running cumulative compaction tasks.
+// -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
-CONF_mInt64(cumulative_compaction_budgeted_bytes, "104857600");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 // cumulative compaction skips recently published deltas in order to prevent
 // compacting a version that might be queried (in case the query planning phase took some time).
@@ -288,21 +290,14 @@ CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 CONF_Int32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
-CONF_mInt32(base_compaction_trace_threshold, "120");
-CONF_mInt32(cumulative_compaction_trace_threshold, "60");
-CONF_mInt32(update_compaction_trace_threshold, "20");
+CONF_mInt32(compaction_trace_threshold, "60");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_mBool(enable_compaction, "true");
 CONF_Bool(enable_event_based_compaction_framework, "false");
-CONF_mInt32(max_compaction_task_num, "4");
-// < 0 means no limit
-CONF_mInt32(max_cumulative_compaction_task, "-1");
-CONF_mInt32(max_base_compaction_task, "1");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -347,6 +342,8 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // short operation time, can set a short timeout
 CONF_Int32(tablet_writer_open_rpc_timeout_sec, "60");
+// make_snapshot rpc timeout
+CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
 // the timeout of a rpc to process one batch in tablet writer.
 // you may need to increase this timeout if using larger 'streaming_load_max_mb',
@@ -375,8 +372,7 @@ CONF_Int32(num_threads_per_disk, "0");
 // There is a trade off of latency and throughout, trying to keep disks busy but
 // not introduce seeks.  The literature seems to agree that with 8 MB reads, random
 // io and sequential io perform similarly.
-CONF_Int32(read_size, "8388608");    // 8 * 1024 * 1024, Read Size (in bytes)
-CONF_Int32(min_buffer_size, "1024"); // 1024, The minimum read buffer size (in bytes)
+CONF_Int32(read_size, "8388608"); // 8 * 1024 * 1024, Read Size (in bytes)
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
@@ -512,6 +508,11 @@ CONF_String(es_scroll_keepalive, "5m");
 
 // HTTP connection timeout for es.
 CONF_Int32(es_http_timeout_ms, "5000");
+
+// es index max result window, and this value affects batch size.
+// if request batch size exceeds this value, ES will return bad request(400)
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html
+CONF_Int32(es_index_max_result_window, "10000");
 
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the
@@ -651,6 +652,9 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "8");
+// Used to reject coming fragment instances, when the number of running drivers
+// exceeds it*pipeline_exec_thread_pool_thread_num.
+CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
@@ -704,6 +708,19 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
+
+// Whether to enable segment overflow read
+// If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
+// after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
+// If false, segment will scan (remaining rows of chunk) rows each time, the final chunk after filtering
+// must be less than of equal to the capacity
+// default: true
+CONF_Bool(enable_segment_overflow_read_chunk, "true");
+
+CONF_Int32(max_batch_publish_latency_ms, "100");
+
+// Config for opentelemetry tracing.
+CONF_String(jaeger_endpoint, "");
 
 } // namespace config
 

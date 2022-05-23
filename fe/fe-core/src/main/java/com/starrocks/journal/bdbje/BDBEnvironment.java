@@ -41,11 +41,11 @@ import com.sleepycat.je.rep.RollbackException;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
 import com.starrocks.ha.HAProtocol;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -186,7 +186,7 @@ public class BDBEnvironment {
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
-                if (!selfNodeHostPort.equals(helperHostPort) && Catalog.getCurrentCatalog().isElectable()) {
+                if (!selfNodeHostPort.equals(helperHostPort) && GlobalStateMgr.getCurrentState().isElectable()) {
                     HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
                     InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
                             selfNodeAddress.getPort());
@@ -196,9 +196,9 @@ public class BDBEnvironment {
 
                 replicationGroupAdmin = new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, adminNodes);
 
-                // get a BDBHA object and pass the reference to Catalog
+                // get a BDBHA object and pass the reference to GlobalStateMgr
                 HAProtocol protocol = new BDBHA(this, selfNodeName);
-                Catalog.getCurrentCatalog().setHaProtocol(protocol);
+                GlobalStateMgr.getCurrentState().setHaProtocol(protocol);
 
                 // start state change listener
                 StateChangeListener listener = new BDBStateChangeListener();
@@ -239,6 +239,12 @@ public class BDBEnvironment {
         // list as the argument to config.setLogProviders(), if the
         // default selection of providers is not suitable.
         restore.execute(insufficientLogEx, config);
+    }
+
+    public void refreshAndSetup(InsufficientLogException insufficientLogEx) {
+        refreshLog(insufficientLogEx);
+        close();
+        setup();
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {

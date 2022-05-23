@@ -196,8 +196,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
-            _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                               _parent->_is_pipeline_level_shuffle ? driver_sequence : -1);
+            TRY_CATCH_BAD_ALLOC(
+                    _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
+                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
         } else {
@@ -205,7 +206,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
                 _chunk_request->add_driver_sequences(driver_sequence);
             }
             auto pchunk = _chunk_request->add_chunks();
-            RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
             _current_request_bytes += pchunk->data().size();
         }
     }
@@ -264,14 +265,15 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                           const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
+                                           int32_t driver_sequence, const std::shared_ptr<SinkBuffer>& buffer,
+                                           TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations,
                                            bool is_pipeline_level_shuffle, const int32_t num_shuffles,
                                            int32_t sender_id, PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
                                            bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
                                            const std::vector<int32_t>& output_columns)
-        : Operator(factory, id, "exchange_sink", plan_node_id),
+        : Operator(factory, id, "exchange_sink", plan_node_id, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
@@ -386,6 +388,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     if (num_rows == 0) {
         return Status::OK();
     }
+    DCHECK_LE(num_rows, state->chunk_size());
 
     vectorized::Chunk temp_chunk;
     vectorized::Chunk* send_chunk = chunk.get();
@@ -418,7 +421,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // 1. create a new chunk PB to serialize
             ChunkPB* pchunk = _chunk_request->add_chunks();
             // 2. serialize input chunk to pchunk
-            RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size()));
+            TRY_CATCH_BAD_ALLOC(
+                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > _request_bytes_threshold) {
@@ -627,10 +631,10 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _output_columns(output_columns) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, _buffer, _part_type, _destinations,
-                                                  _is_pipeline_level_shuffle, _num_shuffles, _sender_id, _dest_node_id,
-                                                  _partition_expr_ctxs, _enable_exchange_pass_through, _fragment_ctx,
-                                                  _output_columns);
+    return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _buffer, _part_type,
+                                                  _destinations, _is_pipeline_level_shuffle, _num_shuffles, _sender_id,
+                                                  _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
+                                                  _fragment_ctx, _output_columns);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

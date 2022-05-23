@@ -24,17 +24,18 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,11 +73,18 @@ public class ConnectContext {
 
     // id for this connection
     protected int connectionId;
+    // Time when the connection is make
+    protected long connectionStartTime;
+
     // mysql net
     protected MysqlChannel mysqlChannel;
     // state
     protected QueryState state;
     protected long returnRows;
+
+    // error code
+    protected String errorCode = "";
+
     // the protocol capability which server say it can support
     protected MysqlCapability serverCapability;
     // the protocol capability after server and client negotiate
@@ -85,6 +93,7 @@ public class ConnectContext {
     protected boolean isKilled;
     // Db
     protected String currentDb = "";
+
     // cluster name
     protected String clusterName = "";
     // username@host of current login user
@@ -109,9 +118,9 @@ public class ConnectContext {
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
-    // Catalog: put catalog here is convenient for unit test,
-    // because catalog is singleton, hard to mock
-    protected Catalog catalog;
+    // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
+    // because globalStateMgr is singleton, hard to mock
+    protected GlobalStateMgr globalStateMgr;
     protected boolean isSend;
 
     protected AuditEventBuilder auditEventBuilder = new AuditEventBuilder();
@@ -137,6 +146,8 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+
+    protected WorkGroup workGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -225,16 +236,12 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
-    public TResourceInfo toResourceCtx() {
-        return new TResourceInfo(qualifiedUser, sessionVariable.getResourceGroup());
+    public void setCatalog(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
-    }
-
-    public Catalog getCatalog() {
-        return catalog;
+    public GlobalStateMgr getGlobalStateMgr() {
+        return globalStateMgr;
     }
 
     public String getQualifiedUser() {
@@ -263,10 +270,7 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
-        // user resource group shouldn't be reset
-        String resourceGroup = this.sessionVariable.getResourceGroup();
         this.sessionVariable = VariableMgr.newSessionVariable();
-        this.sessionVariable.setResourceGroup(resourceGroup);
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {
@@ -322,6 +326,14 @@ public class ConnectContext {
         this.connectionId = connectionId;
     }
 
+    public void resetConnectionStartTime() {
+        this.connectionStartTime = System.currentTimeMillis();
+    }
+
+    public long getConnectionStartTime() {
+        return connectionStartTime;
+    }
+
     public MysqlChannel getMysqlChannel() {
         return mysqlChannel;
     }
@@ -332,6 +344,14 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public MysqlCapability getCapability() {
@@ -449,6 +469,14 @@ public class ConnectContext {
         return plannerProfile;
     }
 
+    public WorkGroup getWorkGroup() {
+        return workGroup;
+    }
+
+    public void setWorkGroup(WorkGroup workGroup) {
+        this.workGroup = workGroup;
+    }
+
     // kill operation with no protect.
     public void kill(boolean killConnection) {
         LOG.warn("kill timeout query, {}, kill connection: {}",
@@ -515,6 +543,8 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
+            // connection start Time
+            row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State

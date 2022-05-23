@@ -155,8 +155,8 @@ public class PredicateStatisticsCalculator {
                     firstChild.isColumnRef() ? Optional.of((ColumnRefOperator) firstChild) : Optional.empty();
 
             Statistics inStatistics = childOpt.map(operator ->
-                    Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                            addColumnStatistic(operator, newInColumnStatistic).build()).
+                            Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
+                                    addColumnStatistic(operator, newInColumnStatistic).build()).
                     orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
             return computeStatisticsAfterPredicate(inStatistics, rowCount);
         }
@@ -222,7 +222,7 @@ public class PredicateStatisticsCalculator {
             }
             if (rightColumnStatistic.hasNaNValue()) {
                 rightColumnStatistic =
-                        rightColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
+                        ColumnStatistic.buildFrom(rightColumnStatistic).setMaxValue(Double.POSITIVE_INFINITY)
                                 .setMinValue(Double.NEGATIVE_INFINITY).build();
             }
 

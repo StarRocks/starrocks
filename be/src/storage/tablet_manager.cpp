@@ -31,7 +31,8 @@ DIAGNOSTIC_POP
 #include <ctime>
 #include <memory>
 
-#include "env/env.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -45,7 +46,6 @@ DIAGNOSTIC_POP
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 #include "util/path_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -296,7 +296,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
         }
 
         TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
-        st = FileUtils::create_dir(new_tablet->schema_hash_path());
+        st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
@@ -728,7 +728,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     // For case 2, If a tablet has just been copied to local BE,
     // it may be cleared by gc-thread(see perform_path_gc_by_tablet) because the tablet meta may not be loaded to memory.
     // So clone task should check path and then failed and retry in this case.
-    if (check_path && !Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
+    if (check_path && !FileSystem::Default()->path_exists(tablet->schema_hash_path()).ok()) {
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->schema_hash_path();
         return Status::NotFound("tablet path not exists");
     }
@@ -778,7 +778,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
         return Status::InternalError("reset tablet uid failed");
     }
 
-    if (!Env::Default()->path_exists(meta_path).ok()) {
+    if (!FileSystem::Default()->path_exists(meta_path).ok()) {
         LOG(WARNING) << "Fail to find header file. meta_path=" << meta_path;
         return Status::NotFound("header file not exist");
     }
@@ -1061,13 +1061,6 @@ void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* pa
     }
 }
 
-void TabletManager::get_partition_related_tablets(int64_t partition_id, std::set<TabletInfo>* tablet_infos) {
-    std::shared_lock rlock(_partition_tablet_map_lock);
-    if (_partition_tablet_map.find(partition_id) != _partition_tablet_map.end()) {
-        *tablet_infos = _partition_tablet_map[partition_id];
-    }
-}
-
 void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
     std::vector<TabletSharedPtr> related_tablets;
     for (const auto& tablets_shard : _tablets_shards) {
@@ -1166,12 +1159,12 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                                                    TabletMetaSharedPtr* tablet_meta) {
     uint32_t next_unique_id = 0;
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    TCreateTabletReq norm_request = request;
+    TCreateTabletReq normal_request = request;
     if (!is_schema_change) {
-        for (uint32_t col_idx = 0; col_idx < request.tablet_schema.columns.size(); ++col_idx) {
+        next_unique_id = request.tablet_schema.columns.size();
+        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
-        next_unique_id = request.tablet_schema.columns.size();
     } else {
         next_unique_id = base_tablet->next_unique_id();
         size_t old_num_columns = base_tablet->num_columns();
@@ -1193,7 +1186,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                     // When receiving a new schema change request, the last default value stored should be
                     // remained instead of changing.
                     if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
-                        norm_request.tablet_schema.columns[new_col_idx].__set_default_value(
+                        normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
                                 base_tablet->tablet_schema().column(old_col_idx).default_value());
                     }
                     break;
@@ -1213,7 +1206,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         return Status::InternalError("fail to get root path shard");
     }
     // We generate a new tablet_uid for this new tablet.
-    return TabletMeta::create(_mem_tracker, norm_request, TabletUid::gen_uid(), shard_id, next_unique_id,
+    return TabletMeta::create(_mem_tracker, normal_request, TabletUid::gen_uid(), shard_id, next_unique_id,
                               col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 
@@ -1306,7 +1299,6 @@ TabletManager::TabletsShard& TabletManager::_get_tablets_shard(TTabletId tabletI
 
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                                        const string& schema_hash_path, bool restore) {
-    LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
@@ -1329,6 +1321,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (snapshot_meta->tablet_meta().updates().next_log_id() != 0) {
         return Status::InternalError("non-zero log id in tablet meta");
     }
+    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:", tablet_id,
+                            snapshot_meta->snapshot_version(), schema_hash_path);
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;
@@ -1381,7 +1375,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     // NOTE: do NOT touch snapshot_meta->tablet_meta since here, it has been modified by
     // `Tablet::create_tablet_from_meta`.
 
-    if (!Env::Default()->path_exists(tablet->schema_hash_path()).ok()) {
+    if (!FileSystem::Default()->path_exists(tablet->schema_hash_path()).ok()) {
         return Status::NotFound("tablet path not exists");
     }
 
@@ -1390,6 +1384,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (old_tablet_ptr != nullptr) {
         if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
+            // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
+            old_tablet_ptr.reset();
             Status st = delete_shutdown_tablet(tablet_id);
             if (st.ok() || st.is_not_found()) {
                 LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id;
@@ -1430,7 +1426,7 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
 }
 
 Status TabletManager::_remove_tablet_directories(const TabletSharedPtr& tablet) {
-    return FileUtils::remove_all(tablet->tablet_id_path());
+    return fs::remove_all(tablet->tablet_id_path());
 }
 
 Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& tablet) {

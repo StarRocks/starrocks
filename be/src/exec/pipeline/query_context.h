@@ -37,12 +37,16 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
-    bool count_down_fragments() { return _num_active_fragments.fetch_sub(1) == 1; }
-
+    bool count_down_fragments() {
+        size_t old = _num_active_fragments.fetch_sub(1);
+        DCHECK_GE(old, 1);
+        return old == 1;
+    }
+    int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
     void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
-
+    inline int get_expire_seconds() { return _expire_seconds.count(); }
     // now time point pass by deadline point.
     bool is_expired() {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -76,14 +80,15 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    void init_query(workgroup::WorkGroup* wg);
+    Status init_query(workgroup::WorkGroup* wg);
 
+    // Some statistic about the query, including cpu, scan_rows, scan_bytes
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
     int64_t cpu_cost() const { return _cur_cpu_cost; }
-
-    // Record the number of rows read from the data source for big query checking
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
+    void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
+    int64_t get_scan_bytes() const { return _cur_scan_bytes; }
 
     // Record the cpu time of the query run, for big query checking
     int64_t init_wg_cpu_cost() const { return _init_wg_cpu_cost; }
@@ -114,6 +119,7 @@ private:
     int64_t _query_begin_time = 0;
     std::atomic<int64_t> _cur_cpu_cost = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
+    std::atomic<int64_t> _cur_scan_bytes = 0;
 
     int64_t _init_wg_cpu_cost = 0;
 };
@@ -125,7 +131,8 @@ public:
     Status init();
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
-    void remove(const TUniqueId& query_id);
+    size_t size();
+    bool remove(const TUniqueId& query_id);
     // used for graceful exit
     void clear();
 
@@ -146,6 +153,9 @@ private:
 
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
+
+    inline static const char* _metric_name = "pip_query_ctx_cnt";
+    std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
 } // namespace pipeline

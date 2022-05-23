@@ -151,25 +151,25 @@ public class AgentTaskTest {
                 new SchemaChangeTask(null, backendId1, dbId, tableId, partitionId, indexId1,
                         tabletId1, replicaId1, columns, schemaHash2, schemaHash1,
                         shortKeyNum, storageType, null, 0, TKeysType.AGG_KEYS);
-        
+
         // modify tablet meta
         // <tablet id, tablet schema hash, tablet in memory/ tablet enable persistent index>
         // for report handle
         List<Triple<Long, Integer, Boolean>> tabletToMeta = Lists.newArrayList();
         tabletToMeta.add(new ImmutableTriple<>(tabletId1, schemaHash1, true));
         tabletToMeta.add(new ImmutableTriple<>(tabletId2, schemaHash2, false));
-        modifyEnablePersistentIndexTask1 = 
+        modifyEnablePersistentIndexTask1 =
                 new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
-        
+
         // for schema change
         MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(1);
         Set<Pair<Long, Integer>> tabletIdWithSchemaHash = new HashSet();
         tabletIdWithSchemaHash.add(Pair.create(tabletId1, schemaHash1));
         countDownLatch.addMark(backendId1, tabletIdWithSchemaHash);
-        modifyEnablePersistentIndexTask2 = 
-                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true, 
-                                             countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
-        modifyInMemoryTask = 
+        modifyEnablePersistentIndexTask2 =
+                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true,
+                        countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+        modifyInMemoryTask =
                 new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.INMEMORY);
     }
 
@@ -244,12 +244,14 @@ public class AgentTaskTest {
         Assert.assertNotNull(request6.getAlter_tablet_req());
 
         // modify enable_persistent_index
-        TAgentTaskRequest request7 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask1);
+        TAgentTaskRequest request7 =
+                (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask1);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request7.getTask_type());
         Assert.assertEquals(modifyEnablePersistentIndexTask1.getSignature(), request7.getSignature());
         Assert.assertNotNull(request7.getUpdate_tablet_meta_info_req());
 
-        TAgentTaskRequest request8 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask2);
+        TAgentTaskRequest request8 =
+                (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask2);
         Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request8.getTask_type());
         Assert.assertEquals(modifyEnablePersistentIndexTask2.getSignature(), request8.getSignature());
         Assert.assertNotNull(request8.getUpdate_tablet_meta_info_req());

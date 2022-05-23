@@ -549,6 +549,93 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
+Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* context,
+                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    ColumnPtr column_format = context->get_constant_column(2);
+    Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
+    auto period_unit = format_slice.to_string();
+
+    ScalarFunction function;
+    if (period_unit == "second") {
+        function = &TimeFunctions::datetime_floor_second;
+    } else if (period_unit == "minute") {
+        function = &TimeFunctions::datetime_floor_minute;
+    } else if (period_unit == "hour") {
+        function = &TimeFunctions::datetime_floor_hour;
+    } else if (period_unit == "day") {
+        function = &TimeFunctions::datetime_floor_day;
+    } else if (period_unit == "month") {
+        function = &TimeFunctions::datetime_floor_month;
+    } else if (period_unit == "year") {
+        function = &TimeFunctions::datetime_floor_year;
+    } else if (period_unit == "week") {
+        function = &TimeFunctions::datetime_floor_week;
+    } else if (period_unit == "quarter") {
+        function = &TimeFunctions::datetime_floor_quarter;
+    } else {
+        return Status::InternalError("period unit must in {second, minute, hour, day, month, year, week, quarter}");
+    }
+
+    auto fc = new DateTruncCtx();
+    fc->function = function;
+    context->set_function_state(scope, fc);
+    return Status::OK();
+}
+
+#define DEFINE_DATETIME_FLOOR_FN(UNIT)                                         \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(datetime_floor_##UNIT##Impl, v, period) { \
+        TimestampValue result = v;                                             \
+        result.floor_to_##UNIT##_period(period);                               \
+        return result;                                                         \
+    }                                                                          \
+                                                                               \
+    DEFINE_TIME_CALC_FN(datetime_floor_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
+
+// datetime_floor_to_second
+DEFINE_DATETIME_FLOOR_FN(second);
+
+// datetime_floor_to_minute
+DEFINE_DATETIME_FLOOR_FN(minute);
+
+// datetime_floor_to_hour
+DEFINE_DATETIME_FLOOR_FN(hour);
+
+// datetime_floor_to_day
+DEFINE_DATETIME_FLOOR_FN(day);
+
+// datetime_floor_to_week
+DEFINE_DATETIME_FLOOR_FN(week);
+
+// datetime_floor_to_month
+DEFINE_DATETIME_FLOOR_FN(month);
+
+// datetime_floor_to_quarter
+DEFINE_DATETIME_FLOOR_FN(quarter);
+
+// datetime_floor_to_year
+DEFINE_DATETIME_FLOOR_FN(year);
+
+#undef DEFINE_DATETIME_FLOOR_FN
+
+ColumnPtr TimeFunctions::datetime_floor(FunctionContext* context, const Columns& columns) {
+    auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    return ctc->function(context, columns);
+}
+
+Status TimeFunctions::datetime_floor_close(starrocks_udf::FunctionContext* context,
+                                           starrocks_udf::FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
+        delete fc;
+    }
+
+    return Status::OK();
+}
+
 // years_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
     int year1, month1, day1, hour1, mintue1, second1, usec1;
@@ -1484,15 +1571,11 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATETIME>(fc, columns);
     } else {
-        bool all_const = ColumnHelper::is_all_const(columns);
+        auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
         ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
         ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
 
-        // all_const was true viewer_date.size() will return 1
-        // which could reduce unnecessary calculations
-        size_t num_rows = all_const ? viewer_date.size() : columns[0]->size();
-
-        ColumnBuilder<TYPE_VARCHAR> builder(columns[0]->size());
+        ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
         for (int i = 0; i < num_rows; ++i) {
             if (viewer_date.is_null(i)) {
                 builder.append_null();

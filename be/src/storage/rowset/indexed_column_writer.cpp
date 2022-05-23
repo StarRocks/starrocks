@@ -26,8 +26,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "env/env.h"
-#include "storage/fs/block_manager.h"
+#include "fs/fs.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/index_page.h"
@@ -42,10 +41,10 @@
 namespace starrocks {
 
 IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
-                                         fs::WritableBlock* wblock)
+                                         WritableFile* wfile)
         : _options(options),
           _typeinfo(std::move(typeinfo)),
-          _wblock(wblock),
+          _wfile(wfile),
           _num_values(0),
           _num_data_pages(0),
           _validx_key_coder(nullptr),
@@ -111,7 +110,7 @@ Status IndexedColumnWriter::_finish_current_data_page() {
     footer.mutable_data_page_footer()->set_num_values(num_values_in_page);
     footer.mutable_data_page_footer()->set_nullmap_size(0);
 
-    RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _options.compression_min_space_saving, _wblock,
+    RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _options.compression_min_space_saving, _wfile,
                                                     {*page_body}, footer, &_last_data_page));
     _num_data_pages++;
 
@@ -157,7 +156,7 @@ Status IndexedColumnWriter::_flush_index(IndexPageBuilder* index_builder, BTreeM
         index_builder->finish(&page_body, &page_footer);
 
         PagePointer pp;
-        RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _options.compression_min_space_saving, _wblock,
+        RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _options.compression_min_space_saving, _wfile,
                                                         {page_body.slice()}, page_footer, &pp));
 
         meta->set_is_root_data_page(false);

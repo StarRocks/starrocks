@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import org.junit.After;
@@ -27,13 +27,13 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
 
-        Catalog catalog = connectContext.getCatalog();
-        catalog.setStatisticStorage(new TestStorage());
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        globalStateMgr.setStatisticStorage(new TestStorage());
 
-        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
-        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
         setTableStatistics(t1, 2000000);
     }
 
@@ -317,5 +317,23 @@ public class CTEPlanTest extends PlanTestBase {
                 "AND true;\n";
 
         getFragmentPlan(sql2);
+    }
+
+    @Test
+    public void testCTEConsumeTuple() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    RANDOM");
+
+        String thrift = getThriftPlan(sql);
+        assertNotContains(thrift, "tuple_id:3");
     }
 }

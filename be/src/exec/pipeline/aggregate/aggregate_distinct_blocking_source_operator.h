@@ -11,8 +11,8 @@ namespace starrocks::pipeline {
 class AggregateDistinctBlockingSourceOperator : public SourceOperator {
 public:
     AggregateDistinctBlockingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                            AggregatorPtr aggregator)
-            : SourceOperator(factory, id, "aggregate_distinct_blocking_source", plan_node_id),
+                                            int32_t driver_sequence, AggregatorPtr aggregator)
+            : SourceOperator(factory, id, "aggregate_distinct_blocking_source", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -48,7 +48,7 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctBlockingSourceOperator>(
-                this, _id, _plan_node_id, _aggregator_factory->get_or_create(driver_sequence));
+                this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_or_create(driver_sequence));
     }
 
 private:

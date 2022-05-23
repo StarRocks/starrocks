@@ -119,7 +119,8 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         // check data source properties
         checkDataSourceProperties();
 
-        if (routineLoadDesc == null && analyzedJobProperties.isEmpty() && !dataSourceProperties.hasAnalyzedProperties()) {
+        if (routineLoadDesc == null && analyzedJobProperties.isEmpty() &&
+                !dataSourceProperties.hasAnalyzedProperties()) {
             throw new AnalysisException("No properties are specified");
         }
     }

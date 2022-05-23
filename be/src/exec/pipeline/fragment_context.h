@@ -5,11 +5,12 @@
 #include <unordered_map>
 
 #include "exec/exec_node.h"
-#include "exec/pipeline/morsel.h"
+#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -19,6 +20,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+
 namespace starrocks {
 namespace pipeline {
 
@@ -27,7 +29,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() : _cancel_flag(false) {}
+    FragmentContext() {}
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
@@ -63,22 +65,10 @@ public:
         _final_status.store(nullptr);
     }
 
+    int num_drivers() const { return _num_drivers.load(); }
     bool count_down_drivers() { return _num_drivers.fetch_sub(1) == 1; }
 
-    void set_final_status(const Status& status) {
-        if (_final_status.load() != nullptr) {
-            return;
-        }
-        Status* old_status = nullptr;
-        if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
-            if (_final_status.load()->is_cancelled()) {
-                LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
-                             << ", instance_id=" << print_id(_fragment_instance_id)
-                             << ", reason=" << final_status().to_string();
-            }
-            _s_status = status;
-        }
-    }
+    void set_final_status(const Status& status);
 
     Status final_status() {
         auto* status = _final_status.load();
@@ -86,13 +76,13 @@ public:
     }
 
     void cancel(const Status& status) {
-        _cancel_flag.store(true, std::memory_order_release);
+        _runtime_state->set_is_cancelled(true);
         set_final_status(status);
     }
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
+    bool is_canceled() { return _runtime_state->is_cancelled(); }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
 
@@ -119,6 +109,8 @@ public:
     void set_enable_resource_group() { _enable_resource_group = true; }
 
     bool enable_resource_group() const { return _enable_resource_group; }
+
+    void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
 
 private:
     // Id of this query
@@ -151,10 +143,11 @@ private:
     // FragmentContext can be unregistered safely.
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
-    std::atomic<bool> _cancel_flag;
     Status _s_status;
 
     bool _enable_resource_group = false;
+
+    DriverLimiter::TokenPtr _driver_token = nullptr;
 };
 
 class FragmentContextManager {

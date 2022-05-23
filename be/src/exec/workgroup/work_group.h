@@ -13,7 +13,9 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
+#include "util/metrics.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -98,7 +100,10 @@ public:
         ++_acc_num_drivers;
     }
     // decrease num_driver when the driver is detached from the workgroup
-    void decrease_num_drivers() { --_num_drivers; }
+    void decrease_num_drivers() {
+        int64_t old = _num_drivers.fetch_sub(1);
+        DCHECK_GT(old, 0);
+    }
 
     int num_drivers() const { return _num_drivers; }
 
@@ -124,16 +129,19 @@ public:
     int64_t total_cpu_cost() const { return _total_cpu_cost.load(); }
     void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
-    bool is_big_query(const QueryContext& query_context);
-    void incr_num_queries() { _num_queries++; }
-    void decr_num_queries() { _num_queries--; }
-    int64_t num_queries() const { return _num_queries; }
+    Status check_big_query(const QueryContext& query_context);
+    Status try_incr_num_queries();
+    void decr_num_queries();
+    int64_t num_running_queries() const { return _num_running_queries; }
+    int64_t num_total_queries() const { return _num_total_queries; }
+    int64_t concurrency_overflow_count() const { return _concurrency_overflow_count; }
+    int64_t bigquery_count() const { return _bigquery_count; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     bool use_big_query_mem_limit() const {
         return 0 < _big_query_mem_limit && _big_query_mem_limit <= _mem_tracker->limit();
     }
-    int64_t big_query_cpu_core_second_limit() const { return _big_query_cpu_core_second_limit; }
+    int64_t big_query_cpu_second_limit() const { return _big_query_cpu_second_limit; }
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
 
     // return true if current workgroup is removable:
@@ -148,20 +156,24 @@ public:
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
 
+    int64_t mem_limit() const;
+
 private:
     std::string _name;
     int64_t _id;
     int64_t _version;
-
-    size_t _cpu_limit;
-    double _memory_limit;
-    size_t _concurrency;
     WorkGroupType _type;
 
+    // Specified limitations
+    size_t _cpu_limit;
+    double _memory_limit;
+    int64_t _memory_limit_bytes = -1;
+    size_t _concurrency_limit = 0;
+
     // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
-    int64_t _big_query_mem_limit = 500;
+    int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
-    int64_t _big_query_cpu_core_second_limit = 0;
+    int64_t _big_query_cpu_second_limit = 0;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
@@ -189,7 +201,10 @@ private:
 
     double _cpu_actual_use_ratio = 0;
 
-    std::atomic<int64_t> _num_queries = 0;
+    std::atomic<int64_t> _num_running_queries = 0;
+    std::atomic<int64_t> _num_total_queries = 0;
+    std::atomic<int64_t> _concurrency_overflow_count = 0;
+    std::atomic<int64_t> _bigquery_count = 0;
 };
 
 class WorkerOwnerManager {
@@ -251,6 +266,8 @@ public:
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
+    void update_metrics();
+
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
     // WorkGroupManager::_mutex is held when invoking these method.
@@ -272,6 +289,21 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
+
+    std::once_flag init_metrics_once_flag;
+    std::unordered_map<std::string, int128_t> _wg_metrics;
+
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_total_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
+
+    void add_metrics(const WorkGroupPtr& wg);
+    void update_metrics_unlocked();
 };
 
 class DefaultWorkGroupInitialization {

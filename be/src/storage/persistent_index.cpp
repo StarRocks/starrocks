@@ -5,9 +5,9 @@
 #include <cstring>
 #include <numeric>
 
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
-#include "storage/fs/fs_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/tablet.h"
@@ -147,7 +147,7 @@ struct ImmutableIndexShard {
         return pages[info.pageid].pack(info.packid);
     }
 
-    Status write(fs::WritableBlock& wb) const;
+    Status write(WritableFile& wb) const;
 
     static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<KVRef>& kv_refs,
                                                                  size_t npage_hint);
@@ -156,7 +156,7 @@ struct ImmutableIndexShard {
     size_t num_entry_moved = 0;
 };
 
-Status ImmutableIndexShard::write(fs::WritableBlock& wb) const {
+Status ImmutableIndexShard::write(WritableFile& wb) const {
     if (pages.size() > 0) {
         return wb.append(Slice((uint8_t*)pages.data(), page_size * pages.size()));
     } else {
@@ -432,7 +432,7 @@ class ImmutableIndexWriter {
 public:
     ~ImmutableIndexWriter() {
         if (_wb) {
-            Env::Default()->delete_file(_idx_file_path_tmp);
+            FileSystem::Default()->delete_file(_idx_file_path_tmp);
         }
     }
 
@@ -440,9 +440,10 @@ public:
         _version = version;
         _idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
         _idx_file_path_tmp = _idx_file_path + ".tmp";
-        ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_idx_file_path_tmp));
-        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, Env::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
-        return _block_mgr->create_block(wblock_opts, &_wb);
+        ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
+        WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
+        return Status::OK();
     }
 
     Status write_shard(size_t key_size, size_t value_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
@@ -459,9 +460,9 @@ public:
             return std::move(rs_create).status();
         }
         auto& shard = rs_create.value();
-        size_t pos_before = _wb->bytes_appended();
+        size_t pos_before = _wb->size();
         RETURN_IF_ERROR(shard->write(*_wb));
-        size_t pos_after = _wb->bytes_appended();
+        size_t pos_after = _wb->size();
         auto shard_meta = _meta.add_shards();
         shard_meta->set_size(kvs.size());
         shard_meta->set_npage(shard->npage());
@@ -485,6 +486,7 @@ public:
         _meta.set_size(_total);
         _meta.set_fixed_key_size(_fixed_key_size);
         _meta.set_fixed_value_size(_fixed_value_size);
+        _meta.set_format_version(PERSISTENT_INDEX_VERSION_1);
         std::string footer;
         if (!_meta.SerializeToString(&footer)) {
             return Status::InternalError("ImmutableIndexMetaPB::SerializeToString failed");
@@ -494,9 +496,8 @@ public:
         put_fixed32_le(&footer, checksum);
         footer.append(index_file_magic, 4);
         RETURN_IF_ERROR(_wb->append(Slice(footer)));
-        RETURN_IF_ERROR(_wb->finalize());
         RETURN_IF_ERROR(_wb->close());
-        RETURN_IF_ERROR(Env::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
+        RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
         _wb.reset();
         return Status::OK();
     }
@@ -505,8 +506,8 @@ private:
     EditVersion _version;
     string _idx_file_path_tmp;
     string _idx_file_path;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
-    std::unique_ptr<fs::WritableBlock> _wb;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _wb;
     size_t _nshard = 0;
     size_t _fixed_key_size = 0;
     size_t _fixed_value_size = 0;
@@ -787,7 +788,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
         return Status::OK();
     }
     *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)(*shard)->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
     for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
         auto& header = (*shard)->header(pageid);
         for (uint32_t bucketid = 0; bucketid < bucket_per_page; bucketid++) {
@@ -814,7 +815,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* key
     size_t found = 0;
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     uint8_t candidate_idxes[bucket_size_max];
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info.hashes[i]);
@@ -850,7 +851,7 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     }
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * page_size == shard_info.bytes) << "illegal shard size";
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
+    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     uint8_t candidate_idxes[bucket_size_max];
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info.hashes[i]);
@@ -918,38 +919,40 @@ Status ImmutableIndex::check_not_exist(size_t n, const void* keys) {
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<fs::ReadableBlock>&& rb) {
-    uint64_t file_size;
-    RETURN_IF_ERROR(rb->size(&file_size));
+StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file) {
+    ASSIGN_OR_RETURN(auto file_size, file->get_size());
     if (file_size < 12) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", rb->path(), file_size));
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: file size $1 < 12", file->filename(), file_size));
     }
     size_t footer_read_size = std::min<size_t>(4096, file_size);
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
-    RETURN_IF_ERROR(rb->read(file_size - footer_read_size, buff));
+    RETURN_IF_ERROR(file->read_at_fully(file_size - footer_read_size, buff.data(), buff.size()));
     uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + footer_read_size - 12);
     uint32_t checksum = UNALIGNED_LOAD32(buff.data() + footer_read_size - 8);
     uint32_t magic = UNALIGNED_LOAD32(buff.data() + footer_read_size - 4);
     if (magic != UNALIGNED_LOAD32(index_file_magic)) {
-        return Status::Corruption(strings::Substitute("load immutable index failed $0 illegal magic", rb->path()));
+        return Status::Corruption(
+                strings::Substitute("load immutable index failed $0 illegal magic", file->filename()));
     }
     std::string_view meta_str;
     if (footer_length <= footer_read_size - 12) {
         meta_str = std::string_view(buff.data() + footer_read_size - 12 - footer_length, footer_length + 4);
     } else {
         raw::stl_string_resize_uninitialized(&buff, footer_length + 4);
-        RETURN_IF_ERROR(rb->read(file_size - 12 - footer_length, buff));
+        RETURN_IF_ERROR(file->read_at_fully(file_size - 12 - footer_length, buff.data(), buff.size()));
         meta_str = std::string_view(buff.data(), footer_length + 4);
     }
     auto actual_checksum = crc32c::Value(meta_str.data(), meta_str.size());
     if (checksum != actual_checksum) {
-        return Status::Corruption(strings::Substitute("load immutable index failed $0 checksum not match", rb->path()));
+        return Status::Corruption(
+                strings::Substitute("load immutable index failed $0 checksum not match", file->filename()));
     }
     ImmutableIndexMetaPB meta;
     if (!meta.ParseFromArray(meta_str.data(), meta_str.size() - 4)) {
         return Status::Corruption(
-                strings::Substitute("load immutable index failed $0 parse meta pb failed", rb->path()));
+                strings::Substitute("load immutable index failed $0 parse meta pb failed", file->filename()));
     }
     std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
@@ -966,15 +969,15 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<f
         dest.offset = src.data().offset();
         dest.bytes = src.data().size();
     }
-    idx->_rb.swap(rb);
+    idx->_file.swap(file);
     return std::move(idx);
 }
 
 PersistentIndex::PersistentIndex(const std::string& path) : _path(path) {}
 
 PersistentIndex::~PersistentIndex() {
-    if (_index_block) {
-        _index_block->close();
+    if (_index_file) {
+        _index_file->close();
     }
     if (_l1) {
         _l1->clear();
@@ -1001,11 +1004,11 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     std::string file_name = _get_l0_index_file_name(_path, version);
-    fs::CreateBlockOptions wblock_opts({file_name});
-    wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
-    RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+    WritableFileOptions wblock_opts;
+    wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, file_name));
     return Status::OK();
 }
 
@@ -1018,7 +1021,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
 
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
@@ -1042,11 +1045,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     PagePointerPB page_pb = snapshot_meta.data();
     size_t snapshot_off = page_pb.offset();
     size_t snapshot_size = page_pb.size();
-    std::unique_ptr<fs::ReadableBlock> rblock;
-    std::unique_ptr<fs::ReadableBlock> l1_rblock;
+    std::unique_ptr<RandomAccessFile> l1_rfile;
 
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    RETURN_IF_ERROR(_block_mgr->open_block(l0_index_file_name, &rblock));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(l0_index_file_name));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
@@ -1072,7 +1074,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
         while (nums > 0) {
             size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
-            RETURN_IF_ERROR(rblock->read(offset, buff));
+            RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
             uint8_t keys[key_size * batch_num];
             std::vector<IndexValue> values;
             values.reserve(batch_num);
@@ -1091,15 +1093,15 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     // the data in the end maybe invalid
     // so we need to truncate file first
     RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
-    fs::CreateBlockOptions wblock_opts({l0_index_file_name});
-    wblock_opts.mode = Env::MUST_EXIST;
-    RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+    WritableFileOptions wblock_opts;
+    wblock_opts.mode = FileSystem::MUST_EXIST;
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_name));
 
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        RETURN_IF_ERROR(_block_mgr->open_block(l1_block_path, &l1_rblock));
-        auto l1_st = ImmutableIndex::load(std::move(l1_rblock));
+        ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_block_path));
+        auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
         if (!l1_st.ok()) {
             return l1_st.status();
         }
@@ -1128,12 +1130,12 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     // First is _flushed is true, we have flushed all _l0 data into _l1 and reload, we don't need
     // to do additional process
     // Second is _flused is false, we have write all _l0 data into new snapshot file, we need to
-    // create new _index_block from the new snapshot file
+    // create new _index_file from the new snapshot file
     if (!_flushed) {
         std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-        fs::CreateBlockOptions wblock_opts({l0_index_file_path});
-        wblock_opts.mode = Env::MUST_EXIST;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
+        WritableFileOptions wblock_opts;
+        wblock_opts.mode = FileSystem::MUST_EXIST;
+        ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_path));
     }
 
     RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
@@ -1273,7 +1275,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     // set _dump_snapshot to true
     // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
     _dump_snapshot = true;
@@ -1369,14 +1371,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_flushed) {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
         std::string file_name = _get_l0_index_file_name(_path, _version);
-        //ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(file_name));
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({file_name});
-        wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
-        DeferOp close_block([&wblock] {
-            if (wblock) {
-                wblock->close();
+        WritableFileOptions wblock_opts;
+        wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wblock_opts, file_name));
+        DeferOp close_block([&wfile] {
+            if (wfile) {
+                wfile->close();
             }
         });
         // update PersistentIndexMetaPB
@@ -1391,6 +1391,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(0);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
@@ -1399,7 +1400,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         std::string file_name = _get_l0_index_file_name(_path, _version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
-        Env::Default()->delete_file(file_name);
+        FileSystem::Default()->delete_file(file_name);
         size_t snapshot_size = _dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         if (!_dump(ar_out)) {
@@ -1417,10 +1418,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(snapshot_size);
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         _offset += snapshot_size;
         _page_size = 0;
     } else {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
         IndexWalMetaPB* wal_pb = l0_meta->add_wals();
         _version.to_pb(wal_pb->mutable_version());
 
@@ -1441,25 +1444,25 @@ Status PersistentIndex::on_commited() {
     if (_flushed) {
         RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
     } else if (_dump_snapshot) {
-        std::string expired_l0_file_path = _index_block->path();
+        std::string expired_l0_file_path = _index_file->filename();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);
-        if (_block_mgr == nullptr) {
-            ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(index_file_path));
+        if (_fs == nullptr) {
+            ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(index_file_path));
         }
-        std::unique_ptr<fs::WritableBlock> wblock;
-        DeferOp close_block([&wblock] {
-            if (wblock) {
-                wblock->close();
+        std::unique_ptr<WritableFile> wfile;
+        DeferOp close_block([&wfile] {
+            if (wfile) {
+                wfile->close();
             }
         });
 
-        fs::CreateBlockOptions wblock_opts({index_file_path});
+        WritableFileOptions wblock_opts;
         // new index file should be created in commit() phase
-        wblock_opts.mode = Env::MUST_EXIST;
-        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
-        _index_block = std::move(wblock);
+        wblock_opts.mode = FileSystem::MUST_EXIST;
+        ASSIGN_OR_RETURN(wfile, _fs->new_writable_file(wblock_opts, index_file_path));
+        _index_file = std::move(wfile);
         VLOG(1) << "delete expired l0 index file: " << expired_l0_file_path;
-        Env::Default()->delete_file(expired_l0_file_path);
+        FileSystem::Default()->delete_file(expired_l0_file_path);
     }
 
     _dump_snapshot = false;
@@ -1546,7 +1549,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
             put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
         }
-        RETURN_IF_ERROR(_index_block->append(fixed_buf));
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
         _page_size += fixed_buf.size();
     }
     return Status::OK();
@@ -1561,7 +1564,7 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
         fixed_buf.append(fkeys + i * _key_size, _key_size);
         put_fixed64_le(&fixed_buf, v);
     }
-    RETURN_IF_ERROR(_index_block->append(fixed_buf));
+    RETURN_IF_ERROR(_index_file->append(fixed_buf));
     _page_size += fixed_buf.size();
     return Status::OK();
 }
@@ -1661,7 +1664,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
-            Status st = Env::Default()->delete_file(path);
+            Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
                 return false;
@@ -1669,7 +1672,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         }
         return true;
     };
-    return Env::Default()->iterate_dir(_path, cb);
+    return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
 template <size_t KeySize>

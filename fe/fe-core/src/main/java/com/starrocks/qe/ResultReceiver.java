@@ -126,14 +126,17 @@ public class ResultReceiver {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
-                status.setStatus(new Status(TStatusCode.TIMEOUT, e.getMessage()));
+                status.setStatus(new Status(TStatusCode.TIMEOUT,
+                        String.format("Query exceeded time limit of %d seconds",
+                                ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlacklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
-            status.setStatus("query timeout");
+            status.setStatus(String.format("Query exceeded time limit of %d seconds",
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }

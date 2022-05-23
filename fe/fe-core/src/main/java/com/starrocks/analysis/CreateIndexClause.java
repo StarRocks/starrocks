@@ -21,68 +21,35 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Index;
-import com.starrocks.common.AnalysisException;
-
-import java.util.Map;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class CreateIndexClause extends AlterTableClause {
-    // in which table the index on, only used when alter = false
-    private TableName tableName;
     // index definition class
-    private IndexDef indexDef;
-    // when alter = true, clause like: alter table add index xxxx
-    // when alter = false, clause like: create index xx on table xxxx
-    private boolean alter;
+    private final IndexDef indexDef;
     // index internal class
     private Index index;
 
     public CreateIndexClause(TableName tableName, IndexDef indexDef, boolean alter) {
         super(AlterOpType.SCHEMA_CHANGE);
-        this.tableName = tableName;
         this.indexDef = indexDef;
-        this.alter = alter;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return Maps.newHashMap();
     }
 
     public Index getIndex() {
         return index;
     }
 
+    public void setIndex(Index index) {
+        this.index = index;
+    }
+
     public IndexDef getIndexDef() {
         return indexDef;
     }
 
-    public boolean isAlter() {
-        return alter;
-    }
-
-    public TableName getTableName() {
-        return tableName;
-    }
-
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (indexDef == null) {
-            throw new AnalysisException("index definition expected.");
-        }
-        indexDef.analyze();
-        this.index = new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                indexDef.getComment());
-    }
-
-    @Override
-    public String toSql() {
-        if (alter) {
-            return indexDef.toSql();
-        } else {
-            return "CREATE " + indexDef.toSql(tableName.toSql());
-        }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateIndexClause(this, context);
     }
 }

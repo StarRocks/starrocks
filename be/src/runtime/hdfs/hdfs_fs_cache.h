@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "common/status.h"
-#include "env/env_hdfs.h"
+#include "fs/fs_hdfs.h"
 
 namespace starrocks {
 

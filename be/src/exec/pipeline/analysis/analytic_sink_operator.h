@@ -8,12 +8,14 @@
 namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
-    AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
-                         AnalytorPtr&& analytor)
-            : Operator(factory, id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor(std::move(analytor)) {
+    AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                         const TPlanNode& tnode, AnalytorPtr&& analytor)
+            : Operator(factory, id, "analytic_sink", plan_node_id, driver_sequence),
+              _tnode(tnode),
+              _analytor(std::move(analytor)) {
         _analytor->ref();
     }
-    ~AnalyticSinkOperator() = default;
+    ~AnalyticSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
@@ -27,12 +29,22 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    Status _process_by_partition_if_necessary();
+    using ProcessByPartitionIfNecessaryFunc = Status (AnalyticSinkOperator::*)();
+    using ProcessByPartitionFunc = void (AnalyticSinkOperator::*)(size_t chunk_size, bool is_new_partition);
+
+    Status _process_by_partition_if_necessary_for_other();
+    // As for the frame `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROWS`, some window functions needn't
+    // use the partition end. For them, we could process before the current partition is finished.
+    Status _process_by_partition_if_necessary_for_unbounded_preceding_rows_frame_without_partition_end();
+    ProcessByPartitionIfNecessaryFunc _process_by_partition_if_necessary = nullptr;
+
     void _process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition);
     void _process_by_partition_for_unbounded_preceding_range_frame(size_t chunk_size, bool is_new_partition);
-    void _process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size, bool is_new_partition);
+    void _process_by_partition_for_unbounded_preceding_rows_frame_with_partition_end(size_t chunk_size,
+                                                                                     bool is_new_partition);
+    void _process_by_partition_for_unbounded_preceding_rows_frame_without_partition_end(size_t chunk_size);
     void _process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition);
-    void (AnalyticSinkOperator::*_process_by_partition)(size_t chunk_size, bool is_new_partition) = nullptr;
+    ProcessByPartitionFunc _process_by_partition = nullptr;
 
     TPlanNode _tnode;
     // It is used to perform analytic algorithms
@@ -52,7 +64,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto analytor = _analytor_factory->create(driver_sequence);
-        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, _tnode, std::move(analytor));
+        return std::make_shared<AnalyticSinkOperator>(this, _id, _plan_node_id, driver_sequence, _tnode,
+                                                      std::move(analytor));
     }
 
 private:

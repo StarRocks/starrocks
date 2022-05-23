@@ -157,7 +157,7 @@ public class ExistentialApply2OuterJoinRule extends BaseApply2OuterJoinRule {
                                                        ExistsPredicateOperator epo, OptimizerContext context) {
         boolean isNotExists = epo.isNotExists();
         // limit
-        OptExpression limitExpression = OptExpression.create(new LogicalLimitOperator(1), input.getInputs().get(1));
+        OptExpression limitExpression = OptExpression.create(LogicalLimitOperator.init(1), input.getInputs().get(1));
 
         // agg count(1)
         CallOperator countOp = SubqueryUtils.createCountRowsOperator();

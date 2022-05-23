@@ -78,7 +78,7 @@ message RowsetTxnMetaPB {
 }
 
 message RowsetMetaPB {
-    required int64 rowset_id = 1;
+    required int64 deprecated_rowset_id = 1;
     optional int64 partition_id = 2;
     optional int64 tablet_id = 3;
     // only for pending rowset
@@ -115,7 +115,7 @@ message RowsetMetaPB {
     // total number of segments
     optional int64 num_segments = 22;
     // rowset id definition, it will replace required rowset id
-    optional string rowset_id_v2 = 23;
+    optional string rowset_id = 23;
     // to indicate whether the data between the segments overlap
     optional SegmentsOverlapPB segments_overlap_pb = 51 [default = OVERLAP_UNKNOWN];
     // every segment in a rowset has an unique uint32 id

@@ -19,8 +19,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "env/env.h"
 #include "exprs/expr.h"
+#include "fs/fs.h"
 #include "runtime/types.h"
 
 namespace starrocks::vectorized {

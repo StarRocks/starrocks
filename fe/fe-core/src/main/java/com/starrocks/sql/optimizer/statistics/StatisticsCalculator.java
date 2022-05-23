@@ -10,7 +10,6 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -30,10 +29,12 @@ import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -106,7 +107,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mortbay.log.Log;
@@ -250,11 +250,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
-                // TODO: pass predicate to get table statistics
-                new ArrayList<>(),
-                ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
-        context.setStatistics(stats);
+        if (context.getStatistics() == null) {
+            Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
+                    // TODO: pass predicate to get table statistics
+                    new ArrayList<>(),
+                    ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
+            context.setStatistics(stats);
+        }
         return visitOperator(node, context);
     }
 
@@ -307,7 +309,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
                                 map(ColumnRefOperator::getName).collect(Collectors.toList()));
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                        computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                                computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
                 columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
                     return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
@@ -352,8 +354,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<ColumnStatistic> columnStatisticList = Catalog.getCurrentStatisticStorage().getColumnStatistics(table,
-                requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
+        List<ColumnStatistic> columnStatisticList =
+                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table,
+                        requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
             builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
@@ -462,7 +465,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             String partitionColumn = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
             ColumnStatistic partitionColumnStatistic =
-                    Catalog.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
+                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
             optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -742,9 +745,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         double crossRowCount = leftRowCount * rightRowCount;
         crossBuilder.setOutputRowCount(crossRowCount);
 
-        List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
-                rightStatistics.getUsedColumns(),
-                Utils.extractConjuncts(joinOnPredicate));
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
+                rightStatistics.getUsedColumns(), Utils.extractConjuncts(joinOnPredicate));
 
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;

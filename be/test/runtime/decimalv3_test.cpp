@@ -36,7 +36,7 @@ TEST_F(TestDecimalV3, testStringDecimal128Cast) {
     StringDecimalCastCases cases = {
             {"3.14", 3, 2, false, "3.14"},
             {"3.14", 3, 2, false, "3.14"},
-            {"4.00", 3, 2, false, "4"},
+            {"4.00", 3, 2, false, "4.00"},
             {"0.0123456789012345678901234567890123456", 37, 37, false, "0.0123456789012345678901234567890123456"},
             {"0.01234567890123456789012345678901234567", 38, 38, false, "0.01234567890123456789012345678901234567"},
             {"1234567890123456789012345678901234567", 37, 0, false, "1234567890123456789012345678901234567"},
@@ -45,10 +45,20 @@ TEST_F(TestDecimalV3, testStringDecimal128Cast) {
     test_string_decimal_cast<int128_t>(cases);
 }
 
+TEST_F(TestDecimalV3, testStringDecimal128CastWithRounding) {
+    StringDecimalCastCases cases = {
+            {"360.000000", 10, 2, false, "360.00"},
+            {"360.004999", 10, 2, false, "360.00"},
+            {"360.005000", 10, 2, false, "360.01"},
+            {"360.005001", 10, 2, false, "360.01"},
+    };
+    test_string_decimal_cast<int128_t>(cases);
+}
+
 TEST_F(TestDecimalV3, testStringDecimal64Cast) {
     StringDecimalCastCases cases = {
             {".12", 3, 2, false, "0.12"},
-            {"1234567890.00", 12, 2, false, "1234567890"},
+            {"1234567890.00", 12, 2, false, "1234567890.00"},
             {"0.12345678901234567", 17, 17, false, "0.12345678901234567"},
             {"0.123456789012345678", 18, 18, false, "0.123456789012345678"},
             {"1.23456789012345678", 18, 17, false, "1.23456789012345678"},
@@ -454,9 +464,9 @@ TEST_F(TestDecimalV3, testDecimalMul) {
 
 TEST_F(TestDecimalV3, testParseHighScaleDecimalString) {
     std::vector<std::tuple<std::string, std::string>> test_cases = {
-            {"0.0000000000000000000000000", "0"},
-            {"1455434.99999999999999999999", "1455434.999999"},
-            {"1000.11233454589877", "1000.112334"},
+            {"0.0000000000000000000000000", "0.000000"},
+            {"1455434.99999999999999999999", "1455435.000000"},
+            {"1000.11233454589877", "1000.112335"},
     };
     for (auto& tc : test_cases) {
         int128_t value;
@@ -470,10 +480,10 @@ TEST_F(TestDecimalV3, testParseHighScaleDecimalString) {
 
 TEST_F(TestDecimalV3, testParseDecimalStringWithLeadingZeros) {
     std::vector<std::tuple<std::string, std::string, bool>> test_cases = {
-            {"0.0000000000000000000123456", "0", false},
+            {"0.0000000000000000000123456", "0.000000000", false},
             {"0.0000000000000000000123456e+19", "0.123456000", false},
             {"0.0000000000000000000123456e+18", "0.012345600", false},
-            {"0.0000000000000000000123456e+256", "0", true},
+            {"0.0000000000000000000123456e+256", "0.000000000", true},
     };
     for (auto& tc : test_cases) {
         int32_t value;
@@ -492,13 +502,13 @@ TEST_F(TestDecimalV3, testFromStringWithOverflowAllowed) {
             {"1.2", "1.2000000000000000000000000000000000000", false},
             {"9.9999999999999999999999999999999999999", "9.9999999999999999999999999999999999999", false},
             {"-9.9999999999999999999999999999999999999", "-9.9999999999999999999999999999999999999", false},
-            {"11.2", "10", false},
+            {"11.2", "10.0000000000000000000000000000000000000", false},
             {"-1.2", "-1.2000000000000000000000000000000000000", false},
-            {"-11.2", "-10", false},
-            {"1E307", "10", false},
-            {"-1E307", "-10", false},
-            {"1.79769e+308", "10", false},
-            {"-1.79769e+308", "-10", false},
+            {"-11.2", "-10.0000000000000000000000000000000000000", false},
+            {"1E307", "10.0000000000000000000000000000000000000", false},
+            {"-1E307", "-10.0000000000000000000000000000000000000", false},
+            {"1.79769e+308", "10.0000000000000000000000000000000000000", false},
+            {"-1.79769e+308", "-10.0000000000000000000000000000000000000", false},
             {"-inf", "", true},
             {"+inf", "", true},
             {"abc", "", true}
@@ -514,6 +524,60 @@ TEST_F(TestDecimalV3, testFromStringWithOverflowAllowed) {
         if (!fail) {
             ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(value, 38, 37), expect);
         }
+    }
+}
+
+TEST_F(TestDecimalV3, testDecimalToStringWithFraction) {
+    std::vector<std::tuple<std::string, std::string>> test_cases = {
+            {"1000", "1000.00000"},      {"1000.0", "1000.00000"},     {"1000.00", "1000.00000"},
+            {"1000.000", "1000.00000"},  {"1000.0000", "1000.00000"},  {"1000.00000", "1000.00000"},
+            {"1000.1", "1000.10000"},    {"1000.01", "1000.01000"},    {"1000.001", "1000.00100"},
+            {"1000.0001", "1000.00010"}, {"1000.00001", "1000.00001"},
+    };
+    for (auto& tc : test_cases) {
+        auto& from_s = std::get<0>(tc);
+        auto& to_s = std::get<1>(tc);
+
+        int32_t dec32;
+        auto fail = DecimalV3Cast::from_string<int32_t>(&dec32, 9, 5, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int32_t>(dec32, 9, 5), to_s);
+
+        int64_t dec64;
+        fail = DecimalV3Cast::from_string<int64_t>(&dec64, 9, 5, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int64_t>(dec64, 9, 5), to_s);
+
+        int128_t dec128;
+        fail = DecimalV3Cast::from_string<int128_t>(&dec128, 9, 5, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(dec128, 9, 5), to_s);
+    }
+}
+
+TEST_F(TestDecimalV3, testDecimalToStringWithoutFraction) {
+    std::vector<std::tuple<std::string, std::string>> test_cases = {
+            {"1000", "1000"},      {"1000.0", "1000"},    {"1000.00", "1000"},    {"1000.900", "1001"},
+            {"1000.1234", "1000"}, {"1000.5000", "1001"}, {"1000.50000", "1001"}, {"1000.49999", "1000"},
+    };
+    for (auto& tc : test_cases) {
+        auto& from_s = std::get<0>(tc);
+        auto& to_s = std::get<1>(tc);
+
+        int32_t dec32;
+        auto fail = DecimalV3Cast::from_string<int32_t>(&dec32, 9, 0, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int32_t>(dec32, 9, 0), to_s);
+
+        int64_t dec64;
+        fail = DecimalV3Cast::from_string<int64_t>(&dec64, 9, 0, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int64_t>(dec64, 9, 0), to_s);
+
+        int128_t dec128;
+        fail = DecimalV3Cast::from_string<int128_t>(&dec128, 9, 0, from_s.c_str(), from_s.size());
+        ASSERT_FALSE(fail);
+        ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(dec128, 9, 0), to_s);
     }
 }
 

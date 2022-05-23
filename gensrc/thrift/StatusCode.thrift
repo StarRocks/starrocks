@@ -82,6 +82,9 @@ enum TStatusCode {
     DUPLICATE_RPC_INVOCATION        = 47,
     GLOBAL_DICT_ERROR = 48,
 
-    UNKNOWN = 50
+    UNKNOWN = 50,
+
+    TXN_NOT_EXISTS = 51,
+    TXN_IN_PROCESSING = 52
 }
 

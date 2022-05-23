@@ -31,10 +31,10 @@
 #include <iostream>
 #include <string>
 
-#include "env/env.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -42,20 +42,17 @@ namespace starrocks {
 using namespace strings;
 
 TEST(ZipUtilTest, basic) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 
     ZipFile zf = ZipFile(path + "/test_data/zip_normal.zip");
     auto st = zf.extract(path + "/test_data", "target");
     ASSERT_TRUE(st.ok()) << st.to_string();
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_normal_data"));
-    ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_normal_data"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_normal_data"));
+    ASSERT_FALSE(fs::is_directory(path + "/test_data/target/zip_normal_data").value());
 
-    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
+    auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_normal_data");
 
     char f[11];
     Slice slice(f, 11);
@@ -63,30 +60,27 @@ TEST(ZipUtilTest, basic) {
 
     ASSERT_EQ("hello world", slice.to_string());
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 }
 
 TEST(ZipUtilTest, dir) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 
     ZipFile zipFile = ZipFile(path + "/test_data/zip_dir.zip");
     ASSERT_TRUE(zipFile.extract(path + "/test_data", "target").ok());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/one"));
-    ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/one"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/one"));
+    ASSERT_TRUE(fs::is_directory(path + "/test_data/target/zip_test/one").value());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/one/data"));
-    ASSERT_FALSE(FileUtils::is_dir(path + "/test_data/target/zip_test/one/data"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/one/data"));
+    ASSERT_FALSE(fs::is_directory(path + "/test_data/target/zip_test/one/data").value());
 
-    ASSERT_TRUE(FileUtils::check_exist(path + "/test_data/target/zip_test/two"));
-    ASSERT_TRUE(FileUtils::is_dir(path + "/test_data/target/zip_test/two"));
+    ASSERT_TRUE(fs::path_exist(path + "/test_data/target/zip_test/two"));
+    ASSERT_TRUE(fs::is_directory(path + "/test_data/target/zip_test/two").value());
 
-    auto file = *Env::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
+    auto file = *FileSystem::Default()->new_random_access_file(path + "/test_data/target/zip_test/one/data");
 
     char f[4];
     Slice slice(f, 4);
@@ -94,14 +88,11 @@ TEST(ZipUtilTest, dir) {
 
     ASSERT_EQ("test", slice.to_string());
 
-    FileUtils::remove_all(path + "/test_data/target");
+    fs::remove_all(path + "/test_data/target");
 }
 
 TEST(ZipUtilTest, targetAlready) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     ZipFile f(path + "/test_data/zip_normal.zip");
 
@@ -111,10 +102,7 @@ TEST(ZipUtilTest, targetAlready) {
 }
 
 TEST(ZipUtilTest, notzip) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
-    std::string path(dir_path);
+    const std::string path = "./be/test/util";
 
     ZipFile f(path + "/test_data/zip_normal_data");
     Status st = f.extract("test", "test");
@@ -123,8 +111,3 @@ TEST(ZipUtilTest, notzip) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

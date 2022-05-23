@@ -26,6 +26,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
@@ -52,6 +53,7 @@
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -175,29 +177,34 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    auto max_thread_num = std::thread::hardware_concurrency();
+    _max_executor_threads = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
-        max_thread_num = config::pipeline_exec_thread_pool_thread_num;
+        _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
-    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
+    _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
+    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_executor") // pipeline executor
                             .set_min_threads(0)
-                            .set_max_threads(max_thread_num)
+                            .set_max_threads(_max_executor_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&driver_executor_thread_pool));
-    _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
-    _driver_executor->initialize(max_thread_num);
+    _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
+    _driver_executor->initialize(_max_executor_threads);
+
+    _driver_limiter =
+            new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
                             .set_min_threads(0)
-                            .set_max_threads(max_thread_num)
+                            .set_max_threads(_max_executor_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&wg_driver_executor_thread_pool));
-    _wg_driver_executor = new pipeline::GlobalDriverExecutor(std::move(wg_driver_executor_thread_pool), true);
-    _wg_driver_executor->initialize(max_thread_num);
+    _wg_driver_executor =
+            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor->initialize(_max_executor_threads);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -207,6 +214,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
     _stream_load_executor = new StreamLoadExecutor(this);
+    _stream_context_mgr = new StreamContextMgr();
+    _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _plugin_mgr = new PluginMgr();
@@ -225,7 +234,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _broker_mgr->init();
     _small_file_mgr->init();
-    _init_mem_tracker();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
@@ -305,18 +313,11 @@ Status ExecEnv::init_mem_tracker() {
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    _init_storage_page_cache();
     return Status::OK();
 }
 
-Status ExecEnv::_init_mem_tracker() {
-    // Initialize global memory limit.
-    std::stringstream ss;
-
-    if (!BitUtil::IsPowerOf2(config::min_buffer_size)) {
-        ss << "--min_buffer_size must be a power-of-two: " << config::min_buffer_size;
-        return Status::InternalError(ss.str());
-    }
-
+Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
@@ -345,6 +346,14 @@ void ExecEnv::_destroy() {
     if (_small_file_mgr) {
         delete _small_file_mgr;
         _small_file_mgr = nullptr;
+    }
+    if (_transaction_mgr) {
+        delete _transaction_mgr;
+        _transaction_mgr = nullptr;
+    }
+    if (_stream_context_mgr) {
+        delete _stream_context_mgr;
+        _stream_context_mgr = nullptr;
     }
     if (_routine_load_task_executor) {
         delete _routine_load_task_executor;
@@ -389,6 +398,10 @@ void ExecEnv::_destroy() {
     if (_wg_driver_executor) {
         delete _wg_driver_executor;
         _wg_driver_executor = nullptr;
+    }
+    if (_driver_limiter) {
+        delete _driver_limiter;
+        _driver_limiter = nullptr;
     }
     if (_fragment_mgr) {
         delete _fragment_mgr;

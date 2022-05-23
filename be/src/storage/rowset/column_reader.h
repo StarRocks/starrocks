@@ -34,7 +34,6 @@
 #include "common/statusor.h"    // for Status
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
-#include "storage/fs/fs_util.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
@@ -159,7 +158,7 @@ private:
 
     MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
 
-    fs::BlockManager* block_manager() const { return _segment->block_manager(); }
+    FileSystem* file_system() const { return _segment->file_system(); }
 
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
 

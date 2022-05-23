@@ -27,6 +27,9 @@ public:
     static AggregateFunctionPtr MakeBitmapUnionCountAggregateFunction();
 
     template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeWindowfunnelAggregateFunction();
+
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeIntersectCountAggregateFunction();
 
     static AggregateFunctionPtr MakeCountAggregateFunction();
@@ -99,6 +102,8 @@ public:
     static AggregateFunctionPtr MakeRankWindowFunction();
 
     static AggregateFunctionPtr MakeRowNumberWindowFunction();
+
+    static AggregateFunctionPtr MakeNtileWindowFunction();
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeFirstValueWindowFunction();

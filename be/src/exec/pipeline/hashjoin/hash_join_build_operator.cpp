@@ -9,14 +9,13 @@ namespace starrocks {
 namespace pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
-                                             int32_t plan_node_id, HashJoinerPtr join_builder,
+                                             int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_builder,
                                              const std::vector<HashJoinerPtr>& read_only_join_probers,
-                                             size_t driver_sequence, PartialRuntimeFilterMerger* partial_rf_merger,
+                                             PartialRuntimeFilterMerger* partial_rf_merger,
                                              const TJoinDistributionMode::type distribution_mode)
-        : Operator(factory, id, name, plan_node_id),
+        : Operator(factory, id, name, plan_node_id, driver_sequence),
           _join_builder(std::move(join_builder)),
           _read_only_join_probers(read_only_join_probers),
-          _driver_sequence(driver_sequence),
           _partial_rf_merger(partial_rf_merger),
           _distribution_mode(distribution_mode) {}
 
@@ -91,10 +90,14 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
                                                                    std::move(in_filters), std::move(bloom_filters)));
     }
-
-    for (auto& read_only_join_prober : _read_only_join_probers) {
-        read_only_join_prober->reference_hash_table(_join_builder.get());
+    {
+        TRY_CATCH_ALLOC_SCOPE_START()
+        for (auto& read_only_join_prober : _read_only_join_probers) {
+            read_only_join_prober->reference_hash_table(_join_builder.get());
+        }
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
+
     _join_builder->enter_probe_phase();
     for (auto& read_only_join_prober : _read_only_join_probers) {
         read_only_join_prober->enter_probe_phase();
@@ -125,10 +128,9 @@ OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, 
     if (_string_key_columns.empty()) {
         _string_key_columns.resize(degree_of_parallelism);
     }
-    return std::make_shared<HashJoinBuildOperator>(this, _id, _name, _plan_node_id,
-                                                   _hash_joiner_factory->create_builder(driver_sequence),
-                                                   _hash_joiner_factory->get_read_only_probers(), driver_sequence,
-                                                   _partial_rf_merger.get(), _distribution_mode);
+    return std::make_shared<HashJoinBuildOperator>(
+            this, _id, _name, _plan_node_id, driver_sequence, _hash_joiner_factory->create_builder(driver_sequence),
+            _hash_joiner_factory->get_read_only_probers(), _partial_rf_merger.get(), _distribution_mode);
 }
 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns) {

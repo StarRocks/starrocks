@@ -26,6 +26,8 @@ public:
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase<T>() { _offsets.emplace_back(0); }
+    // Default value is empty string
+    explicit BinaryColumnBase<T>(size_t size) : _offsets(size + 1, 0) {}
     BinaryColumnBase<T>(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
@@ -286,20 +288,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            // The size limit of a single element is 2^32.
-            // The size limit of all elements is 2^32.
-            // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
-        } else {
-            // The size limit of a single element is 2^32.
-            // The size limit of all elements is 2^64.
-            // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
-        }
-    }
+    bool reach_capacity_limit(std::string* msg = nullptr) const override;
 
 private:
     void _build_slices() const;

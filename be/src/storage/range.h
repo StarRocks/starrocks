@@ -19,9 +19,14 @@ class Range {
     using rowid_t = starrocks::rowid_t;
 
 public:
-    Range() {}
-
+    Range() = default;
     Range(rowid_t begin, rowid_t end);
+
+    // Enable copy/move ctor and assignment.
+    Range(const Range&) = default;
+    Range& operator=(const Range&) = default;
+    Range(Range&&) = default;
+    Range& operator=(Range&&) = default;
 
     // the id of start row, inclusive.
     rowid_t begin() const { return _begin; }

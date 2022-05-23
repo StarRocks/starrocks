@@ -41,6 +41,8 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
+class StreamContextMgr;
+class TransactionMgr;
 class MemTracker;
 class MetricRegistry;
 class StorageEngine;
@@ -68,6 +70,7 @@ class HeartbeatFlags;
 namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
+class DriverLimiter;
 } // namespace pipeline
 
 // Execution environment for queries/plan fragments.
@@ -144,6 +147,8 @@ public:
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
+    StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
+    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
 
     starrocks::workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     starrocks::workgroup::ScanExecutor* hdfs_scan_executor() { return _hdfs_scan_executor; }
@@ -166,12 +171,16 @@ public:
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
+    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+    int64_t max_executor_threads() { return _max_executor_threads; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
 
-    Status _init_mem_tracker();
+    Status _init_storage_page_cache();
 
+private:
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
@@ -225,6 +234,9 @@ private:
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
+    pipeline::DriverLimiter* _driver_limiter;
+    int64_t _max_executor_threads; // Max thread number of executor
+
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 
@@ -236,6 +248,8 @@ private:
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;
     BrpcStubCache* _brpc_stub_cache = nullptr;
+    StreamContextMgr* _stream_context_mgr = nullptr;
+    TransactionMgr* _transaction_mgr = nullptr;
 
     StorageEngine* _storage_engine = nullptr;
 

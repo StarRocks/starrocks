@@ -25,9 +25,8 @@
 #include <memory>
 #include <utility>
 
-#include "env/env.h"
+#include "fs/fs.h"
 #include "runtime/mem_pool.h"
-#include "storage/fs/block_manager.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "storage/rowset/common.h"
@@ -128,7 +127,7 @@ public:
         return Status::OK();
     }
 
-    Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* index_meta) override {
+    Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override {
         if (!_values.empty()) {
             RETURN_IF_ERROR(flush());
         }
@@ -143,7 +142,7 @@ public:
         options.write_ordinal_index = true;
         options.write_value_index = false;
         options.encoding = PLAIN_ENCODING;
-        IndexedColumnWriter bf_writer(options, bf_typeinfo, wblock);
+        IndexedColumnWriter bf_writer(options, bf_typeinfo, wfile);
         RETURN_IF_ERROR(bf_writer.init());
         for (auto& bf : _bfs) {
             Slice data(bf->data(), bf->size());

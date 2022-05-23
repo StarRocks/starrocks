@@ -82,9 +82,9 @@ public:
 
     void set_rowset_id(const RowsetId& rowset_id) {
         // rowset id is a required field, just set it to 0
-        _rowset_meta_pb.set_rowset_id(0);
+        _rowset_meta_pb.set_deprecated_rowset_id(0);
         _rowset_id = rowset_id;
-        _rowset_meta_pb.set_rowset_id_v2(rowset_id.to_string());
+        _rowset_meta_pb.set_rowset_id(rowset_id.to_string());
     }
 
     int64_t tablet_id() const { return _rowset_meta_pb.tablet_id(); }
@@ -176,7 +176,7 @@ public:
 
     void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
 
-    void release_txn_meta() { _rowset_meta_pb.release_txn_meta(); }
+    void clear_txn_meta() { _rowset_meta_pb.clear_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb.empty(); }
 
@@ -284,10 +284,10 @@ private:
     }
 
     void _init() {
-        if (_rowset_meta_pb.rowset_id() > 0) {
-            _rowset_id.init(_rowset_meta_pb.rowset_id());
+        if (_rowset_meta_pb.deprecated_rowset_id() > 0) {
+            _rowset_id.init(_rowset_meta_pb.deprecated_rowset_id());
         } else {
-            _rowset_id.init(_rowset_meta_pb.rowset_id_v2());
+            _rowset_id.init(_rowset_meta_pb.rowset_id());
         }
     }
 

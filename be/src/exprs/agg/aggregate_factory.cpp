@@ -28,6 +28,7 @@
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
+#include "exprs/agg/window_funnel.h"
 #include "percentile_union.h"
 #include "udf/java/java_function_fwd.h"
 
@@ -68,6 +69,11 @@ AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeCountAggregateFunction() {
     return std::make_shared<CountAggregateFunction>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
+    return std::make_shared<WindowFunnelAggregateFunction<PT>>();
 }
 
 template <PrimitiveType PT>
@@ -198,6 +204,10 @@ AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
     return std::make_shared<RowNumberWindowFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
+    return std::make_shared<NtileWindowFunction>();
 }
 
 template <PrimitiveType PT>
@@ -340,12 +350,22 @@ public:
             } else if (name == "retention") {
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
+            } else if (name == "window_funnel") {
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
+                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<arg_type>>(
+                            windowfunnel);
+                }
             }
         } else {
             if (name == "dict_merge") {
                 return AggregateFactory::MakeDictMergeAggregateFunction();
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
+            } else if (name == "window_funnel") {
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    return AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
+                }
             }
         }
 
@@ -501,6 +521,8 @@ public:
             return AggregateFactory::MakeRankWindowFunction();
         } else if (name == "row_number") {
             return AggregateFactory::MakeRowNumberWindowFunction();
+        } else if (name == "ntile") {
+            return AggregateFactory::MakeNtileWindowFunction();
         }
         return nullptr;
     }
@@ -811,6 +833,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("dense_rank");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("rank");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("row_number");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("ntile");
 
     add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
@@ -896,6 +919,10 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+    // This first type is the 4th type input of windowfunnel.
+    // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
+    add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
+    add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 }
 
 #undef ADD_ALL_TYPE

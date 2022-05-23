@@ -6,13 +6,8 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.commons.io.FileUtils;
-import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 public class DateTruncTest {
     private static ConnectContext ctx;

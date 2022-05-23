@@ -18,7 +18,6 @@ import org.junit.Test;
 
 import java.util.Map;
 
-
 public class IcebergHiveCatalogTest {
 
     @Test
@@ -39,12 +38,12 @@ public class IcebergHiveCatalogTest {
         };
 
         new MockUp<CatalogUtil>() {
-          @Mock
-          public Catalog loadCatalog(String catalogImpl, String catalogName,
-                                     Map<String, String> properties,
-                                     Configuration hadoopConf) {
-              return hiveCatalog;
-          }
+            @Mock
+            public Catalog loadCatalog(String catalogImpl, String catalogName,
+                                       Map<String, String> properties,
+                                       Configuration hadoopConf) {
+                return hiveCatalog;
+            }
         };
 
         IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030");

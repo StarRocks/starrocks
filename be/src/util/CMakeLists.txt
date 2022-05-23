@@ -66,7 +66,6 @@ set(UTIL_FILES
   system_metrics.cpp
   url_parser.cpp
   url_coding.cpp
-  file_utils.cpp
   mysql_row_buffer.cpp
   error_util.cc
   spinlock.cc
@@ -87,12 +86,9 @@ set(UTIL_FILES
   slice.cpp
   sm3.cpp
   frame_of_reference_coding.cpp
-  minizip/ioapi.c
-  minizip/unzip.cpp
   zip_util.cpp
   utf8_check.cpp
   path_util.cpp
-  file_cache.cpp
   monotime.cpp
   thread.cpp
   threadpool.cpp

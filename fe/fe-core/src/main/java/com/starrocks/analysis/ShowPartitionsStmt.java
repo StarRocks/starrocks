@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -42,6 +41,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -105,14 +105,14 @@ public class ShowPartitionsStmt extends ShowStmt {
     public void analyze(Analyzer analyzer) throws UserException {
         analyzeImpl(analyzer);
         // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName, tableName,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName, tableName,
                 PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
                     ConnectContext.get().getQualifiedUser(),
                     ConnectContext.get().getRemoteIP(),
                     tableName);
         }
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -138,8 +138,30 @@ public class ShowPartitionsStmt extends ShowStmt {
             LOG.debug("process SHOW PROC '{}';", stringBuilder.toString());
 
             node = ProcService.getInstance().open(stringBuilder.toString());
+
+            this.analyzeOrderBy();
         } finally {
             db.readUnlock();
+        }
+    }
+
+    /**
+     * analyze order by clause if not null and init the orderByPairs
+     *
+     * @throws AnalysisException
+     */
+    private void analyzeOrderBy() throws AnalysisException {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
+            orderByPairs = new ArrayList<>();
+            for (OrderByElement orderByElement : orderByElements) {
+                if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                    throw new AnalysisException("Should order by column");
+                }
+                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                int index = ((PartitionsProcDir) node).analyzeColumn(slotRef.getColumnName());
+                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                orderByPairs.add(orderByPair);
+            }
         }
     }
 
@@ -159,20 +181,7 @@ public class ShowPartitionsStmt extends ShowStmt {
             analyzeSubPredicate(whereClause);
         }
 
-        // order by
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = PartitionsProcDir.analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
-
+        // analyze limit clause if not null
         if (limitElement != null) {
             limitElement.analyze(analyzer);
         }

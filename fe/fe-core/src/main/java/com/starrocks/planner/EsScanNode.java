@@ -30,7 +30,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -40,6 +39,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsShardRouting;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
@@ -172,7 +172,7 @@ public class EsScanNode extends ScanNode {
     public void assignBackends() throws UserException {
         backendMap = HashMultimap.create();
         backendList = Lists.newArrayList();
-        for (Backend be : Catalog.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAlive()) {
                 backendMap.put(be.getHost(), be);
                 backendList.add(be);
@@ -342,5 +342,10 @@ public class EsScanNode extends ScanNode {
                 .append(String.format("ES index/type: %s/%s", indexName, typeName))
                 .append("\n");
         return output.toString();
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
     }
 }

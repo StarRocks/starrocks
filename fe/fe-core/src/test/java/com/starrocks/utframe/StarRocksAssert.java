@@ -33,24 +33,21 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DdlExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -58,7 +55,6 @@ import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -89,18 +85,18 @@ public class StarRocksAssert {
     public StarRocksAssert withDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists " + dbName + ";", ctx);
-        Catalog.getCurrentCatalog().dropDb(dropDbStmt);
+        GlobalStateMgr.getCurrentState().dropDb(dropDbStmt);
 
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
-        Catalog.getCurrentCatalog().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
         return this;
     }
 
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt("create role " + roleName + ";", ctx);
-        Catalog.getCurrentCatalog().getAuth().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuth().createRole(createRoleStmt);
         return this;
     }
 
@@ -108,19 +104,19 @@ public class StarRocksAssert {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(
                         "create user " + user + " default role '" + roleName + "';", ctx);
-        Catalog.getCurrentCatalog().getAuth().createUser(createUserStmt);
+        GlobalStateMgr.getCurrentState().getAuth().createUser(createUserStmt);
         return this;
     }
 
     public StarRocksAssert withDatabaseWithoutAnalyze(String dbName) throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, dbName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        Catalog.getCurrentCatalog().createDb(dbStmt);
+        GlobalStateMgr.getCurrentState().createDb(dbStmt);
         return this;
     }
 
     public boolean databaseExist(String dbName) {
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:" + dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + dbName);
         return db != null;
     }
 
@@ -136,42 +132,42 @@ public class StarRocksAssert {
 
     public StarRocksAssert withResource(String sql) throws Exception {
         CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-        if (!Catalog.getCurrentCatalog().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
-            Catalog.getCurrentCatalog().getResourceMgr().createResource(createResourceStmt);
+        if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
+            GlobalStateMgr.getCurrentState().getResourceMgr().createResource(createResourceStmt);
         }
         return this;
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }
 
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Catalog.getCurrentCatalog().createView(createTableStmt);
+        GlobalStateMgr.getCurrentState().createView(createTableStmt);
         return this;
     }
 
     public StarRocksAssert dropView(String viewName) throws Exception {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
-        Catalog.getCurrentCatalog().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
         return this;
     }
 
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database " + dbName + ";", ctx);
-        Catalog.getCurrentCatalog().dropDb(dropDbStmt);
+        GlobalStateMgr.getCurrentState().dropDb(dropDbStmt);
         return this;
     }
 
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
-        Catalog.getCurrentCatalog().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         return this;
     }
 
@@ -179,7 +175,7 @@ public class StarRocksAssert {
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-        Catalog.getCurrentCatalog().createMaterializedView(createMaterializedViewStmt);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
         return this;
     }
@@ -187,43 +183,48 @@ public class StarRocksAssert {
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-        Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         checkAlterJob();
+        return this;
+    }
+
+    // With catalog
+    public StarRocksAssert withCatalog(String sql) throws Exception {
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
         return this;
     }
 
     public void executeWorkGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        SqlParser parser = new SqlParser(input);
-        List<StatementBase> statements = SqlParserUtils.getMultiStmts(parser);
-        for (StatementBase stmt : statements) {
-            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-            Assert.assertTrue(stmt.getClass().getSimpleName().contains("WorkGroupStmt"));
-            DdlExecutor.execute(Catalog.getCurrentCatalog(), (DdlStmt) stmt);
-        }
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statement, ctx);
+
+        Assert.assertTrue(statement.getClass().getSimpleName().contains("WorkGroupStmt"));
+        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), (DdlStmt) statement);
+
     }
 
     public List<List<String>> executeWorkGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        SqlParser parser = new SqlParser(input);
-        StatementBase statement = SqlParserUtils.getFirstStmt(parser);
-        com.starrocks.sql.analyzer.Analyzer.analyze(statement, ctx);
+
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statement, ctx);
+
         Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
-        return Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
+        return GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
     }
 
     private void checkAlterJob() throws InterruptedException {
         // check alter job
-        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getRollupHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             if (alterJobV2.getJobState().isFinalState()) {
                 continue;
             }
-            Database database = Catalog.getCurrentCatalog().getDb(alterJobV2.getDbId());
+            Database database = GlobalStateMgr.getCurrentState().getDb(alterJobV2.getDbId());
             Table table = database.getTable(alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;

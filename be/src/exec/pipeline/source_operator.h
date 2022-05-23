@@ -4,42 +4,18 @@
 
 #include <utility>
 
-#include "exec/pipeline/chunk_source.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/scan/chunk_source.h"
+#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks {
+
+class PriorityThreadPool;
+
 namespace pipeline {
+
 class SourceOperator;
 using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
-
-class SourceOperator : public Operator {
-public:
-    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id)
-            : Operator(factory, id, name, plan_node_id) {}
-    ~SourceOperator() override = default;
-
-    bool need_input() const override { return false; }
-
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
-        return Status::InternalError("Shouldn't push chunk to source operator");
-    }
-
-    virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
-
-    const MorselQueue* morsel_queue() const { return _morsel_queue; }
-
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
-
-protected:
-    MorselQueue* _morsel_queue = nullptr;
-    ChunkSourcePtr _chunk_source;
-
-    int64_t _last_scan_rows_num = 0;
-};
 
 class SourceOperatorFactory : public OperatorFactory {
 public:
@@ -58,5 +34,32 @@ public:
 protected:
     size_t _degree_of_parallelism = 1;
 };
+
+class SourceOperator : public Operator {
+public:
+    SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+                   int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
+    ~SourceOperator() override = default;
+
+    bool need_input() const override { return false; }
+
+    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
+        return Status::InternalError("Shouldn't push chunk to source operator");
+    }
+
+    virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
+
+    const MorselQueue* morsel_queue() const { return _morsel_queue; }
+
+    size_t degree_of_parallelism() const {
+        auto* source_op_factory = down_cast<SourceOperatorFactory*>(_factory);
+        return source_op_factory->degree_of_parallelism();
+    }
+
+protected:
+    MorselQueue* _morsel_queue = nullptr;
+};
+
 } // namespace pipeline
 } // namespace starrocks

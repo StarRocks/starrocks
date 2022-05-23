@@ -7,7 +7,8 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "env/env.h"
+#include "exec/vectorized/hdfs_scanner.h"
+#include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
 namespace starrocks::parquet {

@@ -21,13 +21,14 @@
 
 #include "storage/rowset/beta_rowset.h"
 
+#include <fs/fs_util.h>
 #include <unistd.h> // for link()
-#include <util/file_utils.h>
 
 #include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
 #include "segment_options.h"
@@ -37,11 +38,11 @@
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -71,13 +72,13 @@ Status BetaRowset::init() {
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status BetaRowset::do_load() {
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
-                                 _schema, &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+                                 &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -92,7 +93,7 @@ Status BetaRowset::remove() {
     VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
-    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     auto merge_status = [&](const Status& st) {
         if (result.ok() && !st.ok() && !st.is_not_found()) result = st;
     };
@@ -100,20 +101,20 @@ Status BetaRowset::remove() {
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_srcrssid_file_path(_rowset_path, rowset_id(), i);
-        auto st = env->delete_file(path);
+        auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
@@ -147,12 +148,12 @@ Status BetaRowset::link_files_to(const std::string& dir, RowsetId new_rowset_id)
 Status BetaRowset::copy_files_to(const std::string& dir) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
-        if (FileUtils::check_exist(dst_path)) {
+        if (fs::path_exist(dst_path)) {
             LOG(WARNING) << "Path already exist: " << dst_path;
             return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+        if (!fs::copy_file(src_path, dst_path).ok()) {
             LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
@@ -160,13 +161,13 @@ Status BetaRowset::copy_files_to(const std::string& dir) {
     }
     for (int i = 0; i < num_delete_files(); ++i) {
         std::string src_path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        if (FileUtils::check_exist(src_path)) {
+        if (fs::path_exist(src_path)) {
             std::string dst_path = segment_del_file_path(dir, rowset_id(), i);
-            if (FileUtils::check_exist(dst_path)) {
+            if (fs::path_exist(dst_path)) {
                 LOG(WARNING) << "Path already exist: " << dst_path;
                 return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+            if (!fs::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                              << ", errno=" << Errno::no();
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
@@ -236,7 +237,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -257,6 +258,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         seg_options.version = options.version;
         seg_options.meta = options.meta;
     }
+    seg_options.rowid_range_option = options.rowid_range_option;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -279,6 +281,11 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+
+        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
+            continue;
+        }
+
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -315,7 +322,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
@@ -346,14 +353,13 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
 // this function is only used for partial update so far
 // make sure segment_footer is in the end of segment_file before call this function
 Status BetaRowset::reload() {
-    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        block_mgr->erase_block_cache(seg_path);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path, seg_id,
-                                 _schema, &footer_size_hint);
+        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+                                 &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();

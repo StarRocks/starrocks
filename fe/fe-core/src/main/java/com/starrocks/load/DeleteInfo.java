@@ -24,11 +24,11 @@ package com.starrocks.load;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -163,7 +163,7 @@ public class DeleteInfo implements Writable {
             replicaInfos.add(info);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
             tableName = Text.readString(in);
             partitionName = Text.readString(in);
 
@@ -176,7 +176,7 @@ public class DeleteInfo implements Writable {
             createTimeMs = in.readLong();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_19) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_19) {
             boolean hasAsyncDeleteJob = in.readBoolean();
             Preconditions.checkState(!hasAsyncDeleteJob, "async delete job is deprecated");
         }

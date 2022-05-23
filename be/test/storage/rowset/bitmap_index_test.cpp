@@ -23,15 +23,15 @@
 
 #include <string>
 
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -44,16 +44,15 @@ public:
 protected:
     void SetUp() override {
         StoragePageCache::create_global_cache(&_tracker, 1000000000);
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kTestDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
     void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
         *reader = new BitmapIndexReader();
-        auto st = (*reader)->load(_block_mgr.get(), file_name, &meta.bitmap_index(), true, false);
+        auto st = (*reader)->load(_fs.get(), file_name, &meta.bitmap_index(), true, false);
         ASSERT_TRUE(st.ok());
 
         st = (*reader)->new_iterator(iter);
@@ -65,22 +64,19 @@ protected:
                           ColumnIndexMetaPB* meta) {
         TypeInfoPtr type_info = get_type_info(type);
         {
-            std::unique_ptr<fs::WritableBlock> wblock;
-            fs::CreateBlockOptions opts({filename});
-            ASSERT_TRUE(_block_mgr->create_block(opts, &wblock).ok());
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
 
             std::unique_ptr<BitmapIndexWriter> writer;
             BitmapIndexWriter::create(type_info, &writer);
             writer->add_values(values, value_count);
             writer->add_nulls(null_count);
-            ASSERT_TRUE(writer->finish(wblock.get(), meta).ok());
+            ASSERT_TRUE(writer->finish(wfile.get(), meta).ok());
             ASSERT_EQ(BITMAP_INDEX, meta->type());
-            ASSERT_TRUE(wblock->close().ok());
+            ASSERT_TRUE(wfile->close().ok());
         }
     }
 
-    std::shared_ptr<EnvMemory> _env = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     MemTracker _tracker;
     MemPool _pool;
 };

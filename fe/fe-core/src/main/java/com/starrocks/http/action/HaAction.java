@@ -21,7 +21,6 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
@@ -29,6 +28,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -67,23 +67,23 @@ public class HaAction extends WebBaseAction {
     private void appendRoleInfo(StringBuilder buffer) {
         buffer.append("<h2>Frontend Role</h2>");
         buffer.append("<pre>");
-        buffer.append("<p>" + Catalog.getCurrentCatalog().getFeType() + "</p>");
+        buffer.append("<p>" + GlobalStateMgr.getCurrentState().getFeType() + "</p>");
         buffer.append("</pre>");
     }
 
     private void appendJournalInfo(StringBuilder buffer) {
         buffer.append("<h2>Current Journal Id</h2>");
         buffer.append("<pre>");
-        if (Catalog.getCurrentCatalog().isMaster()) {
-            buffer.append("<p>" + Catalog.getCurrentCatalog().getEditLog().getMaxJournalId() + "</p>");
+        if (GlobalStateMgr.getCurrentState().isMaster()) {
+            buffer.append("<p>" + GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId() + "</p>");
         } else {
-            buffer.append("<p>" + Catalog.getCurrentCatalog().getReplayedJournalId() + "</p>");
+            buffer.append("<p>" + GlobalStateMgr.getCurrentState().getReplayedJournalId() + "</p>");
         }
         buffer.append("</pre>");
     }
 
     private void appendNodesInfo(StringBuilder buffer) {
-        HAProtocol haProtocol = Catalog.getCurrentCatalog().getHaProtocol();
+        HAProtocol haProtocol = GlobalStateMgr.getCurrentState().getHaProtocol();
         if (haProtocol == null) {
             return;
         }
@@ -114,7 +114,7 @@ public class HaAction extends WebBaseAction {
     private void appendCanReadInfo(StringBuilder buffer) {
         buffer.append("<h2>Can Read</h2>");
         buffer.append("<pre>");
-        buffer.append("<p>" + Catalog.getCurrentCatalog().canRead() + "</p>");
+        buffer.append("<p>" + GlobalStateMgr.getCurrentState().canRead() + "</p>");
 
         buffer.append("</pre>");
     }
@@ -135,7 +135,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendDbNames(StringBuilder buffer) {
-        List<Long> names = Catalog.getCurrentCatalog().getEditLog().getDatabaseNames();
+        List<Long> names = GlobalStateMgr.getCurrentState().getEditLog().getDatabaseNames();
         if (names == null) {
             return;
         }
@@ -151,7 +151,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendFe(StringBuilder buffer) {
-        List<Frontend> fes = Catalog.getCurrentCatalog().getFrontends(null /* all */);
+        List<Frontend> fes = GlobalStateMgr.getCurrentState().getFrontends(null /* all */);
         if (fes == null) {
             return;
         }
@@ -165,7 +165,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendRemovedFe(StringBuilder buffer) {
-        List<String> feNames = Catalog.getCurrentCatalog().getRemovedFrontendNames();
+        List<String> feNames = GlobalStateMgr.getCurrentState().getRemovedFrontendNames();
         buffer.append("<h2>Removed Frontends</h2>");
         buffer.append("<pre>");
         for (String feName : feNames) {

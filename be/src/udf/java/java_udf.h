@@ -29,6 +29,8 @@ extern "C" JNIEnv* getJNIEnv(void);
 
 namespace starrocks::vectorized {
 class DirectByteBuffer;
+class AggBatchCallStub;
+class BatchEvaluateStub;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
@@ -54,20 +56,26 @@ public:
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
-    // batch update input: col1 col2
-    void batch_update_single(FunctionContext* ctx, jobject udaf, jobject update, jobject state, jobject* input,
-                             int cols);
+
+    // batch update single
+    void batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows);
+
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute
-    jobject batch_call(FunctionContext* ctx, jobject udf, jobject evaluate, jobject* input, int cols, int rows);
+    jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
     // batch call no-args function
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
     // batch call int()
     // callers should be Object[]
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
+
+    // type: PrimitiveType
+    // col: result column
+    // jcolumn: Integer[]/String[]
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
     // List methods
     jobject list_get(jobject obj, int idx);
@@ -91,7 +99,7 @@ public:
     static std::string to_jni_class_name(const std::string& name);
 
     // reset Buffer set read/write position to zero
-    void clear(DirectByteBuffer* buffer);
+    void clear(DirectByteBuffer* buffer, FunctionContext* ctx);
 
     jclass object_class() { return _object_class; }
 
@@ -138,6 +146,7 @@ private:
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
+    jmethodID _get_boxed_result;
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 };
@@ -152,8 +161,6 @@ public:
     static constexpr const char* JNI_CLASS_NAME = "java/nio/ByteBuffer";
 
     DirectByteBuffer(void* data, int capacity);
-    DirectByteBuffer(jobject&& handle, void* data, int capacity)
-            : _handle(std::move(handle)), _data(data), _capacity(capacity) {}
     ~DirectByteBuffer();
 
     DirectByteBuffer(const DirectByteBuffer&) = delete;
@@ -187,20 +194,44 @@ private:
     int _capacity;
 };
 
+// A global ref of the guard, handle can be shared across threads
+class JavaGlobalRef {
+public:
+    JavaGlobalRef(jobject&& handle) : _handle(std::move(handle)) {}
+    ~JavaGlobalRef();
+    JavaGlobalRef(const JavaGlobalRef&) = delete;
+
+    JavaGlobalRef(JavaGlobalRef&& other) {
+        _handle = other._handle;
+        other._handle = nullptr;
+    }
+
+    JavaGlobalRef& operator=(JavaGlobalRef&& other) {
+        JavaGlobalRef tmp(std::move(other));
+        std::swap(this->_handle, tmp._handle);
+        return *this;
+    }
+
+    jobject handle() const { return _handle; }
+
+    jobject& handle() { return _handle; }
+
+    void clear();
+
+private:
+    jobject _handle;
+};
+
 // A Class object created from the ClassLoader that can be accessed by multiple threads
 class JVMClass {
 public:
     JVMClass(jobject&& clazz) : _clazz(std::move(clazz)) {}
-    ~JVMClass();
     JVMClass(const JVMClass&) = delete;
 
     JVMClass& operator=(const JVMClass&&) = delete;
     JVMClass& operator=(const JVMClass& other) = delete;
 
-    JVMClass(JVMClass&& other) {
-        _clazz = other._clazz;
-        other._clazz = nullptr;
-    }
+    JVMClass(JVMClass&& other) : _clazz(nullptr) { _clazz = std::move(other._clazz); }
 
     JVMClass& operator=(JVMClass&& other) {
         JVMClass tmp(std::move(other));
@@ -208,19 +239,59 @@ public:
         return *this;
     }
 
-    jclass clazz() const { return (jclass)_clazz; }
+    jclass clazz() const { return (jclass)_clazz.handle(); }
 
     // Create a new instance using the default constructor
-    Status newInstance(jobject* object) const;
+    StatusOr<JavaGlobalRef> newInstance() const;
 
 private:
-    jobject _clazz;
+    JavaGlobalRef _clazz;
+};
+
+class AggBatchCallStub {
+public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_update_method_name = "batchCallV";
+
+    AggBatchCallStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+
+    void batch_update_single(int num_rows, jobject state, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    // UDAF object handle, owned by FunctionContext
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
+};
+
+class BatchEvaluateStub {
+public:
+    static inline const char* stub_clazz_name = "com.starrocks.udf.gen.CallStub";
+    static inline const char* batch_evaluate_method_name = "batchCallV";
+
+    BatchEvaluateStub(FunctionContext* ctx, jobject caller, JVMClass&& clazz, JavaGlobalRef&& method)
+            : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
+
+    FunctionContext* ctx() { return _ctx; }
+    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+
+private:
+    FunctionContext* _ctx;
+    jobject _caller;
+    JVMClass _stub_clazz;
+    JavaGlobalRef _stub_method;
 };
 
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
 public:
+    static const inline int BATCH_SINGLE_UPDATE = 1;
+    static const inline int BATCH_EVALUATE = 2;
     // Handle
     ClassLoader(std::string path) : _path(std::move(path)) {}
     ~ClassLoader();
@@ -228,13 +299,18 @@ public:
     ClassLoader& operator=(const ClassLoader& other) = delete;
     ClassLoader(const ClassLoader&) = delete;
     // get class
-    JVMClass getClass(const std::string& className);
+    StatusOr<JVMClass> getClass(const std::string& className);
+    // get batch call stub
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+
     Status init();
 
 private:
     std::string _path;
     jmethodID _get_class = nullptr;
-    jobject _handle = nullptr;
+    jmethodID _get_call_stub = nullptr;
+    JavaGlobalRef _handle = nullptr;
+    JavaGlobalRef _clazz = nullptr;
 };
 
 struct MethodTypeDescriptor {
@@ -244,11 +320,10 @@ struct MethodTypeDescriptor {
 };
 
 struct JavaMethodDescriptor {
-    ~JavaMethodDescriptor();
     std::string signature; // function signature
     std::string name;      // function name
     std::vector<MethodTypeDescriptor> method_desc;
-    jobject method = nullptr;
+    JavaGlobalRef method = nullptr;
     // thread safe
     jmethodID get_method_id() const;
 };
@@ -271,8 +346,10 @@ struct JavaUDFContext {
 
     std::unique_ptr<ClassLoader> udf_classloader;
     std::unique_ptr<ClassAnalyzer> analyzer;
+    std::unique_ptr<BatchEvaluateStub> call_stub;
+
     JVMClass udf_class = nullptr;
-    jobject udf_handle;
+    JavaGlobalRef udf_handle = nullptr;
 
     // Java Method
     std::unique_ptr<JavaMethodDescriptor> prepare;
@@ -288,9 +365,9 @@ public:
     UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
             : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
-    jobject create();
+    JavaGlobalRef create();
     // destroy state
-    void destroy(jobject state);
+    void destroy(JavaGlobalRef& state);
     // UDAF Update Function
     void update(jvalue* val);
     // UDAF merge
@@ -309,19 +386,19 @@ public:
                                 int col_sz, jobject* cols);
 
 private:
+    // not owned udaf function handle
     jobject _udaf_handle;
     FunctionContext* _function_context;
     JavaUDAFContext* _ctx;
 };
 
 struct JavaUDAFContext {
-    std::unique_ptr<ClassLoader> udf_classloader;
-    std::unique_ptr<ClassAnalyzer> analyzer;
     JVMClass udaf_class = nullptr;
     JVMClass udaf_state_class = nullptr;
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
     std::unique_ptr<JavaMethodDescriptor> update;
+    std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
     std::unique_ptr<JavaMethodDescriptor> finalize;
     std::unique_ptr<JavaMethodDescriptor> serialize;
@@ -333,7 +410,7 @@ struct JavaUDAFContext {
 
     std::unique_ptr<DirectByteBuffer> buffer;
     // handle for UDAF object
-    jobject handle;
+    JavaGlobalRef handle = nullptr;
     std::vector<uint8_t> buffer_data;
 
     std::unique_ptr<UDAFFunction> _func;

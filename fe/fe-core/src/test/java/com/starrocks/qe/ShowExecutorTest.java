@@ -33,14 +33,16 @@ import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowEnginesStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -55,11 +57,13 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -73,7 +77,7 @@ import java.util.List;
 
 public class ShowExecutorTest {
     private ConnectContext ctx;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -168,42 +172,42 @@ public class ShowExecutorTest {
         // mock auth
         Auth auth = AccessTestUtil.fetchAdminAccess();
 
-        // mock catalog.
-        catalog = Deencapsulation.newInstance(Catalog.class);
-        new Expectations(catalog) {
+        // mock globalStateMgr.
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
             {
-                catalog.getDb("testCluster:testDb");
+                globalStateMgr.getDb("testCluster:testDb");
                 minTimes = 0;
                 result = db;
 
-                catalog.getDb("testCluster:emptyDb");
+                globalStateMgr.getDb("testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
 
-                catalog.getClusterDbNames("testCluster");
+                globalStateMgr.getClusterDbNames("testCluster");
                 minTimes = 0;
                 result = Lists.newArrayList("testCluster:testDb");
 
-                catalog.getClusterDbNames("");
+                globalStateMgr.getClusterDbNames("");
                 minTimes = 0;
                 result = Lists.newArrayList("");
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
+                GlobalStateMgr.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
                 minTimes = 0;
 
-                Catalog.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
+                GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
                 minTimes = 0;
             }
         };
@@ -271,6 +275,61 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+        // Prepare to Test
+        ListPartitionInfoTest listPartitionInfoTest = new ListPartitionInfoTest();
+        listPartitionInfoTest.setUp();
+        OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
+        Database db = new Database();
+        new Expectations(db) {
+            {
+                db.getTable(anyString);
+                minTimes = 0;
+                result = olapTable;
+
+                db.getTable(0);
+                minTimes = 0;
+                result = olapTable;
+            }
+        };
+
+        new Expectations() {
+            {
+                analyzer.getClusterName();
+                minTimes = 0;
+                result = "testCluster";
+
+                globalStateMgr.getDb(0);
+                minTimes = 0;
+                result = db;
+            }
+        };
+
+        // Ok to test
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
+                null, null, null, false);
+        stmt.analyze(analyzer);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        // Ready to Assert
+        String partitionKeyTitle = resultSet.getMetaData().getColumn(6).getName();
+        Assert.assertEquals(partitionKeyTitle, "PartitionKey");
+        String valuesTitle = resultSet.getMetaData().getColumn(7).getName();
+        Assert.assertEquals(valuesTitle, "List");
+
+        String partitionKey1 = resultSet.getResultRows().get(0).get(6);
+        Assert.assertEquals(partitionKey1, "dt, province");
+        String partitionKey2 = resultSet.getResultRows().get(1).get(6);
+        Assert.assertEquals(partitionKey2, "dt, province");
+
+        String values1 = resultSet.getResultRows().get(0).get(7);
+        Assert.assertEquals(values1, "(('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin'))");
+        String values2 = resultSet.getResultRows().get(1).get(7);
+        Assert.assertEquals(values2, "(('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing'))");
+    }
+
+    @Test
     public void testShowTableFromUnknownDatabase() throws AnalysisException {
         ShowTableStmt stmt = new ShowTableStmt("testCluster:emptyDb", false, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -293,12 +352,12 @@ public class ShowExecutorTest {
     public void testDescribe() {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
         Analyzer analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-        Catalog catalog = AccessTestUtil.fetchAdminCatalog();
+        GlobalStateMgr globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            Catalog getCurrentCatalog() {
-                return catalog;
+            GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
             }
 
             @Mock
@@ -380,7 +439,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowCreateDb() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:testDb");
@@ -395,7 +454,7 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:emptyDb");
@@ -425,10 +484,13 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowColumn() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
-        ShowColumnStmt stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTbl"), null, null, false);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+
+        ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -440,8 +502,10 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
 
         // verbose
-        stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTbl"), null, null, true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
 
@@ -454,8 +518,9 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
 
         // pattern
-        stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTable"), null, "%1", true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
 
@@ -468,7 +533,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException {
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("testCluster:emptyDb", "testTable"), null, null, false);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
 
         expectedEx.expect(AnalysisException.class);
@@ -477,7 +542,7 @@ public class ShowExecutorTest {
 
         // empty table
         stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "emptyTable"), null, null, true);
-        stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         executor = new ShowExecutor(ctx, stmt);
 
         expectedEx.expect(AnalysisException.class);
@@ -505,6 +570,16 @@ public class ShowExecutorTest {
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("OLAP", resultSet.getString(0));
+    }
+
+    @Test
+    public void testShowUser() throws AnalysisException {
+        ctx.setQualifiedUser("root");
+        ShowUserStmt stmt = new ShowUserStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("root", resultSet.getString(0));
     }
 
     @Test

@@ -12,8 +12,9 @@
 namespace starrocks::pipeline {
 class TableFunctionOperator final : public Operator {
 public:
-    TableFunctionOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const TPlanNode& tnode)
-            : Operator(factory, id, "table_function", plan_node_id), _tnode(tnode) {}
+    TableFunctionOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                          const TPlanNode& tnode)
+            : Operator(factory, id, "table_function", plan_node_id, driver_sequence), _tnode(tnode) {}
 
     ~TableFunctionOperator() override = default;
 
@@ -74,7 +75,7 @@ public:
             : OperatorFactory(id, "table_function", plan_node_id), _tnode(tnode) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<TableFunctionOperator>(this, _id, _plan_node_id, _tnode);
+        return std::make_shared<TableFunctionOperator>(this, _id, _plan_node_id, driver_sequence, _tnode);
     }
 
 private:

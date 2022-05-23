@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/pipeline/query_context.h"
 
+#include <memory>
+
 #include "exec/pipeline/fragment_context.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
@@ -31,12 +33,14 @@ QueryContext::~QueryContext() {
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use its parent MemTracker.
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
-    if (_exec_env != nullptr) {
-        if (_is_runtime_filter_coordinator) {
-            _exec_env->runtime_filter_worker()->close_query(_query_id);
+    if (_mem_tracker) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
+        if (_exec_env != nullptr) {
+            if (_is_runtime_filter_coordinator) {
+                _exec_env->runtime_filter_worker()->close_query(_query_id);
+            }
+            _exec_env->runtime_filter_cache()->remove(_query_id);
         }
-        _exec_env->runtime_filter_cache()->remove(_query_id);
     }
 }
 
@@ -75,15 +79,17 @@ void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     });
 }
 
-void QueryContext::init_query(workgroup::WorkGroup* wg) {
-    if (wg == nullptr) {
-        return;
+Status QueryContext::init_query(workgroup::WorkGroup* wg) {
+    Status st = Status::OK();
+    if (wg != nullptr) {
+        std::call_once(_init_query_once, [this, &st, wg]() {
+            this->set_init_wg_cpu_cost(wg->total_cpu_cost());
+            this->init_query_begin_time();
+            st = wg->try_incr_num_queries();
+        });
     }
-    std::call_once(_init_query_once, [=]() {
-        this->set_init_wg_cpu_cost(wg->total_cpu_cost());
-        this->init_query_begin_time();
-        wg->incr_num_queries();
-    });
+
+    return st;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
@@ -94,6 +100,12 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
           _second_chance_maps(_num_slots) {}
 
 Status QueryContextManager::init() {
+    // regist query context metrics
+    auto metrics = StarRocksMetrics::instance()->metrics();
+    _query_ctx_cnt = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+    metrics->register_metric(_metric_name, _query_ctx_cnt.get());
+    metrics->register_hook(_metric_name, [this]() { _query_ctx_cnt->set_value(this->size()); });
+
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_func, this);
         Thread::set_thread_name(*_clean_thread.get(), "query_ctx_clr");
@@ -133,6 +145,11 @@ size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
 }
 
 QueryContextManager::~QueryContextManager() {
+    // unregist metrics
+    auto metrics = StarRocksMetrics::instance()->metrics();
+    metrics->deregister_hook(_metric_name);
+    _query_ctx_cnt.reset();
+
     if (_clean_thread) {
         this->_stop_clean_func();
         _clean_thread->join();
@@ -206,7 +223,17 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
     }
 }
 
-void QueryContextManager::remove(const TUniqueId& query_id) {
+size_t QueryContextManager::size() {
+    size_t sz = 0;
+    for (int i = 0; i < _mutexes.size(); ++i) {
+        std::shared_lock<std::shared_mutex> read_lock(_mutexes[i]);
+        sz += _context_maps[i].size();
+        sz += _second_chance_maps[i].size();
+    }
+    return sz;
+}
+
+bool QueryContextManager::remove(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -217,12 +244,13 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
-        return;
+        return false;
     }
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
+        return true;
     } else if (it->second->has_no_active_instances()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
@@ -231,7 +259,9 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
         ctx->extend_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
+        return false;
     }
+    return false;
 }
 
 void QueryContextManager::clear() {

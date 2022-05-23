@@ -22,16 +22,16 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
-#include "env/env_memory.h"
+#include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
-#include "util/file_utils.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -42,9 +42,8 @@ protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
-        _env = std::make_shared<EnvMemory>();
-        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
-        ASSERT_TRUE(_env->create_dir(kTestDir).ok());
+        _fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
@@ -55,10 +54,7 @@ protected:
         using CppType = typename CppTypeTraits<type>::CppType;
         std::string fname = kTestDir + "/" + file_name;
         {
-            std::unique_ptr<fs::WritableBlock> wblock;
-            fs::CreateBlockOptions opts({fname});
-            Status st = _block_mgr->create_block(opts, &wblock);
-            ASSERT_TRUE(st.ok()) << st.to_string();
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
 
             std::unique_ptr<BloomFilterIndexWriter> bloom_filter_index_writer;
             BloomFilterOptions bf_options;
@@ -71,13 +67,11 @@ protected:
                     // second page
                     bloom_filter_index_writer->add_nulls(null_count);
                 }
-                st = bloom_filter_index_writer->flush();
-                ASSERT_TRUE(st.ok());
+                ASSERT_OK(bloom_filter_index_writer->flush());
                 i += 1024;
             }
-            st = bloom_filter_index_writer->finish(wblock.get(), index_meta);
-            ASSERT_TRUE(st.ok()) << "writer finish status:" << st.to_string();
-            ASSERT_TRUE(wblock->close().ok());
+            ASSERT_OK(bloom_filter_index_writer->finish(wfile.get(), index_meta));
+            ASSERT_TRUE(wfile->close().ok());
             ASSERT_EQ(BLOOM_FILTER_INDEX, index_meta->type());
             ASSERT_EQ(bf_options.strategy, index_meta->bloom_filter_index().hash_strategy());
         }
@@ -89,7 +83,7 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        auto st = (*reader)->load(_block_mgr.get(), fname, &meta.bloom_filter_index(), true, false);
+        auto st = (*reader)->load(_fs.get(), fname, &meta.bloom_filter_index(), true, false);
         ASSERT_TRUE(st.ok());
 
         st = (*reader)->new_iterator(iter);
@@ -155,8 +149,7 @@ protected:
     }
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    std::shared_ptr<EnvMemory> _env = nullptr;
-    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
+    std::shared_ptr<MemoryFileSystem> _fs = nullptr;
 };
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {

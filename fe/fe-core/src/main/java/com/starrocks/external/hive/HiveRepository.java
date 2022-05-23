@@ -5,7 +5,6 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -15,6 +14,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,10 +24,14 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 public class HiveRepository {
     // hiveResourceName => HiveMetaClient
@@ -38,13 +42,16 @@ public class HiveRepository {
     Map<String, HiveMetaCache> metaCaches = Maps.newHashMap();
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
 
-    Executor executor = Executors.newFixedThreadPool(100);
+    Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_refresh_min_threads,
+            Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
+
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
     private final ExecutorService partitionDaemonExecutor =
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
                     Integer.MAX_VALUE, "hive-meta-concurrency-pool", true);
 
     public HiveMetaClient getClient(String resourceName) throws DdlException {
+        boolean isInternalCatalog = isInternalCatalog(resourceName);
         HiveMetaClient client;
         metaClientsLock.readLock().lock();
         try {
@@ -63,18 +70,23 @@ public class HiveRepository {
             if (client != null) {
                 return client;
             }
-            Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
-            if (resource == null) {
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+            if (resource == null && isInternalCatalog) {
                 throw new DdlException("get hive client failed, resource[" + resourceName + "] not exists");
             }
-            if (resource.getType() != ResourceType.HIVE && resource.getType() != ResourceType.HUDI) {
+            if (isInternalCatalog && resource.getType() != ResourceType.HIVE &&
+                    resource.getType() != ResourceType.HUDI) {
                 throw new DdlException("resource [" + resourceName + "] is not hive/hudi resource");
             }
 
-            if (resource.getType() == ResourceType.HIVE) {
-                client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
-            } else if (resource.getType() == ResourceType.HUDI) {
-                client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
+            if (!isInternalCatalog) {
+                client = new HiveMetaClient(resourceName);
+            } else {
+                if (resource.getType() == ResourceType.HIVE) {
+                    client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
+                } else if (resource.getType() == ResourceType.HUDI) {
+                    client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
+                }
             }
 
             metaClients.put(resourceName, client);
@@ -105,7 +117,7 @@ public class HiveRepository {
                 return hiveMetaCache;
             }
 
-            hiveMetaCache = new HiveMetaCache(metaClient, executor);
+            hiveMetaCache = new HiveMetaCache(metaClient, executor, resourceName);
             metaCaches.put(resourceName, hiveMetaCache);
             return hiveMetaCache;
         } finally {
@@ -137,7 +149,7 @@ public class HiveRepository {
             try {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("get table {}.{} partition meta info failed.", hmsTable.getDb(), hmsTable.getTable(),  e);
+                LOG.warn("get table {}.{} partition meta info failed.", hmsTable.getDb(), hmsTable.getTable(), e);
                 throw new DdlException(e.getMessage());
             }
         }
@@ -198,7 +210,7 @@ public class HiveRepository {
             HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
             metaCache.clearCache(hmsTable);
         } catch (DdlException e) {
-            LOG.warn("clean table {}.{} cache failed.", hmsTable.getDb(), hmsTable.getTable(),  e);
+            LOG.warn("clean table {}.{} cache failed.", hmsTable.getDb(), hmsTable.getTable(), e);
         }
     }
 

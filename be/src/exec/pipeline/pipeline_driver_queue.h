@@ -26,12 +26,13 @@ public:
     virtual void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) = 0;
 
     virtual StatusOr<DriverRawPtr> take(int worker_id) = 0;
+    virtual void cancel(DriverRawPtr driver) = 0;
 
     // Update statistics of the driver's workgroup,
     // when yielding the driver in the executor thread.
     virtual void update_statistics(const DriverRawPtr driver) = 0;
 
-    virtual size_t size() = 0;
+    virtual size_t size() const = 0;
     bool empty() { return size() == 0; }
 
 protected:
@@ -41,6 +42,26 @@ protected:
     static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 };
 
+// SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
+// It guarantees the following characteristics:
+// 1. the running drivers are executed in FIFO order.
+// 2. the cancelled drivers have the highest priority and are executed first.
+// The cancelled drivers are all equal and the order of execution is not guaranteed,
+// this may not be a big problem because the finalize operation is fast enough.
+//
+// We use some data structures to maintain the above properties:
+// 1. std::deque<DriverRawPtr> queue
+//   store the drivers added by PipelineDriverPoller, cancelled driver are added to the head and the others are added to the tail
+// 2. std::queue<DriverRawPtr> pending_cancel_queue
+//   store the drivers that are already in `queue` but cancelled, the drivers will only be added when the query is cancelled externally
+// 3. std::unordered_set<DriverRawPtr> cancelled_set
+//   record drivers that have been taken in pending_cancel_queue
+//
+// When taking a driver from SubQuerySharedDriverQueue, we try to take it from `pending_cancel_queue` first.
+// if `pending_cancel_queue` is not empty, we take it from the head and record it in `cancelled_set`.
+// Otherwise, we take it from `queue`.
+// It should be noted that the driver in `queue` may already be taken from `pending_cancel_queue`,
+// we should ignore such drivers and try to get the next one.
 class SubQuerySharedDriverQueue {
 public:
     void update_accu_time(const DriverRawPtr driver) {
@@ -49,7 +70,18 @@ public:
 
     double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
 
-    std::queue<DriverRawPtr> queue;
+    void put(const DriverRawPtr driver);
+    void cancel(const DriverRawPtr driver);
+    DriverRawPtr take();
+    inline bool empty() const { return driver_number == 0; }
+
+    inline size_t size() const { return driver_number; }
+
+    std::deque<DriverRawPtr> queue;
+    std::queue<DriverRawPtr> pending_cancel_queue;
+    std::unordered_set<DriverRawPtr> cancelled_set;
+    size_t driver_number = 0;
+
     // factor for normalization
     double factor_for_normal = 0;
 
@@ -61,27 +93,11 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() {
-        double factor = 1;
-        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
-            // initialize factor for every sub queue,
-            // Higher priority queues have more execution time,
-            // so they have a larger factor.
-            _queues[i].factor_for_normal = factor;
-            factor *= RATIO_OF_ADJACENT_QUEUE;
-        }
-
-        int64_t time_slice = 0;
-        for (int i = 0; i < QUEUE_SIZE; ++i) {
-            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-            _level_time_slices[i] = time_slice;
-        }
-    }
+    QuerySharedDriverQueue();
     ~QuerySharedDriverQueue() override = default;
     void close() override;
     void put_back(const DriverRawPtr driver) override;
     void put_back(const std::vector<DriverRawPtr>& drivers) override;
-
     void put_back_from_executor(const DriverRawPtr driver) override;
     void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
@@ -90,7 +106,9 @@ public:
     // Return cancelled status, if the queue is closed.
     StatusOr<DriverRawPtr> take(int worker_id) override;
 
-    size_t size() override;
+    void cancel(DriverRawPtr driver) override;
+
+    size_t size() const override;
 
     static constexpr size_t QUEUE_SIZE = 8;
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
@@ -115,22 +133,7 @@ class QuerySharedDriverQueueWithoutLock : public FactoryMethod<DriverQueue, Quer
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueueWithoutLock>;
 
 public:
-    QuerySharedDriverQueueWithoutLock() {
-        double factor = 1;
-        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
-            // initialize factor for every sub queue,
-            // Higher priority queues have more execution time,
-            // so they have a larger factor.
-            _queues[i].factor_for_normal = factor;
-            factor *= RATIO_OF_ADJACENT_QUEUE;
-        }
-
-        int64_t time_slice = 0;
-        for (int i = 0; i < QUEUE_SIZE; ++i) {
-            time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-            _level_time_slices[i] = time_slice;
-        }
-    }
+    QuerySharedDriverQueueWithoutLock();
     ~QuerySharedDriverQueueWithoutLock() override = default;
     void close() override {}
 
@@ -142,9 +145,11 @@ public:
     // Always return non-nullable value.
     StatusOr<DriverRawPtr> take(int worker_id) override;
 
+    void cancel(DriverRawPtr driver) override;
+
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override { return _size; }
+    size_t size() const override { return _size; }
 
 private:
     void _put_back(const DriverRawPtr driver);
@@ -186,9 +191,11 @@ public:
     // Secondly, select the proper driver from the driver queue of this work group.
     StatusOr<DriverRawPtr> take(int worker_id) override;
 
+    void cancel(DriverRawPtr driver) override;
+
     void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() override;
+    size_t size() const override;
 
 private:
     // The schedule period is equal to SCHEDULE_PERIOD_PER_WG_NS * num_workgroups.
