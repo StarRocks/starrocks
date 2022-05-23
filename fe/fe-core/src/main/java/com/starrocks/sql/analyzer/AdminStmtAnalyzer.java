@@ -154,17 +154,10 @@ public class AdminStmtAnalyzer {
             adminShowReplicaStatusStmt.setOp(op);
 
             Expr leftChild = binaryPredicate.getChild(0);
-            if (!(leftChild instanceof SlotRef)) {
-                return false;
-            }
-
-            String leftKey = ((SlotRef) leftChild).getColumnName();
-            if (!leftKey.equalsIgnoreCase("status")) {
-                return false;
-            }
-
             Expr rightChild = binaryPredicate.getChild(1);
-            if (!(rightChild instanceof StringLiteral)) {
+            String leftKey = ((SlotRef) leftChild).getColumnName();
+            if (!(leftChild instanceof SlotRef) || !(rightChild instanceof StringLiteral)
+                    || !leftKey.equalsIgnoreCase("status")) {
                 return false;
             }
 
