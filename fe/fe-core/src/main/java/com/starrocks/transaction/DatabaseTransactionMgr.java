@@ -537,7 +537,7 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform
         boolean txnOperated = false;
         writeLock();
@@ -549,7 +549,7 @@ public class DatabaseTransactionMgr {
         } finally {
             writeUnlock();
             // after state transform
-            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated);
+            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
@@ -1051,14 +1051,14 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
         boolean txnOperated = false;
         writeLock();
         try {
             txnOperated = unprotectAbortTransaction(transactionId, reason);
         } finally {
             writeUnlock();
-            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, reason);
+            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
         }
 
         // send clear txn task to BE to clear the transactions on BE.
