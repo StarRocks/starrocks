@@ -114,6 +114,8 @@ public class RangePartitionDesc extends PartitionDesc {
             }
 
             for (MultiRangePartitionDesc multiRangePartitionDesc : multiRangePartitionDescs) {
+                multiRangePartitionDesc.
+                        convertToSingle(firstPartitionColumn.getType(), otherProperties);
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
                         convertToSingle(firstPartitionColumn.getType(), otherProperties));
             }

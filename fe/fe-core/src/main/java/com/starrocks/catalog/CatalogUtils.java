@@ -2,6 +2,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -41,13 +42,13 @@ public class CatalogUtils {
     }
 
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
-                                                                      List<SingleRangePartitionDesc> singleRangePartitionDescs)
+                                                                      List<PartitionDesc> partitionDescs)
             throws DdlException {
         Set<String> existPartitionNameSet = Sets.newHashSet();
-        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
-            String partitionName = singleRangePartitionDesc.getPartitionName();
+        for (PartitionDesc partitionDesc : partitionDescs) {
+            String partitionName = partitionDesc.getPartitionName();
             if (olapTable.checkPartitionNameExist(partitionName)) {
-                if (singleRangePartitionDesc.isSetIfNotExists()) {
+                if (partitionDesc.isSetIfNotExists()) {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);

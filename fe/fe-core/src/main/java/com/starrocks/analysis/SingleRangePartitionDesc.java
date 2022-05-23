@@ -65,10 +65,12 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.replicationNum = FeConstants.default_replication_num;
     }
 
+    @Override
     public boolean isSetIfNotExists() {
         return ifNotExists;
     }
 
+    @Override
     public String getPartitionName() {
         return partName;
     }
@@ -77,26 +79,32 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         return partitionKeyDesc;
     }
 
+    @Override
     public DataProperty getPartitionDataProperty() {
         return partitionDataProperty;
     }
 
+    @Override
     public short getReplicationNum() {
         return replicationNum;
     }
 
+    @Override
     public boolean isInMemory() {
         return isInMemory;
     }
 
+    @Override
     public TTabletType getTabletType() {
         return tabletType;
     }
 
+    @Override
     public Long getVersionInfo() {
         return versionInfo;
     }
 
+    @Override
     public Map<String, String> getProperties() {
         return this.properties;
     }
