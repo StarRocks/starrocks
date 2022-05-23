@@ -2,6 +2,7 @@
 
 #pragma once
 #include <memory>
+#include <utility>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -103,18 +104,15 @@ public:
 
     jclass object_class() { return _object_class; }
 
-    // check JNI Exception and set error in FunctionContext
-    static void check_call_exception(JNIEnv* env, FunctionContext* ctx);
-
 private:
-    JVMFunctionHelper(JNIEnv* env) : _env(env) {}
+    JVMFunctionHelper() { _init(); };
     void _init();
     void _add_class_path(const std::string& path);
     // pack input array to java object array
     jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
 
 private:
-    JNIEnv* _env;
+    inline static thread_local JNIEnv* _env;
 
     DEFINE_JAVA_PRIM_TYPE(boolean);
     DEFINE_JAVA_PRIM_TYPE(byte);
@@ -150,6 +148,34 @@ private:
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 };
+
+// local object reference guard.
+// The objects inside are automatically call DeleteLocalRef in the life object.
+#define LOCAL_REF_GUARD(lref)                                                \
+    DeferOp VARNAME_LINENUM(guard)([&lref]() {                               \
+        if (lref) {                                                          \
+            JVMFunctionHelper::getInstance().getEnv()->DeleteLocalRef(lref); \
+            lref = nullptr;                                                  \
+        }                                                                    \
+    })
+
+#define LOCAL_REF_GUARD_ENV(env, lref)              \
+    DeferOp VARNAME_LINENUM(guard)([&lref, env]() { \
+        if (lref) {                                 \
+            env->DeleteLocalRef(lref);              \
+            lref = nullptr;                         \
+        }                                           \
+    })
+
+// check JNI Exception and set error in FunctionContext
+#define CHECK_UDF_CALL_EXCEPTION(env, ctx)                                         \
+    if (auto e = env->ExceptionOccurred()) {                                       \
+        LOCAL_REF_GUARD(e);                                                        \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
+        LOG(WARNING) << "Exception: " << msg;                                      \
+        ctx->set_error(msg.c_str());                                               \
+        env->ExceptionClear();                                                     \
+    }
 
 // Used for UDAF serialization and deserialization,
 // providing a C++ memory space for Java to access.
