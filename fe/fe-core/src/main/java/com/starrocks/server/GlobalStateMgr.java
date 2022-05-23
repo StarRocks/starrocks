@@ -2744,7 +2744,8 @@ public class GlobalStateMgr {
         }
 
         if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, dbName);
+            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
         ctx.setDatabase(dbName);
