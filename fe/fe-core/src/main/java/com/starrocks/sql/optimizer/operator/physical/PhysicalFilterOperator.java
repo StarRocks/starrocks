@@ -23,6 +23,11 @@ public class PhysicalFilterOperator extends PhysicalOperator {
     }
 
     @Override
+    public boolean equals(Object o) {
+        return this == o;
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalFilter(this, context);
     }
