@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
@@ -179,18 +180,18 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
-    public void handleNewRangePartitionDescs(List<SingleRangePartitionDesc> listDesc,
+    public void handleNewRangePartitionDescs(List<PartitionDesc> listDesc,
                                              List<Partition> partitionList, Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
         int len = listDesc.size();
         for (int i = 0; i < len; i++) {
             if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
                 long partitionId = partitionList.get(i).getId();
-                SingleRangePartitionDesc desc = listDesc.get(i);
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc)listDesc.get(i);
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {
-                    range = checkAndCreateRange(listDesc.get(i), isTemp);
+                    range = checkAndCreateRange(desc, isTemp);
                     setRangeInternal(partitionId, isTemp, range);
                 } catch (IllegalArgumentException e) {
                     // Range.closedOpen may throw this if (lower > upper)
