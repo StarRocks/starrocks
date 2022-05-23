@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -23,24 +24,29 @@ public class LogicalTopNOperator extends LogicalOperator {
     private final List<Ordering> orderByElements;
     private final long offset;
     private final SortPhase sortPhase;
+    private final TopNType topNType;
     private boolean isSplit = false;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
-        this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL, false);
+        this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
+                TopNType.ROW_NUMBER,
+                false);
     }
 
     public LogicalTopNOperator(List<Ordering> orderByElements, long limit, long offset) {
-        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, SortPhase.FINAL, false);
+        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, SortPhase.FINAL, TopNType.ROW_NUMBER,
+                false);
     }
 
     public LogicalTopNOperator(List<Ordering> orderByElements, long limit, long offset,
                                SortPhase sortPhase) {
-        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, sortPhase, false);
+        this(limit, null, null, null, DEFAULT_LIMIT, orderByElements, offset, sortPhase, TopNType.ROW_NUMBER, false);
     }
 
     private LogicalTopNOperator(Builder builder) {
         this(builder.getLimit(), builder.getPredicate(), builder.getProjection(), builder.partitionByColumns,
-                builder.partitionLimit, builder.orderByElements, builder.offset, builder.sortPhase, builder.isSplit);
+                builder.partitionLimit, builder.orderByElements, builder.offset, builder.sortPhase, builder.topNType,
+                builder.isSplit);
     }
 
     private LogicalTopNOperator(long limit,
@@ -48,18 +54,23 @@ public class LogicalTopNOperator extends LogicalOperator {
                                 List<ColumnRefOperator> partitionByColumns,
                                 long partitionLimit,
                                 List<Ordering> orderByElements, long offset,
-                                SortPhase sortPhase, boolean isSplit) {
+                                SortPhase sortPhase, TopNType topNType, boolean isSplit) {
         super(OperatorType.LOGICAL_TOPN, limit, predicate, projection);
         this.partitionByColumns = partitionByColumns;
         this.partitionLimit = partitionLimit;
         this.orderByElements = orderByElements;
         this.offset = offset;
         this.sortPhase = sortPhase;
+        this.topNType = topNType;
         this.isSplit = isSplit;
     }
 
     public SortPhase getSortPhase() {
         return sortPhase;
+    }
+
+    public TopNType getTopNType() {
+        return topNType;
     }
 
     public boolean isSplit() {
@@ -147,6 +158,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         private List<Ordering> orderByElements;
         private long offset;
         private SortPhase sortPhase;
+        private TopNType topNType = TopNType.ROW_NUMBER;
         private boolean isSplit = false;
 
         @Override
@@ -160,6 +172,7 @@ public class LogicalTopNOperator extends LogicalOperator {
             this.orderByElements = topNOperator.orderByElements;
             this.offset = topNOperator.offset;
             this.sortPhase = topNOperator.sortPhase;
+            this.topNType = topNOperator.topNType;
             this.isSplit = topNOperator.isSplit;
             return this;
         }
@@ -181,6 +194,11 @@ public class LogicalTopNOperator extends LogicalOperator {
 
         public LogicalTopNOperator.Builder setOffset(int offset) {
             this.offset = offset;
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setTopNType(TopNType topNType) {
+            this.topNType = topNType;
             return this;
         }
 

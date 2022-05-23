@@ -14,7 +14,7 @@
 
 namespace starrocks::vectorized {
 
-static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_columns,
+static void get_compare_results_colwise(size_t number_of_rows_to_sort, Columns& order_by_columns,
                                         std::vector<CompareVector>& compare_results_array,
                                         std::vector<DataSegment>& data_segments,
                                         const std::vector<int>& sort_order_flags,
@@ -32,7 +32,7 @@ static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_co
         std::vector<Datum> rhs_values;
         auto& segment = data_segments[i];
         for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
-            rhs_values.push_back(order_by_columns[col_idx]->get(row_to_sort));
+            rhs_values.push_back(order_by_columns[col_idx]->get(number_of_rows_to_sort));
         }
         compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_order_flags,
                         null_first_flags);
@@ -86,6 +86,9 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             size_t local_first_size = middle_num;
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] < 0) {
+                    filter_array[i][j] = DataSegment::IN_LAST_RESULT;
+                    ++middle_num;
+                } else if (compare_results_array[i][j] == 0) {
                     filter_array[i][j] = DataSegment::IN_LAST_RESULT;
                     ++middle_num;
                 }

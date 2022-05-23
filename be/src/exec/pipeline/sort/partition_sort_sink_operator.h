@@ -86,9 +86,10 @@ public:
     PartitionSortSinkOperatorFactory(
             int32_t id, int32_t plan_node_id, std::shared_ptr<SortContextFactory> sort_context_factory,
             SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-            const std::string& sort_keys, int64_t offset, int64_t limit, const std::vector<OrderByType>& order_by_types,
-            TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-            const RowDescriptor& parent_node_child_row_desc, const std::vector<ExprContext*>& analytic_partition_exprs)
+            const std::string& sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
+            const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
+            const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
+            const std::vector<ExprContext*>& analytic_partition_exprs)
             : OperatorFactory(id, "partition_sort_sink", plan_node_id),
               _sort_context_factory(sort_context_factory),
               _sort_exec_exprs(sort_exec_exprs),
@@ -97,6 +98,7 @@ public:
               _sort_keys(sort_keys),
               _offset(offset),
               _limit(limit),
+              _topn_type(topn_type),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
@@ -119,6 +121,7 @@ private:
     const std::string _sort_keys;
     int64_t _offset;
     int64_t _limit;
+    const TTopNType::type _topn_type;
     const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().

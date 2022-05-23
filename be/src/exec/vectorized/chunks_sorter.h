@@ -148,7 +148,7 @@ protected:
 
     std::atomic<bool> _is_sink_complete = false;
 
-    CompareStrategy _compare_strategy = Default;
+    CompareStrategy _compare_strategy = ColumnWise;
 };
 
 } // namespace starrocks::vectorized

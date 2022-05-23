@@ -35,7 +35,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
 // Sort multiple chunks in column-wise style
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            size_t limit);
+                            size_t limit, bool is_limit_by_rank = false);
 
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1

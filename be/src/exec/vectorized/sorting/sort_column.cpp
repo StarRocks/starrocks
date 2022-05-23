@@ -423,7 +423,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
 
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            size_t limit) {
+                            size_t limit, bool is_limit_by_rank) {
     if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
@@ -453,7 +453,14 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     }
 
     if (limit < perm.size()) {
-        perm.resize(limit);
+        if (is_limit_by_rank) {
+            int first_non_equal_pos = SIMD::find_zero(tie, limit);
+            if (first_non_equal_pos < perm.size()) {
+                perm.resize(first_non_equal_pos);
+            }
+        } else {
+            perm.resize(limit);
+        }
     }
 
     return Status::OK();

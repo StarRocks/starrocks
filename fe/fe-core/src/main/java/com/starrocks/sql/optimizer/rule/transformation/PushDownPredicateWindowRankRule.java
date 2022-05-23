@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -61,8 +62,9 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
         ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
         CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
-        // TODO(hcf) we support rank/dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equalsIgnoreCase(callOperator.getFnName())) {
+        // TODO(hcf) we support dense_rank later
+        if (!FunctionSet.ROW_NUMBER.equalsIgnoreCase(callOperator.getFnName()) &&
+                !FunctionSet.RANK.equalsIgnoreCase(callOperator.getFnName())) {
             return false;
         }
 
@@ -84,6 +86,7 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
         LogicalWindowOperator windowOperator = childExpr.getOp().cast();
 
         ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
+        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
         List<BinaryPredicateOperator> lessPredicates =
                 filters.stream().filter(op -> op instanceof BinaryPredicateOperator)
@@ -112,6 +115,8 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        TopNType topNType = TopNType.parse(callOperator.getFnName());
+
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
         // OutputPropertyDeriver will generate PhysicalPropertySet.EMPTY if sortPhase is SortPhase.PARTIAL
         final SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
@@ -122,6 +127,7 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
                 .setPartitionLimit(partitionLimit)
                 .setOrderByElements(windowOperator.getEnforceSortColumns())
                 .setLimit(limit)
+                .setTopNType(topNType)
                 .setSortPhase(sortPhase)
                 .build(), childExpr.getInputs());
 
