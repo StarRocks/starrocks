@@ -47,6 +47,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
 
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+
+    /**
+     * configure the mem limit of load process on BE.
+     * Previously users used exec_mem_limit to set memory limits.
+     * To maintain compatibility, the default value of load_mem_limit is 0,
+     * which means that the load memory limit is still using exec_mem_limit.
+     * Users can set a value greater than zero to explicitly specify the load memory limit.
+     * This variable is mainly for INSERT operation, because INSERT operation has both query and load part.
+     * Using only the exec_mem_limit variable does not make a good distinction of memory limit between the two parts.
+     */
+    public static final String LOAD_MEM_LIMIT = "load_mem_limit";
+
+    /**
+     * The mem limit of query on BE. It takes effects only when enabling pipeline engine.
+     * - If `query_mem_limit` > 0, use it to limit the memory of a query.
+     *   The memory a query able to be used is just `query_mem_limit`.
+     * - Otherwise, use `exec_mem_limit` to limit the memory of a query.
+     *   The memory a query able to be used is `exec_mem_limit * num_fragments * pipeline_dop`.
+     * To maintain compatibility, the default value is 0.
+     */
+    public static final String QUERY_MEM_LIMIT = "query_mem_limit";
+
     public static final String QUERY_TIMEOUT = "query_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
@@ -90,16 +112,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
-    /*
-     * configure the mem limit of load process on BE.
-     * Previously users used exec_mem_limit to set memory limits.
-     * To maintain compatibility, the default value of load_mem_limit is 0,
-     * which means that the load memory limit is still using exec_mem_limit.
-     * Users can set a value greater than zero to explicitly specify the load memory limit.
-     * This variable is mainly for INSERT operation, because INSERT operation has both query and load part.
-     * Using only the exec_mem_limit variable does not make a good distinction of memory limit between the two parts.
-     */
-    public static final String LOAD_MEM_LIMIT = "load_mem_limit";
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
@@ -217,6 +229,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
+
+    @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
+    private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
+    private long queryMemLimit = 0L;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILLING)
     public boolean enableSpilling = false;
@@ -378,9 +396,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
     private boolean forwardToMaster = false;
-
-    @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
-    private long loadMemLimit = 0L;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -968,6 +983,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
+        if (queryMemLimit > 0) {
+            tResult.setQuery_mem_limit(queryMemLimit);
+        }
 
         tResult.setMin_reservation(0);
         tResult.setMax_reservation(maxExecMemByte);
