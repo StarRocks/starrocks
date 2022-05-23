@@ -10,6 +10,7 @@ import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -24,9 +25,6 @@ import org.junit.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -40,13 +38,8 @@ public class MaterializedViewTest {
     @Mocked
     private Database database;
 
-    @Mocked
     private OlapTable olapTable1;
-
-    @Mocked
     private OlapTable olapTable2;
-
-    @Mocked
     private OlapTable olapTable3;
 
     @Before
@@ -226,6 +219,24 @@ public class MaterializedViewTest {
 
     @Test
     public void testSinglePartitionSerialization() throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getDb(100);
+                result = database;
+
+                database.getTable(10L);
+                result = olapTable1;
+
+                database.getTable(20L);
+                result = olapTable2;
+
+                database.getTable(30L);
+                result = olapTable3;
+            }
+        };
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
@@ -242,18 +253,19 @@ public class MaterializedViewTest {
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
         mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
-        File file = new File("./index");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
-        mv.write(dos);
+        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
+        mv.write(out);
 
-        dos.flush();
-        dos.close();
+        out.flush();
+        out.close();
 
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        MaterializedView materializedView = MaterializedView.read(dis);
+        DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
+
+        Table table = Table.read(in);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView materializedView = (MaterializedView) table;
         Assert.assertTrue(mv.equals(materializedView));
         Assert.assertEquals(mv.getName(), materializedView.getName());
         PartitionInfo partitionInfo1 = materializedView.getPartitionInfo();
@@ -264,10 +276,6 @@ public class MaterializedViewTest {
         Assert.assertTrue(distributionInfo instanceof HashDistributionInfo);
         Assert.assertEquals(10, ((HashDistributionInfo) distributionInfo).getBucketNum());
         Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
-
-        // 3. delete files
-        dis.close();
-        file.delete();
     }
 
     public RangePartitionInfo generateRangePartitionInfo() throws DdlException, AnalysisException {
@@ -334,19 +342,17 @@ public class MaterializedViewTest {
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
         mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
-        File file = new File("./index");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
-        mv.write(dos);
+        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
+        mv.write(out);
 
-        dos.flush();
-        dos.close();
+        out.flush();
+        out.close();
 
-        // deserialized from Table.read
-        File file2 = new File("./index");
-        DataInputStream dis2 = new DataInputStream(new FileInputStream(file2));
-        Table table = Table.read(dis2);
+        DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
+
+        Table table = Table.read(in);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView materializedView2 = (MaterializedView) table;
         Assert.assertTrue(mv.equals(materializedView2));
@@ -361,8 +367,5 @@ public class MaterializedViewTest {
         Assert.assertTrue(distributionInfo2 instanceof HashDistributionInfo);
         Assert.assertEquals(10, distributionInfo2.getBucketNum());
         Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo2).getDistributionColumns().size());
-        dis2.close();
-        // 3. delete files
-        file.delete();
     }
 }
