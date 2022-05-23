@@ -171,11 +171,6 @@ public class LogicalTopNOperator extends LogicalOperator {
             return this;
         }
 
-        public LogicalTopNOperator.Builder setLimit(int offset) {
-            this.offset = offset;
-            return this;
-        }
-
         public LogicalTopNOperator.Builder setSortPhase(SortPhase sortPhase) {
             this.sortPhase = sortPhase;
             return this;
