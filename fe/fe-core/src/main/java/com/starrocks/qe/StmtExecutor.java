@@ -812,7 +812,8 @@ public class StmtExecutor {
             if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
             }
-            context.getGlobalStateMgr().changeDb(context, useStmt.getDatabase());
+            // TODO: refactor useStmt and rename getDatabase
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;

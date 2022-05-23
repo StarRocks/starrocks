@@ -244,10 +244,10 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = Lists.newArrayList("default_cluster:testDb");
 
-                    globalStateMgr.changeDb((ConnectContext) any, "blockDb");
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
 
                     globalStateMgr.initDefaultCluster();

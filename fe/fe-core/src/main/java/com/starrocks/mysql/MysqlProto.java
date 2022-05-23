@@ -210,8 +210,7 @@ public class MysqlProto {
         String db = authPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
-                String dbFullName = ClusterNamespace.getFullName(context.getClusterName(), db);
-                GlobalStateMgr.getCurrentState().changeDb(context, dbFullName);
+                GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
             } catch (DdlException e) {
                 sendResponsePacket(context);
                 return false;
@@ -257,8 +256,7 @@ public class MysqlProto {
         String db = changeUserPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
-                String dbFullName = ClusterNamespace.getFullName(context.getClusterName(), db);
-                GlobalStateMgr.getCurrentState().changeDb(context, dbFullName);
+                GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
             } catch (DdlException e) {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
                         priviousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
