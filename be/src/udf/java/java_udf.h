@@ -32,12 +32,14 @@ namespace starrocks::vectorized {
 class DirectByteBuffer;
 class AggBatchCallStub;
 class BatchEvaluateStub;
+class JVMClass;
 // Restrictions on use:
 // can only be used in pthread, not in bthread
 // thread local helper
 class JVMFunctionHelper {
 public:
     static JVMFunctionHelper& getInstance();
+    static std::pair<JNIEnv*, JVMFunctionHelper&> getInstanceWithEnv();
     JVMFunctionHelper(const JVMFunctionHelper&) = delete;
     // get env
     JNIEnv* getEnv() { return _env; }
@@ -59,10 +61,18 @@ public:
     jobject create_object_array(jobject o, int num_rows);
 
     // batch update single
-    void batch_update_single(AggBatchCallStub* stub, jobject state, jobject* input, int cols, int rows);
+    void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows);
 
     // batch update input: state col1 col2
-    void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
+    void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input, int cols);
+
+    // batch update if state is not null
+    // input: state col1 col2
+    void batch_update_if_not_null(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input,
+                                  int cols);
+
+    // only used for AGG streaming
+    void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
     // batch call evalute
     jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
@@ -77,6 +87,10 @@ public:
     // col: result column
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
+
+    // convert int handle to jobject
+    // return a local ref
+    jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
 
     // List methods
     jobject list_get(jobject obj, int idx);
@@ -103,6 +117,8 @@ public:
     void clear(DirectByteBuffer* buffer, FunctionContext* ctx);
 
     jclass object_class() { return _object_class; }
+
+    JVMClass& function_state_clazz();
 
 private:
     JVMFunctionHelper() { _init(); };
@@ -141,12 +157,16 @@ private:
     jmethodID _create_boxed_array;
     jmethodID _batch_update_single;
     jmethodID _batch_update;
+    jmethodID _batch_update_if_not_null;
+    jmethodID _batch_update_state;
     jmethodID _batch_call;
     jmethodID _batch_call_no_args;
     jmethodID _int_batch_call;
     jmethodID _get_boxed_result;
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
+
+    std::unique_ptr<JVMClass> _function_states_clazz;
 };
 
 // local object reference guard.
@@ -312,6 +332,30 @@ private:
     JavaGlobalRef _stub_method;
 };
 
+// UDAF State Lists
+// mapping a java object as a int index
+// use get method to
+class UDAFStateList {
+public:
+    static inline const char* clazz_name = "com.starrocks.udf.FunctionStates";
+    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& add);
+
+    jobject handle() { return _handle.handle(); }
+
+    // get state with index state
+    jobject get_state(FunctionContext* ctx, JNIEnv* env, int state);
+
+    // add a state to StateList
+    int add_state(FunctionContext* ctx, JNIEnv* env, jobject state);
+
+private:
+    JavaGlobalRef _handle;
+    JavaGlobalRef _get_method;
+    JavaGlobalRef _add_method;
+    jmethodID _get_method_id;
+    jmethodID _add_method_id;
+};
+
 // For loading UDF Class
 // Not thread safe
 class ClassLoader {
@@ -391,27 +435,29 @@ public:
     UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
             : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
-    JavaGlobalRef create();
+    int create();
     // destroy state
-    void destroy(JavaGlobalRef& state);
+    void destroy(int state);
     // UDAF Update Function
     void update(jvalue* val);
     // UDAF merge
-    void merge(jobject state, jobject buffer);
-    void serialize(jobject state, jobject buffer);
+    void merge(int state, jobject buffer);
+    void serialize(int state, jobject buffer);
     // UDAF State serialize_size
-    int serialize_size(jobject state);
+    int serialize_size(int state);
     // UDAF finalize
-    jvalue finalize(jobject state);
+    jvalue finalize(int state);
 
     // WindowFunction reset
-    void reset(jobject state);
+    void reset(int state);
 
     // WindowFunction updateBatch
-    jobject window_update_batch(jobject state, int peer_group_start, int peer_group_end, int frame_start, int frame_end,
+    jobject window_update_batch(int state, int peer_group_start, int peer_group_end, int frame_start, int frame_end,
                                 int col_sz, jobject* cols);
 
 private:
+    jobject _convert_to_jobject(int state);
+
     // not owned udaf function handle
     jobject _udaf_handle;
     FunctionContext* _function_context;
@@ -423,6 +469,7 @@ struct JavaUDAFContext {
     JVMClass udaf_state_class = nullptr;
     std::unique_ptr<JavaMethodDescriptor> create;
     std::unique_ptr<JavaMethodDescriptor> destory;
+    std::unique_ptr<UDAFStateList> states;
     std::unique_ptr<JavaMethodDescriptor> update;
     std::unique_ptr<AggBatchCallStub> update_batch_call_stub;
     std::unique_ptr<JavaMethodDescriptor> merge;
