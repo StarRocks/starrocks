@@ -22,15 +22,12 @@
 package com.starrocks.persist;
 
 import com.facebook.presto.hive.$internal.com.google.common.reflect.TypeToken;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -40,7 +37,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.avro.ValidateAll;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -48,7 +44,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 public class PartitionPersistInfo implements Writable {
     private Long dbId;
@@ -107,6 +102,7 @@ public class PartitionPersistInfo implements Writable {
     }
 
     /**
+     * Initialize an empty object, the purpose is for placeholders, compatible with older versions
      *
      * @return
      * @throws DdlException
@@ -210,7 +206,8 @@ public class PartitionPersistInfo implements Writable {
             }
             String multiValuesJsonStr = Text.readString(in);
             if (multiValuesJsonStr != null) {
-                java.lang.reflect.Type multiValueType = new TypeToken<List<ArrayList<String>>>() {}.getType();
+                java.lang.reflect.Type multiValueType = new TypeToken<List<ArrayList<String>>>() {
+                }.getType();
                 multiValues = GsonUtils.GSON.fromJson(multiValuesJsonStr, multiValueType);
             }
         }
