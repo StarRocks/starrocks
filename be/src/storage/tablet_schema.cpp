@@ -435,6 +435,40 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return partial_tablet_schema;
 }
 
+Status TabletSchema::_init_schema() const {
+    starrocks::vectorized::Fields fields;
+    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
+        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, column(cid));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+    }
+    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());
+    return Status::OK();
+}
+
+Status TabletSchema::_init_schema_op() const {
+    starrocks::vectorized::Fields fields;
+    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
+        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, column(cid));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+    }
+    _schema_with_op = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());
+    auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
+                                                                    FieldType::OLAP_FIELD_TYPE_TINYINT, false);
+    op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
+    _schema_with_op->append(op_column);
+    return Status::OK();
+}
+
+vectorized::Schema* TabletSchema::schema() const {
+    _schema_init.call([this] {return _init_schema(); });
+    return _schema.get();
+}
+
+vectorized::Schema* TabletSchema::schema_with_op() const {
+    _schema_with_op_init.call([this] {return _init_schema_op();});
+    return _schema_with_op.get();
+}
+
 TabletSchema::~TabletSchema() {
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);

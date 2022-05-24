@@ -18,13 +18,33 @@ class TabletSchema;
 
 namespace vectorized {
 
+class MemTableFlushContext {
+public:
+    void init(std::unique_ptr<Column> deletes, ChunkPtr result_chunk, RowsetWriter* rowset_writer, MemTracker* mem_tracker) {
+        _deletes = std::move(deletes);
+        _result_chunk = std::move(result_chunk);
+        _rowset_writer = rowset_writer;
+        _mem_tracker = mem_tracker;
+    }
+    
+    Status flush();
+    size_t memory_usage() const;
+    MemTracker* mem_tracker() { return _mem_tracker; }
+
+private:
+    std::unique_ptr<Column> _deletes;
+    ChunkPtr _result_chunk;
+    RowsetWriter* _rowset_writer;
+    MemTracker* _mem_tracker;
+};
+
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-             RowsetWriter* rowset_writer, MemTracker* mem_tracker);
+             RowsetWriter* rowset_writer, MemTracker* mem_tracker, bool is_load = false);
 
-    MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
-             MemTracker* mem_tracker);
+    MemTable(int64_t tablet_id, Schema* schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+             MemTracker* mem_tracker, bool is_load = false);
 
     ~MemTable();
 
@@ -44,10 +64,14 @@ public:
 
     Status finalize();
 
+    Status load_finalize(MemTableFlushContext* flush_context);
+
     bool is_full() const;
 
+    void reset_memtable();
+
 private:
-    void _merge();
+    void _merge(bool is_final);
 
     void _sort(bool is_final);
     void _sort_column_inc();
@@ -66,7 +90,7 @@ private:
     std::vector<uint32_t> _selective_values;
 
     int64_t _tablet_id;
-    Schema _vectorized_schema;
+    Schema* _vectorized_schema;
     const TabletSchema* _tablet_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
@@ -93,6 +117,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+    bool _is_load;
 };
 
 } // namespace vectorized

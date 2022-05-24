@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "storage/olap_define.h"
+#include "storage/memtable.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
 
@@ -62,7 +63,7 @@ public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
-    Status submit(std::unique_ptr<vectorized::MemTable> mem_table);
+    Status submit(std::unique_ptr<vectorized::MemTableFlushContext> memtable_flush_context);
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
@@ -88,7 +89,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(vectorized::MemTable* mem_table);
+    void _flush_memtable(vectorized::MemTableFlushContext* mem_table);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 

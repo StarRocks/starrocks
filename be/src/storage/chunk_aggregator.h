@@ -17,11 +17,10 @@ namespace starrocks::vectorized {
 using CompareFN = void (*)(const Column* col, uint8_t* flags);
 
 class ChunkAggregator {
-private:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
-                    bool is_vertical_merge, bool is_key);
-
 public:
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
+                    bool is_vertical_merge, bool is_key, bool need_reset);
+
     ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
 
     ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
@@ -43,6 +42,12 @@ public:
 
     bool has_aggregate_data() const { return _has_aggregate; }
 
+    bool has_aggregate_chunk() const { return _aggregate_chunk != nullptr; }
+
+    void clone_empty_chunk(const ChunkPtr& chunk);
+
+    void swap_aggregate_result(const ChunkPtr& chunk);
+
     bool is_finish();
 
     void aggregate_reset();
@@ -56,6 +61,8 @@ public:
     size_t bytes_usage();
 
     void close();
+
+    void reset();
 
 private:
     bool _row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const;

@@ -111,6 +111,8 @@ private:
 
     void _reset_mem_table();
 
+    void _new_mem_table();
+
     State _get_state() { return _state.load(std::memory_order_acquire); }
     void _set_state(State state) { _state.store(state, std::memory_order_release); }
 

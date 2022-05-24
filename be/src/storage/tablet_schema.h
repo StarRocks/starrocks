@@ -29,8 +29,11 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_define.h"
 #include "storage/type_utils.h"
+#include "storage/chunk_helper.h"
 #include "storage/types.h"
+#include "column/schema.h"
 #include "util/c_string.h"
+#include "util/once.h"
 
 namespace starrocks {
 
@@ -39,6 +42,13 @@ class MemTracker;
 class SegmentReaderWriterTest;
 class SegmentReaderWriterTest_estimate_segment_size_Test;
 class SegmentReaderWriterTest_TestStringDict_Test;
+
+namespace vectorized {
+class Schema;
+class ChunkHelper;
+}
+
+static const string LOAD_OP_COLUMN = "__op";
 
 class TabletColumn {
     struct ExtraFields {
@@ -266,13 +276,21 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
-private:
+    vectorized::Schema* schema() const;
+
+    vectorized::Schema* schema_with_op() const;
+
+private:    
     friend class SegmentReaderWriterTest;
     FRIEND_TEST(SegmentReaderWriterTest, estimate_segment_size);
     FRIEND_TEST(SegmentReaderWriterTest, TestStringDict);
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+    Status _init_schema() const;
+
+    Status _init_schema_op() const;
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
@@ -289,6 +307,12 @@ private:
     // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
     uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
+
+    mutable std::unique_ptr<vectorized::Schema> _schema;
+    mutable std::unique_ptr<vectorized::Schema> _schema_with_op;
+
+    mutable StarRocksCallOnce<Status> _schema_init;
+    mutable StarRocksCallOnce<Status> _schema_with_op_init;
 
     bool _has_bf_fpp = false;
 };

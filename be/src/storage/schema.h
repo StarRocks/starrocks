@@ -29,6 +29,7 @@
 #include "storage/types.h"
 
 namespace starrocks {
+class TabletSchema;
 
 // The class is used to represent row's format in memory.  Each row contains
 // multiple columns, some of which are key-columns (the rest are value-columns).
@@ -39,55 +40,15 @@ namespace starrocks {
 // we store all column schema maybe accessed here. And default access through column id
 class Schema {
 public:
-    Schema(const TabletSchema& tablet_schema) {
-        size_t num_columns = tablet_schema.num_columns();
-        std::vector<ColumnId> col_ids(num_columns);
-        std::vector<TabletColumn> columns;
-        columns.reserve(num_columns);
-
-        size_t num_key_columns = 0;
-        for (uint32_t cid = 0; cid < num_columns; ++cid) {
-            col_ids[cid] = cid;
-            const TabletColumn& column = tablet_schema.column(cid);
-            if (column.is_key()) {
-                ++num_key_columns;
-            }
-            columns.push_back(column);
-        }
-
-        _init(columns, col_ids, num_key_columns);
-    }
+    Schema(const TabletSchema& tablet_schema);
 
     // All the columns of one table may exist in the columns param, but col_ids is only a subset.
-    Schema(const std::vector<TabletColumn>& columns, const std::vector<ColumnId>& col_ids) {
-        size_t num_key_columns = 0;
-        for (const auto& c : columns) {
-            if (c.is_key()) {
-                ++num_key_columns;
-            }
-        }
-
-        _init(columns, col_ids, num_key_columns);
-    }
+    Schema(const std::vector<TabletColumn>& columns, const std::vector<ColumnId>& col_ids);
 
     // Only for UT
-    Schema(const std::vector<TabletColumn>& columns, size_t num_key_columns) {
-        std::vector<ColumnId> col_ids(columns.size());
-        for (uint32_t cid = 0; cid < columns.size(); ++cid) {
-            col_ids[cid] = cid;
-        }
+    Schema(const std::vector<TabletColumn>& columns, size_t num_key_columns);
 
-        _init(columns, col_ids, num_key_columns);
-    }
-
-    Schema(const std::vector<const Field*>& cols, size_t num_key_columns) {
-        std::vector<ColumnId> col_ids(cols.size());
-        for (uint32_t cid = 0; cid < cols.size(); ++cid) {
-            col_ids[cid] = cid;
-        }
-
-        _init(cols, col_ids, num_key_columns);
-    }
+    Schema(const std::vector<const Field*>& cols, size_t num_key_columns);
 
     Schema(const Schema&);
     Schema& operator=(const Schema& other);
@@ -100,12 +61,12 @@ public:
     size_t num_key_columns() const { return _num_key_columns; }
     size_t schema_size() const { return _schema_size; }
 
-    size_t column_offset(ColumnId cid) const { return _col_offsets[cid]; }
+    inline size_t column_offset(ColumnId cid) const;
 
     // TODO(lingbin): What is the difference between colun_size() and index_size()
-    size_t column_size(ColumnId cid) const { return _cols[cid]->size(); }
+    inline size_t column_size(ColumnId cid) const;
 
-    size_t index_size(ColumnId cid) const { return _cols[cid]->index_size(); }
+    inline size_t index_size(ColumnId cid) const;
 
     bool is_null(const char* row, int index) const { return *reinterpret_cast<const bool*>(row + _col_offsets[index]); }
     void set_is_null(void* row, uint32_t cid, bool is_null) const {

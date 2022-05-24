@@ -25,6 +25,56 @@
 
 namespace starrocks {
 
+Schema::Schema(const TabletSchema& tablet_schema) {
+        size_t num_columns = tablet_schema.num_columns();
+        std::vector<ColumnId> col_ids(num_columns);
+        std::vector<TabletColumn> columns;
+        columns.reserve(num_columns);
+
+        size_t num_key_columns = 0;
+        for (uint32_t cid = 0; cid < num_columns; ++cid) {
+            col_ids[cid] = cid;
+            const TabletColumn& column = tablet_schema.column(cid);
+            if (column.is_key()) {
+                ++num_key_columns;
+            }
+            columns.push_back(column);
+        }
+
+        _init(columns, col_ids, num_key_columns);
+    }
+
+// All the columns of one table may exist in the columns param, but col_ids is only a subset.
+Schema::Schema(const std::vector<TabletColumn>& columns, const std::vector<ColumnId>& col_ids) {
+    size_t num_key_columns = 0;
+    for (const auto& c : columns) {
+        if (c.is_key()) {
+            ++num_key_columns;
+        }
+    }
+
+    _init(columns, col_ids, num_key_columns);
+}
+
+// Only for UT
+Schema::Schema(const std::vector<TabletColumn>& columns, size_t num_key_columns) {
+    std::vector<ColumnId> col_ids(columns.size());
+    for (uint32_t cid = 0; cid < columns.size(); ++cid) {
+        col_ids[cid] = cid;
+    }
+
+    _init(columns, col_ids, num_key_columns);
+}
+
+Schema::Schema(const std::vector<const Field*>& cols, size_t num_key_columns) {
+    std::vector<ColumnId> col_ids(cols.size());
+    for (uint32_t cid = 0; cid < cols.size(); ++cid) {
+        col_ids[cid] = cid;
+    }
+
+    _init(cols, col_ids, num_key_columns);
+}
+
 Schema::Schema(const Schema& other) {
     _copy_from(other);
 }
@@ -187,5 +237,11 @@ std::string Schema::debug_string() const {
     ss << "],num_key_columns=" << _num_key_columns << ",schema_size=" << _schema_size;
     return ss.str();
 }
+
+inline size_t Schema::column_offset(ColumnId cid) const { return _col_offsets[cid]; }
+
+inline size_t Schema::column_size(ColumnId cid) const { return _cols[cid]->size(); }
+
+inline size_t Schema::index_size(ColumnId cid) const { return _cols[cid]->index_size(); }
 
 } // namespace starrocks

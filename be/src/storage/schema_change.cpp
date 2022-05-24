@@ -1115,7 +1115,7 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
 
     // memtable max buffer size set 80% of memory limit so that it will do _merge() if reach 80%
     // do finialize() and flush() if reach 90%
-    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, new_rowset_writer,
                                                 _memory_limitation * 0.8, tls_thread_status.mem_tracker());
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
@@ -1136,7 +1136,7 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
         if (cur_usage > tls_thread_status.mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, new_rowset_writer,
                                                    _memory_limitation * 0.9, tls_thread_status.mem_tracker());
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << tls_thread_status.mem_tracker()->consumption();
@@ -1169,7 +1169,7 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, new_rowset_writer,
                                                    _memory_limitation * 0.8, tls_thread_status.mem_tracker());
         }
 

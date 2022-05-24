@@ -185,7 +185,7 @@ Status DeltaWriter::_init() {
     }
 
     _tablet_schema = writer_context.tablet_schema;
-    _reset_mem_table();
+    _new_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _set_state(kWriting);
     return Status::OK();
@@ -234,12 +234,14 @@ Status DeltaWriter::close() {
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
+    _mem_table.reset();
     return Status::OK();
 }
 
 Status DeltaWriter::_flush_memtable_async() {
-    RETURN_IF_ERROR(_mem_table->finalize());
-    return _flush_token->submit(std::move(_mem_table));
+    std::unique_ptr<MemTableFlushContext> memtable_flush_context = std::make_unique<MemTableFlushContext>();
+    RETURN_IF_ERROR(_mem_table->load_finalize(memtable_flush_context.get()));
+    return _flush_token->submit(std::move(memtable_flush_context));
 }
 
 Status DeltaWriter::_flush_memtable() {
@@ -247,9 +249,13 @@ Status DeltaWriter::_flush_memtable() {
     return _flush_token->wait();
 }
 
-void DeltaWriter::_reset_mem_table() {
+void DeltaWriter::_new_mem_table() {
     _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _rowset_writer.get(),
                                             _mem_tracker);
+}
+
+void DeltaWriter::_reset_mem_table() {
+    _mem_table->reset_memtable();
 }
 
 Status DeltaWriter::commit() {

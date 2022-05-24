@@ -10,7 +10,7 @@
 namespace starrocks::vectorized {
 
 ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
-                                 uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
+                                 uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key, bool need_reset)
         : _schema(schema),
           _reserve_rows(reserve_rows),
           _max_aggregate_rows(max_aggregate_rows),
@@ -48,19 +48,21 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
         _column_aggregator.emplace_back(ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
     }
 
-    aggregate_reset();
+    if (need_reset) {
+        aggregate_reset();
+    }
 }
 
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
-        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false) {}
+        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false, true) {}
 
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
                                  double factor)
-        : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false) {}
+        : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false, true) {}
 
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
-        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
+        : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key, true) {}
 
 bool ChunkAggregator::_row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const {
     for (uint16_t i = 0; i < _key_fields; i++) {
@@ -194,6 +196,61 @@ void ChunkAggregator::aggregate_reset() {
     _element_memory_usage_num_rows = 0;
     _bytes_usage = 0;
     _bytes_usage_num_rows = 0;
+}
+
+void ChunkAggregator::clone_empty_chunk(const ChunkPtr& chunk) {
+    _aggregate_chunk = chunk->clone_empty_with_schema(_reserve_rows);
+    _aggregate_rows = 0;
+
+    for (int i = 0; i < _num_fields; ++i) {
+        auto p = _aggregate_chunk->get_column_by_index(i).get();
+        _column_aggregator[i]->update_aggregate(p);
+    }
+    _has_aggregate = false;
+
+    _element_memory_usage = 0;
+    _element_memory_usage_num_rows = 0;
+    _bytes_usage = 0;
+    _bytes_usage_num_rows = 0; 
+}
+
+void ChunkAggregator::swap_aggregate_result(const ChunkPtr& chunk) {
+    for (int i = 0; i < _num_fields; ++i) {
+        _column_aggregator[i]->finalize();
+    }
+    DCHECK(chunk->is_empty());
+    chunk->swap_chunk(*_aggregate_chunk);
+    _aggregate_rows = 0;
+
+    for (int i = 0; i < _num_fields; ++i) {
+        auto p = _aggregate_chunk->get_column_by_index(i).get();
+        _column_aggregator[i]->update_aggregate(p);
+    }
+    _has_aggregate = false;
+
+    _element_memory_usage = 0;
+    _element_memory_usage_num_rows = 0;
+    _bytes_usage = 0;
+    _bytes_usage_num_rows = 0; 
+}
+
+void ChunkAggregator::reset() {
+    DCHECK(_aggregate_chunk->is_empty());
+    _element_memory_usage = 0;
+    _element_memory_usage_num_rows = 0;
+    _bytes_usage = 0;
+    _bytes_usage_num_rows = 0;
+    _source_row = 0;
+    _source_size = 0;
+    _is_eq.clear();
+    _selective_index.clear();
+    _aggregate_loops.clear();
+    _aggregate_rows = 0;
+    _do_aggregate = true;
+    _has_aggregate = false;
+    _merged_rows = 0;
+    _is_vertical_merge = false;
+    _is_key = false;
 }
 
 ChunkPtr ChunkAggregator::aggregate_result() {

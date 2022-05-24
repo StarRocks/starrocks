@@ -155,4 +155,5 @@ add_library(Storage STATIC
     vertical_compaction_task.cpp
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
+    field.cpp
 )

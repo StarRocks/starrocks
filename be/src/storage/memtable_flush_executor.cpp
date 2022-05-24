@@ -24,29 +24,28 @@
 #include <memory>
 
 #include "runtime/current_thread.h"
-#include "storage/memtable.h"
 
 namespace starrocks {
 
 class MemtableFlushTask final : public Runnable {
 public:
-    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable)
-            : _flush_token(flush_token), _memtable(std::move(memtable)) {}
+    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTableFlushContext> memtable_flush_context)
+            : _flush_token(flush_token), _memtable_flush_context(std::move(memtable_flush_context)) {}
 
     ~MemtableFlushTask() = default;
 
     void run() override {
-        SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
+        SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable_flush_context->mem_tracker(), false);
 
         _flush_token->_stats.cur_flush_count++;
-        _flush_token->_flush_memtable(_memtable.get());
+        _flush_token->_flush_memtable(_memtable_flush_context.get());
         _flush_token->_stats.cur_flush_count--;
-        _memtable.reset();
+        _memtable_flush_context.reset();
     }
 
 private:
     FlushToken* _flush_token;
-    std::unique_ptr<vectorized::MemTable> _memtable;
+    std::unique_ptr<vectorized::MemTableFlushContext> _memtable_flush_context;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
@@ -55,11 +54,11 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
+Status FlushToken::submit(std::unique_ptr<vectorized::MemTableFlushContext> memtable_flush_context) {
     RETURN_IF_ERROR(status());
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
-    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
+    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable_flush_context));
     return _flush_token->submit(std::move(task));
 }
 
@@ -73,7 +72,7 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(vectorized::MemTable* memtable) {
+void FlushToken::_flush_memtable(vectorized::MemTableFlushContext* memtable) {
     // If previous flush has failed, return directly
     if (!status().ok()) return;
 
