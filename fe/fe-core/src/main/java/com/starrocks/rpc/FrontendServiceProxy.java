@@ -21,7 +21,7 @@ public class FrontendServiceProxy {
         FrontendService.Client client = ClientPool.frontendPool.borrowObject(address, timeoutMs);
         boolean isConnValid = false;
         try {
-            for (int i = 0; i < RETRY_TIMES ; i++) {
+            for (int i = 0; i < RETRY_TIMES; i++) {
                 try {
                     T t = callable.invoke(client);
                     isConnValid = true;

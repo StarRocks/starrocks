@@ -3,7 +3,6 @@
 package com.starrocks.external.starrocks;
 
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TGetTableMetaRequest;
