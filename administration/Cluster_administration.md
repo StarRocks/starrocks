@@ -1,163 +1,288 @@
-# Cluster Management
+# Manage a cluster
 
-## Cluster start/stop
+This topic explains how to manage a cluster.
 
-After the StarRocks cluster is deployed, the next step is to start the cluster for servicing. Before that you need to ensure that the configuration file meets the requirements.
+## Start and stop a cluster
 
-### FE startup
+We recommend that your machines in the cluster are equipped with the following configurations:
 
-Before you set up the FE, configure the metadata placement directory (meta_dir) and communication port.
+- The machines used as frontends (FEs) are equipped with an 8-core CPU and 16 GB of RAM or higher configurations.
+- The machines used as backends (BEs) are equipped with a 16-core CPU and 64 GB of RAM or higher configurations.
 
-***meta_dir***: The directory where the FE stores metadata. The directory needs to be created in advance and written in the configuration file. Since the metadata of the FE is the metadata of the whole system, it is recommended not to mix with other processes for deployment.
+### Start an FE
 
-There are four communication ports configured by the FE:
+Before you set up an FE, configure the `meta_dir` parameter and the communication ports:
 
-|Port Name|Default Port|Role|
-|--|--|--|
-|http_port|8030|the http server port on the FE|
-|rpc_port|9020|the thrift server port on FE|
-|query_port|9030| the mysql server port on FE|
-|edit_log_port|9010|Port for communication between FE Groups (Master, Follower, Observer)|
+- `meta_dir`: the directory in which the FE stores metadata. By default, set the `meta_dir` parameter to `${STARROCKS_HOME}/meta`. If you want to specify the directory, define it in the **fe/conf/fe.conf** file. You must create the directory before you configure the `meta_dir` parameter. The metadata stored in the FE is the metadata of the whole system, we recommend that you put the metadata directory in a separate folder.
+- Communication ports: there are four communication ports available for the BE.
 
-To start FE:
+| **Port name** | **Default port number** | **Description**                                              |
+| ------------- | ----------------------- | ------------------------------------------------------------ |
+| http_port     | 8030                    | The port that is used by the FE to communicate with an HTTP protocol. |
+| rpc_port      | 9020                    | The port that is used by the FE to communicate with a thrift server. |
+| query_port    | 9030                    | The port that is used by the FE to communicate with a MySQL protocol. |
+| edit_log_port | 9010                    | The port that is used for communication between the FEs in a cluster |
 
-1. Go to the deployment directory of the FE process
-  
-2. * Run `sh bin/start_fe.sh --daemon` to start the service
+After you complete the previous configurations, perform the following steps to start the FE:
 
-FE deploys multiple nodes in order to ensure high availability. Typically, users deploy 3 FEs (1 Master + 2 Follower).
+1. Navigate to the deployment directory of the FE.
+2. Run `sh bin/start_fe.sh --daemon` to start the FE.
 
-When starting multiple nodes, it is recommended to start  the Followers one by one, and then start the Master.
+You can deploy multiple FEs to ensure high availability. Typically, you can deploy three FEs: one master FE and two follower FEs.
 
-It is recommended to verify the setup of any FE by sending a query.
+When you start multiple FEs, start the follower FE one by one. When you upgrade a cluster, upgrade the follower FEs and then upgrade the master FE. By doing so, you can detect errors that may occur during the upgrades of the follower FEs and make sure that the cluster can continue to properly process queries.
 
-### BE startup
+**Note**:
 
-Before set up the BE, configure the  data directory (storage_root_path) and communication port.
+- If you configured multiple follower FEs, the cluster can select one follower FE as the master FE to process queries only when more than half of configured follower FEs are available.
+- We recommend that you verify every FE that you want to start. You can send a query to an FE to verify the FE.
 
-***storage_root_path*** The directory where the BE stores the storage files. The directory needs to be created in advance. It is recommended to create one directory per disk.
+### Start a BE
 
-There are three communication ports configured by the BE:
+Before you set up the BE, configure the  `storage_root_path` parameter and the communication ports:
 
-|Port Name|Default Port|Role|
-|--|--|--|
-|be_port|9060|The thrift server port on BE to receive requests from FE|
-|webserver_port|8040|The http server port on the BE|
-|heartbeat_service_port|9050|The heartbeat service (thrift) port on the BE to receive heartbeats from the FE|
+- `storage_root_path`: indicates the directory for the BE to store the storage files. The directory needs to be created in advance. We recommend creating one directory per disk.
+- Communication ports: there are four communication ports available for the BE.
 
-### Confirm cluster health status
+| **Port** **name**  | **Default** **port** **number** | **Description**                                              |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------ |
+| be_port                | 9060                                | The port that is used by the BE to communicate with an FE.   |
+| webserver_port         | 8040                                | The port that is used by the BE to communicate with an HTTP protocol. |
+| heartbeat_service_port | 9050                                | The port that is used by the BE to receive heartbeats from an FE. |
+| brpc                   | 8060                                | The port that is used for communication between the BEs in a cluster. |
 
-After setting up the BE and FE, you need to check the process status to make sure the services are started properly.
+### Check the health status of a cluster
 
-* Run `http://be_host:be_http_port3/api/health` to confirm the BE status
+After you set up the BEs and FEs of a cluster, you need to check the statuses of FEs and BEs to ensure the FEs and BEs are started normally:
 
-  * Returns {"status": "OK", "msg": "To Be Added"} indicating normal startup.
+- Run `http://be_host:be_http_port/api/health` to check the statuses of BEs. If `{"status": "OK", "msg": "To Be Added"}` is returned, the BEs have properly started.
 
-* Run `http://fe_host:fe_http_port/api/bootstrap` to confirm the FE status.
+- Run `http://fe_host:fe_http_port/api/bootstrap` to check the statuses of FEs. If `{"status": "OK", "msg": "Success"}` is returned, the FEs have properly started.
 
-  * Returns {"status": "OK", "msg": "Success"} indicating normal startup.
+### Stop a cluster
 
-### Cluster stop
+To stop a cluster, you need to stop all the FEs and BEs in the cluster:
 
-* Go to the FE directory and run `sh bin/stop_fe.sh`
+- Go to the deployment directory of each FE and run `sh bin/stop_fe.sh`.
 
-* Enter the BE directory and run `sh bin/stop_be.sh`
+- Go to the deployment directory of each BE and run `sh bin/stop_be.sh`.
 
-### Cluster upgrade
+### Upgrade a cluster
 
-StarRocks can perform a rolling upgrade, that is, to upgrade the BE first and then the FE. StarRocks ensures that the BE is backward compatible with the FE. The upgrade has three steps, including testing the upgrade, rolling the upgrade, and observing the service.
+StarRocks can perform a rolling upgrade, which allows you to first upgrade the BEs, then the FEs, and finally the Brokers in a cluster. StarRocks ensures that the BEs are backward compatible with the FEs.
 
-### Upgrade preparation
+#### Before you begin
 
-* After data verification, distribute the new BE and FE binaries to their respective directories.
+- (Optional) Test whether the cluster after the upgrade affects your current data.
 
-* For minor upgrades, you only need to  upgrade `starrocks_be` for the BE and `starrocks-fe.jar` for the FE.
-* For major upgrades, you may need to upgrade other files (including but not limited to bin/ lib/ etc.); if you are not sure whether you need to replace other files, just replace them all.
+- Distribute the BE and FE binary files for new versions of BE and FE to the deployment directory of BE and FE.
 
-### Upgrade
+- For a minor version update (for example, from 2.0.x to 2.0.y), you only need to upgrade `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
 
-* Confirm that the file replacement for the new version is complete.
+- For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
 
-* Reboot the BE nodes one by one and then reboot the FE nodes one by one.
-  
-* Confirm that the previous instance is started successfully, and then restart the next instance.
+#### Procedure
 
-#### BE Upgrade
+1. Confirm that the files of the previous version are replaced with the files of the new version.
+2. Restart the BEs one by one and then restart the FEs one by one. Start the next BE or FE only after the previous BE or FE has successfully started.
 
-```shell
-cd be_work_dir 
-mv lib lib.bak 
-cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
+##### Upgrade a  BE
+
+```Plain%20Text
+cd be_work_dir
+
 sh bin/stop_be.sh
+
+mv lib lib.bak 
+
+mv bin bin.bak
+
+cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
+
+cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
+
 sh bin/start_be.sh --daemon
+
 ps aux | grep starrocks_be
 ```
 
-#### FE Upgrade
+##### Upgrade an FE
 
-```shell
-cd fe_work_dir 
-mv lib lib.bak 
-cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+```Plain%20Text
+cd fe_work_dir
+
 sh bin/stop_fe.sh
+
+mv lib lib.bak 
+
+mv bin bin.bak
+
+cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+
+cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
+
 sh bin/start_fe.sh --daemon
+
+ps aux | grep StarRocksFE
+```
+
+##### Upgrade a Broker
+
+```Plain%20Text
+cd broker_work_dir 
+
+mv lib lib.bak 
+
+mv bin bin.bak
+
+cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
+
+cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
+
+sh bin/stop_broker.sh
+
+sh bin/start_broker.sh --daemon
+
+ps aux | grep broker
+```
+
+**Note**: You must update the BEs before you upgrade the FEs. If you upgrade the FEs before the BEs, the FEs of the new version may be incompatible with the BEs of the previous version. As a result, the commands that are issued by the FEs may cause the BEs not to work properly.
+
+## Roll back a cluster
+
+All StarRocks versions, which are named StarRocks-xx, support rollbacks. You need to first roll back the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to roll back the cluster to the previous version. This way, you can quickly recover the cluster.
+
+### Before you begin
+
+- For a minor version rollback (for example, from 2.0.x to 2.0.x), you need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
+
+- To a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the bin and lib folders of the FEs and BEs.
+
+### Procedure
+
+1. Confirm that the files of the previous version are replaced with the files of the new version.
+2. Restart the FEs one by one and then restart the BEs one by one.
+
+**Note**: Start the next FE or BE only after the previous FE or BE has successfully started.
+
+#### Roll back an FE
+
+```Plain%20Text
+cd fe_work_dir 
+
+mv lib libtmp.bak 
+
+mv bin bintmp.bak 
+
+mv lib.bak lib   
+
+mv bin.bak bin 
+
+sh bin/stop_fe.sh
+
+sh bin/start_fe.sh --daemon
+
 ps aux | grep StarRocksFe
 ```
 
-Note:
+#### Roll back a BE
 
-The start order of BE and FE should not be reversed. This is because if the upgrade causes incompatibility between different versions of FE and BE, commands from the new FE may cause the old BE to fail. This problem can be circumvented if the BE is started first. Because a new BE file has been deployed and the BE is already a new BE after it is automatically restarted via the daemon.
+```Plain%20Text
+cd be_work_dir 
 
-##### Usage Notes for performing grayscale upgrade from StarRocks 2.0 to 2.1
+mv lib libtmp.bak 
 
-If you need to perform grayscale upgrade from StarRocks 2.0 to 2.1, you need to set the following settings in advance to ensure that the chunksize (i.e., the number of rows of data processed by the BE node in each batch) is the same for all BE nodes.
+mv bin bintmp.bak 
 
-* The configuration item vector_chunk_size for all BE nodes is 4096 (the default value is 4096 in rows).
-  > You can set the value of `vector_chunk_size` in the BE node's configuration file be.conf. When you successfully set the value of `vector_chunk_size`, you need to restart the BE node to make the change take effect.
-* The global variable batch_size of the FE node is less than or equal to 4096 (the default and recommended value is 4096 in rows).
+mv lib.bak lib
 
-```plain text
+mv bin.bak bin
+
+sh bin/stop_be.sh
+
+sh bin/start_be.sh --daemon
+
+ps aux | grep starrocks_be
+```
+
+#### Roll back a Broker
+
+```Plain%20Text
+cd broker_work_dir 
+
+mv lib libtmp.bak 
+
+mv bin bintmp.bak
+
+mv lib.bak lib
+
+mv bin.bak bin
+
+sh bin/stop_broker.sh
+
+sh bin/start_broker.sh --daemon
+
+ps aux | grep broker
+```
+
+**Note**: You must roll back the FEs before you roll back the BEs. If you rollback the BEs before the FEs, the FEs of the new version may be incompatible with the BEs of the previous version. As a result, the commands that are issued by the FEs may cause the BEs to break down.
+
+### Usage notes for grayscale upgrade from StarRocks 2.0 to StarRocks 2.1
+
+If you need to perform a grayscale upgrade from StarRocks 2.0 to StarRocks 2.1, set the following configuration items to ensure that the chunk size (which indicates the number of rows of data that can be processed by a BE at a time) is the same for all BEs.
+
+- `vector_chunk_size`: set this configuration item to 4096 for all BEs. Default value: 4096. Unit: rows.
+
+> You must set the `vector_chunk_size` configuration item in the **be.conf** file of each BE. After you set the `vector_chunk_size` configuration item for a BE, you must restart the BE to make the setting take effect.
+
+- `batch_size`: set this configuration item less than or equal to 4096 for all FEs. Default value: 4096. Unit: rows. This option is a global variable in the cluster. If you modified this configuration item in the current session, this configuration item in other sessions also changes.
+
+```Lua
 -- check batch_size
+
 mysql> show variables like '%batch_size%';
+
 +---------------+-------+
+
 | Variable_name | Value |
+
 +---------------+-------+
+
 | batch_size    | 1024  |
+
 +---------------+-------+
+
 1 row in set (0.00 sec)
 
+
+
 -- set batch_size
+
 mysql> set global batch_size = 4096;
 ```
 
-### Test the BE upgrade
+## Test the upgrade of a cluster (Optional)
 
-* Select an arbitrary BE node and deploy the latest `starrocks_be` binary.
+Before you upgrade a cluster, you can perform the following steps to test whether the cluster after the upgrade affects your current data.
 
-* Reboot the BE node and check if the restart is successful by querying the BE log `be.INFO`.
-  
-* If the restart fails, troubleshoot first. If you can’t reproduce the error for diagnosis, you can directly delete the BE by `DROP BACKEND` to clean up the data. Restart the BE with the previous version of `starrocks_be`, then run `ADD BACKEND` again. (This method will result in the loss of one replication of the data, so be sure to perform this operation with three completel replications)
+### Test the upgrade of BEs
 
-### Test  the FE upgrade
+1. Select a BE and deploy the **starrocks_be** binary file of the new version on the BE.
+2. Restart the BE. Then view the **be.INFO** log file of BE to check whether the restart is successful.
+3. If the restart fails, troubleshoot the failure.
 
-* Deploy the new version FE to your own local development machine for testing
+### Test the upgrade of FEs
 
-* Modify the configuration file `fe.conf`. Set **all ports to be different from the online FE**.
-  
-* Add `cluster_id=123456` to `fe.conf`
-  
-* Add `metadata_failure_recovery=true` to `fe.conf`
-  
-* Copy the metadata directory `starrocks-meta` of the online leader FE to the test environment.
+The FE metadata is critical and an abnormal upgrade may cause data loss. We recommend that you test the upgrade of FEs in your test environment (If you do not have a test environment, you can first upgrade a follower FE or an observer FE and then check whether it runs as expected). Proceed with caution when you perform the following steps.
 
-* Change `cluster_id` in the `starrocks-meta/image/VERSION` file (this is the file copied to the test environment)
+1. Deploy an FE of the new version in your testing environment, such as your local development machine.
+2. Modify the **fe.conf** file. Configure the ports of the test FE to be different from the ports of the online FEs.
+3. Set `cluster_id` in the **fe.conf** file to `123456`.
+4. Set `metadata_failure_recovery` in the **fe.conf** file to `true`.
+5. Copy the metadata directory of the master FE in the production environment to your test environment.
+6. Set the `cluster_id` configuration item in the **meta/image/VERSION** file to 123456.
+7. In your test environment, run `sh bin/start_fe.sh` to start the test FE.
+8. View the **fe.log** file of the test FE to check whether the restart is successful.
+9. If the restart is successful, run `sh bin/stop_fe.sh` to stop the test FE.
 
-* In the test environment, run `sh bin/start_fe.sh` to start the FE.
-  
-* Confirm if the restart is successful through the FE log `fe.log`.
-  
-* If the restart is successful, run `sh bin/stop_fe.sh` to stop the FE process in the test environment.
-
-**The purpose of steps 2-6 above is to prevent the FE in the  test environment from starting and connecting to the online environment by mistake.**
-
-**Because the FE metadata is very critical and an abnormal upgrade may cause data loss, please be cautious when performing the steps abov
+The step 2 through 6 aim to prevent the test FE from connecting to the production environment after a restart.
