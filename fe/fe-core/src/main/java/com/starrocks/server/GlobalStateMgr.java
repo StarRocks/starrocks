@@ -3683,7 +3683,7 @@ public class GlobalStateMgr {
             List<SingleRangePartitionDesc> singleRangePartitionDescs = partitionDescs.stream()
                     .map(item -> (SingleRangePartitionDesc) item)
                     .collect(Collectors.toList());
-            rangePartitionInfo.handleNewRangePartitionDescsV2(singleRangePartitionDescs,
+            rangePartitionInfo.handleNewRangePartitionDescs(singleRangePartitionDescs,
                     partitionList, existPartitionNameSet, isTempPartition);
         } else if (partitionType == PartitionType.LIST) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
