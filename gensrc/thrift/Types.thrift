@@ -447,3 +447,10 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
 }
+
+const i64 MAX_VARCHAR_LENGTH = 1048576;
+const i64 MAX_CHAR_LENGTH = 255;
+const i64 MAX_CHAR_INLINE_LENGTH = 128;
+const i64 DEFAULT_HLL_LENGTH = 16385;
+const i64 DEFAULT_BITMAP_LENGTH = 128;
+const i64 DEFAULT_JSON_LENGTH = 128;

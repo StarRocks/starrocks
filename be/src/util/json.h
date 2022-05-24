@@ -10,6 +10,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "gen_cpp/Types_constants.h"
 #include "glog/logging.h"
 #include "simdjson.h"
 #include "util/coding.h"
@@ -28,7 +29,7 @@ enum JsonType {
     JSON_OBJECT = 5,
 };
 
-constexpr int kJsonDefaultSize = 128;
+const int kJsonDefaultSize = g_Types_constants.DEFAULT_JSON_LENGTH;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
 
 class JsonValue {

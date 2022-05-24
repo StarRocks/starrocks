@@ -76,6 +76,11 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) : 
     }
 }
 
+const int TypeDescriptor::MAX_VARCHAR_LENGTH = g_Types_constants.MAX_VARCHAR_LENGTH;
+const int TypeDescriptor::MAX_CHAR_LENGTH = g_Types_constants.MAX_CHAR_LENGTH;
+const int TypeDescriptor::MAX_CHAR_INLINE_LENGTH = g_Types_constants.MAX_CHAR_INLINE_LENGTH;
+const int TypeDescriptor::DEFAULT_BITMAP_LENGTH = g_Types_constants.DEFAULT_BITMAP_LENGTH;
+
 void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
     thrift_type->__isset.types = true;
     thrift_type->types.emplace_back();

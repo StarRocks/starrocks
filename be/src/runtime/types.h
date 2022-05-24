@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "common/config.h"
+#include "gen_cpp/Types_constants.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "runtime/primitive_type.h"
@@ -43,10 +44,10 @@ struct TypeDescriptor {
     PrimitiveType type{INVALID_TYPE};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
-    static constexpr int MAX_VARCHAR_LENGTH = 1048576;
-    static constexpr int MAX_CHAR_LENGTH = 255;
-    static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
-    static constexpr int DEFAULT_BITMAP_LENGTH = 128;
+    static const int MAX_VARCHAR_LENGTH;
+    static const int MAX_CHAR_LENGTH;
+    static const int MAX_CHAR_INLINE_LENGTH;
+    static const int DEFAULT_BITMAP_LENGTH;
 
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
