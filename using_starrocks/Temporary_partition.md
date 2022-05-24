@@ -66,7 +66,7 @@ curl --location-trusted -u root: -H "label:123" -H "temporary_partitions: tp1, t
 ```sql
 LOAD LABEL example_db.label1
 (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starrocks/data/input/file")
     INTO TABLE `my_table`
     TEMPORARY PARTITION (tp1, tp2, ...)
     ...
