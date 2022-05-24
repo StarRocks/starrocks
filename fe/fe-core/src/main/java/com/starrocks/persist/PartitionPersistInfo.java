@@ -40,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.avro.ValidateAll;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -65,13 +66,12 @@ public class PartitionPersistInfo implements Writable {
     private boolean isInMemory = false;
     private boolean isTempPartition = false;
 
-
     public PartitionPersistInfo() {
     }
 
     public PartitionPersistInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
                                 DataProperty dataProperty, short replicationNum,
-                                boolean isInMemory, boolean isTempPartition ) {
+                                boolean isInMemory, boolean isTempPartition) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -83,14 +83,14 @@ public class PartitionPersistInfo implements Writable {
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
 
-         this.values = new ArrayList<>();
-         this.multiValues = new ArrayList<>();
+        this.values = new ArrayList<>();
+        this.multiValues = new ArrayList<>();
     }
 
     public PartitionPersistInfo(long dbId, long tableId, Partition partition,
                                 List<String> values, List<List<String>> multiValues,
                                 DataProperty dataProperty, short replicationNum,
-                                boolean isInMemory, boolean isTempPartition ) throws DdlException {
+                                boolean isInMemory, boolean isTempPartition) throws DdlException {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -102,18 +102,23 @@ public class PartitionPersistInfo implements Writable {
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
 
-        this.values = values;
-        this.multiValues = multiValues;
+        this.values = values == null ? new ArrayList<>() : values;
+        this.multiValues = multiValues == null ? new ArrayList<>() : multiValues;
     }
 
+    /**
+     *
+     * @return
+     * @throws DdlException
+     */
     private Range<PartitionKey> findTempRange() throws DdlException {
-        try{
+        try {
             PartitionKey lower = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-1")),
                     Arrays.asList(new Column("tinyint", Type.TINYINT)));
             PartitionKey upper = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("1")),
                     Arrays.asList(new Column("tinyint", Type.TINYINT)));
             return Range.closedOpen(lower, upper);
-        }catch (AnalysisException e){
+        } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
     }
@@ -148,6 +153,14 @@ public class PartitionPersistInfo implements Writable {
 
     public boolean isTempPartition() {
         return isTempPartition;
+    }
+
+    public List<String> getValues() {
+        return values;
+    }
+
+    public List<List<String>> getMultiValues() {
+        return multiValues;
     }
 
     public void write(DataOutput out) throws IOException {
@@ -192,13 +205,13 @@ public class PartitionPersistInfo implements Writable {
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
             String valuesJsonStr = Text.readString(in);
-            if (valuesJsonStr != null){
+            if (valuesJsonStr != null) {
                 values = GsonUtils.GSON.fromJson(valuesJsonStr, ArrayList.class);
             }
             String multiValuesJsonStr = Text.readString(in);
-            if (multiValuesJsonStr != null){
+            if (multiValuesJsonStr != null) {
                 java.lang.reflect.Type multiValueType = new TypeToken<List<ArrayList<String>>>() {}.getType();
-                multiValues =  GsonUtils.GSON.fromJson(multiValuesJsonStr, multiValueType);
+                multiValues = GsonUtils.GSON.fromJson(multiValuesJsonStr, multiValueType);
             }
         }
 
