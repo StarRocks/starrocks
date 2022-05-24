@@ -51,7 +51,7 @@ private:
     SnapshotTypePB _snapshot_type = SNAPSHOT_TYPE_UNKNOWN;
     int32_t _format_version = -1 /* default invalid value*/;
     int64_t _snapshot_version = -1 /*default invalid value*/;
-    TabletMetaPB _tablet_meta;
+    TabletMetaPB _tablet_meta; // only valid in full snapshot mode, will empty in incremental snapshot mode
     std::vector<RowsetMetaPB> _rowset_metas;
     std::unordered_map<uint32_t, DelVector> _delete_vectors;
 };

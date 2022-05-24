@@ -83,7 +83,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for transaction: {}", transactionState.getTransactionId());
+                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
             }
         }
         if (!batchTask.getAllTasks().isEmpty()) {

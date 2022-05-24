@@ -30,6 +30,8 @@ message PQueryStatistics {
     optional int64 scan_rows = 1;
     optional int64 scan_bytes = 2;
     optional int64 returned_rows = 3;
+    optional int64 cpu_cost_ns = 4;
+    optional int64 mem_cost_bytes = 5;
     repeated QueryStatisticsItemPB stats_items = 10;
 }
 

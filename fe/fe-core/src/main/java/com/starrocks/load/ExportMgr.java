@@ -30,9 +30,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
@@ -44,6 +46,9 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -348,5 +353,37 @@ public class ExportMgr {
             readUnlock();
         }
         return size;
+    }
+
+    public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
+        long newChecksum = checksum;
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_32) {
+            int size = dis.readInt();
+            newChecksum = checksum ^ size;
+            for (int i = 0; i < size; ++i) {
+                long jobId = dis.readLong();
+                newChecksum ^= jobId;
+                ExportJob job = new ExportJob();
+                job.readFields(dis);
+                unprotectAddJob(job);
+            }
+        }
+        LOG.info("finished replay exportJob from image");
+        return newChecksum;
+    }
+
+    public long saveExportJob(DataOutputStream dos, long checksum) throws IOException {
+        Map<Long, ExportJob> idToJob = getIdToJob();
+        int size = idToJob.size();
+        checksum ^= size;
+        dos.writeInt(size);
+        for (ExportJob job : idToJob.values()) {
+            long jobId = job.getId();
+            checksum ^= jobId;
+            dos.writeLong(jobId);
+            job.write(dos);
+        }
+
+        return checksum;
     }
 }

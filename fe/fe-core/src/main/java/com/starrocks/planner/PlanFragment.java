@@ -140,7 +140,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
-    private Set<Integer> joinNodeIds = Sets.newHashSet();
+    private Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -238,14 +238,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
-        root.fillLocalRfWaitingSet(joinNodeIds);
-        if (root instanceof JoinNode) {
-            joinNodeIds.add(root.getId().asInt());
+        root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
+        if (root instanceof RuntimeFilterBuildNode) {
+            runtimeFilterBuildNodeIds.add(root.getId().asInt());
         }
         if (clearGlobalRuntimeFilter) {
             root.clearProbeRuntimeFilters();
-            if (root instanceof JoinNode) {
-                ((JoinNode) root).clearBuildRuntimeFilters();
+            if (root instanceof RuntimeFilterBuildNode) {
+                ((RuntimeFilterBuildNode) root).clearBuildRuntimeFilters();
             }
         }
         for (PlanNode child : root.getChildren()) {
@@ -523,9 +523,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             return;
         }
 
-        if (root instanceof JoinNode) {
-            JoinNode joinNode = (JoinNode) root;
-            for (RuntimeFilterDescription description : joinNode.getBuildRuntimeFilters()) {
+        if (root instanceof RuntimeFilterBuildNode) {
+            RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
+            for (RuntimeFilterDescription description : rfBuildNode.getBuildRuntimeFilters()) {
                 buildRuntimeFilters.put(description.getFilterId(), description);
             }
         }

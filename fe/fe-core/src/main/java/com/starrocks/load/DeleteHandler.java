@@ -98,6 +98,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -365,7 +366,7 @@ public class DeleteHandler implements Writable {
                                 deleteJob.checkAndUpdateQuorum();
                                 Thread.sleep(1000);
                                 nowQuorumTimeMs = System.currentTimeMillis();
-                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}", deleteJob.getId(),
+                                LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", deleteJob.getId(),
                                         transactionId);
                             }
                         } catch (MetaNotFoundException e) {
@@ -966,6 +967,11 @@ public class DeleteHandler implements Writable {
             return new DeleteHandler();
         }
         return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
+    }
+
+    public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 
     public void removeOldDeleteInfo() {
