@@ -41,19 +41,22 @@ public:
         }
     }
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
 
         uint16_t new_size = 0;
@@ -170,19 +173,22 @@ public:
         }
     }
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
         // Get BinaryColumn
         const BinaryColumn* binary_column;
         if (column->is_nullable()) {

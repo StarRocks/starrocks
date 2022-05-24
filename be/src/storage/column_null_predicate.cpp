@@ -15,16 +15,17 @@ class ColumnIsNullPredicate : public ColumnPredicate {
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             memcpy(&selection[from], &is_null[from], to - from);
         } else {
             memset(selection + from, 0, to - from);
         }
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
@@ -34,9 +35,10 @@ public:
         } else {
             memset(selection + from, 0, to - from);
         }
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
@@ -46,6 +48,7 @@ public:
         } else {
             // nothing to do.
         }
+        return Status::OK();
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
@@ -80,7 +83,7 @@ class ColumnNotNullPredicate : public ColumnPredicate {
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
@@ -90,9 +93,10 @@ public:
         } else {
             memset(selection + from, 1, to - from);
         }
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
@@ -102,9 +106,10 @@ public:
         } else {
             // nothing to do.
         }
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
@@ -114,6 +119,7 @@ public:
         } else {
             memset(selection + from, 1, to - from);
         }
+        return Status::OK();
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {

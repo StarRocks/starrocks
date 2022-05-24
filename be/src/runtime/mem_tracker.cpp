@@ -105,7 +105,7 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
 std::string MemTracker::err_msg(const std::string& msg) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
-    str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
+    str << "Used: " << consumption() << " try consume: " << last_try_consume() << ", Limit: " << limit() << ". ";
     switch (type()) {
     case MemTracker::NO_SET:
         break;

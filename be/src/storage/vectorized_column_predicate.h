@@ -109,23 +109,25 @@ public:
 
     uint32_t column_id() const { return _column_id; }
 
-    void evaluate(const Column* column, uint8_t* selection) const { evaluate(column, selection, 0, column->size()); }
-
-    void evaluate_and(const Column* column, uint8_t* selection) const {
-        evaluate_and(column, selection, 0, column->size());
+    Status evaluate(const Column* column, uint8_t* selection) const {
+        return evaluate(column, selection, 0, column->size());
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection) const {
-        evaluate_or(column, selection, 0, column->size());
+    Status evaluate_and(const Column* column, uint8_t* selection) const {
+        return evaluate_and(column, selection, 0, column->size());
     }
 
-    virtual void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    Status evaluate_or(const Column* column, uint8_t* selection) const {
+        return evaluate_or(column, selection, 0, column->size());
+    }
 
-    virtual void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    virtual void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    virtual uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
+    virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+
+    virtual StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
         CHECK(false) << "not supported";
         return 0;
     }

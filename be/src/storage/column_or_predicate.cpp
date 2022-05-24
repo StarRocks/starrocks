@@ -6,24 +6,26 @@
 
 namespace starrocks::vectorized {
 
-void ColumnOrPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-    _evaluate(column, selection, from, to);
+Status ColumnOrPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+    return _evaluate(column, selection, from, to);
 }
 
-void ColumnOrPredicate::evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnOrPredicate::evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     _buff.resize(column->size());
-    _evaluate(column, _buff.data(), from, to);
+    RETURN_IF_ERROR(_evaluate(column, _buff.data(), from, to));
     const uint8_t* p = _buff.data();
     for (uint16_t i = from; i < to; i++) {
         DCHECK((bool)(selection[i] & p[i]) == (selection[i] && p[i]));
         selection[i] &= p[i];
     }
+    return Status::OK();
 }
 
-void ColumnOrPredicate::evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnOrPredicate::evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     for (const ColumnPredicate* child : _child) {
-        child->evaluate_or(column, selection, from, to);
+        RETURN_IF_ERROR(child->evaluate_or(column, selection, from, to));
     }
+    return Status::OK();
 }
 
 bool ColumnOrPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -33,11 +35,12 @@ bool ColumnOrPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     return _child.empty();
 }
 
-void ColumnOrPredicate::_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnOrPredicate::_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     _child[0]->evaluate(column, selection, from, to);
     for (size_t i = 1; i < _child.size(); i++) {
-        _child[i]->evaluate_or(column, selection, from, to);
+        RETURN_IF_ERROR(_child[i]->evaluate_or(column, selection, from, to));
     }
+    return Status::OK();
 }
 
 Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_ptr,

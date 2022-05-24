@@ -190,8 +190,8 @@ private:
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
-    uint16_t _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
-    uint16_t _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
+    StatusOr<uint16_t> _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
+    StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
 
     void _init_column_predicates();
 
@@ -202,7 +202,7 @@ private:
 
     Status _init_global_dict_decoder();
 
-    void _rewrite_predicates();
+    Status _rewrite_predicates();
 
     Status _decode_dict_codes(ScanContext* ctx);
 
@@ -344,7 +344,7 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
-    _rewrite_predicates();
+    RETURN_IF_ERROR(_rewrite_predicates());
     RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
     _range_iter = _scan_range.new_iterator();
@@ -711,7 +711,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             size_t next_start = chunk->num_rows();
 
             if (has_predicate) {
-                next_start = _filter(chunk, rowid, chunk_start, next_start);
+                ASSIGN_OR_RETURN(next_start, _filter(chunk, rowid, chunk_start, next_start));
                 chunk->check_or_die();
             }
             chunk_start = next_start;
@@ -741,7 +741,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     size_t raw_chunk_size = chunk->num_rows();
 
-    size_t chunk_size = _filter_by_expr_predicates(chunk, rowid);
+    ASSIGN_OR_RETURN(size_t chunk_size, _filter_by_expr_predicates(chunk, rowid));
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
@@ -788,7 +788,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
-        _opts.delete_predicates.evaluate(chunk, _selection.data());
+        RETURN_IF_ERROR(_opts.delete_predicates.evaluate(chunk, _selection.data()));
         size_t deletes = SIMD::count_nonzero(_selection.data(), old_sz);
         if (deletes == old_sz) {
             chunk->set_num_rows(0);
@@ -881,7 +881,7 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     _context = to;
 }
 
-uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
     // There must be one predicate, either vectorized or branchless.
     DCHECK(_vectorized_preds.size() + _branchless_preds.size() > 0 || _del_vec);
 
@@ -922,7 +922,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
         for (size_t i = 0; selected_size > 0 && i < _branchless_preds.size(); ++i) {
             const ColumnPredicate* pred = _branchless_preds[i];
             ColumnPtr& c = chunk->get_column_by_id(pred->column_id());
-            selected_size = pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size);
+            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size));
         }
 
         memset(&_selection[from], 0, to - from);
@@ -951,7 +951,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
     return chunk_size;
 }
 
-uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
     size_t chunk_size = chunk->num_rows();
     if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
@@ -1167,7 +1167,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
     return Status::OK();
 }
 
-void SegmentIterator::_rewrite_predicates() {
+Status SegmentIterator::_rewrite_predicates() {
     //
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
                                      _predicate_columns, _scan_range);
@@ -1188,6 +1188,8 @@ void SegmentIterator::_rewrite_predicates() {
         ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
         crewriter.rewrite_predicate(&_obj_pool);
     }
+
+    return Status::OK();
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
