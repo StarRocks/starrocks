@@ -36,7 +36,6 @@
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
-#include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
@@ -218,7 +217,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
-    _plugin_mgr = new PluginMgr();
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
@@ -334,10 +332,6 @@ void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
-    }
-    if (_plugin_mgr) {
-        delete _plugin_mgr;
-        _plugin_mgr = nullptr;
     }
     if (_heartbeat_flags) {
         delete _heartbeat_flags;
