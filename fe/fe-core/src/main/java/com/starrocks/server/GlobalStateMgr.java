@@ -179,6 +179,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -189,6 +190,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -205,6 +207,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -2608,6 +2611,10 @@ public class GlobalStateMgr {
         localMetastore.dropMaterializedView(stmt);
     }
 
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt)
+            throws DdlException, MetaNotFoundException, AnalysisException {
+        localMetastore.alterMaterializedView(stmt);
+    }
     /*
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -2638,6 +2645,14 @@ public class GlobalStateMgr {
 
     public void replayRenameTable(TableInfo tableInfo) {
         localMetastore.replayRenameTable(tableInfo);
+    }
+
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        this.alter.replayRenameMaterializedView(log);
+    }
+
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        this.alter.replayChangeMaterializedViewRefreshScheme(log);
     }
 
     // the invoker should keep db write lock

@@ -20,6 +20,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
@@ -190,6 +191,12 @@ public class Analyzer {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }

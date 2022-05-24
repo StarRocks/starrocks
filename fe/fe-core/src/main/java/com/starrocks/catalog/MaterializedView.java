@@ -4,10 +4,12 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -16,6 +18,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,18 +29,25 @@ import java.util.Set;
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
-    public enum RefreshType {
-        SYNC,
-        ASYNC
-    }
-
     public static class AsyncRefreshContext {
         // base table id -> (partitionid -> visible version)
         @SerializedName(value = "baseTableVisibleVersionMap")
         public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        TimestampArithmeticExpr.TimeUnit timeUnit;
+
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.step = 0;
+            this.timeUnit = TimestampArithmeticExpr.TimeUnit.MINUTE;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -46,6 +56,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public TimestampArithmeticExpr.TimeUnit getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(TimestampArithmeticExpr.TimeUnit timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 
@@ -59,13 +93,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
 
+
+
         public MvRefreshScheme() {
             this.type = RefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
         }
 
-        public MvRefreshScheme(RefreshType type, AsyncRefreshContext asyncRefreshContext, long lastRefreshTime) {
+        public MvRefreshScheme(com.starrocks.catalog.RefreshType type, AsyncRefreshContext asyncRefreshContext,
+                               long lastRefreshTime) {
             this.type = type;
             this.asyncRefreshContext = asyncRefreshContext;
             this.lastRefreshTime = lastRefreshTime;
@@ -94,6 +131,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public void setLastRefreshTime(long lastRefreshTime) {
             this.lastRefreshTime = lastRefreshTime;
         }
+
+
     }
 
     @SerializedName(value = "dbId")
@@ -149,6 +188,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setViewDefineSql(String viewDefineSql) {
         this.viewDefineSql = viewDefineSql;
+    }
+
+    public MvRefreshScheme getRefreshScheme() {
+        return refreshScheme;
+    }
+
+    public void setRefreshScheme(MvRefreshScheme refreshScheme) {
+        this.refreshScheme = refreshScheme;
     }
 
     @Override

@@ -46,11 +46,13 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -64,10 +66,17 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -187,6 +196,126 @@ public class Alter {
         } finally {
             db.writeUnlock();
         }
+    }
+    public void processAlterMaterializedView(AlterMaterializedViewStatement stmt)
+            throws DdlException, MetaNotFoundException, AnalysisException {
+        // check db
+        final TableName mvName = stmt.getMvName();
+        final String oldMvName = mvName.getTbl();
+        final String newMvName = stmt.getNewMvName();
+        final RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        String dbName = mvName.getDb();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        db.writeLock();
+        try {
+            MaterializedView materializedView = null;
+            final Table table = db.getTable(oldMvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+
+            if (materializedView == null) {
+                throw new MetaNotFoundException("Materialized view " + mvName + " is not find");
+            }
+            // check materialized view state
+            if (materializedView.getState() != OlapTableState.NORMAL) {
+                throw new DdlException("Materialized view [" + materializedView.getName() + "]'s state is not NORMAL. "
+                        + "Do not allow to do ALTER ops");
+            }
+
+            //rename materialized view
+            if (newMvName != null) {
+                processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
+            } else if (refreshSchemeDesc != null) {
+                //change refresh scheme
+                processChangeRefreshScheme(refreshSchemeDesc, materializedView);
+            } else {
+                throw new DdlException("unsupported modification for materialized view");
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
+            throws DdlException {
+        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+        final String refreshType = refreshSchemeDesc.getType().name();
+
+        if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
+            throw new DdlException("unsupported change to SYNC refresh type");
+        } else if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            final long step = asyncRefreshSchemeDesc.getStep();
+            if (step < 0) {
+                throw new DdlException("unsupported negative step value");
+            }
+            asyncRefreshContext.setStep(step);
+            asyncRefreshContext.setTimeUnit(asyncRefreshSchemeDesc.getTimeUnit());
+        }
+        final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
+        refreshScheme.setType(newRefreshType);
+
+        final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+    }
+
+    private void processRenameMaterializedView(String oldMvName, String newMvName, Database db,
+                                               MaterializedView materializedView) throws DdlException {
+        if (oldMvName.equals(newMvName)) {
+            throw new DdlException("Same materialized view name");
+        }
+        if (db.getTable(newMvName) != null) {
+            throw new DdlException("Materialized view [" + newMvName + "] is already used");
+        }
+        materializedView.setName(newMvName);
+        db.dropTable(oldMvName);
+        db.createTable(materializedView);
+        final RenameMaterializedViewLog renameMaterializedViewLog =
+                new RenameMaterializedViewLog(materializedView, oldMvName, newMvName);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
+    }
+
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        long dbId = log.getDbId();
+        long materializedViewId = log.getId();
+        String newMaterializedViewName = log.getNewMaterializedViewName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+        db.dropTable(oldMaterializedView.getName());
+        oldMaterializedView.setName(newMaterializedViewName);
+        db.createTable(oldMaterializedView);
+        LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                newMaterializedViewName, oldMaterializedView.getId());
+    }
+
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        long dbId = log.getDbId();
+        long id = log.getId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        MaterializedView oldMaterializedView;
+        final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
+
+        oldMaterializedView = (MaterializedView) db.getTable(id);
+        final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
+        newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
+        newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
+        final RefreshType refreshType = log.getRefreshType();
+        final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
+        newMvRefreshScheme.setType(refreshType);
+        newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+        oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
+        LOG.info(
+                "replay materialized view [{}]'s refresh type to {}, start time to {}, " +
+                        "interval step to {}, time unit to {}, id: {}",
+                oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
+                asyncRefreshContext.getStep(), asyncRefreshContext.getTimeUnit(), id);
     }
 
     public void processAlterTable(AlterTableStmt stmt) throws UserException {

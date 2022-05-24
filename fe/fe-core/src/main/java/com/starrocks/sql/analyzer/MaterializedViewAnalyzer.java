@@ -14,27 +14,33 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -263,6 +269,46 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             stmt.getDbMvName().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+                                                        ConnectContext context) {
+            statement.getMvName().normalization(context);
+            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
+            final String newMvName = statement.getNewMvName();
+            if (newMvName != null) {
+                if (statement.getMvName().getTbl().equals(newMvName)) {
+                    throw new SemanticException("Same materialized view name");
+                }
+            } else if (refreshSchemeDesc != null) {
+                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                    throw new SemanticException("Unsupported change to SYNC refresh type");
+                }
+                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+                    LocalDateTime startTime = async.getStartTime();
+                    final long step = async.getStep();
+                    TimestampArithmeticExpr.TimeUnit timeUnit = async.getTimeUnit();
+                    if (startTime != null && timeUnit == null) {
+                        throw new SemanticException("please input interval clause");
+                    }
+                    if (startTime != null && startTime.isBefore(LocalDateTime.now())) {
+                        throw new IllegalArgumentException("Refresh start must be after current time");
+                    } else {
+                        async.setStartTime(LocalDateTime.now());
+                    }
+                    if (timeUnit != null && async.getSupportedTimeUnitType().contains(timeUnit)) {
+                        throw new IllegalArgumentException("Unsupported time unit");
+                    }
+                    if (step < 0) {
+                        throw new IllegalArgumentException("Unsupported negative step value");
+                    }
+                }
+            } else {
+                throw new SemanticException("Unsupported modification for materialized view");
+            }
             return null;
         }
     }
