@@ -588,29 +588,6 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-struct TypeMemoryUsed {
-    template <PrimitiveType ptype>
-    size_t operator()() {
-        switch (ptype) {
-        case TYPE_VARCHAR:
-        case TYPE_CHAR:
-            return 128;
-        case TYPE_JSON:
-            // 1KB.
-            return 1024;
-        case TYPE_HLL:
-            // 16KB.
-            return 16 * 1024;
-        case TYPE_OBJECT:
-        case TYPE_PERCENTILE:
-            // 1MB.
-            return 1024 * 1024;
-        default:
-            return 0;
-        }
-    }
-};
-
 size_t _estimate_type_bytes(PrimitiveType ptype) {
     switch (ptype) {
     case TYPE_VARCHAR:
