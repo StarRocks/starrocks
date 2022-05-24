@@ -131,7 +131,7 @@ public class ResourceMgr implements Writable {
     }
 
     private void onDropResource(Resource resource) {
-        if (resource instanceof HiveResource || resource instanceof HudiResource) {
+        if (resource instanceof HiveResource || resource instanceof HudiResource || resource instanceof IcebergResource) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
     }
@@ -177,8 +177,10 @@ public class ResourceMgr implements Writable {
                 ((HiveResource) resource).alterProperties(stmt.getProperties());
             } else if (resource instanceof HudiResource) {
                 ((HudiResource) resource).alterProperties(stmt.getProperties());
+            } else if (resource instanceof IcebergResource) {
+                ((IcebergResource) resource).alterProperties(stmt.getProperties());
             } else {
-                throw new DdlException("Alter resource statement only support external hive/hudi now");
+                throw new DdlException("Alter resource statement only support external hive/hudi/iceberg now");
             }
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
