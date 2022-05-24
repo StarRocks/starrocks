@@ -109,7 +109,13 @@ public class ResourceMgr implements Writable {
      * <p>2. Clear cache in memory </p>
      */
     public void replayCreateResource(Resource resource) {
-        nameToResource.put(resource.getName(), resource);
+        this.writeLock();
+        try {
+            nameToResource.put(resource.getName(), resource);
+        } finally {
+            this.writeUnLock();
+        }
+
         if (resource instanceof HiveResource || resource instanceof HudiResource) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
