@@ -140,15 +140,11 @@ public class SetVar {
 
         // Check variable load_mem_limit value is valid
         if (getVariable().equalsIgnoreCase(SessionVariable.LOAD_MEM_LIMIT)) {
-            String value = getValue().getStringValue();
-            try {
-                long load_mem_limit = Long.parseLong(value);
-                if (load_mem_limit < 0) {
-                    throw new AnalysisException(SessionVariable.LOAD_MEM_LIMIT + " must be equal or greater than 0.");
-                }
-            } catch (NumberFormatException ex) {
-                throw new AnalysisException(SessionVariable.LOAD_MEM_LIMIT + " is not a number");
-            }
+            checkNonNegativeLongVariable(SessionVariable.LOAD_MEM_LIMIT);
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_MEM_LIMIT)) {
+            checkNonNegativeLongVariable(SessionVariable.QUERY_MEM_LIMIT);
         }
 
         // Check variable time_zone value is valid
@@ -163,15 +159,7 @@ public class SetVar {
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.SQL_SELECT_LIMIT)) {
-            String value = getValue().getStringValue();
-            try {
-                long selectLimit = Long.parseLong(value);
-                if (selectLimit < 0) {
-                    throw new AnalysisException(SessionVariable.SQL_SELECT_LIMIT + " must be equal or greater than 0.");
-                }
-            } catch (NumberFormatException ex) {
-                throw new AnalysisException(SessionVariable.SQL_SELECT_LIMIT + " is not a number");
-            }
+            checkNonNegativeLongVariable(SessionVariable.SQL_SELECT_LIMIT);
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
@@ -190,5 +178,17 @@ public class SetVar {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    private void checkNonNegativeLongVariable(String field) throws AnalysisException {
+        String value = getValue().getStringValue();
+        try {
+            long num = Long.parseLong(value);
+            if (num < 0) {
+                throw new AnalysisException(field + " must be equal or greater than 0.");
+            }
+        } catch (NumberFormatException ex) {
+            throw new AnalysisException(field + " is not a number");
+        }
     }
 }
