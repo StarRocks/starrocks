@@ -1,162 +1,179 @@
 # SQL
 
-## Fail to create materialized view: fail to allocate memory
+This topic provides answers to some frequently asked questions about SQL.
 
-Modify memory_limitation_per_thread_for_schema_change in be.conf.
+## This error "fail to allocate memory." when I build a materialized view
 
-This parameter represents the maximum memory allowed for a single schema change task. The default value is 2G.
+To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
 
-## Does StarRocks limit the result cache?
+## Does StarRocks have limitations on query result caching?
 
-No, StarRocks does not cache results. The speed of query getting slower every time is because the subsequent queries uses pagecache of the operation system.
+StarRocks does not support result caching. StarRocks enables the page cache to cache the query result for repetitive use. This allows subsequent query execution to get results directly from the cache. You can set the `storage_page_cache_limit` parameter in the **be.conf** file to specify the size of the page cache. The default size of the page cache is 20 GB.
 
-Pagecache size can be limited by setting the parameter storage_page_cache_limit in be.conf. The default value is 20G.
+## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
-## When the field is NULL, all computing results are false except is null
+In standard SQL, every calculation that includes an operand with a `NULL` value returns a `NULL`.
 
-Computing results of null and all other expressions in the standard sql are null.
+## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query？
 
-## [Add apostrophes for bigint in Equi-Join Query ]Unwanted data appear
+### Problem description
 
-```sql
+See the following examples:
+
+```Plain%20Text
 select cust_id,idno 
+
 from llyt_dev.dwd_mbr_custinfo_dd 
+
 where Pt= ‘2021-06-30’ 
+
 and cust_id = ‘20210129005809043707’ 
-limit 10 offset 0;
-```
 
-```plain text
+limit 10 offset 0;
 +---------------------+-----------------------------------------+
+
 |   cust_id           |      idno                               |
+
 +---------------------+-----------------------------------------+
+
 |  20210129005809436  | yjdgjwsnfmdhjw294F93kmHCNMX39dw=        |
+
 |  20210129005809436  | sdhnswjwijeifme3kmHCNMX39gfgrdw=        |
+
 |  20210129005809436  | Tjoedk3js82nswndrf43X39hbggggbw=        |
+
 |  20210129005809436  | denuwjaxh73e39592jwshbnjdi22ogw=        |
+
 |  20210129005809436  | ckxwmsd2mei3nrunjrihj93dm3ijin2=        |
+
 |  20210129005809436  | djm2emdi3mfi3mfu4jro2ji2ndimi3n=        |
-+---------------------+-----------------------------------------+
-```
 
-```sql
++---------------------+-----------------------------------------+
 select cust_id,idno 
+
 from llyt_dev.dwd_mbr_custinfo_dd 
+
 where Pt= ‘2021-06-30’ 
+
 and cust_id = 20210129005809043707 
+
 limit 10 offset 0;
-```
-
-```plain text
 +---------------------+-----------------------------------------+
+
 |   cust_id           |      idno                               |
+
 +---------------------+-----------------------------------------+
+
 |  20210189979989976  | xuywehuhfuhruehfurhghcfCNMX39dw=        |
+
 +---------------------+-----------------------------------------+
 ```
 
-**Issue description:**
+### Solution
 
-A lot of irrelevant data is found after adding apostrophes in queries of bigint type in where.
+When you compare the STRING data type and the INTEGER data type, the fields of these two types are cast to the DOUBLE data type. Therefore, quotation marks cannot be added. Otherwise, the condition defined in the WHERE clause cannot be indexed.
 
-**Solution:**
+## Does StarRocks support the DECODE function?
 
-When comparing strings with int, it is equivalent to case int to double. While comparing integers, please do not add apostrophes because adding apostrophes would result in inaccurate selection of the index.
+StarRocks does not support the DECODE function of the Oracle database. StarRocks is compatible with MySQL, so you can use the CASE WHEN statement.
 
-## Does StarRocks have the decode function?
+## Can the latest data be queried immediately after data is loaded into the primary key model of StarRocks?
 
-No, it currently does not support the decode function from Oracle. StarRocks syntax is compatible with MySQL and can use the case when function.
+Yes. StarRocks merges data in a way that references Google Mesa. In StarRocks, a BE triggers the data merge and it has two kinds of compaction to merge data. If the data merge is not completed, it is finished during your query. Therefore, you can read the latest data after data loading.
 
-## Does primary key replacement in StarRocks take effect immediately? Or does it need to wait after the backend has merged data?
+## Do the utf8mb4 characters stored in StarRocks get truncated or appear garbled?
 
-The backend of StarRocks was merged in reference to Google's mesa model. There are two levels of compaction which will trigger merging based on backend strategy. If merging is not completed, it will continue during queries. Once merging is completed, only the latest version will be saved, thus avoiding the situation where the latest version cannot be read after data is imported.
+No.
 
-## Will the utd8mb4 string saved in StarRocks be truncated or garbled?
+## This error "table's state is not normal" occurs when I run the `alter table` command
 
-No, it won't because "utf8mb4" in MySQL is the real "UTF-8".
+This error occurs because the previous alteration has not been completed. You can run the following code to check the status of the previous alteration:
 
-## [Schema change] When performing alter table, it reports: table's state is not normal
-
-Alter table is asynchronous. If the previous alter table is not completed, you can view its status through:
-
-```sql
+```SQL
 show tablet from lineitem where State="ALTER"; 
 ```
 
-The execution time is affected by the data volume. The time unit is usually minutes. It is recommended that users stop data import during alter, as it will slow the alter speed.
+The time spent on the alteration operation relates to the data volume. In general, the alteration can be completed in minutes. We recommend that you stop loading data into StarRocks while you are altering tables because data loading lowers the speed at which alteration completes.
 
-## [query issue related to hive external table] query on hive external table reports an error: failure to partition
+## This error "get partition detail failed: org.apache.doris.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest" occurs when I query the external tables of Apache Hive
 
-**Issue description:**
+This error occurs when the metadata of Apache Hive partitions cannot be obtained. To solve this problem, copy **core-sit.xml** and **hdfs-site.xml** to the **fe.conf** file and the **be.conf** file.
 
-The detailed error report is as follows: get partition detail failed: org.apache.doris.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest（the name of specific hdfs-ha）
+## This error "planner use long time 3000 remaining task num 1" occurs when I query data
 
-**Solution:**
+This error occurs usually due to a full garbage collection (full GC), which can be checked by using backend monitoring and the **fe.gc** log. To solve this problem, perform one of the following operations:
 
-Please copy and paste the core-site.xml and hdfs-site.xml files to fe/conf and be/conf respectively.
+- Allows SQL's client to access multiple frontends (FEs) simultaneously to spread the load.
+- Change the heap size of Java Virtual Machine (JVM) from 8 GB to 16 GB in the **fe.conf** file to increase memory and reduce the impact of full GC.
 
-**Cause:**
+## When cardinality of column A is small, the query results of `select B from tbl order by A limit 10` vary each time
 
-Failure to obtain metadata in the partitions of configuration unit.
+SQL can only guarantee that column A is ordered, and it cannot guarantee that the order of column B is the same for each query. MySQL can guarantee the order of column A and column B because it is a standalone database.
 
-## Slow queries on large tables. Predicate pushdown is not performed
+StarRocks is a distributed database, of which data stored in the underlying table is in a sharding pattern. The data of column A is distributed across multiple machines, so the order of column B returned by multiple machines may be different for each query, resulting in inconsistent order of B each time. To solve this problem, change `select B from tbl order by A limit 10` to `select B from tbl order by A,B limit 10`.
 
-When multiple large tables are connected, the older version of planner sometimes does not perform predicate pushdown, for example:
+## Why is there a large gap in column efficiency between SELECT * and SELECT?
 
-```sql
-A JION B ON A.col1=B.col1 JOIN C on B.col1=C.col1 where A.col1='newyork' ，
-```
+To solve this problem, check the profile and see MERGE details：
 
-This could be revised as the following:
+- Check whether the aggregation on the storage layer takes up too much time.
 
-```sql
-A JION B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='newyork'，
-```
+- Check whether there are too many indicator columns. If so, aggregate hundreds of columns of millions of rows.
 
-Or, you can update it to the latest version and restart CBO. After this, predicate pushdown will be performed to optimize query performance.
-
-## Query reports an error: Doris planner use long time 3000 remaining task num 1
-
-**Solution:**
-
-View fe.gc log to see if full gc issue is caused by multiple concurrent tasks.
-
-If the backend monitor and fe.gc log indicate that GC is indeed becoming very frequent, there are two solutions to resolve it:
-
-1. SQLclient could be used to access multiple fe to achieve load balance.
-2. Change jvm8g to 16g in fe.conf. (Maximum memory could alleviate full gc impact.)
-
-## When the cardinal A is small, each query result of  select B from tbl order by A limit 10 is different
-
-**Solution:**
-
-`select B from tbl order by A,B limit 10`, and query results would become identical after also adding B in the ordering process.
-
-**Cause：**
-
-The SQL above can only make sure that A is in a clear sequence, with B being still disordered. This is because MySQL is a device database while StarRocks is a distributed database with data storage is sharded in the bottom tables. Data related to A is stored in multiple devices. Thus, each query may send back results in different sequence, which makes B disordered.
-
-## Execution efficiency between select * and select are of too great difference
-
-When there is an exceptional difference in the execution efficiency between these two, we need to verify their profiles and view detailed information about MERGE.
-
-- Please verify if it is because the aggregation of storage tiers is too time-consuming.
-- Please verify if it is because there are too many sorting columns waiting to aggregate hundreds of columns and millions of rows.
-
-```plain text
+```Plain%20Text
 MERGE:
+
     - aggr: 26s270ms
+
     - sort: 15s551ms
 ```
 
-## The current delete does not support Nested Function
+## Does DELETE support nested functions?
 
-A nested function like this is not currently supported: DELETE from test_new WHERE to_days(now())-to_days(publish_time) >7;`to_days(now())
+Nested functions are not supported, such as `to_days(now())` in `DELETE from test_new WHERE to_days(now())-to_days(publish_time) >7;`.
 
-## When there are over a hundred tables in a database, use database becomes too slow
+## How to improve the usage efficiency of a database when there are hundreds of tables in it?
 
-`mysql -uroot -h127.0.0.1 -P8867 -A`. When connecting the client, please add -A parameter. This will not preread the database information, thus making it fast to change among databases.
+To improve efficiency, add the `-A` parameter when you connect to MySQL's client server: `mysql -uroot -h127.0.0.1 -P8867 -A`. MySQL's client server does not pre-read database information.
 
-## What should be done when there are too many log files in be/fe?
+## How to reduce the disk space occupied by the BE log and the FE log?
 
-You can modify the log level and the parameter size. For more detail, please refer to Parameter configuration( [参数配置](/administration/Configuration.md)) for explanations on default parameter value and effect related to log.
+Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/Configuration.md).
+
+## This error "table *** is colocate table, cannot change replicationNum" occurs when I modify the replication number
+
+When you create colocated tables, you need to set the `group` property. Therefore, you cannot modify the replication number for a single table. You can perform the following steps to modify the replication number for all tables in a group:
+
+1. Set `group_with` to `empty` for all tables in a group.
+2. Set a proper `replication_num` for all tables in a group.
+3. Set `group_with` back to its original value.
+
+## Does setting VARCHAR to the maximum value affect storage?
+
+VARCHAR is a variable-length data type, which has a specified length that can be changed based on the actual data length. Specifying a different varchar length when you create a table has little impact on the query performance on the same data.
+
+## This error "create partititon timeout" occurs when I truncate a table
+
+To truncate a table, you need to create the corresponding partitions and then swap them. If there are a larger number of partitions that need to be created, this error occurs. In addition, if there are many data load tasks, the lock will be held for a long time during the compaction process. Therefore, the lock cannot be acquired when you create tables. If there are too many data load tasks, set `tablet_map_shard_size` to `512` in the **be.conf** file to reduce the lock contention.
+
+## This error "Failed to specify server's Kerberos principal name" occurs when I access external tables of Apache Hive
+
+Add the following information to **hdfs-site.xml** in the **fe.conf** file and the **be.conf** file:
+
+```HTML
+<property>
+
+<name>dfs.namenode.kerberos.principal.pattern</name>
+
+<value>*</value>
+
+</property>
+```
+
+## Is "2021-10" a date format in StarRocks?
+
+No.
+
+## Can "2021-10" be used as a partition field?
+
+No, use functions to change "2021-10" to "2021-10-01" and then use "2021-10-01" as a partition field.

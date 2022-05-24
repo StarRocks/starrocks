@@ -27,7 +27,7 @@
   + [Insert Into](/loading/InsertInto.md)
   + [ETL in Loading](/loading/Etl_in_loading.md)
   + [Json Loading](/loading/Json_loading.md)
-  + [Flink Connector](/loading/Flink-connector-starrocks.md)
+  + [Load data by using flink-connector-starrocks](/loading/Flink-connector-starrocks.md)
   + [DataX Writer](/loading/DataX-starrocks-writer.md)
 + Data Export
   + [Export](/unloading/Export.md)
@@ -43,6 +43,7 @@
   + [Window Function](/using_starrocks/Window_function.md)
   + [Cost Based Optimizer](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [File manager](/using_starrocks/File_manager.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -303,7 +304,7 @@
   + [System Limit](/reference/System_limit.md)
 + Administration
   + [Build in Docker](/administration/Build_in_docker.md)
-  + [Cluster Administration](/administration/Cluster_administration.md)
+  + [Manage a cluster](/administration/Cluster_administration.md)
   + [Configuration](/administration/Configuration.md)
   + [Scale In and Out](/administration/Scale_up_down.md)
   + [Backup and Restore](/administration/Backup_and_restore.md)
