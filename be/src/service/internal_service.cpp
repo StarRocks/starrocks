@@ -132,7 +132,7 @@ void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController
                                                  const PTabletWriterOpenRequest* request,
                                                  PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer open, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", txn_id=" << request->txn_id();
+             << ", txn_id: " << request->txn_id();
     _exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
 }
 

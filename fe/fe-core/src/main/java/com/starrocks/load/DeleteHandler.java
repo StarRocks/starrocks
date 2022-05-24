@@ -366,7 +366,7 @@ public class DeleteHandler implements Writable {
                                 deleteJob.checkAndUpdateQuorum();
                                 Thread.sleep(1000);
                                 nowQuorumTimeMs = System.currentTimeMillis();
-                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}", deleteJob.getId(),
+                                LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", deleteJob.getId(),
                                         transactionId);
                             }
                         } catch (MetaNotFoundException e) {
