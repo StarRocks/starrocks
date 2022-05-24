@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 /*
@@ -32,7 +33,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return expressionContext.getChildLogicalProperty(1).getOutputColumns();
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return expressionContext.getChildLogicalProperty(1).getOutputColumns();
+        }
     }
 
     public int getCteId() {
