@@ -1049,65 +1049,7 @@ Status StorageEngine::load_header(const std::string& shard_path, const TCloneReq
 }
 
 Status StorageEngine::execute_task(EngineTask* task) {
-    // 1. add wlock to related tablets
-    // 2. do prepare work
-    // 3. release wlock
-    {
-        std::vector<TabletInfo> tablet_infos;
-        task->get_related_tablets(&tablet_infos);
-        sort(tablet_infos.begin(), tablet_infos.end());
-        std::vector<TabletSharedPtr> related_tablets;
-        DeferOp release_lock([&]() {
-            for (TabletSharedPtr& tablet : related_tablets) {
-                tablet->release_header_lock();
-            }
-        });
-        for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
-                tablet->obtain_header_wrlock();
-                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
-                related_tablets.push_back(tablet);
-                release_guard.cancel();
-            } else {
-                LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
-            }
-        }
-        // add write lock to all related tablets
-        RETURN_IF_ERROR(task->prepare());
-    }
-
-    // do execute work without lock
-    RETURN_IF_ERROR(task->execute());
-
-    // 1. add wlock to related tablets
-    // 2. do finish work
-    // 3. release wlock
-    {
-        std::vector<TabletInfo> tablet_infos;
-        // related tablets may be changed after execute task, so that get them here again
-        task->get_related_tablets(&tablet_infos);
-        sort(tablet_infos.begin(), tablet_infos.end());
-        std::vector<TabletSharedPtr> related_tablets;
-        DeferOp release_lock([&]() {
-            for (TabletSharedPtr& tablet : related_tablets) {
-                tablet->release_header_lock();
-            }
-        });
-        for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
-                tablet->obtain_header_wrlock();
-                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
-                related_tablets.push_back(tablet);
-                release_guard.cancel();
-            } else {
-                LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
-            }
-        }
-        // add write lock to all related tablets
-        return task->finish();
-    }
+    return task->execute();
 }
 
 // check whether any unused rowsets's id equal to rowset_id
