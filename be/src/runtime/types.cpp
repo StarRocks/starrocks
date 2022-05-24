@@ -80,6 +80,8 @@ const int TypeDescriptor::MAX_VARCHAR_LENGTH = g_Types_constants.MAX_VARCHAR_LEN
 const int TypeDescriptor::MAX_CHAR_LENGTH = g_Types_constants.MAX_CHAR_LENGTH;
 const int TypeDescriptor::MAX_CHAR_INLINE_LENGTH = g_Types_constants.MAX_CHAR_INLINE_LENGTH;
 const int TypeDescriptor::DEFAULT_BITMAP_LENGTH = g_Types_constants.DEFAULT_BITMAP_LENGTH;
+const int TypeDescriptor::DEFAULT_JSON_LENGTH = g_Types_constants.DEFAULT_JSON_LENGTH;
+const int TypeDescriptor::DEFAULT_HLL_LENGTH = g_Types_constants.DEFAULT_HLL_LENGTH;
 
 void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
     thrift_type->__isset.types = true;

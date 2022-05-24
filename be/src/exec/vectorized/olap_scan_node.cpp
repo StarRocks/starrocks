@@ -19,6 +19,7 @@
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
@@ -595,15 +596,12 @@ size_t _estimate_type_bytes(PrimitiveType ptype) {
     case TYPE_ARRAY:
         return 128;
     case TYPE_JSON:
-        // 1KB.
-        return 1024;
+        return TypeDescriptor::DEFAULT_JSON_LENGTH;
     case TYPE_HLL:
-        // 16KB.
-        return 16 * 1024;
+        return TypeDescriptor::DEFAULT_HLL_LENGTH;
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
-        // 1MB.
-        return 1024 * 1024;
+        return TypeDescriptor::DEFAULT_BITMAP_LENGTH;
     default:
         return 0;
     }

@@ -48,6 +48,8 @@ struct TypeDescriptor {
     static const int MAX_CHAR_LENGTH;
     static const int MAX_CHAR_INLINE_LENGTH;
     static const int DEFAULT_BITMAP_LENGTH;
+    static const int DEFAULT_JSON_LENGTH;
+    static const int DEFAULT_HLL_LENGTH;
 
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
