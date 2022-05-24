@@ -1,10 +1,10 @@
 # SELECT
 
-## description
+## Description
 
-The Select statement consists of select, from, where, group by, having, order by, union, and so on.
+The SELECT statement consists of select, from, where, group by, having, order by, union, and so on.
 
-StarRocks'query statement basically conforms to the SQL92 standard. Here is a brief description of the supported select usage.
+StarRocks' query statement basically conforms to the SQL92 standard. Here is a brief description of the supported select usage.
 
 ### Join
 
@@ -29,7 +29,7 @@ USING (col1 [, col2 ...]) ]
 ```
 
 ```sql
-SELECT select_list FROMS
+SELECT select_list FROM
 table_or_subquery1, table_or_subquery2 [, table_or_subquery3 ...]
 [other_join_clause ...]
 WHERE
@@ -339,7 +339,7 @@ query_1 UNION [DISTINCT | ALL] query_2
 
 Instructions:
 
-Using only union keywords and union disitnct works the same way. Since de-duplication is memory intensive,
+Using only union keywords and union distinct works the same way. Since de-duplication is memory intensive,
 
 As a result, queries using union all operations are faster and consume less memory. If the user wants to order by and limit the returned result set,
 
@@ -406,7 +406,7 @@ select distinct tiny_column from big_table limit 2;
 select distinct tiny_column, int_column from big_table limit 2;
 ```
 
-distinct can be used with aggregate functions (usually count functions), and count (disitnct) is used to calculate how many different combinations are contained on one or more columns.
+distinct can be used with aggregate functions (usually count functions), and count (distinct) is used to calculate how many different combinations are contained on one or more columns.
 
 ```SQL
 -- Counts the unique values from one column.
@@ -686,7 +686,7 @@ Determines whether the regular expression is matched. Using POSIX standard regul
 
 "." matches any single character, "*" matches zero or more options, "+" matches one or more options, "?" means greedy representation, and so on. Regular expressions need to match complete values, not just parts of strings.
 
-If you want to match the middle part, the front part of the regular expression can be written as'^. 'or'.'. '^'and'$' are usually omitted. The RLKIE operator and the REGEXP operator are synonyms.
+If you want to match the middle part, the front part of the regular expression can be written as'^. 'or'.'. '^'and'$' are usually omitted. The RLIKE operator and the REGEXP operator are synonyms.
 
 The'|'operator is an optional operator. Regular expressions on either side of'|' only need to satisfy one side condition. The'|'operator and regular expressions on both sides usually need to be enclosed in ().
 
@@ -736,6 +736,6 @@ select sum(tiny_column) as total_count from big_table;
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
 
-## keyword
+## Keyword
 
 SELECT
