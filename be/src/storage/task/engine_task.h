@@ -34,12 +34,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineTask {
 public:
-    // use olap_status not agent_status, because the task is very close to engine
-    virtual Status prepare() { return Status::OK(); }
     virtual Status execute() { return Status::OK(); }
-    virtual Status finish() { return Status::OK(); }
-    virtual Status cancel() { return Status::OK(); }
-    virtual void get_related_tablets(std::vector<TabletInfo>* tablet_infos) {}
     virtual ~EngineTask() = default;
 };
 
