@@ -8,6 +8,8 @@
 
 namespace starrocks::pipeline {
 
+const int32_t LocalPartitionTopnContext::MAX_PARTITION_NUM = 4096;
+
 LocalPartitionTopnContext::LocalPartitionTopnContext(
         const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
         std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset, int64_t partition_limit,
@@ -47,8 +49,20 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     return _chunks_partitioner->prepare(state);
 }
 
-Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(const vectorized::ChunkPtr& chunk) {
-    return _chunks_partitioner->offer(chunk);
+Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state,
+                                                                const vectorized::ChunkPtr& chunk) {
+    const auto num_partitions = _chunks_partitioner->num_partitions();
+    if (!_is_downgrade && num_partitions < MAX_PARTITION_NUM) {
+        return _chunks_partitioner->offer(chunk);
+    } else {
+        transfer_all_chunks_from_partitioner_to_sorters(state);
+        {
+            std::lock_guard<std::mutex> l(_buffer_lock);
+            _downgrade_buffer.push(chunk);
+        }
+        _is_downgrade = true;
+        return Status::OK();
+    }
 }
 
 void LocalPartitionTopnContext::sink_complete() {
@@ -56,6 +70,9 @@ void LocalPartitionTopnContext::sink_complete() {
 }
 
 Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorters(RuntimeState* state) {
+    if (_is_transfered) {
+        return Status::OK();
+    }
     const auto num_partitions = _chunks_partitioner->num_partitions();
     _chunks_sorters.resize(num_partitions);
     for (int i = 0; i < num_partitions; ++i) {
@@ -73,10 +90,14 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
         RETURN_IF_ERROR(chunks_sorter->done(state));
     }
 
+    _is_transfered = true;
     return Status::OK();
 }
 
 bool LocalPartitionTopnContext::has_output() {
+    if (_is_downgrade) {
+        return _sorter_index < _chunks_sorters.size() || !_downgrade_buffer.empty();
+    }
     return _is_sink_complete && _sorter_index < _chunks_sorters.size();
 }
 
@@ -85,6 +106,25 @@ bool LocalPartitionTopnContext::is_finished() {
         return false;
     }
     return !has_output();
+}
+
+StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
+    vectorized::ChunkPtr chunk = nullptr;
+    if (_sorter_index < _chunks_sorters.size()) {
+        ASSIGN_OR_RETURN(chunk, pull_one_chunk_from_sorters());
+        if (chunk != nullptr) {
+            return chunk;
+        }
+    }
+    if (_downgrade_buffer.empty()) {
+        return nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> l(_buffer_lock);
+        chunk = _downgrade_buffer.front();
+        _downgrade_buffer.pop();
+    }
+    return chunk;
 }
 
 StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
