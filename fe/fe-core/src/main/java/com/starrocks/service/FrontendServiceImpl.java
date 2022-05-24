@@ -66,6 +66,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -97,6 +100,9 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTaskInfoResult;
+import com.starrocks.thrift.TGetTaskRunInfoResult;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
@@ -128,6 +134,8 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -319,6 +327,75 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return result;
     }
+
+    @Override
+    public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
+        LOG.debug("get show task request: {}", params);
+        TGetTaskInfoResult result = new TGetTaskInfoResult();
+        List<TTaskInfo> tasksResult = Lists.newArrayList();
+        result.setTasks(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Task> taskList = taskManager.showTasks(params.db);
+
+        for (Task task : taskList) {
+            TTaskInfo info = new TTaskInfo();
+            info.setTask_name(task.getName());
+            info.setCreate_time(task.getCreateTime() / 1000);
+            // Now there are only MANUAL types of Tasks
+            info.setSchedule("MANUAL");
+            info.setDatabase(task.getDbName());
+            info.setDefinition(task.getDefinition());
+            tasksResult.add(info);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
+        LOG.debug("get show task run request: {}", params);
+        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
+        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
+        result.setTask_runs(tasksResult);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            return result;
+        }
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        for (TaskRunStatus status : taskRunList) {
+            TTaskRunInfo info = new TTaskRunInfo();
+            info.setQuery_id(status.getQueryId());
+            info.setTask_name(status.getTaskName());
+            info.setCreate_time(status.getCreateTime() / 1000);
+            info.setFinish_time(status.getFinishTime() / 1000);
+            info.setState(status.getState().toString());
+            info.setDefinition(status.getDefinition());
+            info.setError_code(status.getErrorCode());
+            info.setError_message(status.getErrorMessage());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+
 
     @Override
     public TGetDBPrivsResult getDBPrivs(TGetDBPrivsParams params) throws TException {
@@ -687,7 +764,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
             // this is a duplicate request, just return previous txn id
-            LOG.info("duplicate request for stream load. request id: {}, txn: {}", e.getDuplicatedRequestId(),
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
                     e.getTxnId());
             result.setTxnId(e.getTxnId());
         } catch (LabelAlreadyUsedException e) {
@@ -744,7 +821,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn id: {}, backend: {}",
+        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -758,7 +835,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 status.addToError_msgs("Publish timeout. The data will be visible after a while");
             }
         } catch (UserException e) {
-            LOG.warn("failed to commit txn: {}: {}", request.getTxnId(), e.getMessage());
+            LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
         } catch (Throwable e) {
@@ -846,7 +923,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn id: {}, reason: {}, backend: {}",
+        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -899,7 +976,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn id: {}, load id: {}, backend: {}",
+        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
         LOG.debug("stream load put request: {}", request);

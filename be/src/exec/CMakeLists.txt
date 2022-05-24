@@ -110,6 +110,8 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_triggers_scanner.cpp
     vectorized/schema_scanner/schema_events_scanner.cpp
     vectorized/schema_scanner/schema_views_scanner.cpp
+    vectorized/schema_scanner/schema_tasks_scanner.cpp
+    vectorized/schema_scanner/schema_task_runs_scanner.cpp
     vectorized/schema_scanner/schema_user_privileges_scanner.cpp
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
@@ -145,6 +147,7 @@ set(EXEC_FILES
     pipeline/scan/connector_scan_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/select_operator.cpp
+    pipeline/crossjoin/cross_join_context.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp

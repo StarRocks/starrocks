@@ -726,7 +726,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() != null);
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null);
     }
 
     @Override
@@ -740,7 +740,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.DATABASE() != null) {
-            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() != null,
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() == null,
                     properties);
         } else if (context.TABLE() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
@@ -752,9 +752,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 columnNames = columns.stream().map(Identifier::getValue).collect(toList());
             }
 
-            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() != null, properties);
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() == null, properties);
         } else {
-            return new CreateAnalyzeJobStmt(context.FULL() != null, properties);
+            return new CreateAnalyzeJobStmt(context.FULL() == null, properties);
         }
     }
 
@@ -832,7 +832,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
-        if (context.RESOURCE_GROUPS() != null) {
+        if (context.GROUPS() != null) {
             return new ShowWorkGroupStmt(null, context.ALL() != null);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
@@ -1734,7 +1734,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
-            "row_number", "rank", "dense_rank", "lead", "lag", "first_value", "last_value");
+            "row_number", "rank", "dense_rank", "ntile", "lead", "lag", "first_value", "last_value");
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
@@ -1785,6 +1785,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
+        } else if (context.CURRENT_TIMESTAMP() != null) {
+            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {

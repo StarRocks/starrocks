@@ -549,6 +549,21 @@ public class SelectAnalyzer {
         }
 
         @Override
+        public Expr visitAnalyticExpr(AnalyticExpr expr, Void context) {
+            for (int i = 0; i < expr.getFnCall().getChildren().size(); ++i) {
+                expr.getFnCall().setChild(i, visit(expr.getChild(i)));
+            }
+
+            List<OrderByElement> orderByElements = expr.getOrderByElements();
+            orderByElements.forEach(orderByElement -> orderByElement.setExpr(visit(orderByElement.getExpr())));
+
+            for (int i = 0; i < expr.getPartitionExprs().size(); ++i) {
+                expr.getPartitionExprs().set(i, visit(expr.getPartitionExprs().get(i)));
+            }
+            return expr;
+        }
+
+        @Override
         public Expr visitSlot(SlotRef slotRef, Void context) {
             if (columnsNotInGroupBy.containsKey(slotRef)) {
                 return columnsNotInGroupBy.get(slotRef);

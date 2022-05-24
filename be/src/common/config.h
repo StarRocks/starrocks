@@ -255,6 +255,8 @@ CONF_Bool(disable_column_pool, "false");
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
+// This config is to limit the max concurrency of running base compaction tasks.
+// -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
@@ -263,6 +265,8 @@ CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
+// This config is to limit the max concurrency of running cumulative compaction tasks.
+// -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 // cumulative compaction skips recently published deltas in order to prevent
@@ -714,6 +718,9 @@ CONF_Bool(enable_schema_change_v2, "true");
 CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
+
+// Config for opentelemetry tracing.
+CONF_String(jaeger_endpoint, "");
 
 } // namespace config
 

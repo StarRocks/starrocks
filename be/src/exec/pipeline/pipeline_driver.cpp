@@ -469,10 +469,17 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     driver_acct().update_last_time_spent(time_spent);
 
     // Update statistics of scan operator
-    if (SourceOperator* source = source_operator()) {
-        query_ctx()->incr_cur_scan_rows_num(source->get_last_scan_rows_num());
-        query_ctx()->incr_cur_scan_bytes(source->get_last_scan_rows_num());
+    if (ScanOperator* scan = source_scan_operator()) {
+        query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
+        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
     }
+
+    // Update cpu cost of this query
+    int64_t runtime_ns = driver_acct().get_last_time_spent();
+    int64_t source_operator_last_cpu_time_ns = source_operator()->get_last_growth_cpu_time_ns();
+    int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
+    int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+    query_ctx()->incr_cpu_cost(accounted_cpu_cost);
 }
 
 } // namespace starrocks::pipeline

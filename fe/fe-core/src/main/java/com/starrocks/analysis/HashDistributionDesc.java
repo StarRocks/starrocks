@@ -39,7 +39,7 @@ import java.util.Set;
 
 public class HashDistributionDesc extends DistributionDesc {
     private int numBucket;
-    private List<String> distributionColumnNames;
+    private final List<String> distributionColumnNames;
 
     public HashDistributionDesc() {
         type = DistributionInfoType.HASH;
@@ -125,8 +125,7 @@ public class HashDistributionDesc extends DistributionDesc {
             }
         }
 
-        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(numBucket, distributionColumns);
-        return hashDistributionInfo;
+        return new HashDistributionInfo(numBucket, distributionColumns);
     }
 
     @Override

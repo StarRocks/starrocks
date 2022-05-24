@@ -23,8 +23,26 @@
 
 namespace starrocks {
 
+void QueryStatistics::to_pb(PQueryStatistics* statistics) {
+    DCHECK(statistics != nullptr);
+    statistics->set_scan_rows(scan_rows);
+    statistics->set_scan_bytes(scan_bytes);
+    statistics->set_returned_rows(returned_rows);
+    statistics->set_cpu_cost_ns(cpu_ns);
+    statistics->set_mem_cost_bytes(mem_cost_bytes);
+    *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
+}
+
 void QueryStatistics::merge(QueryStatisticsRecvr* recvr) {
     recvr->merge(this);
+}
+
+void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
+    scan_rows += statistics.scan_rows();
+    scan_bytes += statistics.scan_bytes();
+    cpu_ns += statistics.cpu_cost_ns();
+    mem_cost_bytes += statistics.mem_cost_bytes();
+    _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
 }
 
 void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender_id) {

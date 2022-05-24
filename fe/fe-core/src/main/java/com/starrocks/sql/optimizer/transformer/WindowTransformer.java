@@ -80,13 +80,19 @@ public class WindowTransformer {
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.ROWNUMBER)) {
+        if (AnalyticExpr.isRowNumberFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for row_numer()");
-            windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
-                    new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
-                    new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
-        }
-        if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
+            windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
+        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for NTILE()");
+            windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
+
+            try {
+                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
 
@@ -430,7 +436,7 @@ public class WindowTransformer {
     }
 
     public static class PartitionGroup {
-        private List<SortGroup> sortGroups;
+        private final List<SortGroup> sortGroups;
         private List<ScalarOperator> partitionExpressions;
 
         public PartitionGroup() {

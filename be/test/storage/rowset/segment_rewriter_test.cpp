@@ -10,6 +10,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
@@ -25,7 +26,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -46,7 +46,7 @@ protected:
     }
 
     void TearDown() override {
-        ASSERT_TRUE(FileUtils::remove_all(kSegmentDir).ok());
+        ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
         StoragePageCache::release_global_cache();
     }
 

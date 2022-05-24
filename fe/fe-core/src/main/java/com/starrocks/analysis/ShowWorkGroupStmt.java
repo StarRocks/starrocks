@@ -8,11 +8,11 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // Show WorkGroups
 // 1. Show WorkGroup specified by name
-//  SHOW RESOURCE_GROUP <name>
+//  SHOW RESOURCE GROUP <name>
 // 2. Show all WorkGroups
-//  SHOW RESOURCE_GROUPS ALL
+//  SHOW RESOURCE GROUPS ALL
 // 3. Show all of WorkGroups that visible to current user
-//  SHOW RESOURCE_GROUPS
+//  SHOW RESOURCE GROUPS
 
 public class ShowWorkGroupStmt extends ShowStmt {
     private final String name;

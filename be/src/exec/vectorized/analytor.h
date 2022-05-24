@@ -117,6 +117,10 @@ public:
 
     void remove_unused_buffer_values(RuntimeState* state);
 
+    bool need_partition_boundary_for_unbounded_preceding_rows_frame() const {
+        return _need_partition_boundary_for_unbounded_preceding_rows_frame;
+    }
+
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
 #else
@@ -208,6 +212,11 @@ private:
 
     bool _has_udaf = false;
 
+    // Some window functions, eg. NTILE, need the boundary of partition to calculate its value.
+    // For these functions, we must wait util the partition finished.
+    bool _need_partition_boundary_for_unbounded_preceding_rows_frame = false;
+
+private:
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);
     // lead and lag function is special, the frame_start and frame_end

@@ -666,50 +666,20 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testSemiJoinReorder() throws Exception {
-        String sql = "SELECT \n" +
-                "  v2 \n" +
-                "FROM \n" +
-                "  t0 \n" +
-                "WHERE \n" +
-                "  v1 IN (\n" +
-                "    SELECT \n" +
-                "      v2 \n" +
-                "    FROM \n" +
-                "      t0 \n" +
-                "    WHERE \n" +
-                "      (\n" +
-                "        v2 IN (\n" +
-                "          SELECT \n" +
-                "            v1\n" +
-                "          FROM \n" +
-                "            t0\n" +
-                "        ) \n" +
-                "        OR (\n" +
-                "          v2 IN (\n" +
-                "            SELECT \n" +
-                "              v1\n" +
-                "            FROM \n" +
-                "              t0\n" +
-                "          )\n" +
-                "        )\n" +
-                "      ) \n" +
-                "      AND (\n" +
-                "        v3 IN (\n" +
-                "          SELECT \n" +
-                "            v1 \n" +
-                "          FROM \n" +
-                "            t0\n" +
-                "        )\n" +
-                "      )\n" +
-                "  );";
+        String sql = "SELECT v2 \n" +
+                "FROM t0 \n" +
+                "WHERE v1 IN (SELECT v2 \n" +
+                "             FROM t0 \n" +
+                "             WHERE (v2 IN (SELECT v1 FROM t0) \n" +
+                "                   OR (v2 IN (SELECT v1 FROM t0))) \n" +
+                "             AND (v3 IN (SELECT v1 FROM t0)));";
         // check no exception
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 10:HASH JOIN\n" +
+        assertContains(plan, "12:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: v2 = 11: v1\n" +
-                "  |  other predicates: (10: expr) OR (11: v1 IS NOT NULL)");
+                "  |  equal join conjunct: 5: v2 = 24: v1");
     }
 
     @Test

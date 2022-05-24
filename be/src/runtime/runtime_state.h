@@ -116,6 +116,7 @@ public:
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
@@ -209,12 +210,6 @@ public:
 
     int64_t load_job_id() const { return _load_job_id; }
 
-    // we only initialize object for load jobs
-    void set_load_error_hub_info(const TLoadErrorHubInfo& hub_info) {
-        TLoadErrorHubInfo* info = new TLoadErrorHubInfo(hub_info);
-        _load_error_hub_info.reset(info);
-    }
-
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
     // is_summary is true, means we are going to write the summary line
@@ -245,8 +240,6 @@ public:
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
-
-    void export_load_error(const std::string& error_msg);
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -284,6 +277,9 @@ public:
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
+
+    void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
+    bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
 private:
     Status create_error_log_file();
@@ -372,11 +368,9 @@ private:
     std::vector<std::string> _export_output_files;
 
     int64_t _load_job_id = 0;
-    std::unique_ptr<TLoadErrorHubInfo> _load_error_hub_info;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
-    std::unique_ptr<LoadErrorHub> _error_hub;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
     // prohibit copies
@@ -388,6 +382,8 @@ private:
     vectorized::GlobalDictMaps _load_global_dicts;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+
+    bool _enable_pipeline_engine = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
@@ -404,7 +400,7 @@ private:
             break;                                                                                                  \
         case MemTracker::QUERY:                                                                                     \
             str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
-                   "set session variable exec_mem_limit.";                                                          \
+                   "set session variable exec_mem_limit or query_mem_limit.";                                       \
             break;                                                                                                  \
         case MemTracker::PROCESS:                                                                                   \
             str << "Mem usage has exceed the limit of BE";                                                          \

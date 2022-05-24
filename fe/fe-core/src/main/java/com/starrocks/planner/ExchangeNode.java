@@ -37,6 +37,7 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -92,7 +93,16 @@ public class ExchangeNode extends PlanNode {
         }
         // Only apply the limit at the receiver if there are multiple senders.
         if (inputNode.getFragment().isPartitioned()) {
-            limit = inputNode.limit;
+            if (inputNode instanceof SortNode) {
+                SortNode sortNode = (SortNode) inputNode;
+                if (CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
+                    limit = inputNode.limit;
+                } else {
+                    unsetLimit();
+                }
+            } else {
+                limit = inputNode.limit;
+            }
         }
         computeTupleIds();
     }

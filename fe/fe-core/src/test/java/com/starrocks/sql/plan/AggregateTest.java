@@ -1078,6 +1078,27 @@ public class AggregateTest extends PlanTestBase {
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0"));
 
+        sql = "select lead(v2) over(partition by v1) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
+        sql = "select lead(v2) over(partition by v1 order by v3) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                "  |  group by: 1: v1"));
+
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
 
@@ -1153,5 +1174,37 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
                 "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 2");
         connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testSumString() throws Exception {
+        String sql = "select sum(N_COMMENT) from nation";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(CAST(4: N_COMMENT AS DOUBLE))");
+    }
+
+    @Test
+    public void testGroupByConstant() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
+        String plan = getFragmentPlan(sql);
+        // check four phase aggregate
+        assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(19: count)\n" +
+                "  |  group by: 18: expr");
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
+        plan = getFragmentPlan(sql);
+        // check four phase aggregate
+        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(20: count)\n" +
+                "  |  group by: 18: expr");
+
+        sql = "select count(distinct L_ORDERKEY + 1) from lineitem group by 1.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(20: count)\n" +
+                "  |  group by: 18: expr");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 }

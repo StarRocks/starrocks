@@ -43,6 +43,8 @@ public:
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type, JoinRuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
+
+    static StatusOr<ExprContext*> rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct, Chunk* chunk);
 };
 
 // how to generate & publish this runtime filter

@@ -18,7 +18,7 @@ namespace starrocks {
 CompactionScheduler::CompactionScheduler() {
     auto st = ThreadPoolBuilder("compact_pool")
                       .set_min_threads(1)
-                      .set_max_threads(StorageEngine::instance()->compaction_manager()->max_task_num())
+                      .set_max_threads(std::max(1, StorageEngine::instance()->compaction_manager()->max_task_num()))
                       .set_max_queue_size(1000)
                       .build(&_compaction_pool);
     DCHECK(st.ok());
