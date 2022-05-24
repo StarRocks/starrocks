@@ -57,7 +57,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
     /*
      *
-     * @todo:
+     * @todo: support constant in sub-query
      * e.g.
      *   select v0, 1 in (select v0 from t0) from t1
      *
@@ -292,8 +292,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             distinctConsumeOutputMaps.forEach((k, v) -> distinctRewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(distinctRewriteMap);
 
-            distinctJoinOnPredicate =
-                    Utils.compoundAnd(rewriter.rewrite(inPredicate), rewriter.rewrite(correlationPredicate));
+            inPredicate = (BinaryPredicateOperator) rewriter.rewrite(inPredicate);
+            distinctJoinOnPredicate = Utils.compoundAnd(inPredicate, rewriter.rewrite(correlationPredicate));
 
             distinctAggregateOutputs.addAll(distinctConsumeOutputMaps.keySet());
             // distinct aggregate
