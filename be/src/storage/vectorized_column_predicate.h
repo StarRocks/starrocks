@@ -68,34 +68,6 @@ enum class PredicateType {
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
 
-inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
-    switch (p) {
-    case PredicateType::kEQ:
-        return TExprOpcode::EQ;
-    case PredicateType::kNE:
-        return TExprOpcode::NE;
-    case PredicateType::kGT:
-        return TExprOpcode::GT;
-    case PredicateType::kGE:
-        return TExprOpcode::GE;
-    case PredicateType::kLT:
-        return TExprOpcode::LT;
-    case PredicateType::kLE:
-        return TExprOpcode::LE;
-    case PredicateType::kInList:
-        return TExprOpcode::FILTER_IN;
-    case PredicateType::kNotInList:
-        return TExprOpcode::FILTER_NOT_IN;
-    case PredicateType::kAnd:
-        return TExprOpcode::COMPOUND_AND;
-    case PredicateType::kOr:
-        return TExprOpcode::COMPOUND_OR;
-    default:
-        CHECK(false) << "not supported";
-        __builtin_unreachable();
-    }
-}
-
 template <typename T>
 static inline T string_to_int(const Slice& s) {
     StringParser::ParseResult r;
