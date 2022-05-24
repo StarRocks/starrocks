@@ -185,7 +185,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
@@ -3492,14 +3491,14 @@ public class GlobalStateMgr {
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc, isTempPartition);
                 }
-            }else if (partitionType == PartitionType.LIST){
+            } else if (partitionType == PartitionType.LIST) {
                 ListPartitionInfo listPartitionInfo = ((ListPartitionInfo) partitionInfo);
                 List<ColumnDef> columnDefList = listPartitionInfo.getPartitionColumns().stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
-                partitionDesc.analyze(columnDefList,cloneProperties);
+                partitionDesc.analyze(columnDefList, cloneProperties);
                 CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc);
-            }else{
+            } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
         }
@@ -3780,7 +3779,7 @@ public class GlobalStateMgr {
         return sourceProperties;
     }
 
-    public  void replayAddPartition(PartitionPersistInfo info) throws DdlException {
+    public void replayAddPartition(PartitionPersistInfo info) throws DdlException {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
         try {

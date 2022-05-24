@@ -181,8 +181,8 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void handleNewRangePartitionDescsV2(List<SingleRangePartitionDesc> listDesc,
-                                             List<Partition> partitionList, Set<String> existPartitionNameSet,
-                                             boolean isTemp) throws DdlException {
+                                               List<Partition> partitionList, Set<String> existPartitionNameSet,
+                                               boolean isTemp) throws DdlException {
         int len = listDesc.size();
         for (int i = 0; i < len; i++) {
             if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
@@ -211,7 +211,7 @@ public class RangePartitionInfo extends PartitionInfo {
         for (int i = 0; i < len; i++) {
             if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
                 long partitionId = partitionList.get(i).getId();
-                SingleRangePartitionDesc desc = (SingleRangePartitionDesc)listDesc.get(i);
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) listDesc.get(i);
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {

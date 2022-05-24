@@ -81,11 +81,11 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues.put(partitionId, partitionValues);
     }
 
-    public void setBatchLiteralExprValues(Map<Long,List<String>> batchValues) throws AnalysisException {
-        for(Map.Entry<Long,List<String>> entry : batchValues.entrySet()){
+    public void setBatchLiteralExprValues(Map<Long, List<String>> batchValues) throws AnalysisException {
+        for (Map.Entry<Long, List<String>> entry : batchValues.entrySet()) {
             long partitionId = entry.getKey();
             List<String> values = entry.getValue();
-            this.setLiteralExprValues(partitionId,values);
+            this.setLiteralExprValues(partitionId, values);
         }
     }
 
@@ -112,11 +112,12 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
     }
 
-    public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues) throws AnalysisException {
-        for(Map.Entry<Long,List<List<String>>> entry : batchMultiValues.entrySet()){
+    public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
+            throws AnalysisException {
+        for (Map.Entry<Long, List<List<String>>> entry : batchMultiValues.entrySet()) {
             long partitionId = entry.getKey();
             List<List<String>> multiValues = entry.getValue();
-            this.setMultiLiteralExprValues(partitionId,multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
         }
     }
 
