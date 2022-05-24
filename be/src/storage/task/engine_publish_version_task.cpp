@@ -37,7 +37,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
           _tablet_info(tablet_info),
           _rowset(rowset) {}
 
-Status EnginePublishVersionTask::finish() {
+Status EnginePublishVersionTask::execute() {
     VLOG(1) << "Begin publish txn tablet:" << _tablet_info.tablet_id << " version:" << _version
             << " partition:" << _partition_id << " txn:" << _transaction_id << " rowset:" << _rowset->rowset_id();
 
