@@ -13,7 +13,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
@@ -29,7 +28,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -45,7 +43,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public class TaskManager implements Writable {
+public class TaskManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
 
@@ -168,7 +166,7 @@ public class TaskManager implements Writable {
             for (long taskId : taskIdList) {
                 Task task = manualTaskMap.get(taskId);
                 if (task == null) {
-                    LOG.warn("drop task {} failed because task is null", taskId);
+                    LOG.warn("drop taskId {} failed because task is null", taskId);
                     continue;
                 }
                 nameToTaskMap.remove(task.getName());
@@ -218,6 +216,9 @@ public class TaskManager implements Writable {
     }
 
     public void replayCreateTask(Task task) {
+        if ((System.currentTimeMillis() - task.getCreateTime()) / 1000 > Config.label_keep_max_second) {
+            return;
+        }
         createTask(task, true);
     }
 
@@ -231,7 +232,7 @@ public class TaskManager implements Writable {
 
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ConnectContext.get());
-        Long createResult = createTask(task, false);
+        long createResult = createTask(task, false);
 
         String taskName = task.getName();
         if (createResult < 0) {
@@ -255,7 +256,20 @@ public class TaskManager implements Writable {
 
     public long loadTasks(DataInputStream dis, long checksum) throws IOException {
         try {
-            readFields(dis);
+            String s = Text.readString(dis);
+            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
+            if (data != null) {
+                if (data.tasks != null) {
+                    for (Task task : data.tasks) {
+                        replayCreateTask(task);
+                    }
+                }
+                if (data.runStatus != null) {
+                    for (TaskRunStatus runStatus : data.runStatus) {
+                        replayCreateTaskRun(runStatus);
+                    }
+                }
+            }
             LOG.info("finished replaying TaskManager from image");
         } catch (EOFException e) {
             LOG.info("no TaskManager to replay.");
@@ -263,37 +277,13 @@ public class TaskManager implements Writable {
         return checksum;
     }
 
-
     public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
-
-    @Override
-    public void write(DataOutput out) throws IOException {
         SerializeData data = new SerializeData();
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         data.runStatus = showTaskRunStatus(null);
         String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
-
-    public void readFields(DataInputStream dis) throws IOException {
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-        if (data != null) {
-            if (data.tasks != null) {
-                for (Task task : data.tasks) {
-                    replayCreateTask(task);
-                }
-            }
-            if (data.runStatus != null) {
-                for (TaskRunStatus runStatus : data.runStatus) {
-                    replayCreateTaskRun(runStatus);
-                }
-            }
-        }
+        Text.writeString(dos, s);
+        return checksum;
     }
 
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
@@ -320,12 +310,20 @@ public class TaskManager implements Writable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        long lastUpdateTime = status.getCreateTime();
+        if (status.getFinishTime() > lastUpdateTime) {
+            lastUpdateTime = status.getFinishTime();
+        }
+        if ((System.currentTimeMillis() - lastUpdateTime) / 1000 > Config.label_keep_max_second) {
+            return;
+        }
 
         switch (status.getState()) {
             case PENDING:
                 String taskName = status.getTaskName();
                 Task task = nameToTaskMap.get(taskName);
                 if (task == null) {
+                    LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();

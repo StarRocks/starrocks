@@ -23,7 +23,6 @@ public class TaskRunStatusChange implements Writable {
     @SerializedName("finishTime")
     private long finishTime;
 
-
     @SerializedName("fromStatus")
     Constants.TaskRunState fromStatus;
 

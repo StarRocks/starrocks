@@ -1345,7 +1345,6 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.saveSmallFiles(dos, checksum);
             checksum = pluginMgr.savePlugins(dos, checksum);
             checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
