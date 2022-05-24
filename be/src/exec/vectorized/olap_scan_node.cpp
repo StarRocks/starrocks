@@ -594,12 +594,17 @@ struct TypeMemoryUsed {
         switch (ptype) {
         case TYPE_VARCHAR:
         case TYPE_CHAR:
+            return 128;
         case TYPE_JSON:
+            // 1KB.
+            return 1024;
         case TYPE_HLL:
+            // 16KB.
+            return 16 * 1024;
         case TYPE_OBJECT:
         case TYPE_PERCENTILE:
-            // Use 100 bytes to estimate types of indeterminate length.
-            return 100;
+            // 1MB.
+            return 1024 * 1024;
         default:
             return 0;
         }
