@@ -106,15 +106,12 @@ public class Backend implements Writable {
     // port of starlet on BE
     private volatile int starletPort;
 
-    private AtomicBoolean workerAdded;
-
     public Backend() {
         this.host = "";
         this.version = "";
         this.lastUpdateMs = 0;
         this.lastStartTime = 0;
         this.isAlive = new AtomicBoolean();
-        this.workerAdded = new AtomicBoolean();
         this.isDecommissioned = new AtomicBoolean(false);
 
         this.bePort = 0;
@@ -188,8 +185,7 @@ public class Backend implements Writable {
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
     }
-
-
+    
     // for test only
     public void updateOnce(int bePort, int httpPort, int beRpcPort) {
         if (this.bePort != bePort) {
