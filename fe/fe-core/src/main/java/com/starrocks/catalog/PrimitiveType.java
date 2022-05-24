@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TypesConstants;
 
 import java.util.Arrays;
 import java.util.List;
@@ -372,16 +373,14 @@ public enum PrimitiveType {
                 typeSize = 16;
                 break;
             case HLL:
-                // 16KB
-                typeSize = 16 * 1024;
+                typeSize = (int) TypesConstants.DEFAULT_HLL_LENGTH;
                 break;
             case BITMAP:
             case PERCENTILE:
-                // 1MB
-                typeSize = 1024 * 1024;
+                typeSize = (int) TypesConstants.DEFAULT_BITMAP_LENGTH;
                 break;
             case JSON:
-                typeSize = 1024;
+                typeSize = (int) TypesConstants.DEFAULT_JSON_LENGTH;
                 break;
             default:
                 Preconditions.checkState(false, "unknown type " + this);

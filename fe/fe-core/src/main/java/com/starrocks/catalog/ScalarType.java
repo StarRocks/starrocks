@@ -31,6 +31,7 @@ import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import com.starrocks.thrift.TypesConstants;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,11 +55,11 @@ public class ScalarType extends Type implements Cloneable {
     public static final int DEFAULT_PRECISION = 9;
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int MAX_VARCHAR_LENGTH = 1048576;
-    public static final int MAX_CHAR_LENGTH = 255;
+    public static final int DEFAULT_STRING_LENGTH = (int) TypesConstants.DEFAULT_STRING_LENGTH;
+    public static final int MAX_VARCHAR_LENGTH = (int) TypesConstants.MAX_VARCHAR_LENGTH;
+    public static final int MAX_CHAR_LENGTH = (int) TypesConstants.MAX_CHAR_LENGTH;
     // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
-    public static final int MAX_HLL_LENGTH = 16385;
+    public static final int MAX_HLL_LENGTH = (int) TypesConstants.DEFAULT_HLL_LENGTH;
     @SerializedName(value = "type")
     private final PrimitiveType type;
 
@@ -552,6 +553,7 @@ public class ScalarType extends Type implements Cloneable {
         switch (type) {
             case VARCHAR:
             case CHAR:
+            case JSON:
             case HLL: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
@@ -730,11 +732,11 @@ public class ScalarType extends Type implements Cloneable {
             case VARCHAR:
                 return len;
             case HLL:
-                return 16385;
+                return (int) TypesConstants.DEFAULT_HLL_LENGTH;
             case BITMAP:
-                return 1024; // this is a estimated value
+                return (int) TypesConstants.DEFAULT_BITMAP_LENGTH; // this is a estimated value
             case JSON:
-                return 128; // estimated value
+                return (int) TypesConstants.DEFAULT_JSON_LENGTH; // estimated value
             default:
                 return 0;
         }
