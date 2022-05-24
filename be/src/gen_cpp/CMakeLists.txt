@@ -87,6 +87,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/segment.pb.cc
     ${GEN_CPP_DIR}/persistent_index.pb.cc
     ${GEN_CPP_DIR}/tablet_schema.pb.cc
+    ${GEN_CPP_DIR}/starlake.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
