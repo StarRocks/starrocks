@@ -2,6 +2,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
@@ -62,10 +63,8 @@ public class ImpersonateUserPrivTable extends PrivTable {
 
     public static ImpersonateUserPrivTable read(DataInput in) throws IOException {
         ImpersonateUserPrivTable table = new ImpersonateUserPrivTable();
-        ImpersonateUserPrivEntry entry;
-        int count = in.readInt();
-        for (int i = 0; i != count; ++ i) {
-            entry = GsonUtils.GSON.fromJson(Text.readString(in), ImpersonateUserPrivEntry.class);
+        SerializeData data = GsonUtils.GSON.fromJson(Text.readString(in), SerializeData.class);
+        for (ImpersonateUserPrivEntry entry : data.entries) {
             try {
                 entry.analyse();
             } catch (AnalysisException e) {
@@ -81,11 +80,17 @@ public class ImpersonateUserPrivTable extends PrivTable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeInt(this.size());
+        SerializeData data = new SerializeData();
         Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             ImpersonateUserPrivEntry entry = (ImpersonateUserPrivEntry) iter.next();
-            Text.writeString(out, GsonUtils.GSON.toJson(entry));
+            data.entries.add(entry);
         }
+        Text.writeString(out, GsonUtils.GSON.toJson(data));
+    }
+
+    private static class SerializeData {
+        @SerializedName("entries")
+        public List<ImpersonateUserPrivEntry> entries = new ArrayList<>();
     }
 }

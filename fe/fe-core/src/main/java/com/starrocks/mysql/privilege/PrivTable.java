@@ -22,7 +22,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -49,7 +48,6 @@ public abstract class PrivTable implements Writable {
     private static final Logger LOG = LogManager.getLogger(PrivTable.class);
 
     // keep user identity sorted
-    @SerializedName("map")
     protected Map<UserIdentity, List<PrivEntry>> map = new TreeMap<>(new Comparator<UserIdentity>() {
         @Override
         public int compare(UserIdentity o1, UserIdentity o2) {
