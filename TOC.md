@@ -15,7 +15,6 @@
   + [数据模型介绍](/table_design/Data_model.md)
   + [数据分布](/table_design/Data_distribution.md)
   + [排序键和shortkey index](/table_design/Sort_key.md)
-  + [物化视图](/table_design/Materialized_view.md)
 + 数据导入
   + [导入总览](/loading/Loading_intro.md)
   + [Stream Load](/loading/StreamLoad.md)
