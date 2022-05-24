@@ -35,8 +35,7 @@ namespace starrocks {
 
 const std::string MemTracker::COUNTER_NAME = "PeakMemoryUsage";
 
-MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
-                       bool log_usage_if_zero)
+MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister)
         : _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
