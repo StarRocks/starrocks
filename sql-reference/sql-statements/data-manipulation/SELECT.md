@@ -29,7 +29,7 @@ USING (col1 [, col2 ...]) ]
 ```
 
 ```sql
-SELECT select_list FROMS
+SELECT select_list FROM
 table_or_subquery1, table_or_subquery2 [, table_or_subquery3 ...]
 [other_join_clause ...]
 WHERE
