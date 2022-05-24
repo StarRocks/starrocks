@@ -91,7 +91,8 @@ static std::string alphabet1 = "~!@#$%^&*()_+{}|:\"<>?[]\\;',./";
 
 static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string& alphabet, size_t avg_length,
                                                               size_t num_rows) {
-    auto col = BinaryColumn::create(num_rows);
+    auto col = BinaryColumn::create();
+    col->reserve(num_rows);
     std::random_device rd;
     std::uniform_int_distribution<size_t> length_g(0, 2 * avg_length);
     std::uniform_int_distribution<size_t> g(0, alphabet.size());
@@ -103,7 +104,7 @@ static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string&
         for (auto i = 0; i < length; ++i) {
             s.push_back(alphabet[g(rd)]);
         }
-        col->append(Slice(s)));
+        col->append(Slice(s));
     }
     return col;
 }
@@ -362,7 +363,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
     EXPECT_EQ(pbf0->max_value(), Slice("dd", 2));
 }
 
-typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>)> PartitionByFunc;
+typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>&)> PartitionByFunc;
 typedef std::function<void(JoinRuntimeFilter*, JoinRuntimeFilter::RunningContext*)> GrfConfigFunc;
 
 void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc part_func, GrfConfigFunc grf_config_func) {
@@ -382,7 +383,8 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
     }
 
     for (auto i = 0; i < num_rows; ++i) {
-        bfs[hash_values[i]].insert(column->get_slice(i));
+        auto slice = column->get_slice(i);
+        bfs[hash_values[i]].insert(&slice);
     }
 
     std::vector<std::string> serialized_rfs(num_partitions);
@@ -400,8 +402,8 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
                                                         serialized_rfs[p].size());
         ASSERT_EQ(grf_component->size(), num_rows_per_partitions[p]);
         grf.concat(grf_component);
-        ASSERT_EQ(grf.size(), num_rows);
     }
+    ASSERT_EQ(grf.size(), num_rows);
     JoinRuntimeFilter::RunningContext running_ctx;
     grf_config_func(&grf, &running_ctx);
     {
@@ -416,20 +418,20 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
         running_ctx.selection.assign(num_rows, 1);
         auto true_count = grf.evaluate(negative_column.get(), &running_ctx);
         auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
-        ASSERT_EQ(true_count, num_rows);
+        ASSERT_LE((double)true_count / num_rows, 0.5);
         ASSERT_EQ(true_count, true_count2);
     }
 }
 void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
                               std::vector<int> bucketseq_to_partition) {
-    auto part_by_func = [num_rows, num_partitions, num_backets, &bucketseq_to_partition](
+    auto part_by_func = [num_rows, num_partitions, num_buckets, &bucketseq_to_partition](
                                 BinaryColumn* column, std::vector<uint32_t>& hash_values,
                                 std::vector<size_t>& num_rows_per_partitions) {
-        std::vector<uint32_t> hash_values(num_rows, 0);
+        hash_values.assign(num_rows, 0);
         column->crc32_hash(hash_values.data(), 0, num_rows);
         for (auto i = 0; i < num_rows; ++i) {
             hash_values[i] %= num_buckets;
-            hash_values[i] = bucketseq_to_partitions[hash_values[i]];
+            hash_values[i] = bucketseq_to_partition[hash_values[i]];
             ++num_rows_per_partitions[hash_values[i]];
         }
     };
@@ -454,8 +456,8 @@ TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter3) {
 
 void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions,
                                                         TRuntimeFilterBuildJoinMode::type type) {
-    auto part_by_func = [](BinaryColumn* column, std::vector<uint32_t>& hash_values,
-                           std::vector<size_t>& num_rows_per_partitions) {
+    auto part_by_func = [num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
+                                                   std::vector<size_t>& num_rows_per_partitions) {
         hash_values.assign(num_rows, HashUtil::FNV_SEED);
         column->fnv_hash(hash_values.data(), 0, num_rows);
         for (auto i = 0; i < num_rows; ++i) {
@@ -488,18 +490,18 @@ TEST_F(RuntimeFilterTest, TestPartitionedRuntimeFilter3) {
 }
 
 TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter1) {
-    test_shuffle_hash_bucket_helper(100, 1);
+    test_shuffle_hash_bucket_grf_helper(100, 1);
 }
 TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter2) {
-    test_shuffle_hash_bucket_helper(100, 3);
+    test_shuffle_hash_bucket_grf_helper(100, 3);
 }
 TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter3) {
-    test_shuffle_hash_bucket_helper(100, 5);
+    test_shuffle_hash_bucket_grf_helper(100, 5);
 }
 
 void test_local_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions) {
-    auto part_by_func = [](BinaryColumn* column, std::vector<uint32_t>& hash_values,
-                           std::vector<size_t>& num_rows_per_partitions) {
+    auto part_by_func = [num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
+                                                   std::vector<size_t>& num_rows_per_partitions) {
         hash_values.assign(num_rows, 0);
         column->crc32_hash(hash_values.data(), 0, num_rows);
         for (auto i = 0; i < num_rows; ++i) {
@@ -514,73 +516,15 @@ void test_local_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions) {
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter1) {
-    test_local_hash_bucket_helper(100, 1);
+    test_local_hash_bucket_grf_helper(100, 1);
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter2) {
-    test_local_hash_bucket_helper(100, 3);
+    test_local_hash_bucket_grf_helper(100, 3);
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter3) {
-    test_local_hash_bucket_helper(100, 5);
-}
-
-TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter) {
-    RuntimeBloomFilter<TYPE_VARCHAR> bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
-    ObjectPool pool;
-    {
-        std::vector<std::string> data = {"bb", "cc", "dd"};
-        std::vector<Slice> values;
-        for (const auto& s : data) {
-            values.emplace_back(Slice(s));
-        }
-        bf0.init(100);
-        for (auto& s : values) {
-            bf0.insert(&s);
-        }
-
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
-        std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf0, (uint8_t*)buf.data());
-        buf.resize(actual_size);
-
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf0, (const uint8_t*)buf.data(), actual_size);
-    }
-
-    auto* pbf0 = static_cast<RuntimeBloomFilter<TYPE_VARCHAR>*>(rf0);
-    EXPECT_EQ(pbf0->min_value(), Slice("bb", 2));
-    EXPECT_EQ(pbf0->max_value(), Slice("dd", 2));
-
-    RuntimeBloomFilter<TYPE_VARCHAR> bf1;
-    JoinRuntimeFilter* rf1 = &bf1;
-    {
-        std::vector<std::string> data = {"aa", "cc", "dc"};
-        std::vector<Slice> values;
-        for (const auto& s : data) {
-            values.emplace_back(Slice(s));
-        }
-        bf1.init(100);
-        for (auto& s : values) {
-            bf1.insert(&s);
-        }
-
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf1);
-        std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf1, (uint8_t*)buf.data());
-        buf.resize(actual_size);
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, (const uint8_t*)buf.data(), actual_size);
-    }
-
-    auto* pbf1 = static_cast<RuntimeBloomFilter<TYPE_VARCHAR>*>(rf1);
-    EXPECT_EQ(pbf1->min_value(), Slice("aa", 2));
-    EXPECT_EQ(pbf1->max_value(), Slice("dc", 2));
-
-    // range aa - dd
-    rf0->merge(rf1);
-    // out of scope, we expect aa and dd would be still alive.
-    EXPECT_EQ(pbf0->min_value(), Slice("aa", 2));
-    EXPECT_EQ(pbf0->max_value(), Slice("dd", 2));
+    test_local_hash_bucket_grf_helper(100, 5);
 }
 
 } // namespace vectorized

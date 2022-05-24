@@ -214,7 +214,7 @@ public class Coordinator {
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
 
-    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newConcurrentMap();
+    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -1269,7 +1269,9 @@ public class Coordinator {
 
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragment.getFragmentId(), parallelExecInstanceNum, params);
-                computeBucketSeq2InstanceOrdinal(params, hasColocate);
+                if (hasColocate) {
+                    computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
+                }
             } else {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -1337,20 +1339,15 @@ public class Coordinator {
         }
     }
 
-    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, boolean hasColocate) {
-        if (!hasColocate) {
-            return;
-        }
-        Integer bucketNum = fragmentIdToBucketNumMap.get(params.fragment.getFragmentId());
-        Preconditions.checkArgument(bucketNum != null, "bucketNum not exists for colocate Fragment");
-        Integer[] bucketSeq2InstanceOrdinal = new Integer[bucketNum];
-        for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
+    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
+        Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
             bucketSeq2InstanceOrdinal[bucketSeq] = -1;
         }
         for (int i = 0; i < params.instanceExecParams.size(); ++i) {
             FInstanceExecParam instance = params.instanceExecParams.get(i);
             for (Integer bucketSeq : instance.bucketSeqSet) {
-                Preconditions.checkArgument(bucketSeq < bucketNum, "bucketSeq exceeds bucketNum in colocate Fragment");
+                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
                 bucketSeq2InstanceOrdinal[bucketSeq] = i;
             }
         }

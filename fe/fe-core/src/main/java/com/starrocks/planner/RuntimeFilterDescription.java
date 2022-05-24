@@ -169,6 +169,10 @@ public class RuntimeFilterDescription {
         this.bucketSeqToInstance = bucketSeqToInstance;
     }
 
+    public List<Integer> getBucketSeqToInstance() {
+        return this.bucketSeqToInstance;
+    }
+
     public boolean canPushAcrossExchangeNode() {
         if (onlyLocal) {
             return false;
@@ -262,6 +266,10 @@ public class RuntimeFilterDescription {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.PARTITIONED);
         } else if (joinMode.equals(JoinNode.DistributionMode.COLOCATE)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.COLOCATE);
+        } else if (joinMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET);
+        } else if (joinMode.equals(JoinNode.DistributionMode.REPLICATED)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.REPLICATED);
         }
 
         return t;

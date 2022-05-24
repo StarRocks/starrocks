@@ -374,6 +374,9 @@ public:
         }
         case TRuntimeFilterBuildJoinMode::COLOCATE: {
             hash_values.assign(num_rows, 0);
+            // shuffle-aware grf is partitioned into multiple parts the number of whom equals to the number of
+            // instances. we can use crc32_hash to compute out bucket_seq that the row belongs to, then use
+            // the bucketseq_to_partition array to translate bucket_seq into partition index of the grf.
             compute_hash(&Column::crc32_hash, running_ctx->bucketseq_to_partition.size());
             for (auto i = 0; i < num_rows; ++i) {
                 hash_values[i] = running_ctx->bucketseq_to_partition[hash_values[i]];
