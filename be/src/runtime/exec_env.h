@@ -162,7 +162,6 @@ public:
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
 
-    PluginMgr* plugin_mgr() { return _plugin_mgr; }
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     Status init_mem_tracker();
 
@@ -257,8 +256,6 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
-
-    PluginMgr* _plugin_mgr = nullptr;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
