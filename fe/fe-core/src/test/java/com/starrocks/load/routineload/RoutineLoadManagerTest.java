@@ -59,6 +59,10 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -716,6 +720,14 @@ public class RoutineLoadManagerTest {
 
         routineLoadManager.replayChangeRoutineLoadJob(operation);
         Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+
+        // test load job expired
+        Config.label_keep_max_second = 1;
+        Deencapsulation.setField(routineLoadJob, "createTime", System.currentTimeMillis() - 2000);
+        routineLoadManager.replayChangeRoutineLoadJob(operation);
+        Assert.assertFalse(idToRoutineLoadJob.containsKey(routineLoadJob.getId()));
+
+        Config.label_keep_max_second = 100;
     }
 
     @Test
@@ -760,5 +772,35 @@ public class RoutineLoadManagerTest {
         routineLoadManager.stopRoutineLoadJob(stopRoutineLoadStmt);
 
         Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+    }
+
+
+    @Test
+    public void testSerialize() throws Exception {
+        RoutineLoadManager loadManager = new RoutineLoadManager();
+        RoutineLoadJob goodJob
+        loadManager.replayCreateRoutineLoadJob(new KafkaRoutineLoadJob());
+        // 5. save image
+        File tempFile = File.createTempFile("RoutineLoadManagerTest", ".image");
+        System.err.println("write image " + tempFile.getAbsolutePath());
+        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
+        long checksum = 0;
+        long saveChecksum = mgr.saveExportJob(dos, checksum);
+        dos.close();
+
+        // 6. clean expire
+        mgr.removeOldExportJobs();
+        Assert.assertEquals(1, mgr.getIdToJob().size());
+
+        // 7. load image, will filter job1
+        RoutineLoadManager newMgr = new RoutineLoadManager();
+        Assert.assertEquals(0, newMgr.getIdToJob().size());
+        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
+        checksum = 0;
+        long loadChecksum = newMgr.loadExportJob(dis, checksum);
+        Assert.assertEquals(1, newMgr.getIdToJob().size());
+        Assert.assertEquals(saveChecksum, loadChecksum);
+
+        tempFile.delete();
     }
 }
