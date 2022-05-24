@@ -620,12 +620,12 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
     }
 
     for (const auto& slot : slots) {
-        size_t filed_bytes = std::max<size_t>(slot->slot_size(), 0);
-        filed_bytes += _estimate_type_bytes(slot->type().type);
+        size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
+        field_bytes += _estimate_type_bytes(slot->type().type);
 
-        _estimated_scan_row_bytes += filed_bytes;
+        _estimated_scan_row_bytes += field_bytes;
         if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
-            _estimated_output_row_bytes += filed_bytes;
+            _estimated_output_row_bytes += field_bytes;
         }
     }
 }
