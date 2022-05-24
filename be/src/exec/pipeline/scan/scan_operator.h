@@ -83,6 +83,7 @@ private:
 
     bool _try_to_increase_committed_scan_tasks();
     void _decrease_committed_scan_tasks() { _num_committed_scan_tasks.fetch_sub(1); }
+    bool _exceed_max_scan_concurrency(int num_committed_scan_tasks) const;
 
 protected:
     ScanNode* _scan_node = nullptr;

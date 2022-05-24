@@ -95,7 +95,8 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP || _num_committed_scan_tasks.load() >= _max_scan_concurrency) {
+    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP ||
+        _exceed_max_scan_concurrency(_num_committed_scan_tasks.load())) {
         return false;
     }
 
@@ -338,12 +339,16 @@ void ScanOperator::_merge_chunk_source_profiles() {
 
 bool ScanOperator::_try_to_increase_committed_scan_tasks() {
     int old_num = _num_committed_scan_tasks.fetch_add(1);
-    // _max_scan_concurrency takes effect, only when it is positive.
-    if (_max_scan_concurrency > 0 && old_num >= _max_scan_concurrency) {
+    if (_exceed_max_scan_concurrency(old_num)) {
         _decrease_committed_scan_tasks();
         return false;
     }
     return true;
+}
+
+bool ScanOperator::_exceed_max_scan_concurrency(int num_committed_scan_tasks) const {
+    // _max_scan_concurrency takes effect, only when it is positive.
+    return _max_scan_concurrency > 0 && num_committed_scan_tasks >= _max_scan_concurrency;
 }
 
 // ========== ScanOperatorFactory ==========
