@@ -587,9 +587,9 @@ TEST_F(CSVScannerTest, test_large_record_size) {
 }
 
 TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
-    constexpr size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
-    constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
-    constexpr size_t field_count = (record_length + field_length - 1) / field_length;
+    const size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    const size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    const size_t field_count = (record_length + field_length - 1) / field_length;
 
     TypeDescriptor large_varchar_type;
     large_varchar_type.type = TYPE_VARCHAR;
