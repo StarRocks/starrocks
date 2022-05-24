@@ -77,9 +77,9 @@ Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_
 }
 
 StorageEngine::StorageEngine(const EngineOptions& options)
-        : _options(options),
+        : _effective_cluster_id(-1),
+          _options(options),
           _available_storage_medium_type_count(0),
-          _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
 
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
@@ -1057,6 +1057,27 @@ bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id)
     std::lock_guard lock(_gc_mutex);
     auto search = _unused_rowsets.find(rowset_id.to_string());
     return search != _unused_rowsets.end();
+}
+
+DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
+        : StorageEngine(options), _conf_path(options.conf_path) {
+    _s_instance = this;
+    _effective_cluster_id = config::cluster_id;
+    cluster_id_mgr = std::make_unique<ClusterIdMgr>(options.conf_path);
+}
+
+Status DummyStorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
+    std::unique_ptr<DummyStorageEngine> engine = std::make_unique<DummyStorageEngine>(options);
+    RETURN_IF_ERROR(engine->cluster_id_mgr->init());
+    *engine_ptr = engine.release();
+    LOG(INFO) << "Opened Empty storage engine";
+    return Status::OK();
+}
+
+Status DummyStorageEngine::set_cluster_id(int32_t cluster_id) {
+    RETURN_IF_ERROR(cluster_id_mgr->set_cluster_id(cluster_id));
+    _effective_cluster_id = cluster_id;
+    return Status::OK();
 }
 
 } // namespace starrocks

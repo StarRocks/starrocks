@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "service/backend_service.h"
+#include "service/backend_base.h"
 
 #include <arrow/record_batch.h>
 #include <gperftools/heap-profiler.h>
@@ -60,46 +60,30 @@ using apache::thrift::TMultiplexedProcessor;
 using apache::thrift::transport::TTransportException;
 using apache::thrift::concurrency::ThreadFactory;
 
-BackendService::BackendService(ExecEnv* exec_env)
-        : _exec_env(exec_env), _agent_server(new AgentServer(exec_env, *exec_env->master_info())) {}
+BackendServiceBase::BackendServiceBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
-Status BackendService::create_service(ExecEnv* exec_env, int port, ThriftServer** server) {
-    std::shared_ptr<BackendService> handler(new BackendService(exec_env));
-    // TODO: do we want a BoostThreadFactory?
-    // TODO: we want separate thread factories here, so that fe requests can't starve
-    // be requests
-    std::shared_ptr<ThreadFactory> thread_factory(new ThreadFactory());
-
-    std::shared_ptr<TProcessor> be_processor(new BackendServiceProcessor(handler));
-
-    *server = new ThriftServer("backend", be_processor, port, exec_env->metrics(), config::be_service_threads);
-
-    LOG(INFO) << "StarRocksInternalService listening on " << port;
-
-    return Status::OK();
-}
-
-void BackendService::exec_plan_fragment(TExecPlanFragmentResult& return_val, const TExecPlanFragmentParams& params) {
+void BackendServiceBase::exec_plan_fragment(TExecPlanFragmentResult& return_val,
+                                            const TExecPlanFragmentParams& params) {
     LOG(INFO) << "exec_plan_fragment() instance_id=" << params.params.fragment_instance_id << " coord=" << params.coord
               << " backend#=" << params.backend_num;
     VLOG_ROW << "exec_plan_fragment params is " << apache::thrift::ThriftDebugString(params).c_str();
     start_plan_fragment_execution(params).set_t_status(&return_val);
 }
 
-Status BackendService::start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params) {
+Status BackendServiceBase::start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params) {
     if (!exec_params.fragment.__isset.output_sink) {
         return Status::InternalError("missing sink in plan fragment");
     }
     return _exec_env->fragment_mgr()->exec_plan_fragment(exec_params);
 }
 
-void BackendService::cancel_plan_fragment(TCancelPlanFragmentResult& return_val,
-                                          const TCancelPlanFragmentParams& params) {
+void BackendServiceBase::cancel_plan_fragment(TCancelPlanFragmentResult& return_val,
+                                              const TCancelPlanFragmentParams& params) {
     LOG(INFO) << "cancel_plan_fragment(): instance_id=" << params.fragment_instance_id;
     _exec_env->fragment_mgr()->cancel(params.fragment_instance_id).set_t_status(&return_val);
 }
 
-void BackendService::transmit_data(TTransmitDataResult& return_val, const TTransmitDataParams& params) {
+void BackendServiceBase::transmit_data(TTransmitDataResult& return_val, const TTransmitDataParams& params) {
     VLOG_ROW << "transmit_data(): instance_id=" << params.dest_fragment_instance_id
              << " node_id=" << params.dest_node_id << " #rows=" << params.row_batch.num_rows
              << " eos=" << (params.eos ? "true" : "false");
@@ -111,23 +95,13 @@ void BackendService::transmit_data(TTransmitDataResult& return_val, const TTrans
     }
 }
 
-void BackendService::fetch_data(TFetchDataResult& return_val, const TFetchDataParams& params) {
+void BackendServiceBase::fetch_data(TFetchDataResult& return_val, const TFetchDataParams& params) {
     // maybe hang in this function
     Status status = _exec_env->result_mgr()->fetch_data(params.fragment_instance_id, &return_val);
     status.set_t_status(&return_val);
 }
 
-void BackendService::submit_export_task(TStatus& t_status, const TExportTaskRequest& request) {}
-
-void BackendService::get_export_status(TExportStatusResult& result, const TUniqueId& task_id) {}
-
-void BackendService::erase_export_task(TStatus& t_status, const TUniqueId& task_id) {}
-
-void BackendService::get_tablet_stat(TTabletStatResult& result) {
-    StorageEngine::instance()->tablet_manager()->get_tablet_stat(&result);
-}
-
-void BackendService::submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) {
+void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) {
     for (auto& task : tasks) {
         Status st = _exec_env->routine_load_task_executor()->submit_task(task);
         if (!st.ok()) {
@@ -143,7 +117,7 @@ void BackendService::submit_routine_load_task(TStatus& t_status, const std::vect
  * 1. validate user privilege (todo)
  * 2. FragmentMgr#exec_plan_fragment
  */
-void BackendService::open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) {
+void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) {
     TStatus t_status;
     TUniqueId fragment_instance_id = generate_uuid();
     std::shared_ptr<ScanContext> p_context;
@@ -169,7 +143,7 @@ void BackendService::open_scanner(TScanOpenResult& result_, const TScanOpenParam
 }
 
 // fetch result from polling the queue, should always maintaince the context offset, otherwise inconsistent result
-void BackendService::get_next(TScanBatchResult& result_, const TScanNextBatchParams& params) {
+void BackendServiceBase::get_next(TScanBatchResult& result_, const TScanNextBatchParams& params) {
     std::string context_id = params.context_id;
     u_int64_t offset = params.offset;
     TStatus t_status;
@@ -220,7 +194,7 @@ void BackendService::get_next(TScanBatchResult& result_, const TScanNextBatchPar
     context->last_access_time = time(nullptr);
 }
 
-void BackendService::close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) {
+void BackendServiceBase::close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) {
     std::string context_id = params.context_id;
     TStatus t_status;
     Status st = _exec_env->external_scan_context_mgr()->clear_scan_context(context_id);

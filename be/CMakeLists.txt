@@ -464,6 +464,8 @@ set(STARROCKS_LINK_LIBS
     Rowset
     Runtime
     Service
+    ServiceBE
+    ServiceCN
     Udf
     Util
     StarRocksGen
@@ -690,7 +692,9 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(FILES
     ${BASE_DIR}/../bin/common.sh
     ${BASE_DIR}/../bin/start_be.sh
+    ${BASE_DIR}/../bin/start_cn.sh
     ${BASE_DIR}/../bin/stop_be.sh
+    ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
@@ -700,6 +704,7 @@ install(FILES
 
 install(FILES
     ${BASE_DIR}/../conf/be.conf
+    ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     DESTINATION ${OUTPUT_DIR}/conf)
 
