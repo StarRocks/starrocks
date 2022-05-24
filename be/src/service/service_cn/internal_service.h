@@ -1,6 +1,6 @@
-// This file is made available under Elastic License 2.0.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/service/brpc_service.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/service/internal_service.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -21,31 +21,23 @@
 
 #pragma once
 
-#include <memory>
-
 #include "common/status.h"
-#include "service/brpc.h"
+#include "gen_cpp/doris_internal_service.pb.h"
+#include "gen_cpp/internal_service.pb.h"
+#include "service/internal_service.h"
 
 namespace brpc {
-class Server;
+class Controller;
 }
 
 namespace starrocks {
 
 class ExecEnv;
 
-// Class enclose brpc service.
-class BRpcService {
+template <typename T>
+class ComputeNodeInternalServiceImpl : public PInternalServiceImplBase<T> {
 public:
-    BRpcService(ExecEnv* exec_env);
-    ~BRpcService();
-
-    Status start(int port, google::protobuf::Service* service, google::protobuf::Service* doris_service);
-    void join();
-
-private:
-    ExecEnv* _exec_env;
-    std::unique_ptr<brpc::Server> _server;
+    ComputeNodeInternalServiceImpl(ExecEnv* exec_env) : PInternalServiceImplBase<T>(exec_env) {}
 };
 
 } // namespace starrocks
