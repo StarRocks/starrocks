@@ -255,6 +255,7 @@ public class TaskManager {
     }
 
     public long loadTasks(DataInputStream dis, long checksum) throws IOException {
+        int taskCount = 0;
         try {
             String s = Text.readString(dis);
             SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
@@ -263,7 +264,9 @@ public class TaskManager {
                     for (Task task : data.tasks) {
                         replayCreateTask(task);
                     }
+                    taskCount = data.tasks.size();
                 }
+
                 if (data.runStatus != null) {
                     for (TaskRunStatus runStatus : data.runStatus) {
                         replayCreateTaskRun(runStatus);
@@ -274,12 +277,14 @@ public class TaskManager {
         } catch (EOFException e) {
             LOG.info("no TaskManager to replay.");
         }
+        checksum ^= taskCount;
         return checksum;
     }
 
     public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
         data.tasks = new ArrayList<>(nameToTaskMap.values());
+        checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
