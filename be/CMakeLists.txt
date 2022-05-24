@@ -226,9 +226,6 @@ set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
 
-add_library(minizip STATIC IMPORTED)
-set_target_properties(minizip PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libminizip.a)
-
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
@@ -534,7 +531,6 @@ set(STARROCKS_DEPENDENCIES
     brotlidec
     brotlienc
     zstd
-    minizip
     arrow
     parquet
     orc
