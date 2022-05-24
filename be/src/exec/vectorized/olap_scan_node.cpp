@@ -39,10 +39,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
 
-    // init filtered_ouput_columns
+    // init filtered_output_columns
     for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
     }
+
+    _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
 }
@@ -65,7 +67,6 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     if (_olap_scan_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
-    _runtime_state = state;
 
     return Status::OK();
 }
@@ -223,7 +224,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     });
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
-    Status status = scanner->open(_runtime_state);
+    Status status = scanner->open(runtime_state());
     if (!status.ok()) {
         QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
         _update_status(status);
@@ -256,7 +257,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             chunk = _chunk_pool.pop();
         }
         DCHECK_EQ(chunk->num_rows(), 0);
-        status = scanner->get_chunk(_runtime_state, chunk.get());
+        status = scanner->get_chunk(runtime_state(), chunk.get());
         if (!status.ok()) {
             QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
             std::lock_guard<std::mutex> l(_mtx);
@@ -291,7 +292,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             // _chunk_pool is empty and scanner has been placed into _pending_scanners,
             // nothing to do here.
         } else if (status.is_end_of_file()) {
-            scanner->close(_runtime_state);
+            scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             // pick next scanner to run.
             std::lock_guard<std::mutex> l(_mtx);
@@ -301,12 +302,12 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             }
         } else {
             _update_status(status);
-            scanner->close(_runtime_state);
+            scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
         }
     } else {
-        scanner->close(_runtime_state);
+        scanner->close(runtime_state());
         _closed_scanners.fetch_add(1, std::memory_order_release);
         _close_pending_scanners();
     }
@@ -445,7 +446,7 @@ int OlapScanNode::_compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
-    PriorityThreadPool* thread_pool = _runtime_state->exec_env()->thread_pool();
+    PriorityThreadPool* thread_pool = runtime_state()->exec_env()->thread_pool();
     int delta = !scanner->keep_priority();
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
     PriorityThreadPool::Task task;
@@ -554,6 +555,21 @@ StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* sca
     return tablet;
 }
 
+int OlapScanNode::max_scan_concurrency() const {
+    int64_t query_limit = runtime_state()->query_mem_tracker_ptr()->limit();
+
+    // We temporarily assume that the memory tried in the storage layer
+    // is the same size as the chunk_size * _estimated_scan_row_bytes.
+    size_t row_mem_usage = _estimated_scan_row_bytes + _estimated_output_row_bytes;
+    size_t chunk_mem_usage = row_mem_usage * runtime_state()->chunk_size();
+    DCHECK_GT(chunk_mem_usage, 0);
+
+    // limit scan memory usage not greater than 1/4 query limit
+    int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
+
+    return concurrency;
+}
+
 Status OlapScanNode::_capture_tablet_rowsets() {
     _tablet_rowsets.resize(_scan_ranges.size());
     for (int i = 0; i < _scan_ranges.size(); ++i) {
@@ -573,40 +589,51 @@ Status OlapScanNode::_capture_tablet_rowsets() {
 }
 
 struct TypeMemoryUsed {
-    template <FieldType type>
+    template <PrimitiveType ptype>
     size_t operator()() {
-        switch (type) {
-        case OLAP_FIELD_TYPE_VARCHAR:
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_JSON:
-            return 100;
-#define M(TYPE) return 100;
-            APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M)
-#undef M
+        switch (ptype) {
+        case TYPE_VARCHAR:
+        case TYPE_CHAR:
+            return 128;
+        case TYPE_JSON:
+            // 1KB.
+            return 1024;
+        case TYPE_HLL:
+            // 16KB.
+            return 16 * 1024;
+        case TYPE_OBJECT:
+        case TYPE_PERCENTILE:
+            // 1MB.
+            return 1024 * 1024;
         default:
             return 0;
         }
     }
 };
 
-size_t OlapScanNode::_scanner_concurrency() {
-    int64_t query_limit = _runtime_state->query_mem_tracker_ptr()->limit();
+void OlapScanNode::_estimate_scan_and_output_row_bytes() {
+    const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
+    const auto& slots = tuple_desc->slots();
 
-    size_t chunk_mem_usage = 0;
-    size_t row_mem_usage = 0;
-    const auto& fields = _chunk_schema->fields();
-    // we could use statistics
-    for (const auto& field : fields) {
-        row_mem_usage += field->type()->size();
-        row_mem_usage += field_type_dispatch_column(field->type()->type(), TypeMemoryUsed());
+    std::unordered_set<std::string> unused_output_column_set;
+    for (const auto& column : unused_output_column_set) {
+        unused_output_column_set.emplace(column);
     }
-    // We temporarily assume that the memory tried in the storage layer
-    // is the same size as the chunk
-    row_mem_usage *= 2;
-    chunk_mem_usage = row_mem_usage * _runtime_state->chunk_size();
-    DCHECK_GT(chunk_mem_usage, 0);
-    // limit scan memory usage not greater than 1/4 query limit
-    int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
+
+    for (const auto& slot : slots) {
+        size_t filed_bytes = std::max<size_t>(slot->slot_size(), 0);
+        filed_bytes += type_dispatch_column(slot->type().type, TypeMemoryUsed());
+
+        _estimated_scan_row_bytes += filed_bytes;
+        if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
+            _estimated_output_row_bytes += filed_bytes;
+        }
+    }
+}
+
+size_t OlapScanNode::_scanner_concurrency() const {
+    int concurrency = max_scan_concurrency();
     // limit concurrency not greater than scanner numbers
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
@@ -641,7 +668,7 @@ void OlapScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
         TabletScanner* scanner = _pending_scanners.pop();
-        scanner->close(_runtime_state);
+        scanner->close(runtime_state());
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
 }
