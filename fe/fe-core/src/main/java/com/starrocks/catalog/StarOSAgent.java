@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
  * 1. Encapsulation of StarClient api.
  * 2. Maintenance of StarOS worker to StarRocks backend map.
  */
-
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
 
