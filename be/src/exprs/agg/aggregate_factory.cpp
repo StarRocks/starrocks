@@ -21,6 +21,7 @@
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
+#include "exprs/agg/max_min_by.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
@@ -223,6 +224,18 @@ AggregateFunctionPtr AggregateFactory::MakeLastValueWindowFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeLeadLagWindowFunction() {
     return std::make_shared<LeadLagWindowFunction<PT>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeMaxByAggregateFunction() {
+    return std::make_shared<
+            MaxMinByAggregateFunction<PT, MaxByAggregateData<PT>, MaxByOP<PT, MaxByAggregateData<PT>>>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeMinByAggregateFunction() {
+    return std::make_shared<
+            MaxMinByAggregateFunction<PT, MinByAggregateData<PT>, MinByOP<PT, MinByAggregateData<PT>>>>();
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -470,6 +483,12 @@ public:
                 auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg);
+            } else if (name == "max_by") {
+                auto max_by = AggregateFactory::MakeMaxAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxByAggregateData<ArgPT>>(max_by);
+            } else if (name == "min_by") {
+                auto min_by = AggregateFactory::MakeMinAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinByAggregateData<ArgPT>>(min_by);
             }
         } else {
             if (name == "count") {
@@ -559,6 +578,12 @@ public:
                 auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg_value);
+            }  else if (name == "max_by") {
+                auto max_by = AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxByAggregateData<ArgPT>>(max_by);
+            } else if (name == "min_by") {
+                auto min_by = AggregateFactory::MakeMinByAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinByAggregateData<ArgPT>>(min_by);
             }
         } else {
             if (name == "avg") {
@@ -577,6 +602,10 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+            } else if (name == "max_by") {
+                return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
+            } else if (name == "min_by") {
+                return AggregateFactory::MakeMinByAggregateFunction<ArgPT>();
             }
         }
 
@@ -656,6 +685,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     ADD_ALL_TYPE("max");
     ADD_ALL_TYPE("min");
+    ADD_ALL_TYPE("max_by");
+    ADD_ALL_TYPE("min_by");
     ADD_ALL_TYPE("any_value");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");

@@ -459,6 +459,8 @@ enum TAggregationOp {
   BITMAP_UNION,
   ANY_VALUE,
   NTILE
+  MAX_BY
+  MIN_BY
 }
 
 //struct TAggregateFunctionCall {
