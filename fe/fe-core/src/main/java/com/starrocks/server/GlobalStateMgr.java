@@ -1015,11 +1015,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
 
-<<<<<<< HEAD
         //register service to starMgr
-=======
-        // register service to starMgr
->>>>>>> upstream/main
         if (Config.integrate_staros) {
             int clusterId = getCurrentState().getClusterId();
             getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));

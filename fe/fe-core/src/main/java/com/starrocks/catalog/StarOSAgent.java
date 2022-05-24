@@ -142,9 +142,14 @@ public class StarOSAgent {
         LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
     }
 
-    public long addWorker(long backendId, String workerIpPort) {
+    public void addWorker(long backendId, String workerIpPort) {
+        if (serviceId == -1) {
+            LOG.info("When addWorker serviceId is -1");
+            return;
+        }
         if (workerToId.containsKey(workerIpPort)) {
-            return workerToId.get(workerIpPort);
+            LOG.info("workerToId contains {}, workerId is {}", workerIpPort, workerToId.get(workerIpPort));
+            return;
         }
         long workerId = -1;
         try {
@@ -153,8 +158,9 @@ public class StarOSAgent {
             LOG.warn(e);
             System.exit(-1);
         }
+        workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);
-        return workerId;
+        LOG.info("add worker {} succ, backendId is {}", workerId, backendId);
     }
 
     // Mock StarClient
