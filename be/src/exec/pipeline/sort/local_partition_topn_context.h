@@ -35,7 +35,7 @@ public:
     Status prepare(RuntimeState* state);
 
     // Add one chunk to partitioner
-    Status push_one_chunk_to_partitioner(const vectorized::ChunkPtr& chunk);
+    Status push_one_chunk_to_partitioner(RuntimeState* state, const vectorized::ChunkPtr& chunk);
 
     // Notify that there is no further input for partitiner
     void sink_complete();
@@ -49,19 +49,32 @@ public:
     // Return true if sink completed and all the data in the chunks_sorters has been pulled out
     bool is_finished();
 
+    // Pull one chunk from sorters or downgrade_buffer
+    StatusOr<vectorized::ChunkPtr> pull_one_chunk();
+
+private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
     StatusOr<vectorized::ChunkPtr> pull_one_chunk_from_sorters();
 
-private:
+    // TODO(hcf) set this value properly, maybe based on cache size
+    static const int32_t MAX_PARTITION_NUM;
+
+    bool _is_downgrade = false;
+    // We simply offer chunk to this buffer when number of partition reaches the threshould MAX_PARTITION_NUM
+    std::queue<vectorized::ChunkPtr> _downgrade_buffer;
+    std::mutex _buffer_lock;
+
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<vectorized::PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
+    // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
     vectorized::ChunksPartitionerPtr _chunks_partitioner;
+    bool _is_transfered = false;
 
     // Every partition holds a chunks_sorter
     vectorized::ChunksSorters _chunks_sorters;
