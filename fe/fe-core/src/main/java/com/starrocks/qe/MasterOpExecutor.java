@@ -65,7 +65,7 @@ public class MasterOpExecutor {
         }
         // set thriftTimeoutMs to query_timeout + thrift_rpc_timeout_ms
         // so that we can return an execution timeout instead of a network timeout
-        this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+        this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 10000;
         this.parsedStmt = parsedStmt;
     }
 
@@ -134,7 +134,6 @@ public class MasterOpExecutor {
 
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,
-                Config.thrift_rpc_retry_times,
                 client -> client.forward(params));
     }
 

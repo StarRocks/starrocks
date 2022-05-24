@@ -849,8 +849,7 @@ public class NodeMgr {
         setFrontendConfig(configs);
 
         List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + 10000;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {
@@ -864,7 +863,6 @@ public class NodeMgr {
                 TSetConfigResponse response = FrontendServiceProxy
                         .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 timeout,
-                                Config.thrift_rpc_retry_times,
                                 client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {

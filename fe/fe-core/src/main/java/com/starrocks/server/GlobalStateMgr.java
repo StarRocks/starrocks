@@ -2844,7 +2844,7 @@ public class GlobalStateMgr {
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
                                                 List<String> partitions) {
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+                + 10000;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
@@ -2853,7 +2853,6 @@ public class GlobalStateMgr {
             try {
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
                         timeout,
-                        Config.thrift_rpc_retry_times,
                         client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {

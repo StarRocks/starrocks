@@ -30,9 +30,7 @@ public class TableMetaSyncer {
         authInfo.setPasswd(table.getSourceTablePassword());
         request.setAuth_info(authInfo);
         try {
-            TGetTableMetaResponse response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
+            TGetTableMetaResponse response = FrontendServiceProxy.call(addr, 10000,
                     client -> client.getTableMeta(request));
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 String errMsg;

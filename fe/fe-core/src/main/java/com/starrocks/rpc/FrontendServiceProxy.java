@@ -14,13 +14,14 @@ import java.net.SocketTimeoutException;
 
 public class FrontendServiceProxy {
     private static final Logger LOG = LogManager.getLogger(FrontendServiceProxy.class);
+    private static final int RETRY_TIMES = 2;
 
-    public static <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes, MethodCallable<T> callable)
+    public static <T> T call(TNetworkAddress address, int timeoutMs, MethodCallable<T> callable)
             throws Exception {
         FrontendService.Client client = ClientPool.frontendPool.borrowObject(address, timeoutMs);
         boolean isConnValid = false;
         try {
-            for (int i = 0; i < retryTimes; i++) {
+            for (int i = 0; i < RETRY_TIMES ; i++) {
                 try {
                     T t = callable.invoke(client);
                     isConnValid = true;
@@ -33,7 +34,7 @@ public class FrontendServiceProxy {
                     // but we do not retry for the timeout exception, because it may be a network timeout
                     // or the target server may be running slow.
                     isConnValid = ClientPool.frontendPool.reopen(client, timeoutMs);
-                    if (i == retryTimes - 1 ||
+                    if (i == RETRY_TIMES - 1 ||
                             !isConnValid ||
                             (te.getCause() instanceof SocketTimeoutException)) {
                         throw te;
