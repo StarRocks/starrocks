@@ -39,7 +39,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
 
 Status EnginePublishVersionTask::execute() {
     VLOG(1) << "Begin publish txn tablet:" << _tablet_info.tablet_id << " version:" << _version
-            << " partition:" << _partition_id << " txn:" << _transaction_id << " rowset:" << _rowset->rowset_id();
+            << " partition:" << _partition_id << " txn_id: " << _transaction_id << " rowset:" << _rowset->rowset_id();
 
     TabletSharedPtr tablet =
             StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
@@ -54,11 +54,12 @@ Status EnginePublishVersionTask::execute() {
                                                                     _rowset);
     if (!st.ok()) {
         LOG(WARNING) << "Publish txn failed tablet:" << _tablet_info.tablet_id << " version:" << _version
-                     << " partition:" << _partition_id << " txn:" << _transaction_id
+                     << " partition:" << _partition_id << " txn_id: " << _transaction_id
                      << " rowset:" << _rowset->rowset_id();
     } else {
         LOG(INFO) << "Publish txn success tablet:" << _tablet_info.tablet_id << " version:" << _version
-                  << " partition:" << _partition_id << " txn:" << _transaction_id << " rowset:" << _rowset->rowset_id();
+                  << " partition:" << _partition_id << " txn_id: " << _transaction_id
+                  << " rowset:" << _rowset->rowset_id();
     }
     return st;
 }
