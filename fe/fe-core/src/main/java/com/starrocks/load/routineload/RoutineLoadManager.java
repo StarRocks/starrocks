@@ -551,11 +551,6 @@ public class RoutineLoadManager implements Writable {
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
                 .build());
-        if (job.needRemove()) {
-            LOG.warn("remove expired job {}", job);
-            idToRoutineLoadJob.remove(operation.getId());
-            unprotectedRemoveJobFromDb(job);
-        }
     }
 
     /**

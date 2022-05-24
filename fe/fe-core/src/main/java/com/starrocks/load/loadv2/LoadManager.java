@@ -328,8 +328,8 @@ public class LoadManager implements Writable {
             // if there are still more jobs than LABEL_KEEP_MAX_NUM
             // remove the ones that finished earlier
             int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
-            LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
             if (numJobsToRemove > 0) {
+                LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
