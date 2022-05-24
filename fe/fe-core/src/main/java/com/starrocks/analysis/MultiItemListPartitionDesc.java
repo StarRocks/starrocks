@@ -14,6 +14,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 
 import java.util.HashMap;
@@ -116,6 +117,11 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
             if (values.size() != partitionColSize) {
                 throw new AnalysisException(
                         "(" + String.join(",", values) + ") size should be equal to partition column size ");
+            }
+            for (String value : values) {
+                if (StringUtils.isBlank(value)){
+                    throw new AnalysisException("Partition value should not have blank item");
+                }
             }
         }
     }
