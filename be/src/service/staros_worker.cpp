@@ -4,6 +4,7 @@
 
 #ifdef USE_STAROS
 
+#include <starlet.h>
 #include <worker.h>
 
 #include <mutex>
@@ -58,16 +59,16 @@ staros::starlet::Starlet* g_starlet;
 void init_staros_worker() {
     if (g_starlet != nullptr) return;
     g_worker = std::make_shared<StarOSWorker>();
-    //    g_starlet = new staros::starlet::Starlet(g_worker);
-    //    g_starlet->init(config::starlet_port);
-    //    g_starlet->set_star_mgr_addr(config::starmgr_addr);
-    //    g_starlet->start();
+    g_starlet = new staros::starlet::Starlet(g_worker);
+    g_starlet->init(config::starlet_port);
+    g_starlet->set_star_mgr_addr(config::starmgr_addr);
+    g_starlet->start();
 }
 
 void shutdown_staros_worker() {
-    //    g_starlet->stop();
-    //    delete g_starlet;
-    //    g_starlet = nullptr;
+    g_starlet->stop();
+    delete g_starlet;
+    g_starlet = nullptr;
     g_worker = nullptr;
 }
 

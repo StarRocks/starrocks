@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 #include <fs/fs_starlet.h>
 #include <gtest/gtest.h>
+#include <starlet.h>
 
 #include <fstream>
 
@@ -11,6 +12,8 @@
 #include "testutil/assert.h"
 
 namespace starrocks {
+
+extern staros::starlet::Starlet* g_starlet;
 
 class StarletFileSystemTest : public testing::Test {
 public:
@@ -27,7 +30,7 @@ public:
     }
 
     std::string StarletPath(std::string_view path) {
-        return fmt::format("staros://s3://{}.s3.{}.{}/{}", bucket, region, domain, path);
+        return fmt::format("staros://s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
     }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
@@ -41,9 +44,9 @@ public:
 
 private:
     staros::starlet::Starlet* _starlet;
-    constexpr static const char* bucket = "starlet-test";
-    constexpr static const char* region = "oss-cn-hangzhou";
-    constexpr static const char* domain = "aliyuncs.com";
+    constexpr static const char* kBucket = "starlet-test";
+    constexpr static const char* kRegion = "oss-cn-hangzhou";
+    constexpr static const char* kDomain = "aliyuncs.com";
 };
 
 TEST_F(StarletFileSystemTest, test_write_and_read) {

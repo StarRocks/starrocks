@@ -183,7 +183,11 @@ else
 fi
 
 # need config STAROS_DIR in custom.sh if USE_STAROS
-export STAROS_DIR="/home/disk1/hanrui/dev/staros"
+if [ "${USE_STAROS}" == "ON"  -a -z "${STAROS_DIR}" ]; then
+    echo "Please set STAROS_DIR when using staros"
+    exit 1
+fi
+
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
     CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}

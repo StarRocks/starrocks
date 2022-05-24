@@ -30,7 +30,7 @@ add_subdirectory(service_cn)
 
 set(EXEC_FILES
     backend_options.cpp
-    backend_service.cpp
+    backend_base.cpp
     brpc_service.cpp
     internal_service.cpp
     mem_hook.cpp)
