@@ -171,12 +171,35 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     auto strings2 = BinaryColumn::create();
 
     std::string values[] = {
-            "{\"k1\":    1}", //int
-            "{\"k1\":    3.14159}", //double
-            "{\"k1\":    {\"k2\":       \"v2\"}}"}; //object
+            R"({"k1":    1})",             //int, 1 key
+            R"({"k1":    1, "k2": 2})", // 2 keys, get the former
+            R"({"k0":    0, "k1": 1})", // 2 keys, get  the latter
 
-    std::string strs[] = {"$.k1", "$.k1", "$.k1"};
-    std::string length_strings[] = {"1", "3.14159", "{\"k2\":\"v2\"}"};
+            R"({"k1":    3.14159})",                   //double, 1 key
+            R"({"k0":    2.71828, "k1":  3.14159})", // 2 keys, get  the former
+            R"({"k1":    3.14159, "k2":  2.71828})", // 2 keys, get  the latter
+
+            R"({"k1":    "{\"k11\":       \"v11\"}"})",                                                      //string
+            R"({"k0":    "{\"k01\":       \"v01\"}",  "k1":     "{\"k11\":       \"v11\"}"})", // 2 keys, get  the former
+            R"({"k1":    "{\"k11\":       \"v11\"}",  "k2":     "{\"k21\": \"v21\"}"})", // 2 keys, get  the latter
+
+            R"({"k1":    {"k11":       "v11"}})",                                   //object
+            R"({"k0":    {"k01":       "v01"},  "k1":     {"k11": "v11"}})",  // 2 keys, get  the former
+            R"({"k1":    {"k11":       "v11"},  "k2":     {"k21": "v21"}})"}; // 2 keys, get  the latter
+
+    std::string strs[] = {"$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1","$.k1","$.k1"};
+    std::string length_strings[] = {"1",
+                                    "1",
+                                    "1",
+                                    "3.14159",
+                                    "3.14159",
+                                    "3.14159",
+                                    R"({"k11":       "v11"})",
+                                    R"({"k11":       "v11"})",
+                                    R"({"k11":       "v11"})",
+                                    R"({"k11":"v11"})",
+                                    R"({"k11":"v11"})",
+                                    R"({"k11":"v11"})"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);
