@@ -21,7 +21,7 @@
 
 package com.starrocks.common;
 
-import com.starrocks.proto.PStatus;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 
@@ -87,7 +87,7 @@ public class Status {
         this.errorMsg = msg;
     }
 
-    public void setPstatus(PStatus status) {
+    public void setPstatus(StatusPB status) {
         this.errorCode = TStatusCode.findByValue(status.statusCode);
         if (status.errorMsgs != null && !status.errorMsgs.isEmpty()) {
             this.errorMsg = status.errorMsgs.get(0);
