@@ -40,8 +40,16 @@ public class AlterMaterializedViewTest {
 
     @Test(expected = AnalysisException.class)
     public void testRenameSameName() throws Exception {
-        String alterMvSql = "alter materialized view mv1 rename mv1;";
+        String alterMvSql = "alter materialized view mv1 rename MV1;";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testAlterSyncRefresh() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh sync";
+        AlterMaterializedViewStmt alterMvStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), RefreshType.SYNC);
     }
 
     @Test
