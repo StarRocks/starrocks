@@ -315,7 +315,7 @@ public class ExportMgr {
                 Map.Entry<Long, ExportJob> entry = iter.next();
                 ExportJob job = entry.getValue();
                 if (isJobExpired(job, currentTimeMs)) {
-                    LOG.warn("remove expired job: {}", job);
+                    LOG.info("remove expired job: {}", job);
                     iter.remove();
                 }
             }
@@ -341,7 +341,7 @@ public class ExportMgr {
             ExportJob job = idToJob.get(jobId);
             job.updateState(newState, true);
             if (isJobExpired(job, System.currentTimeMillis())) {
-                LOG.warn("remove expired job: {}", job);
+                LOG.info("remove expired job: {}", job);
                 idToJob.remove(jobId);
             }
         } finally {
@@ -377,7 +377,7 @@ public class ExportMgr {
                 job.readFields(dis);
                 // discard expired job right away
                 if (isJobExpired(job, currentTimeMs)) {
-                    LOG.warn("discard expired job: {}", job);
+                    LOG.info("discard expired job: {}", job);
                     continue;
                 }
                 unprotectAddJob(job);

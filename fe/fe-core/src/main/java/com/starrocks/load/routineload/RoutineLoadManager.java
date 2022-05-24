@@ -612,7 +612,7 @@ public class RoutineLoadManager implements Writable {
         for (int i = 0; i < size; i++) {
             RoutineLoadJob routineLoadJob = RoutineLoadJob.read(in);
             if (routineLoadJob.needRemove()) {
-                LOG.warn("discard expired job [{}]", routineLoadJob.getId());
+                LOG.info("discard expired job [{}]", routineLoadJob.getId());
                 continue;
             }
             idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);

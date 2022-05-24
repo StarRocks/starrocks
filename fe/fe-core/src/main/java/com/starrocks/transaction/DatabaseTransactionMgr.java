@@ -1524,7 +1524,7 @@ public class DatabaseTransactionMgr {
             }
             unprotectUpsertTransactionState(transactionState, true);
             if (transactionState.isExpired(System.currentTimeMillis())) {
-                LOG.warn("remove expired transaction: {}", transactionState);
+                LOG.info("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
         } finally {

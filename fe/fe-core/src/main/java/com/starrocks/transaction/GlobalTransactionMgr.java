@@ -580,7 +580,7 @@ public class GlobalTransactionMgr implements Writable {
             TransactionState transactionState = new TransactionState();
             transactionState.readFields(in);
             if (transactionState.isExpired(now)) {
-                LOG.warn("discard expired transaction state: {}", transactionState);
+                LOG.info("discard expired transaction state: {}", transactionState);
                 continue;
             }
             try {

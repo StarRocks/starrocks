@@ -901,13 +901,15 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
-        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
-            LOG.warn("discard expired delete info {}", deleteInfo);
-            return;
-        }
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
         updateTableDeleteInfo(globalStateMgr, dbId, deleteInfo.getTableId());
+
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.info("discard expired delete info {}", deleteInfo);
+            return;
+        }
+
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -916,6 +918,7 @@ public class DeleteHandler implements Writable {
         } finally {
             lock.writeLock().unlock();
         }
+
     }
 
     public void replayMultiDelete(MultiDeleteInfo deleteInfo, GlobalStateMgr globalStateMgr) {
@@ -923,13 +926,16 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
-        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
-            LOG.warn("discard expired delete info {}", deleteInfo);
-            return;
-        }
+
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
         updateTableDeleteInfo(globalStateMgr, dbId, deleteInfo.getTableId());
+
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.info("discard expired delete info {}", deleteInfo);
+            return;
+        }
+
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();

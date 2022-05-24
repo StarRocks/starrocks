@@ -220,7 +220,7 @@ public class LoadManager implements Writable {
                 .add("msg", "replay end load job")
                 .build());
         if (isJobExpired(job, System.currentTimeMillis())) {
-            LOG.warn("remove expired job: {}", job);
+            LOG.info("remove expired job: {}", job);
             unprotectedRemoveJobReleatedMeta(job);
         }
     }
@@ -236,7 +236,7 @@ public class LoadManager implements Writable {
         job.replayUpdateStateInfo(info);
 
         if (isJobExpired(job, System.currentTimeMillis())) {
-            LOG.warn("remove expired job: {}", job);
+            LOG.info("remove expired job: {}", job);
             unprotectedRemoveJobReleatedMeta(job);
         }
     }
@@ -318,7 +318,7 @@ public class LoadManager implements Writable {
                 }
                 if (isJobExpired(job, currentTimeMs)) {
                     // remove expired job
-                    LOG.warn("remove expired job: {}", job);
+                    LOG.info("remove expired job: {}", job);
                     unprotectedRemoveJobReleatedMeta(job);
                 } else {
                     jobs.add(job);
@@ -333,7 +333,7 @@ public class LoadManager implements Writable {
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
-                    LOG.warn("remove redundant job: {}", job);
+                    LOG.info("remove redundant job: {}", job);
                     unprotectedRemoveJobReleatedMeta(job);
                 }
             }
@@ -603,7 +603,7 @@ public class LoadManager implements Writable {
             LoadJob loadJob = LoadJob.read(in);
             // discard expired job right away
             if (isJobExpired(loadJob, now)) {
-                LOG.warn("discard expired job: {}", loadJob);
+                LOG.info("discard expired job: {}", loadJob);
                 continue;
             }
             idToLoadJob.put(loadJob.getId(), loadJob);
