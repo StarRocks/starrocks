@@ -66,6 +66,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -83,6 +84,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_TIMEOUT;
 
 /*
  * MaterializedViewHandler is responsible for ADD/DROP materialized view.
@@ -117,10 +120,10 @@ public class MaterializedViewHandler extends AlterHandler {
         }
     }
 
-    // return true iff job is actually added this time
+    // return true if job is actually added this time
     private void addAlterJobV2ToTableNotFinalStateJobMap(AlterJobV2 alterJobV2) {
         if (alterJobV2.isDone()) {
-            LOG.info("try to add a final job({}) to a unfinal set. db: {}, tbl: {}",
+            LOG.info("try to add a final job({}) to a alterable set. db: {}, tbl: {}",
                     alterJobV2.getJobId(), alterJobV2.getDbId(), alterJobV2.getTableId());
             return;
         }
@@ -194,13 +197,21 @@ public class MaterializedViewHandler extends AlterHandler {
         // avoid conflict against with batch add rollup job
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL);
 
-        long baseIndexId = checkAndGetBaseIndex(baseIndexName, olapTable);
         // Step1.3: mv clause validation
         List<Column> mvColumns = checkAndPrepareMaterializedView(addMVClause, db, olapTable);
 
         // Step2: create mv job
-        RollupJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns, addMVClause
-                .getProperties(), olapTable, db, baseIndexId, addMVClause.getMVKeysType(), addMVClause.getOrigStmt());
+        createMaterializedView(mvIndexName, baseIndexName, mvColumns, addMVClause
+                .getProperties(), olapTable, db, addMVClause.getMVKeysType(), addMVClause.getOrigStmt());
+    }
+
+    private void createMaterializedView(String mvIndexName, String baseIndexName, List<Column> mvColumns,
+                                        Map<String, String> addMVClause, OlapTable olapTable, Database db,
+                                        KeysType addMVClause1, OriginStatement addMVClause2)
+            throws DdlException, AnalysisException {
+        long baseIndexId = checkAndGetBaseIndex(baseIndexName, olapTable);
+        RollupJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns, addMVClause,
+                olapTable, db, baseIndexId, addMVClause1, addMVClause2);
 
         addAlterJobV2(rollupJobV2);
 
@@ -744,13 +755,7 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
-            // Step1: check drop mv index operation
-            checkDropMaterializedView(mvName, olapTable);
-            // Step2; drop data in memory
-            long mvIndexId = dropMaterializedView(mvName, olapTable);
-            // Step3: log drop mv operation
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexId, false));
+            dropMaterializedView(mvName, db, olapTable);
             LOG.info("finished drop materialized view [{}] in table [{}]", mvName, olapTable.getName());
         } catch (MetaNotFoundException e) {
             if (dropMaterializedViewStmt.isSetIfExists()) {
@@ -758,6 +763,49 @@ public class MaterializedViewHandler extends AlterHandler {
             } else {
                 throw e;
             }
+        }
+    }
+
+    private void dropMaterializedView(String mvName, Database db, OlapTable olapTable)
+            throws DdlException, MetaNotFoundException {
+        // Step1: check drop mv index operation
+        checkDropMaterializedView(mvName, olapTable);
+        // Step2; drop data in memory
+        long mvIndexId = dropMaterializedView(mvName, olapTable);
+        // Step3: log drop mv operation
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexId, false));
+    }
+
+    /**
+     * Step1. drop old materialized view
+     * Step2. create new materialized view
+     * @param stmt
+     * @param db
+     * @param olapTable
+     * @throws DdlException
+     * @throws AnalysisException
+     */
+    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt, Database db, OlapTable olapTable)
+            throws DdlException, AnalysisException, MetaNotFoundException {
+        //drop materialized view
+        final String oldMvName = stmt.getMvName().getTbl();
+        dropMaterializedView(oldMvName, db, olapTable);
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (alterJobV2 instanceof RollupJobV2) {
+                RollupJobV2 rollupJobV2 = (RollupJobV2) alterJobV2;
+                //create materialized view
+                if (rollupJobV2.getRollupIndexName().equalsIgnoreCase(oldMvName)) {
+                    long timeoutMs = rollupJobV2.getTimeoutMs();
+                    Map<String, String> properties = new HashMap<>();
+                    properties.put(PROPERTIES_TIMEOUT, String.valueOf(timeoutMs));
+                    final String baseIndexName = rollupJobV2.getBaseIndexName();
+                    final String newMvName = stmt.getNewMvName();
+                    createMaterializedView(newMvName, baseIndexName, rollupJobV2.getRollupSchema(), properties,
+                            olapTable, db, rollupJobV2.getRollupKeysType(), rollupJobV2.getOrigStmt());
+                }
+            }
+
         }
     }
 
@@ -1296,5 +1344,6 @@ public class MaterializedViewHandler extends AlterHandler {
     public Map<Long, Set<Long>> getTableRunningJobMap() {
         return tableRunningJobMap;
     }
+
 
 }

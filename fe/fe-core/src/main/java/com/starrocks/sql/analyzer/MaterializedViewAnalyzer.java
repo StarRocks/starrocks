@@ -19,17 +19,20 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -261,6 +264,25 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             stmt.getDbMvName().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
+                                                        ConnectContext context) {
+            statement.getMvName().normalization(context);
+            if (statement.getNewMvName() != null) {
+                String newTableName = statement.getNewMvName();
+                if (statement.getMvName().getTbl().equalsIgnoreCase(newTableName)) {
+                    throw new SemanticException("New table name can not equals to old name");
+                }
+            }
+            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
+            if (refreshSchemeDesc != null) {
+                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                    throw new SemanticException("Not support SYNC refresh type");
+                }
+            }
             return null;
         }
     }

@@ -33,6 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -176,6 +177,7 @@ public class StatementPlanner {
                 || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof AlterMaterializedViewStmt
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof AnalyzeStmt

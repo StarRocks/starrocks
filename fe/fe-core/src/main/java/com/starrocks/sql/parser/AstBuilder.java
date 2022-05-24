@@ -117,6 +117,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CTERelation;
@@ -498,6 +499,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
+    }
+
+    @Override
+    public ParseNode visitAlterMaterializedViewStatement(
+            StarRocksParser.AlterMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        String newMvName = null;
+        if (context.tableRenameClause() != null) {
+            newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
+        }
+        //process refresh
+        RefreshSchemeDesc refreshSchemeDesc = null;
+        if (context.refreshSchemeDesc() != null) {
+            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc);
     }
 
     // ------------------------------------------- Cluster Management Statement -----------------------------------------

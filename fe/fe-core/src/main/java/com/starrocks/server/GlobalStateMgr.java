@@ -206,6 +206,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -2599,6 +2600,10 @@ public class GlobalStateMgr {
         localMetastore.dropMaterializedView(stmt);
     }
 
+    public void alterMaterializedView(AlterMaterializedViewStmt stmt)
+            throws DdlException, MetaNotFoundException, AnalysisException {
+        localMetastore.alterMaterializedView(stmt);
+    }
     /*
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler

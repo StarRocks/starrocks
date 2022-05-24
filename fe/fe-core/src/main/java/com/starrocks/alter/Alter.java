@@ -68,6 +68,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -184,6 +185,54 @@ public class Alter {
             } else {
                 throw e;
             }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt)
+            throws DdlException, MetaNotFoundException, AnalysisException {
+        // check db
+        final TableName mvName = stmt.getMvName();
+        String dbName = mvName.getDb();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        db.writeLock();
+        try {
+            Table table = null;
+            if (mvName.getTbl() != null) {
+                table = db.getTable(mvName.getTbl());
+            } else {
+                boolean hasfindTable = false;
+                for (Table t : db.getTables()) {
+                    if (t instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) t;
+                        for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
+                            if (olapTable.getIndexNameById(mvIdx.getId()).equals(mvName.getTbl())) {
+                                table = olapTable;
+                                hasfindTable = true;
+                                break;
+                            }
+                        }
+                        if (hasfindTable) {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (table == null) {
+                throw new MetaNotFoundException("Materialized view " + mvName + " is not find");
+            }
+            // check table state
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getState() != OlapTableState.NORMAL) {
+                throw new DdlException("Table[" + table.getName() + "]'s state is not NORMAL. "
+                        + "Do not allow doing DROP ops");
+            }
+            // alter materialized view
+            ((MaterializedViewHandler) materializedViewHandler).processAlterMaterializedView(stmt, db, olapTable);
         } finally {
             db.writeUnlock();
         }
