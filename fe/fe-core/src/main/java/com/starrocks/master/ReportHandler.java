@@ -100,9 +100,19 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 
 public class ReportHandler extends Daemon {
+    public enum ReportType {
+        UNKNOWN_REPORT,
+        TABLET_REPORT,
+        DISK_REPORT,
+        TASK_REPORT,
+        WORKGROUP_REPORT
+    }
+
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
     private BlockingQueue<ReportTask> reportQueue = Queues.newLinkedBlockingQueue();
+
+    private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     public ReportHandler() {
         GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
@@ -113,6 +123,10 @@ public class ReportHandler extends Daemon {
             }
         };
         MetricRepo.addMetric(gaugeQueueSize);
+        pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.WORKGROUP_REPORT, Maps.newHashMap());
     }
 
     public TMasterResult handleReport(TReportRequest request) throws TException {
@@ -140,26 +154,41 @@ public class ReportHandler extends Daemon {
         List<TWorkGroup> activeWorkGroups = null;
         long reportVersion = -1;
 
-        String reportType = "";
+        ReportType reportType = ReportType.UNKNOWN_REPORT;
         if (request.isSetTasks()) {
             tasks = request.getTasks();
-            reportType += "task";
+            reportType = ReportType.TASK_REPORT;
         }
 
         if (request.isSetDisks()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TASK_REPORT);
+                return result;
+            }
             disks = request.getDisks();
-            reportType += "disk";
+            reportType = ReportType.DISK_REPORT;
         }
 
         if (request.isSetTablets()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
+                return result;
+            }
             tablets = request.getTablets();
             reportVersion = request.getReport_version();
-            reportType += "tablet";
+            reportType = ReportType.TABLET_REPORT;
         } else if (request.isSetTablet_list()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
+                return result;
+            }
             // the 'tablets' member will be deprecated in future.
             tablets = buildTabletMap(request.getTablet_list());
             reportVersion = request.getReport_version();
-            reportType += "tablet";
+            reportType = ReportType.TABLET_REPORT;
         }
 
         if (request.isSetTablet_max_compaction_score()) {
@@ -167,13 +196,19 @@ public class ReportHandler extends Daemon {
         }
 
         if (request.isSetActive_workgroups()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.WORKGROUP_REPORT);
+                return result;
+            }
             activeWorkGroups = request.active_workgroups;
+            reportType = ReportType.WORKGROUP_REPORT;
         }
         List<TWorkGroupOp> workGroupOps =
                 GlobalStateMgr.getCurrentState().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
-        ReportTask reportTask = new ReportTask(beId, tasks, disks, tablets, reportVersion, activeWorkGroups);
+        ReportTask reportTask = new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -182,6 +217,8 @@ public class ReportHandler extends Daemon {
             errorMsgs.add("failed to put report task to queue. queue size: " + reportQueue.size());
             errorMsgs.add("err: " + e.getMessage());
             tStatus.setError_msgs(errorMsgs);
+
+            LOG.warn(errorMsgs);
             return result;
         }
 
@@ -190,15 +227,27 @@ public class ReportHandler extends Daemon {
         return result;
     }
 
+    private void buildErrorResult(TStatus tStatus, String msg) {
+        tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
+        List<String> errorMsgs = Lists.newArrayList();
+        errorMsgs.add(msg);
+        tStatus.setError_msgs(errorMsgs);
+        LOG.warn(errorMsgs);
+    }
+
     private void putToQueue(ReportTask reportTask) throws Exception {
-        int currentSize = reportQueue.size();
-        if (currentSize > Config.report_queue_size) {
-            LOG.warn("the report queue size exceeds the limit: {}. current: {}", Config.report_queue_size, currentSize);
-            throw new Exception(
-                    "the report queue size exceeds the limit: " + Config.report_queue_size + ". current: " +
-                            currentSize);
+        synchronized (pendingTaskMap) {
+            if (!pendingTaskMap.containsKey(reportTask.type)) {
+                throw new Exception("Unkonw report task type" + reportTask.toString());
+            }
+            ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
+            if (oldTask == null) {
+                reportQueue.put(reportTask);
+            } else {
+                LOG.info("update be {} report task {}", oldTask.beId, oldTask);
+            }
+            pendingTaskMap.get(reportTask.type).put(reportTask.beId, reportTask);
         }
-        reportQueue.put(reportTask);
     }
 
     private Map<Long, TTablet> buildTabletMap(List<TTablet> tabletList) {
@@ -215,18 +264,20 @@ public class ReportHandler extends Daemon {
 
     private class ReportTask extends MasterTask {
 
-        private long beId;
+        public long beId;
+        public ReportType type;
         private Map<TTaskType, Set<Long>> tasks;
         private Map<String, TDisk> disks;
         private Map<Long, TTablet> tablets;
         private long reportVersion;
         private List<TWorkGroup> activeWorkGroups;
 
-        public ReportTask(long beId, Map<TTaskType, Set<Long>> tasks,
+        public ReportTask(long beId, ReportType type, Map<TTaskType, Set<Long>> tasks,
                           Map<String, TDisk> disks,
                           Map<Long, TTablet> tablets, long reportVersion,
                           List<TWorkGroup> activeWorkGroups) {
             this.beId = beId;
+            this.type = type;
             this.tasks = tasks;
             this.disks = disks;
             this.tablets = tablets;
@@ -1214,8 +1265,16 @@ public class ReportHandler extends Daemon {
             ReportTask task = null;
             try {
                 task = reportQueue.take();
+                synchronized (pendingTaskMap) {
+                    // using lastest task
+                    task = pendingTaskMap.get(task.type).get(task.beId);
+                    if (task == null) {
+                        throw new Exception("pendingTaskMap not exists " + task.beId);
+                    }
+                    pendingTaskMap.get(task.type).remove(task.beId, task);
+                }
                 task.exec();
-            } catch (InterruptedException e) {
+            } catch (Exception e) {
                 LOG.warn("got interupted exception when executing report", e);
             }
         }
