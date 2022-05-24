@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
@@ -85,6 +86,15 @@ public class OlapTableTest {
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
+            tbl.addRelatedMaterializedView(10l);
+            tbl.addRelatedMaterializedView(20l);
+            tbl.addRelatedMaterializedView(30l);
+            Assert.assertEquals(Sets.newHashSet(10l, 20l, 30l), tbl.getRelatedMaterializedViews());
+            tbl.removeRelatedMaterializedView(10l);
+            tbl.removeRelatedMaterializedView(20l);
+            Assert.assertEquals(Sets.newHashSet(30l), tbl.getRelatedMaterializedViews());
+            tbl.removeRelatedMaterializedView(30l);
+            Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }
 
