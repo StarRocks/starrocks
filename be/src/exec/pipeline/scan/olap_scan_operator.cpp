@@ -28,14 +28,17 @@ Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
 void OlapScanOperatorFactory::do_close(RuntimeState*) {}
 
 OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node, _ctx);
+    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node, _max_scan_concurrency,
+                                              _num_committed_scan_tasks, _ctx);
 }
 
 // ==================== OlapScanOperator ====================
 
 OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+                                   int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks,
                                    OlapScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, scan_node), _ctx(std::move(ctx)) {
+        : ScanOperator(factory, id, driver_sequence, scan_node, max_scan_concurrency, num_committed_scan_tasks),
+          _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 
