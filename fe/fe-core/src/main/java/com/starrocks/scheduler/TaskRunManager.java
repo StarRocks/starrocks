@@ -43,7 +43,9 @@ public class TaskRunManager {
         }
 
         if (pendingTaskRunMap.keySet().size() > Config.pending_task_run_num_limit) {
-            return new SubmitResult(null, SubmitResult.SubmitStatus.Rejected);
+            LOG.warn("pending TaskRun exceeds pending_task_run_num_limit:{}, reject the submit.",
+                    Config.pending_task_run_num_limit);
+            return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
 
         String queryId = UUIDUtil.genUUID().toString();
@@ -53,7 +55,7 @@ public class TaskRunManager {
 
         Queue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId, u -> Queues.newConcurrentLinkedQueue());
         taskRuns.offer(taskRun);
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.Submitted);
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map
@@ -73,7 +75,7 @@ public class TaskRunManager {
                 taskRunHistory.addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
-                GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
             }
         }
     }
@@ -92,10 +94,7 @@ public class TaskRunManager {
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     runningTaskRunMap.put(taskId, pendingTaskRun);
-                    TaskRunStatusChange statusChange =
-                            new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                                    Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                    GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
+                    // RUNNING state persistence is not necessary currently
                 }
             }
         }

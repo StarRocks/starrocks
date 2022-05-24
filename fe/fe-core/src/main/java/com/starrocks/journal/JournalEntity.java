@@ -522,7 +522,7 @@ public class JournalEntity implements Writable {
                 data = TaskRunStatus.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_ALTER_TASK_RUN:
+            case OperationType.OP_UPDATE_TASK_RUN:
                 data = TaskRunStatusChange.read(in);
                 isRead = true;
                 break;

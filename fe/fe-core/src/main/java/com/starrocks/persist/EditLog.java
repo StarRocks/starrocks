@@ -717,13 +717,13 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_TASK_RUN: {
                     final TaskRunStatus status = (TaskRunStatus) journal.getData();
-                    globalStateMgr.getTaskManager().replayTaskRunCreateStatus(status);
+                    globalStateMgr.getTaskManager().replayCreateTaskRun(status);
                     break;
                 }
-                case OperationType.OP_ALTER_TASK_RUN: {
+                case OperationType.OP_UPDATE_TASK_RUN: {
                     final TaskRunStatusChange statusChange =
                             (TaskRunStatusChange) journal.getData();
-                    globalStateMgr.getTaskManager().replayTaskRunStatusChange(statusChange);
+                    globalStateMgr.getTaskManager().replayUpdateTaskRun(statusChange);
                     break;
                 }
                 case OperationType.OP_DROP_TASK_RUNS: {
@@ -993,8 +993,8 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_TASK_RUN, status);
     }
 
-    public void logTaskRunStatusChange(TaskRunStatusChange statusChange) {
-        logEdit(OperationType.OP_ALTER_TASK_RUN, statusChange);
+    public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
+        logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
     public void logDropTaskRuns(List<String> queryIdList) {

@@ -28,8 +28,8 @@ public class SubmitResult {
     }
 
     enum SubmitStatus {
-        Submitted,
-        Rejected,
-        Failed
+        SUBMITTED,
+        REJECTED,
+        FAILED
     }
 }

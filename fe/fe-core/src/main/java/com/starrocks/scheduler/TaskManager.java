@@ -115,6 +115,7 @@ public class TaskManager implements Writable {
                 }
                 pendingIter.remove();
             }
+            // will not happen, but defensive programming
             Iterator<Long> runningIter = taskRunManager.getRunningTaskRunMap().keySet().iterator();
             while (runningIter.hasNext()) {
                 TaskRun taskRun = taskRunManager.getRunningTaskRunMap().get(runningIter.next());
@@ -154,7 +155,7 @@ public class TaskManager implements Writable {
     public SubmitResult executeTask(String taskName) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
-            return new SubmitResult(null, SubmitResult.SubmitStatus.Failed);
+            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
         return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build());
     }
@@ -167,7 +168,8 @@ public class TaskManager implements Writable {
             for (long taskId : taskIdList) {
                 Task task = manualTaskMap.get(taskId);
                 if (task == null) {
-                    return;
+                    LOG.warn("drop task {} failed because task is null", taskId);
+                    continue;
                 }
                 nameToTaskMap.remove(task.getName());
                 manualTaskMap.remove(task.getId());
@@ -239,7 +241,7 @@ public class TaskManager implements Writable {
             throw new DdlException("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
         }
         SubmitResult submitResult = executeTask(taskName);
-        if (submitResult.getStatus() != SubmitResult.SubmitStatus.Submitted) {
+        if (submitResult.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
             dropTasks(ImmutableList.of(task.getId()), false);
         }
 
@@ -288,7 +290,7 @@ public class TaskManager implements Writable {
             }
             if (data.runStatus != null) {
                 for (TaskRunStatus runStatus : data.runStatus) {
-                    replayTaskRunCreateStatus(runStatus);
+                    replayCreateTaskRun(runStatus);
                 }
             }
         }
@@ -317,7 +319,7 @@ public class TaskManager implements Writable {
         return taskRunList;
     }
 
-    public void replayTaskRunCreateStatus(TaskRunStatus status) {
+    public void replayCreateTaskRun(TaskRunStatus status) {
 
         switch (status.getState()) {
             case PENDING:
@@ -344,37 +346,26 @@ public class TaskManager implements Writable {
         }
     }
 
-    public void replayTaskRunStatusChange(TaskRunStatusChange statusChange) {
-        Constants.TaskRunState fromStatus = statusChange.getFromStatus();
+    public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        if (fromStatus == Constants.TaskRunState.PENDING) {
-            if (toStatus == Constants.TaskRunState.RUNNING) {
-                Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
-                if (taskRunQueue != null && taskRunQueue.size() != 0) {
-                    TaskRun pendingTaskRun = taskRunQueue.poll();
-                    pendingTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-                    taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
-                    if (taskRunQueue.size() == 0) {
-                        taskRunManager.getPendingTaskRunMap().remove(taskId);
-                    }
-                }
+        Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
+        if (taskRunQueue != null) {
+            if (taskRunQueue.size() == 0) {
+                taskRunManager.getPendingTaskRunMap().remove(taskId);
+                return;
             }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING) {
-            if (toStatus == Constants.TaskRunState.SUCCESS ||
-                    toStatus == Constants.TaskRunState.FAILED) {
-                TaskRun taskRun = taskRunManager.getRunningTaskRunMap().remove(taskId);
-                // will not happen, but defensive programming
-                if (taskRun == null) {
-                    return;
-                }
+
+            TaskRun pendingTaskRun = taskRunQueue.poll();
+            TaskRunStatus status = pendingTaskRun.getStatus();
+            if (status.getQueryId().equals(statusChange.getQueryId())) {
                 if (toStatus == Constants.TaskRunState.FAILED) {
-                    taskRun.getStatus().setErrorMessage(statusChange.getErrorMessage());
-                    taskRun.getStatus().setErrorCode(statusChange.getErrorCode());
+                    status.setErrorMessage(statusChange.getErrorMessage());
+                    status.setErrorCode(statusChange.getErrorCode());
                 }
-                taskRun.getStatus().setState(toStatus);
-                taskRun.getStatus().setFinishTime(statusChange.getFinishTime());
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                status.setState(toStatus);
+                status.setFinishTime(statusChange.getFinishTime());
+                taskRunManager.getTaskRunHistory().addHistory(status);
             }
         }
     }
