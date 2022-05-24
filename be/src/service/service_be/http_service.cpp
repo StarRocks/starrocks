@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "service/http_service.h"
+#include "http_service.h"
 
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
@@ -48,18 +48,18 @@
 
 namespace starrocks {
 
-HttpService::HttpService(ExecEnv* env, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
         : _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
 
-HttpService::~HttpService() {
+HttpServiceBE::~HttpServiceBE() {
     _ev_http_server.reset();
     _web_page_handler.reset();
     STLDeleteElements(&_http_handlers);
 }
 
-Status HttpService::start() {
+Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
 
     // register load
