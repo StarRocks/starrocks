@@ -136,6 +136,7 @@ private:
                                                    const TExecPlanFragmentParams& request, int64_t* scan_dop,
                                                    int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
