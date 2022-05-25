@@ -437,7 +437,7 @@ void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num
     };
     auto grf_config_func = [&bucketseq_to_partition](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
         grf->set_join_mode(TRuntimeFilterBuildJoinMode::COLOCATE);
-        ctx->bucketseq_to_partition = bucketseq_to_partition;
+        ctx->bucketseq_to_partition = &bucketseq_to_partition;
     };
     test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func);
 }

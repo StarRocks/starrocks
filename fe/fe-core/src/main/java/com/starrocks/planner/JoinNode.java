@@ -212,6 +212,56 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
+        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
+            if (probeExpr instanceof SlotRef) {
+                for (BinaryPredicate eqConjunct : eqJoinConjuncts) {
+                    Expr lhs = eqConjunct.getChild(0);
+                    Expr rhs = eqConjunct.getChild(1);
+                    SlotRef eqSlotRef = null;
+                    Expr otherExpr = null;
+                    if ((lhs instanceof SlotRef) && probeExpr.isBound(((SlotRef) lhs).getSlotId())) {
+                        eqSlotRef = (SlotRef) lhs;
+                        otherExpr = rhs;
+                    } else if ((rhs instanceof SlotRef) && probeExpr.isBound(((SlotRef) rhs).getSlotId())) {
+                        eqSlotRef = (SlotRef) rhs;
+                        otherExpr = lhs;
+                    }
+                    if (eqSlotRef == null) {
+                        continue;
+                    }
+                    boolean hasPushedDown = false;
+                    hasPushedDown |= getChild(0).pushDownRuntimeFilters(description, eqSlotRef);
+                    hasPushedDown |= getChild(1).pushDownRuntimeFilters(description, eqSlotRef);
+                    // If probeExpr is SlotRef(a), there exits an equalJoinConjunct SlotRef(a)=SlotRef(b) in SemiJoin
+                    // or InnerJoin, then the rf also can pushed down to both sides of HashJoin because SlotRef(a) and
+                    // SlotRef(b) are equivalent.
+                    boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
+                    if ((otherExpr instanceof SlotRef) && isInnerOrSemiJoin) {
+                        hasPushedDown |= getChild(0).pushDownRuntimeFilters(description, otherExpr);
+                        hasPushedDown |= getChild(1).pushDownRuntimeFilters(description, otherExpr);
+                    }
+                    if (hasPushedDown) {
+                        return true;
+                    }
+                }
+            }
+
+            // can not push down to children.
+            // use runtime filter at this level.
+            if (description.canProbeUse(this)) {
+                description.addProbeExpr(id.asInt(), probeExpr);
+                probeRuntimeFilters.add(description);
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<BinaryPredicate> getEqJoinConjuncts() {
         return eqJoinConjuncts;
     }

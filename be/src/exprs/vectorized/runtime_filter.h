@@ -201,7 +201,7 @@ public:
     public:
         Column::Filter selection;
         std::vector<uint32_t> hash_values;
-        std::vector<int32_t> bucketseq_to_partition;
+        const std::vector<int32_t>* bucketseq_to_partition;
     };
 
     virtual size_t evaluate(Column* input_column, RunningContext* ctx) const = 0;
@@ -377,9 +377,10 @@ public:
             // shuffle-aware grf is partitioned into multiple parts the number of whom equals to the number of
             // instances. we can use crc32_hash to compute out bucket_seq that the row belongs to, then use
             // the bucketseq_to_partition array to translate bucket_seq into partition index of the grf.
-            compute_hash(&Column::crc32_hash, running_ctx->bucketseq_to_partition.size());
+            const auto& bucketseq_to_partition = *running_ctx->bucketseq_to_partition;
+            compute_hash(&Column::crc32_hash, bucketseq_to_partition.size());
             for (auto i = 0; i < num_rows; ++i) {
-                hash_values[i] = running_ctx->bucketseq_to_partition[hash_values[i]];
+                hash_values[i] = bucketseq_to_partition[hash_values[i]];
             }
             break;
         }

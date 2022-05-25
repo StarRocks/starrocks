@@ -256,7 +256,6 @@ public class RuntimeFilterDescription {
         if (isColocate() && bucketSeqToInstance!=null && !bucketSeqToInstance.isEmpty()) {
             t.setBucketseq_to_instance(bucketSeqToInstance);
         }
-
         assert (joinMode != JoinNode.DistributionMode.NONE);
         if (joinMode.equals(JoinNode.DistributionMode.BROADCAST)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
