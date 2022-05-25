@@ -1939,7 +1939,7 @@ public class JoinTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        String plan  = starRocksAssert.query(sql).explainQuery();
+        String plan = starRocksAssert.query(sql).explainQuery();
         assertContains(plan, "  3:SELECT\n" +
                 "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
                 "  |  \n" +
@@ -2612,5 +2612,22 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // check no error
         assertContains(plan, "16:ASSERT NUMBER OF ROWS");
+    }
+
+    @Test
+    public void testSemiOuterJoin() throws Exception {
+        String sql = "select * from t0 full outer join t2 on t0.v1 = t2.v7 and t0.v1 > t2.v7 " +
+                "where t0.v2 in (select t1.v4 from t1 where false)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 7: v4\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)");
     }
 }

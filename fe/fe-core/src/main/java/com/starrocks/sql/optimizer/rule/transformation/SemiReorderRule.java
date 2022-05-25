@@ -33,18 +33,22 @@ import java.util.stream.Collectors;
  */
 public class SemiReorderRule extends TransformationRule {
     public SemiReorderRule() {
-        super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN).
-                addChildren(
-                        Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(Pattern.create(OperatorType.PATTERN_LEAF),
-                                Pattern.create(OperatorType.PATTERN_LEAF)
-                                        .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF))),
-                        Pattern.create(OperatorType.PATTERN_LEAF)));
+        super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN)
+                .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         if (!topJoin.getJoinType().isLeftSemiJoin() && !topJoin.getJoinType().equals(JoinOperator.LEFT_ANTI_JOIN)) {
+            return false;
+        }
+
+        LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.getInputs().get(0).getOp();
+        if (bottomJoin.getJoinType().isOuterJoin()) {
             return false;
         }
 
@@ -167,10 +171,7 @@ public class SemiReorderRule extends TransformationRule {
             newRightChild = OptExpression.create(newRightChildOperator, leftChildJoinRightChild.getInputs());
         }
 
-        return Lists.newArrayList(OptExpression.create(newTopJoin,
-                Lists.newArrayList(
-                        OptExpression.create(newSemiJoin,
-                                Lists.newArrayList(input.inputAt(0).inputAt(0), input.inputAt(1))),
-                        newRightChild)));
+        OptExpression semiOpt = OptExpression.create(newSemiJoin, input.inputAt(0).inputAt(0), input.inputAt(1));
+        return Lists.newArrayList(OptExpression.create(newTopJoin, semiOpt, newRightChild));
     }
 }
