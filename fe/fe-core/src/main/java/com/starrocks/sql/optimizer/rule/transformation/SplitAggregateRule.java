@@ -179,19 +179,15 @@ public class SplitAggregateRule extends TransformationRule {
             if (!operator.getGroupingKeys().isEmpty()) {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
                     if (isGroupByAllConstant(input, operator)) {
-                        newExpressions.addAll(implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
+                        return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
-                                operator.getGroupingKeys()));
+                                operator.getGroupingKeys());
+                    } else if (canGenerateTwoStageAggregate(operator, distinctColumns) && operator.hasLimit()) {
+                        return implementTwoStageAgg(input, operator);
                     } else {
-                        newExpressions.addAll(implementOneDistinctWithGroupByAgg(
-                                context.getColumnRefFactory(), input, operator,
-                                singleDistinctFunctionPos));
+                        return implementOneDistinctWithGroupByAgg(context.getColumnRefFactory(), input, operator,
+                                singleDistinctFunctionPos);
                     }
-                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
-                        return newExpressions;
-                    }
-                    newExpressions.addAll(implementTwoStageAgg(input, operator));
-                    return newExpressions;
                 } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
                         canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
@@ -207,13 +203,8 @@ public class SplitAggregateRule extends TransformationRule {
                 }
             } else {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
-                    newExpressions.addAll(implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
-                            input, operator, distinctColumns, singleDistinctFunctionPos));
-                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
-                        return newExpressions;
-                    }
-                    newExpressions.addAll(implementTwoStageAgg(input, operator));
-                    return newExpressions;
+                    return implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
+                            input, operator, distinctColumns, singleDistinctFunctionPos);
                 } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
                         canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
