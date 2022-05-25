@@ -150,8 +150,6 @@ public class ShowDbStmtTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        System.out.println(metaData.getColumn(0).getName());
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
-        Assert.assertEquals(resultSet.getResultRows().get(0).get(0), "testDb");
     }
 }

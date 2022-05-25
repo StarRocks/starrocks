@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -13,6 +14,8 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowStmtAnalyzer {
@@ -64,6 +67,23 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDatabasesStmt(ShowDbStmt node, ConnectContext context) {
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+            boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
+            if (!isInternalCatalog) {
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_CATALOG_ERROR);
+                }
+            }
             return null;
         }
 

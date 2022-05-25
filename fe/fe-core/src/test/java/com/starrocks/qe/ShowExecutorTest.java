@@ -243,8 +243,8 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testDb", resultSet.getString(0));
+        Assert.assertFalse(resultSet.next());
+        Assert.assertEquals("Database", resultSet.getMetaData().getColumn(0).getName());
     }
 
     @Test

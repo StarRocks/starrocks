@@ -119,7 +119,6 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -129,6 +128,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
@@ -146,7 +146,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -158,11 +157,13 @@ public class ShowExecutor {
     private ConnectContext ctx;
     private ShowStmt stmt;
     private ShowResultSet resultSet;
+    private MetadataMgr metadataMgr;
 
     public ShowExecutor(ConnectContext ctx, ShowStmt stmt) {
         this.ctx = ctx;
         this.stmt = stmt;
         resultSet = null;
+        metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
     public ShowResultSet execute() throws AnalysisException, DdlException {
@@ -175,7 +176,7 @@ public class ShowExecutor {
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
         } else if (stmt instanceof ShowDbStmt) {
-            handleShowDb();
+            handleShowDb(ctx);
         } else if (stmt instanceof ShowTableStmt) {
             handleShowTable();
         } else if (stmt instanceof ShowTableStatusStmt) {
@@ -459,7 +460,7 @@ public class ShowExecutor {
     }
 
     // Show clusters
-    private void handleShowCluster() throws AnalysisException {
+    private void handleShowCluster() {
         final ShowClusterStmt showStmt = (ShowClusterStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
         final List<String> clusterNames = ctx.getGlobalStateMgr().getClusterNames();
@@ -477,7 +478,7 @@ public class ShowExecutor {
     }
 
     // Show clusters
-    private void handleShowMigrations() throws AnalysisException {
+    private void handleShowMigrations() {
         final ShowMigrationsStmt showStmt = (ShowMigrationsStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
         final Set<BaseParam> infos = ctx.getGlobalStateMgr().getMigrations();
@@ -492,23 +493,18 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb() throws AnalysisException, DdlException {
+    private void handleShowDb(ConnectContext ctx) throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> dbNames = new ArrayList<>();
-
+        String catalogName;
         if (showDbStmt.getCatalogName() == null) {
-            dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
+            catalogName = ctx.getCurrentCatalog();
         } else {
-            String db = showDbStmt.getCatalogName();
-            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            Optional<ConnectorMetadata> connectorMetadata = metadataMgr.getOptionalMetadata(db);
-            if (metadataMgr.connectorMetadataExists(db)) {
-                dbNames = connectorMetadata.get().listDbNames();
-            } else {
-                throw new AnalysisException("Can not acquire databases from " + db + ", please check catalog config!");
-            }
+            catalogName = showDbStmt.getCatalogName();
         }
+        boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
+        dbNames = metadataMgr.listDbNames(catalogName);
 
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
@@ -522,8 +518,10 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
-                continue;
+            if (isInternalCatalog) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
             dbNameSet.add(db);
         }
