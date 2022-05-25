@@ -247,11 +247,11 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
 }
 
 TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
-    auto tc = DateColumn::create();
-    tc->append(DateValue::create(2007, 1, 1));
-    tc->append(DateValue::create(2017, 5, 1));
-    tc->append(DateValue::create(2020, 9, 23));
-    tc->append(DateValue::create(2015, 10, 11));
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2017, 5, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2020, 9, 23, 0, 0, 0));
+    tc->append(TimestampValue::create(2015, 10, 11, 0, 0, 0));
 
     int weeks[] = {1, 18, 38, 41};
 
@@ -267,15 +267,15 @@ TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
 }
 
 TEST_F(TimeFunctionsTest, weekWithModeTest) {
-    auto tc = DateColumn::create();
-    tc->append(DateValue::create(2007, 1, 1));
-    tc->append(DateValue::create(2017, 5, 1));
-    tc->append(DateValue::create(2020, 9, 23));
-    tc->append(DateValue::create(2015, 10, 11));
-    tc->append(DateValue::create(2014, 12, 11));
-    tc->append(DateValue::create(2001, 5, 3));
-    tc->append(DateValue::create(2005, 2, 3));
-    tc->append(DateValue::create(2003, 9, 3));
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2017, 5, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2020, 9, 23, 0, 0, 0));
+    tc->append(TimestampValue::create(2015, 10, 11, 0, 0, 0));
+    tc->append(TimestampValue::create(2014, 12, 11, 0, 0, 0));
+    tc->append(TimestampValue::create(2001, 5, 3, 0, 0, 0));
+    tc->append(TimestampValue::create(2005, 2, 3, 0, 0, 0));
+    tc->append(TimestampValue::create(2003, 9, 3, 0, 0, 0));
 
     auto mode_column = Int32Column::create();
     mode_column->append(3);
