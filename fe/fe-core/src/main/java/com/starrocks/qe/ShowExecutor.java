@@ -163,7 +163,7 @@ public class ShowExecutor {
         this.ctx = ctx;
         this.stmt = stmt;
         resultSet = null;
-        metadataMgr = ctx.globalStateMgr.getMetadataMgr();
+        metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
     public ShowResultSet execute() throws AnalysisException {
