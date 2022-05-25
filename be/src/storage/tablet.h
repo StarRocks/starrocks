@@ -102,7 +102,6 @@ public:
     size_t num_key_columns() const;
     size_t num_short_key_columns() const;
     size_t num_rows_per_row_block() const;
-    CompressKind compress_kind() const;
     size_t next_unique_id() const;
     size_t row_size() const;
     size_t field_index(const string& field_name) const;
@@ -404,10 +403,6 @@ inline size_t Tablet::num_short_key_columns() const {
 
 inline size_t Tablet::num_rows_per_row_block() const {
     return _tablet_meta->tablet_schema().num_rows_per_row_block();
-}
-
-inline CompressKind Tablet::compress_kind() const {
-    return _tablet_meta->tablet_schema().compress_kind();
 }
 
 inline size_t Tablet::next_unique_id() const {
