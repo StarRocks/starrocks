@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRankRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectionToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
@@ -116,7 +117,8 @@ public class Optimizer {
         // statistics won't set correctly after physicalRuleRewrite.
         // we need set plan costs before physical rewrite stage.
         final CostEstimate costs = Explain.buildCost(result);
-        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
+                .setPlanMemCosts(costs.getMemoryCost());
 
         OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
         OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
@@ -191,6 +193,7 @@ public class Optimizer {
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectionToCTEAnchorRule());
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
 
         // Add full cte required columns, and save orig required columns
