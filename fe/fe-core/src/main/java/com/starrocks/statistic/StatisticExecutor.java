@@ -363,7 +363,7 @@ public class StatisticExecutor {
         return where.toString();
     }
 
-    public static StatementBase parseSQL(String sql, ConnectContext context) throws Exception {
+    public static StatementBase parseSQL(String sql, ConnectContext context) {
         StatementBase parsedStmt = com.starrocks.sql.parser.SqlParser.parse(sql,
                 context.getSessionVariable().getSqlMode()).get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql, 0));
@@ -440,7 +440,7 @@ public class StatisticExecutor {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_FULL_TEMPLATE);
 
-            builder.append(sw.toString());
+            builder.append(sw);
             builder.append(" UNION ALL ");
         }
 
@@ -541,7 +541,7 @@ public class StatisticExecutor {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_TYPE_SAMPLE_TEMPLATE);
             }
 
-            builder.append(sw.toString());
+            builder.append(sw);
             builder.append(" UNION ALL ");
         }
 
