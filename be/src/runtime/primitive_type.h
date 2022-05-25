@@ -183,4 +183,7 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
 
 PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 
+// Return length of fixed-length type, return 0 for dynamic length type
+size_t get_size_of_fixed_length_type(PrimitiveType ptype);
+
 } // namespace starrocks
