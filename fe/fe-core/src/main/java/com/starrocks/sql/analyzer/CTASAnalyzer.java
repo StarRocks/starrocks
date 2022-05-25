@@ -76,6 +76,9 @@ public class CTASAnalyzer {
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
+                if (slotRef.getTblNameWithoutAnalyzed() == null) {
+                    continue;
+                }
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
                 if (!(table instanceof OlapTable)) {
