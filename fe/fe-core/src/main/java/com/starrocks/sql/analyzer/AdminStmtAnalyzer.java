@@ -84,9 +84,11 @@ public class AdminStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
                     dbName = ClusterNamespace.getFullName(session.getClusterName(), session.getDatabase());
-                    adminShowReplicaDistributionStmt.setDbName(dbName);
                 }
+            } else {
+                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
             }
+            adminShowReplicaDistributionStmt.setDbName(dbName);
 
             try {
                 CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
@@ -106,9 +108,11 @@ public class AdminStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
                     dbName = ClusterNamespace.getFullName(session.getClusterName(), session.getDatabase());
-                    adminShowReplicaStatusStmt.setDbName(dbName);
                 }
+            } else {
+                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
             }
+            adminShowReplicaStatusStmt.setDbName(dbName);
 
             try {
                 CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
