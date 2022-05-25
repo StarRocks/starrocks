@@ -777,7 +777,7 @@ public class MaterializedViewRule extends Rule {
                     return false;
                 }
                 String mvColumnName = MVUtils.getMVColumnName(mvColumn, queryFnName, queryColumn.getName());
-                if (mvColumnName.equals(mvColumn.getName())) {
+                if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
                     if (!rewriteContexts.containsKey(indexId)) {
                         rewriteContexts.put(indexId, Lists.newArrayList());
                     }
