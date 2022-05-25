@@ -1,4 +1,4 @@
-# Java UDF
+# Java UDF【公测中】
 
 自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数 UDF（User Defined Function，UDF），该功能正在公测中。您可以根据业务场景开发自定义函数，扩展StarRocks的函数能力。本文介绍StarRocks支持的 UDF 类型，开发流程和使用方式。
 
