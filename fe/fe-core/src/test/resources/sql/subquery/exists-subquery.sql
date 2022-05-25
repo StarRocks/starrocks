@@ -316,46 +316,16 @@ LEFT OUTER JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [3: v3 = 3 O
 [sql]
 select v3, v1 from t0 where (t0.v3 = 3 or exists (select v6 from t1 where v5 = v1)) and not exists (select v5 from t1 where v4 = v2);
 [result]
-LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [3: v3 = 3 OR 5: v5 IS NOT NULL])
-    LEFT ANTI JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [null])
+LEFT ANTI JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [3: v3 = 3 OR 5: v5 IS NOT NULL])
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
-            SCAN (columns[8: v4] predicate[null])
-    EXCHANGE SHUFFLE[5]
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5]] having [null]
-            EXCHANGE SHUFFLE[5]
-                AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5]] having [null]
-                    SCAN (columns[5: v5] predicate[null])
-[end]
-
-[sql]
-select * from t0 where exists (select 9)
-[result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+        EXCHANGE SHUFFLE[5]
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5]] having [null]
+                EXCHANGE SHUFFLE[5]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5]] having [null]
+                        SCAN (columns[5: v5] predicate[null])
     EXCHANGE BROADCAST
-        VALUES (9)
-[end]
-
-[sql]
-select * from t0 where exists (select 9,10)
-[result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        VALUES (9)
-[end]
-
-[sql]
-select * from t0 where not exists (select 9)
-[result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{6: count=count(6: count)}] group by [[]] having [6: count = 0]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{6: count=count(1)}] group by [[]] having [null]
-                    VALUES (9)
+        SCAN (columns[8: v4] predicate[null])
 [end]
 
 [sql]
