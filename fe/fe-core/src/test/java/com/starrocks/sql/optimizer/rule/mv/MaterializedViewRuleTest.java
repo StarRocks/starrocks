@@ -13,7 +13,7 @@ import org.junit.Test;
 public class MaterializedViewRuleTest extends PlanTestBase {
     @Test
     public void testMaterializedViewWithCountSelection() throws Exception {
-        String sql = "select L_SHIPDATE, count(L_LINENUMBER) from lineitem group by L_SHIPDATE;";
+        String sql = "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
         Assert.assertTrue(plan != null);
         Assert.assertEquals(1, plan.getScanNodes().size());
@@ -22,9 +22,9 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getDb("default_cluster:test");
-        Table table = database.getTable("lineitem");
+        Table table = database.getTable("lineorder_flat");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
-        Assert.assertEquals(baseTable.getIndexIdByName("lineitem_count_mv"), selectedIndexid);
+        Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
     }
 }
