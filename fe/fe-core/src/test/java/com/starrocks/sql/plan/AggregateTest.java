@@ -1092,15 +1092,15 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
-                "  |  group by: 1: v1"));
+                        "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                        "  |  group by: 1: v1"));
 
         sql = "select lead(v2) over(partition by v1 order by v3) from t0 group by v1";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
-                "  |  group by: 1: v1"));
+                        "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                        "  |  group by: 1: v1"));
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
@@ -1225,5 +1225,18 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 4> : arrays_overlap(3: v3, CAST(ARRAY<tinyint(4)>[1] AS ARRAY<BIGINT>))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testOuterJoinSatisfyAgg() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select distinct t0.v1  from t0 full outer join[shuffle] t1 on t0.v1 = t1.v4;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 }

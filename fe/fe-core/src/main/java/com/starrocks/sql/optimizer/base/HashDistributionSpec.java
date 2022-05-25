@@ -124,8 +124,9 @@ public class HashDistributionSpec extends DistributionSpec {
             }
         }
         // Left outer join will cause right table produce NULL in different node, also right outer join
-        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL &&
-                otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+        if (otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG &&
+                (thisSourceType == HashDistributionDesc.SourceType.LOCAL ||
+                        thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_JOIN)) {
             ColumnRefSet otherColumns = new ColumnRefSet();
             other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
             if (propertyInfo.nullableColumns.isIntersect(otherColumns)) {
