@@ -1209,4 +1209,43 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "  4:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testBucketShuffleJoinWindowFunction() throws Exception {
+        String sql = "select \n" +
+                "  subq_1.c3 as c2, \n" +
+                "  ref_1.c_address as c3 \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      subq_0.c0 as c2, \n" +
+                "      subq_0.c0 as c3, \n" +
+                "      avg(\n" +
+                "        cast(null as DOUBLE)\n" +
+                "      ) over (\n" +
+                "        partition by subq_0.c0, \n" +
+                "        subq_0.c0 \n" +
+                "        order by \n" +
+                "          subq_0.c0\n" +
+                "      ) as c4 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          ref_0.o_custkey as c0 \n" +
+                "        from \n" +
+                "          orders as ref_0 \n" +
+                "        where \n" +
+                "          ref_0.o_totalprice > ref_0.o_totalprice\n" +
+                "      ) as subq_0 \n" +
+                "    where \n" +
+                "      null\n" +
+                "  ) as subq_1 \n" +
+                "  left join customer as ref_1 on (subq_1.c2 = ref_1.c_custkey) \n" +
+                "where \n" +
+                "  subq_1.c4 >= subq_1.c4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    BUCKET_SHUFFLE_HASH_PARTITIONED: 2: O_CUSTKEY");
+    }
 }
