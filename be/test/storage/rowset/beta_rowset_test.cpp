@@ -354,7 +354,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
         }
         ASSERT_OK(rowset_writer->flush_columns());
     }
-    ASSERT_OK(rowset_writer->final_flush());
+    ASSERT_OK(rowset_writer->close());
 
     // check rowset
     RowsetSharedPtr rowset = rowset_writer->build().value();

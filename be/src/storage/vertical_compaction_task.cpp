@@ -74,7 +74,7 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     }
     TRACE("[Compaction] data compacted");
 
-    RETURN_IF_ERROR(output_rs_writer->final_flush());
+    RETURN_IF_ERROR(output_rs_writer->close());
 
     TRACE("[Compaction] writer flushed");
 

@@ -89,16 +89,16 @@ public:
     ~HorizontalBetaRowsetWriter() override;
 
     Status add_chunk(const vectorized::Chunk& chunk) override;
+    Status add_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
     Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
-
-    Status flush_chunk(const vectorized::Chunk& chunk) override;
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;
     Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override;
 
     Status flush() override;
+
+    Status close() override;
 
     StatusOr<RowsetSharedPtr> build() override;
 
@@ -109,7 +109,7 @@ private:
 
     Status _final_merge();
 
-    Status _flush_chunk(const vectorized::Chunk& chunk);
+    Status _add_chunk(const vectorized::Chunk& chunk);
 
     std::string _dump_mixed_segment_delfile_not_supported();
 
@@ -122,6 +122,17 @@ public:
     explicit VerticalBetaRowsetWriter(const RowsetWriterContext& context);
     ~VerticalBetaRowsetWriter() override;
 
+    Status add_chunk(const vectorized::Chunk& chunk) override {
+        return Status::NotSupported("VerticalBetaRowsetWriter::add_chunk");
+    }
+    Status add_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
+        return Status::NotSupported("VerticalBetaRowsetWriter::add_chunk_with_deletes");
+    }
+
+    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override {
+        return Status::NotSupported("VerticalBetaRowsetWriter::add_chunk_with_rssid");
+    }
+
     Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
                        bool is_key) override;
 
@@ -130,7 +141,9 @@ public:
 
     Status flush_columns() override;
 
-    Status final_flush() override;
+    Status flush() override { return Status::NotSupported("VerticalBetaRowsetWriter::flush"); }
+
+    Status close() override;
 
 private:
     StatusOr<std::unique_ptr<SegmentWriter>> _create_segment_writer(const std::vector<uint32_t>& column_indexes,

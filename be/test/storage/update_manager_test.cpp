@@ -59,10 +59,11 @@ public:
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
         if (one_delete == nullptr) {
-            CHECK_OK(writer->flush_chunk(*chunk));
+            CHECK_OK(writer->add_chunk(*chunk));
         } else {
-            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->add_chunk_with_deletes(*chunk, *one_delete));
         }
+        CHECK_OK(writer->flush());
         return *writer->build();
     }
 

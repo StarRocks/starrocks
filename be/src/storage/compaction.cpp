@@ -333,8 +333,8 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         }
     }
 
-    if (auto st = _output_rs_writer->final_flush(); !st.ok()) {
-        LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << _tablet->tablet_id()
+    if (auto st = _output_rs_writer->close(); !st.ok()) {
+        LOG(WARNING) << "failed to close rowset when merging rowsets of tablet " << _tablet->tablet_id()
                      << ", err=" << st;
         return st;
     }

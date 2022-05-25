@@ -245,6 +245,19 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
 }
 
 Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
+    switch (_flush_chunk_state) {
+    case FlushChunkState::UNKNOWN:
+        _flush_chunk_state = FlushChunkState::UPSERT;
+        break;
+    case FlushChunkState::UPSERT:
+        break;
+    default:
+        return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+    }
+    return _add_chunk(chunk);
+}
+
+Status HorizontalBetaRowsetWriter::_add_chunk(const vectorized::Chunk& chunk) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -287,37 +300,8 @@ std::string HorizontalBetaRowsetWriter::_dump_mixed_segment_delfile_not_supporte
     return msg;
 }
 
-Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
-    // 1. pure upsert
-    // once upsert, subsequent flush can only do upsert
-    switch (_flush_chunk_state) {
-    case FlushChunkState::UNKNOWN:
-        _flush_chunk_state = FlushChunkState::UPSERT;
-        break;
-    case FlushChunkState::UPSERT:
-        break;
-    default:
-        return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
-    }
-    return _flush_chunk(chunk);
-}
-
-Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) {
-    auto segment_writer = _create_segment_writer();
-    if (!segment_writer.ok()) {
-        return segment_writer.status();
-    }
-    RETURN_IF_ERROR((*segment_writer)->append_chunk(chunk));
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        _num_rows_written += static_cast<int64_t>(chunk.num_rows());
-        _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
-    }
-    return _flush_segment_writer(&segment_writer.value());
-}
-
-Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                            const vectorized::Column& deletes) {
+Status HorizontalBetaRowsetWriter::add_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                          const vectorized::Column& deletes) {
     auto flush_del_file = [&](const vectorized::Column& deletes) {
         auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
@@ -337,7 +321,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     // 2. pure delete, support multi-segment
     // 3. mixed upsert/delete, do not support multi-segment
     if (!upserts.is_empty() && deletes.empty()) {
-        return flush_chunk(upserts);
+        return add_chunk(upserts);
     } else if (upserts.is_empty() && !deletes.empty()) {
         // 2. pure delete
         // once delete, subsequent flush can only do delete
@@ -362,9 +346,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
             return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
         RETURN_IF_ERROR(flush_del_file(deletes));
-        return _flush_chunk(upserts);
+        return _add_chunk(upserts);
     } else {
-        return flush_chunk(upserts);
+        return add_chunk(upserts);
     }
 }
 
@@ -393,6 +377,10 @@ Status HorizontalBetaRowsetWriter::flush() {
     if (_segment_writer != nullptr) {
         return _flush_segment_writer(&_segment_writer);
     }
+    return Status::OK();
+}
+
+Status HorizontalBetaRowsetWriter::close() {
     return Status::OK();
 }
 
@@ -508,7 +496,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
             total_rows += chunk->num_rows();
             total_chunk++;
-            add_chunk(*chunk);
+            _add_chunk(*chunk);
         } else {
             return st;
         }
@@ -683,7 +671,7 @@ Status VerticalBetaRowsetWriter::flush_columns() {
     return Status::OK();
 }
 
-Status VerticalBetaRowsetWriter::final_flush() {
+Status VerticalBetaRowsetWriter::close() {
     if (_segment_writers.empty()) {
         return Status::OK();
     }

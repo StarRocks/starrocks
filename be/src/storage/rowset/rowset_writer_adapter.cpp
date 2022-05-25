@@ -36,13 +36,6 @@ Status RowsetWriterAdapter::add_chunk(const vectorized::Chunk& chunk) {
     return _writer->add_chunk(*_chunk_converter->copy_convert(chunk));
 }
 
-Status RowsetWriterAdapter::flush_chunk(const vectorized::Chunk& chunk) {
-    if (_chunk_converter == nullptr) {
-        RETURN_IF_ERROR(_init_chunk_converter());
-    }
-    return _writer->flush_chunk(*_chunk_converter->copy_convert(chunk));
-}
-
 Status RowsetWriterAdapter::_init_chunk_converter() {
     _chunk_converter = std::make_unique<ChunkConverter>();
     RETURN_IF_ERROR(_chunk_converter->init(ChunkHelper::convert_schema(*_in_schema),
@@ -53,13 +46,13 @@ Status RowsetWriterAdapter::_init_chunk_converter() {
     return Status::OK();
 }
 
-Status RowsetWriterAdapter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                     const vectorized::Column& deletes) {
+Status RowsetWriterAdapter::add_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                   const vectorized::Column& deletes) {
     LOG(WARNING) << "updatable tablet should not use RowsetWriterAdapter";
     if (_chunk_converter == nullptr) {
         RETURN_IF_ERROR(_init_chunk_converter());
     }
-    return _writer->flush_chunk_with_deletes(*_chunk_converter->copy_convert(upserts), deletes);
+    return _writer->add_chunk_with_deletes(*_chunk_converter->copy_convert(upserts), deletes);
 }
 
 } // namespace starrocks::vectorized

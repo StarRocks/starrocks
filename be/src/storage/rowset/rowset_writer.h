@@ -25,6 +25,7 @@
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dicts.h"
+#include "storage/chunk_stream_sink.h"
 #include "storage/column_mapping.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -52,38 +53,25 @@ class Column;
 //      ...
 //      writer->flush();
 //
-//      // 2. parallel add chunk
-//      // each chunk generates a segment
-//      writer->flush_chunk(chunk);
-//
-//      // 3. add chunk by columns
+//      // 2. add chunk by columns
 //      for (column_group : column_groups) {
 //          writer->add_columns(chunk, column_group, is_key);
 //          writer->add_columns(chunk, column_group, is_key);
 //          ...
 //          writer->flush_columns();
 //      }
-//      writer->final_flush();
+//      writer->close();
 //
 //      // finish
 //      writer->build();
 //
-class RowsetWriter {
+class RowsetWriter : public ChunkStreamSink {
 public:
     RowsetWriter() = default;
-    virtual ~RowsetWriter() = default;
+    ~RowsetWriter() override = default;
 
     RowsetWriter(const RowsetWriter&) = delete;
     const RowsetWriter& operator=(const RowsetWriter&) = delete;
-
-    virtual Status init() = 0;
-
-    virtual Status add_chunk(const vectorized::Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
-
-    // Used for updatable tablet compaction (BetaRowsetWriter), need to write src rssid with segment
-    virtual Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
-        return Status::NotSupported("RowsetWriter::add_chunk_with_rssid");
-    }
 
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
@@ -97,14 +85,6 @@ public:
         return Status::NotSupported("RowsetWriter::add_columns_with_rssid");
     }
 
-    virtual Status flush_chunk(const vectorized::Chunk& chunk) {
-        return Status::NotSupported("RowsetWriter::flush_chunk");
-    }
-
-    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
-        return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
-    }
-
     // Precondition: the input `rowset` should have the same type of the rowset we're building
     virtual Status add_rowset(RowsetSharedPtr rowset) { return Status::NotSupported("RowsetWriter::add_rowset"); }
 
@@ -113,15 +93,9 @@ public:
         return Status::NotSupported("RowsetWriter::add_rowset_for_linked_schema_change");
     }
 
-    // explicit flush all buffered rows into segment file.
-    virtual Status flush() { return Status::NotSupported("RowsetWriter::flush"); }
-
     // Used for vertical compaction
     // flush columns data and index
     virtual Status flush_columns() { return Status::NotSupported("RowsetWriter::flush_columns"); }
-
-    // flush segments footer
-    virtual Status final_flush() { return Status::NotSupported("RowsetWriter::final_flush"); }
 
     // finish building and return pointer to the built rowset (guaranteed to be inited).
     // return nullptr when failed

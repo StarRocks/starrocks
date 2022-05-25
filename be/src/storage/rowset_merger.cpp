@@ -491,8 +491,8 @@ private:
             }
         }
 
-        if (auto st = writer->final_flush(); !st.ok()) {
-            LOG(WARNING) << "failed to final flush rowset when merging rowsets of tablet " << tablet.tablet_id()
+        if (auto st = writer->close(); !st.ok()) {
+            LOG(WARNING) << "failed to close rowset when merging rowsets of tablet " << tablet.tablet_id()
                          << ", err=" << st;
             return st;
         }

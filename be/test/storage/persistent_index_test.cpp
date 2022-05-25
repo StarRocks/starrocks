@@ -327,11 +327,13 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
         cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % size + 2)));
     }
     if (one_delete == nullptr && !keys.empty()) {
-        CHECK_OK(writer->flush_chunk(*chunk));
+        CHECK_OK(writer->add_chunk(*chunk));
+        CHECK_OK(writer->flush());
     } else if (one_delete == nullptr) {
         CHECK_OK(writer->flush());
     } else if (one_delete != nullptr) {
-        CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+        CHECK_OK(writer->add_chunk_with_deletes(*chunk, *one_delete));
+        CHECK_OK(writer->flush());
     }
     return *writer->build();
 }

@@ -29,9 +29,7 @@ public:
 
     Status add_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
 
-    Status flush_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
-
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
+    Status add_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
         return Status::NotSupported("");
     }
 
@@ -53,7 +51,7 @@ public:
 
     Status flush() override { return Status::OK(); }
     Status flush_columns() override { return Status::OK(); }
-    Status final_flush() override { return Status::OK(); }
+    Status close() override { return Status::OK(); }
 
     Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
@@ -116,11 +114,13 @@ public:
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
-            CHECK_OK(writer->flush_chunk(*chunk));
+            CHECK_OK(writer->add_chunk(*chunk));
+            CHECK_OK(writer->flush());
         } else if (one_delete == nullptr) {
             CHECK_OK(writer->flush());
         } else if (one_delete != nullptr) {
-            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->add_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush());
         }
         return *writer->build();
     }

@@ -12,7 +12,7 @@
 
 namespace starrocks {
 
-class RowsetWriter;
+class ChunkStreamSink;
 class SlotDescriptor;
 class TabletSchema;
 
@@ -21,9 +21,9 @@ namespace vectorized {
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-             RowsetWriter* rowset_writer, MemTracker* mem_tracker);
+             ChunkStreamSink* sink, MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+    MemTable(int64_t tablet_id, const Schema& schema, ChunkStreamSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
     ~MemTable();
@@ -72,7 +72,7 @@ private:
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
 
-    RowsetWriter* _rowset_writer;
+    ChunkStreamSink* _sink;
 
     // aggregate
     std::unique_ptr<ChunkAggregator> _aggregator;

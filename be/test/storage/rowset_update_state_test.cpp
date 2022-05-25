@@ -67,11 +67,13 @@ public:
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
-            CHECK_OK(writer->flush_chunk(*chunk));
+            CHECK_OK(writer->add_chunk(*chunk));
+            CHECK_OK(writer->flush());
         } else if (one_delete == nullptr) {
             CHECK_OK(writer->flush());
         } else if (one_delete != nullptr) {
-            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->add_chunk_with_deletes(*chunk, *one_delete));
+            CHECK_OK(writer->flush());
         }
         return *writer->build();
     }
@@ -139,7 +141,8 @@ public:
             cols[0]->append_datum(vectorized::Datum(keys[i]));
             cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
         }
-        CHECK_OK(writer->flush_chunk(*chunk));
+        CHECK_OK(writer->add_chunk(*chunk));
+        CHECK_OK(writer->flush());
         RowsetSharedPtr partial_rowset = *writer->build();
 
         return partial_rowset;
@@ -296,7 +299,8 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
         cols[1]->append_datum(vectorized::Datum((int16_t)(i % 100 + 1)));
         cols[2]->append_datum(vectorized::Datum((int32_t)(i % 1000 + 3)));
     }
-    CHECK_OK(writer->flush_chunk(*chunk));
+    CHECK_OK(writer->add_chunk(*chunk));
+    CHECK_OK(writer->flush());
     RowsetSharedPtr new_rowset = *writer->build();
     version = 3;
     st = _tablet->rowset_commit(version, new_rowset);
