@@ -452,6 +452,9 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lineitem_count_mv " +
+                "as select L_SHIPDATE, count(L_LINENUMBER) from lineitem group by L_SHIPDATE;");
+
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
