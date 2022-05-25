@@ -264,7 +264,7 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
-            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            if (CatalogMgr.isInternalCatalog(node.getName().getCatalog())) {
                 dbName = dbName.split(":")[1];
             }
 
