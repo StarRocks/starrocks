@@ -161,28 +161,15 @@ TEST(Rle, SpecificSequences) {
 TEST(Rle, ISSUE_6513_1) {
     std::vector<uint64_t> values;
 
-    values.resize(0x40000000 - 1);
-    for (uint32_t i = 0; i < 0x40000000 - 1; ++i) {
-        values[i] = 0;
-    }
-
-    ValidateRle(values, 1, nullptr, -1);
-}
-
-
-TEST(Rle, ISSUE_6513_2) {
-    std::vector<uint64_t> values;
-
     values.resize(0x40000000);
     for (uint32_t i = 0; i < 0x40000000; ++i) {
         values[i] = 0;
     }
 
-   
     ValidateRle(values, 1, nullptr, -1);
 }
 
-TEST(Rle, ISSUE_6513_3) {
+TEST(Rle, ISSUE_6513_2) {
     std::vector<uint64_t> values;
 
     values.resize(0xFFFFFFFF);
