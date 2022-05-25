@@ -36,9 +36,9 @@ struct TBackendInfo {
     2: required Types.TPort http_port
     3: optional Types.TPort be_rpc_port
     4: optional Types.TPort brpc_port
-    5: optional Types.TPort starlet_port
-    6: optional string version
-    7: optional i32 num_hardware_cores
+    5: optional string version
+    6: optional i32 num_hardware_cores
+    7: optional Types.TPort starlet_port
 }
 
 struct THeartbeatResult {

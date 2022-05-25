@@ -117,7 +117,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         out.writeInt(bePort);
         out.writeInt(httpPort);
         out.writeInt(brpcPort);
-        out.writeInt(starletPort);
     }
 
     @Override

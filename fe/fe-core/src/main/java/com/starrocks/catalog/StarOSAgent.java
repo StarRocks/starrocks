@@ -143,7 +143,7 @@ public class StarOSAgent {
 
     public void addWorker(long backendId, String workerIpPort) {
         if (serviceId == -1) {
-            LOG.info("When addWorker serviceId is -1");
+            LOG.warn("When addWorker serviceId is -1");
             return;
         }
         if (workerToId.containsKey(workerIpPort)) {
@@ -154,8 +154,14 @@ public class StarOSAgent {
         try {
             workerId = client.addWorker(serviceId, workerIpPort);
         } catch (StarClientException e) {
-            LOG.warn(e);
-            System.exit(-1);
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                LOG.warn(e);
+            } else {
+                workerToId.put(workerIpPort, workerId);
+                workerToBackend.put(workerId, backendId);
+                LOG.info("worker {} already added in starMgr", workerId);
+            }
+            return;
         }
         workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);

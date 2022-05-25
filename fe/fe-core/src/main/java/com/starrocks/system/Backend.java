@@ -185,7 +185,7 @@ public class Backend implements Writable {
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
     }
-    
+
     // for test only
     public void updateOnce(int bePort, int httpPort, int beRpcPort) {
         if (this.bePort != bePort) {

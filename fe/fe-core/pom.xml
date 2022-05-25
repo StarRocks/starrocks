@@ -531,30 +531,9 @@ under the License.
             <artifactId>hudi-hadoop-mr</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.staros</groupId>
+            <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.staros</groupId>
-            <artifactId>starproto</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty-shaded</artifactId>
-            <version>1.44.1</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-protobuf</artifactId>
-            <version>1.44.1</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-stub</artifactId>
-            <version>1.44.1</version>
+            <version>0.1.0</version>
         </dependency>
     </dependencies>
 
