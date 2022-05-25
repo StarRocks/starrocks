@@ -367,7 +367,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
-    void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
+    void _update_statistics(size_t total_chunks_moved, size_t last_move_chunks, size_t total_rows_moved, size_t time_spent);
 
     RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
@@ -410,6 +410,8 @@ private:
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _overhead_timer = nullptr;
     RuntimeProfile::Counter* _schedule_timer = nullptr;
+    RuntimeProfile::Counter* _schedule_counter = nullptr;
+    RuntimeProfile::Counter* _timeslot_schedule_counter = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _input_empty_timer = nullptr;
