@@ -30,6 +30,8 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
+    _timeslot_schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleTimeSlotCount", TUnit::UNIT);
     _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
     _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
@@ -99,11 +101,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
+    size_t last_move_chunks = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
     DeferOp defer([&]() {
         if (return_status.ok()) {
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+            _update_statistics(total_chunks_moved, last_move_chunks, total_rows_moved, time_spent);
         }
     });
     while (true) {
@@ -193,7 +196,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
-            if (total_chunks_moved >= YIELD_MAX_CHUNKS_MOVED || time_spent >= YIELD_MAX_TIME_SPENT) {
+            if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
                 break;
             }
@@ -209,6 +212,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             RETURN_IF_ERROR(return_status = _mark_operator_finished(_operators[i], runtime_state));
         }
         _first_unfinished = new_first_unfinished;
+        last_move_chunks = num_chunks_moved;
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
@@ -462,7 +466,11 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     return Status::OK();
 }
 
-void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t last_move_chunks, size_t total_rows_moved, size_t time_spent) {
+    _schedule_counter->update(1);
+    if (last_move_chunks > 0) {
+        _timeslot_schedule_counter->update(1);
+    }
     driver_acct().increment_schedule_times();
     driver_acct().update_last_chunks_moved(total_chunks_moved);
     driver_acct().update_accumulated_rows_moved(total_rows_moved);
