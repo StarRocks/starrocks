@@ -229,7 +229,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableResourceGroup = false;
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
-    private boolean enableTabletInternalParallel = false;
+    private boolean enableTabletInternalParallel = true;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
