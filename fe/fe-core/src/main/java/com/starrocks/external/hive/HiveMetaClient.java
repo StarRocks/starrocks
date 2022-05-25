@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -77,6 +76,7 @@ public class HiveMetaClient {
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
     public static final String DLF_HIVE_METASTORE = "dlf";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -103,7 +103,6 @@ public class HiveMetaClient {
 
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
-        conf.addResource(new Path("file:///" + StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml"));
         conf.set("hive.metastore.uris", uris);
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
@@ -123,7 +122,7 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get("hive.metastore"))) {
+            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
                         HiveMetaStoreThriftClient.class.getName());
             } else {
