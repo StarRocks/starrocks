@@ -216,4 +216,7 @@ public class OperationType {
     // drop external catalog
     public static final short OP_DROP_CATALOG = 10061;
 
+    public static final short OP_RENAME_MATERIALIZED_VIEW = 10070;
+
+    public static final short OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE = 10071;
 }

@@ -35,6 +35,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -261,6 +262,16 @@ public class EditLog {
                 case OperationType.OP_RENAME_TABLE: {
                     TableInfo info = (TableInfo) journal.getData();
                     globalStateMgr.replayRenameTable(info);
+                    break;
+                }
+                case OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE: {
+                    MaterializedView materializedView = (MaterializedView) journal.getData();
+                    globalStateMgr.replayMaterializedViewChangeRefreshScheme(materializedView);
+                    break;
+                }
+                case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
+                    MaterializedView materializedView = (MaterializedView) journal.getData();
+                    globalStateMgr.replayRenameMaterializedView(materializedView);
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
@@ -1398,5 +1409,13 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logMvRename(MaterializedView materializedView) {
+        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, materializedView);
+    }
+
+    public void logMvChangeRefreshScheme(MaterializedView materializedView) {
+        logEdit(OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE, materializedView);
     }
 }

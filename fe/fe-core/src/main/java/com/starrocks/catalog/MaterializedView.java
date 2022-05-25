@@ -28,7 +28,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public enum RefreshType {
         SYNC,
-        ASYNC
+        ASYNC,
+        MANUAL
     }
 
     public static class AsyncRefreshContext {
@@ -149,6 +150,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setViewDefineSql(String viewDefineSql) {
         this.viewDefineSql = viewDefineSql;
+    }
+
+    public MvRefreshScheme getRefreshScheme() {
+        return refreshScheme;
+    }
+
+    public void setRefreshScheme(MvRefreshScheme refreshScheme) {
+        this.refreshScheme = refreshScheme;
     }
 
     @Override

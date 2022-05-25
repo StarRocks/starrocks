@@ -33,6 +33,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -254,6 +255,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE:
+            case OperationType.OP_RENAME_MATERIALIZED_VIEW:
+                data = new MaterializedView();
+                ((MaterializedView) data).readFields(in);
+                isRead = true;
+                break;
             case OperationType.OP_MODIFY_VIEW_DEF: {
                 data = AlterViewInfo.read(in);
                 isRead = true;

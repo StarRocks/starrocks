@@ -104,6 +104,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -2636,6 +2637,14 @@ public class GlobalStateMgr {
 
     public void replayRenameTable(TableInfo tableInfo) {
         localMetastore.replayRenameTable(tableInfo);
+    }
+
+    public void replayRenameMaterializedView(MaterializedView materializedView) {
+        this.alter.replayRenameMaterializedView(materializedView);
+    }
+
+    public void replayMaterializedViewChangeRefreshScheme(MaterializedView materializedView) {
+        this.alter.replayMaterializedViewChangeRefreshScheme(materializedView);
     }
 
     // the invoker should keep db write lock
