@@ -185,12 +185,11 @@ TEST(Rle, ISSUE_6513_2) {
 TEST(Rle, ISSUE_6513_3) {
     std::vector<uint64_t> values;
 
-    values.resize(0x70000000);
-    for (uint32_t i = 0; i < 0x70000000; ++i) {
+    values.resize(0xFFFFFFFF);
+    for (uint32_t i = 0; i < 0xFFFFFFFF; ++i) {
         values[i] = 0;
     }
 
-   
     ValidateRle(values, 1, nullptr, -1);
 }
 
