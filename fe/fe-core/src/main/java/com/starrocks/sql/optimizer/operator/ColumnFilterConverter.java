@@ -80,6 +80,10 @@ public class ColumnFilterConverter {
                 return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
             }
 
+            if (type.isDateType() && columnType.isDateType()) {
+                return true;
+            }
+
             return type.equals(columnType);
         }
 
