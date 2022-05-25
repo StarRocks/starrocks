@@ -116,7 +116,7 @@ OutPut Exchange Id: 22
 |  equal join conjunct: [39: C_NATIONKEY, INT, false] = [50: N_NATIONKEY, INT, false]
 |  other join predicates: ((46: N_NAME = 'CANADA') AND (51: N_NAME = 'IRAN')) OR ((46: N_NAME = 'IRAN') AND (51: N_NAME = 'CANADA'))
 |  build runtime filters:
-|  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = true
+|  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = false
 |  output columns: 14, 15, 19, 46, 51
 |  cardinality: 554645
 |  column statistics:
@@ -155,6 +155,8 @@ OutPut Exchange Id: 22
 |  - filter_id = 2, build_expr = (1: S_SUPPKEY), remote = false
 |  output columns: 14, 15, 19, 39, 46
 |  cardinality: 173465347
+|  probe runtime filters:
+|  - filter_id = 3, probe_expr = (39: C_NATIONKEY)
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -187,6 +189,8 @@ OutPut Exchange Id: 22
 |  equal join conjunct: [9: L_ORDERKEY, INT, false] = [26: O_ORDERKEY, INT, false]
 |  output columns: 11, 14, 15, 19, 39
 |  cardinality: 173465347
+|  probe runtime filters:
+|  - filter_id = 2, probe_expr = (11: L_SUPPKEY)
 |  column statistics:
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -198,8 +202,6 @@ OutPut Exchange Id: 22
 |
 |----6:EXCHANGE
 |       cardinality: 150000000
-|       probe runtime filters:
-|       - filter_id = 3, probe_expr = (39: C_NATIONKEY)
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -208,8 +210,6 @@ Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-01-01', [19: L_SHIPDATE, DATE
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=32.0
 cardinality: 173465347
-probe runtime filters:
-- filter_id = 2, probe_expr = (11: L_SUPPKEY)
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -349,8 +349,6 @@ preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
-probe runtime filters:
-- filter_id = 3, probe_expr = (39: C_NATIONKEY)
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
 * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE

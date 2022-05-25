@@ -259,21 +259,23 @@ public class ReplayFromDumpTest {
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
         // check d_date_sk distinct values has adjusted according to the cardinality
-        Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (5: d_date_sk), remote = false\n" +
-                "  |  output columns: 2, 4\n" +
-                "  |  cardinality: 399330000\n" +
-                "  |  column statistics: \n" +
-                "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
-                "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n" +
-                "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n" +
-                "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE\n" +
-                "  |       cardinality: 335"));
+        Assert.assertTrue(replayPair.second.contains("  4:HASH JOIN\n"
+                + "  |  join op: INNER JOIN (BROADCAST)\n"
+                + "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n"
+                + "  |  build runtime filters:\n"
+                + "  |  - filter_id = 0, build_expr = (5: d_date_sk), remote = false\n"
+                + "  |  output columns: 2, 4\n"
+                + "  |  cardinality: 399330000\n"
+                + "  |  probe runtime filters:\n"
+                + "  |  - filter_id = 1, probe_expr = (2: inv_item_sk)\n"
+                + "  |  column statistics: \n"
+                + "  |  * inv_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n"
+                + "  |  * inv_item_sk-->[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE\n"
+                + "  |  * inv_quantity_on_hand-->[0.0, 1000.0, 0.05000724964315228, 4.0, 1006.0] ESTIMATE\n"
+                + "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n"
+                + "  |  \n"
+                + "  |----3:EXCHANGE\n"
+                + "  |       cardinality: 335"));
     }
 
     @Test
