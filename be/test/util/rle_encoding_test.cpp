@@ -158,7 +158,7 @@ TEST(Rle, SpecificSequences) {
     }
 }
 
-TEST(Rle, ISSUE_6513_1) {
+TEST(Rle, ISSUE_6513) {
     std::vector<uint64_t> values;
 
     values.resize(0x40000000);
@@ -169,16 +169,6 @@ TEST(Rle, ISSUE_6513_1) {
     ValidateRle(values, 1, nullptr, -1);
 }
 
-TEST(Rle, ISSUE_6513_2) {
-    std::vector<uint64_t> values;
-
-    values.resize(0xFFFFFFFF);
-    for (uint32_t i = 0; i < 0xFFFFFFFF; ++i) {
-        values[i] = 0;
-    }
-
-    ValidateRle(values, 1, nullptr, -1);
-}
 
 // ValidateRle on 'num_vals' values with width 'bit_width'. If 'value' != -1, that value
 // is used, otherwise alternating values are used.
