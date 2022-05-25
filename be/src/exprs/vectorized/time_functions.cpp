@@ -536,7 +536,7 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
         delsum -= static_cast<long>(static_cast<int>(month) * 4 + 23) / 10;
     }
     temp = ((y / 100 + 1) * 3) / 4;
-    assert(delsum + static_cast<int>(y) / 4 - temp >= 0);
+    DCHECK(delsum + static_cast<int>(y) / 4 - temp >= 0);
     return (delsum + static_cast<int>(y) / 4 - temp);
 }
 
