@@ -52,6 +52,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.TypeManager;
@@ -73,8 +75,10 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 public class ExpressionAnalyzer {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
     private final ConnectContext session;
+    private final MetadataMgr metadataMgr;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         this.session = session;
     }
 
