@@ -551,7 +551,7 @@ public class Auth implements Writable {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
-                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false);
+                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExist());
     }
 
     // alter user
@@ -567,7 +567,7 @@ public class Auth implements Writable {
 
     public void replayCreateUser(PrivInfo privInfo) {
         try {
-            createUserInternal(privInfo.getUserIdent(), privInfo.getRole(), privInfo.getPasswd(), true);
+            createUserInternal(privInfo.getUserIdent(), privInfo.getRole(), privInfo.getPasswd(), true, false);
         } catch (DdlException e) {
             LOG.error("should not happen", e);
         }
@@ -581,7 +581,7 @@ public class Auth implements Writable {
      * 4. grant privs of role to user, if role is specified.
      */
     private void createUserInternal(UserIdentity userIdent, String roleName, Password password,
-                                    boolean isReplay) throws DdlException {
+                                    boolean isReplay, boolean isSetIfNotExists) throws DdlException {
         writeLock();
         try {
             // 1. check if role exist
@@ -595,6 +595,10 @@ public class Auth implements Writable {
 
             // 2. check if user already exist
             if (userPrivTable.doesUserExist(userIdent)) {
+                if (isSetIfNotExists) {
+                    LOG.info("create user[{}] who already exists", userIdent);
+                    return;
+                }
                 throw new DdlException("User " + userIdent + " already exist");
             }
 
@@ -1504,7 +1508,7 @@ public class Auth implements Writable {
         try {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");
             rootUser.setIsAnalyzed();
-            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */);
+            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */, false);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
