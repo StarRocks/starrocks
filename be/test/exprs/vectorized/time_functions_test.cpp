@@ -253,7 +253,7 @@ TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     tc->append(TimestampValue::create(2020, 9, 23, 0, 0, 0));
     tc->append(TimestampValue::create(2015, 10, 11, 0, 0, 0));
 
-    int weeks[] = {1, 18, 38, 41};
+    int weeks[] = {0, 18, 38, 41};
 
     Columns columns;
     columns.emplace_back(tc);
@@ -291,6 +291,7 @@ TEST_F(TimeFunctionsTest, weekWithModeTest) {
 
     Columns columns;
     columns.emplace_back(tc);
+    columns.emplace_back(mode_column);
 
     ColumnPtr result = TimeFunctions::week_of_year_with_mode(_utils->get_fn_ctx(), columns);
 
