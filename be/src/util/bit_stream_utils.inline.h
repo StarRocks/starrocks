@@ -86,11 +86,14 @@ inline void BitWriter::PutAligned(T val, int num_bytes) {
 }
 
 inline void BitWriter::PutVlqInt(int32_t v) {
-    while ((v & 0xFFFFFF80) != 0L) {
-        PutAligned<uint8_t>((v & 0x7F) | 0x80, 1);
-        v >>= 7;
+    uint32_t uv = reinterpret_cast<int32_t>(v);
+    int num_bytes = 0;
+    while ((uv & 0xFFFFFF80) != 0L) {
+        PutAligned<uint8_t>((uv & 0x7F) | 0x80, 1);
+        uv >>= 7;
+        DCHECK_LE(++num_bytes, MAX_VLQ_BYTE_LEN);
     }
-    PutAligned<uint8_t>(v & 0x7F, 1);
+    PutAligned<uint8_t>(uv & 0x7F, 1);
 }
 
 inline BitReader::BitReader(const uint8_t* buffer, int buffer_len) : buffer_(buffer), max_bytes_(buffer_len) {

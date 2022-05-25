@@ -77,6 +77,9 @@ public:
     // to the next byte boundary.
     void Flush(bool align = false);
 
+    // Maximum byte length of a vlq encoded int
+    static const int MAX_VLQ_BYTE_LEN = 5;
+
 private:
     // Bit-packed values are initially written to this variable before being memcpy'd to
     // buffer_. This is faster than writing values byte by byte directly to buffer_.
