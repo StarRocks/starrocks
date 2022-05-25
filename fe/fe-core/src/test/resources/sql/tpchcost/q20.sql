@@ -239,8 +239,6 @@ OutPut Exchange Id: 11
 |  - filter_id = 0, build_expr = (20: P_PARTKEY), remote = false
 |  output columns: 14, 15, 16
 |  cardinality: 20000000
-|  probe runtime filters:
-|  - filter_id = 4, probe_expr = (15: PS_SUPPKEY)
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
@@ -258,6 +256,7 @@ actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (14: PS_PARTKEY)
+- filter_id = 4, probe_expr = (15: PS_SUPPKEY)
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
