@@ -2353,6 +2353,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.table
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 3) {
             return new TableName(parts.get(0), parts.get(1), parts.get(2));
