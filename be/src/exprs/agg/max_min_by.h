@@ -159,39 +159,13 @@ template <PrimitiveType PT, typename State, typename = guard::Guard>
 struct MaxByOP {
     using T = RunTimeCppType<PT>;
 
-    void operator()(State& state, const Column& column, const T& right) const {}
+    void operator()(State& state, const Column* column, const T& right) const {}
 };
-
-std::vector<Column> column_types = {BooleanColumn, Int8Column, Int16Column};
 
 template <PrimitiveType PT, typename State, typename = guard::Guard>
 struct MinByOP {
     using T = RunTimeCppType<PT>;
-    void operator()(State& state, const Column& column, const T& right) const {
-#define HANDLE_ELEMENT_TYPE(ElementType)                \
-    do {                                                \
-        if (typeid(column) == typeid(ElementType)) {    \
-            std::cout << "Process column" << std::endl; \
-        }                                               \
-    } while (0)
-
-        HANDLE_ELEMENT_TYPE(BooleanColumn);
-        HANDLE_ELEMENT_TYPE(Int8Column);
-        HANDLE_ELEMENT_TYPE(Int16Column);
-        HANDLE_ELEMENT_TYPE(Int32Column);
-        HANDLE_ELEMENT_TYPE(Int64Column);
-        HANDLE_ELEMENT_TYPE(Int128Column);
-        HANDLE_ELEMENT_TYPE(FloatColumn);
-        HANDLE_ELEMENT_TYPE(DoubleColumn);
-        HANDLE_ELEMENT_TYPE(DecimalColumn);
-        HANDLE_ELEMENT_TYPE(Decimal32Column);
-        HANDLE_ELEMENT_TYPE(Decimal64Column);
-        HANDLE_ELEMENT_TYPE(Decimal128Column);
-        HANDLE_ELEMENT_TYPE(BinaryColumn);
-        HANDLE_ELEMENT_TYPE(DateColumn);
-        HANDLE_ELEMENT_TYPE(TimestampColumn);
-        HANDLE_ELEMENT_TYPE(ArrayColumn);
-    }
+    void operator()(State& state, const Column* column, const T& right) const {}
 };
 
 template <PrimitiveType PT>
@@ -215,7 +189,32 @@ public:
         DCHECK(!columns[1]->is_nullable() && !columns[1]->is_binary());
         const auto& column = down_cast<const InputColumnType&>(*columns[1]);
         T value = column.get_data()[row_num];
-        OP()(this->data(state), *columns[0], value);
+
+#define HANDLE_ELEMENT_TYPE(ElementType)                                           \
+    do {                                                                           \
+        if (typeid(*columns[0]) == typeid(ElementType)) {                          \
+            const auto& value_column = down_cast<const ElementType&>(*columns[0]); \
+            value_column.get_data()[row_num];                                      \
+            std::cout << "Process column" << std::endl;                            \
+        }                                                                          \
+    } while (0)
+        HANDLE_ELEMENT_TYPE(BooleanColumn);
+        HANDLE_ELEMENT_TYPE(Int8Column);
+        HANDLE_ELEMENT_TYPE(Int16Column);
+        HANDLE_ELEMENT_TYPE(Int32Column);
+        HANDLE_ELEMENT_TYPE(Int64Column);
+        HANDLE_ELEMENT_TYPE(Int128Column);
+        HANDLE_ELEMENT_TYPE(FloatColumn);
+        HANDLE_ELEMENT_TYPE(DoubleColumn);
+        HANDLE_ELEMENT_TYPE(DecimalColumn);
+        HANDLE_ELEMENT_TYPE(Decimal32Column);
+        HANDLE_ELEMENT_TYPE(Decimal64Column);
+        HANDLE_ELEMENT_TYPE(Decimal128Column);
+        HANDLE_ELEMENT_TYPE(BinaryColumn);
+        HANDLE_ELEMENT_TYPE(DateColumn);
+        HANDLE_ELEMENT_TYPE(TimestampColumn);
+
+        OP()(this->data(state), columns[0], value);
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -315,7 +314,7 @@ public:
         }
     }
 
-    std::string get_name() const override { return "maxmin"; }
+    std::string get_name() const override { return "max_min_by"; }
 };
 
 } // namespace starrocks::vectorized
