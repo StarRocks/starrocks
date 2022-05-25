@@ -30,6 +30,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -66,7 +67,7 @@ public class QueryAnalyzer {
 
     public QueryAnalyzer(ConnectContext session) {
         this.session = session;
-        this.metadataMgr = session.getGlobalStateMgr().getMetadataMgr();
+        this.metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
     public void analyze(StatementBase node) {
@@ -639,7 +640,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
 
-            if (!session.getGlobalStateMgr().getCatalogMgr().catalogExists(catalogName)) {
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
