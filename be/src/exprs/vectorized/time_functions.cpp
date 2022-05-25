@@ -548,7 +548,7 @@ int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_b
     bool week_year = (week_behaviour & WEEK_YEAR);
     bool first_weekday = (week_behaviour & WEEK_FIRST_WEEKDAY);
 
-    uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);    
+    uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);
     uint year_local = year;
 
     if (month == 1 && day <= 7 - weekday) {
