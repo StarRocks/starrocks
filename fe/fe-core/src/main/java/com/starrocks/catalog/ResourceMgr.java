@@ -131,7 +131,7 @@ public class ResourceMgr implements Writable {
     }
 
     private void onDropResource(Resource resource) {
-        if (resource instanceof HiveResource || resource instanceof HudiResource || resource instanceof IcebergResource) {
+        if (resource instanceof HiveResource || resource instanceof HudiResource) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
     }
