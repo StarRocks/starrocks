@@ -123,7 +123,8 @@ public class HashDistributionSpec extends DistributionSpec {
                 return false;
             }
         }
-        // Left outer join will cause right table produce NULL in different node, also right outer join
+        // Outer join will produce NULL rows in different node, do aggregate may output multi null rows
+        // if satisfy required shuffle directly
         if (otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG &&
                 (thisSourceType == HashDistributionDesc.SourceType.LOCAL ||
                         thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_JOIN)) {
