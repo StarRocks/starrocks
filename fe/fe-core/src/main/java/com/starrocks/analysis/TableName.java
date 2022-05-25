@@ -83,6 +83,9 @@ public class TableName implements Writable {
     public void normalization(ConnectContext connectContext) {
         try {
             if (Strings.isNullOrEmpty(catalog)) {
+                if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR);
+                }
                 catalog = connectContext.getCurrentCatalog();
             }
 
