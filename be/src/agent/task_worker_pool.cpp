@@ -746,7 +746,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
             while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
                 // submit publishing tablet version task to the threadpool.
                 *st = threadpool->submit_func([&worker_pool_this, &tablet_rs, st, &version, &transaction_id,
-                                              &partition_id]() {
+                                               &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
                     // if rowset is null, it means this be received write task, but failed during write
@@ -756,7 +756,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                         LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
                                      << transaction_id;
                         *st = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
-                                                          tablet_info.tablet_id, transaction_id));
+                                                           tablet_info.tablet_id, transaction_id));
                         return;
                     }
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
