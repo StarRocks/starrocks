@@ -66,7 +66,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -786,11 +786,12 @@ public class MaterializedViewHandler extends AlterHandler {
      * @throws DdlException
      * @throws AnalysisException
      */
-    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt, Database db, OlapTable olapTable)
+    public void processAlterMaterializedView(AlterMaterializedViewStatement stmt, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException, MetaNotFoundException {
         //drop materialized view
         final String oldMvName = stmt.getMvName().getTbl();
-        dropMaterializedView(oldMvName, db, olapTable);
+        final String newMvName = stmt.getNewMvName();
+        olapTable.renameIndexForSchemaChange(oldMvName, newMvName);
         for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
             if (alterJobV2 instanceof RollupJobV2) {
                 RollupJobV2 rollupJobV2 = (RollupJobV2) alterJobV2;
@@ -800,7 +801,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     Map<String, String> properties = new HashMap<>();
                     properties.put(PROPERTIES_TIMEOUT, String.valueOf(timeoutMs));
                     final String baseIndexName = rollupJobV2.getBaseIndexName();
-                    final String newMvName = stmt.getNewMvName();
+
                     createMaterializedView(newMvName, baseIndexName, rollupJobV2.getRollupSchema(), properties,
                             olapTable, db, rollupJobV2.getRollupKeysType(), rollupJobV2.getOrigStmt());
                 }

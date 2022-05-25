@@ -68,7 +68,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -189,7 +189,7 @@ public class Alter {
             db.writeUnlock();
         }
     }
-    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt)
+    public void processAlterMaterializedView(AlterMaterializedViewStatement stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {
         // check db
         final TableName mvName = stmt.getMvName();

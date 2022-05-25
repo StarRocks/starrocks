@@ -117,7 +117,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CTERelation;
@@ -515,7 +515,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.refreshSchemeDesc() != null) {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         }
-        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc);
+        return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
     }
 
     // ------------------------------------------- Cluster Management Statement -----------------------------------------

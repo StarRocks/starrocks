@@ -138,7 +138,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

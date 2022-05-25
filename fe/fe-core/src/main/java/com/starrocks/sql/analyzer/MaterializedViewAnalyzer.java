@@ -26,7 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -268,7 +268,7 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
                                                         ConnectContext context) {
             statement.getMvName().normalization(context);
             if (statement.getNewMvName() != null) {

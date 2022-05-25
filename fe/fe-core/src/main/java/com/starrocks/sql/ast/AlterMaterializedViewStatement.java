@@ -8,16 +8,16 @@ import com.starrocks.analysis.TableName;
 /**
  * 1.Support for modifying the way of refresh and the cycle of asynchronous refresh;
  * 2.Support for modifying the name of a materialized view;
- * 3.For the time being, the way of SYNC is not supported and the way of ASYNC is changed to SYNC
+ * 3.SYNC is not supported and ASYNC is not allow changed to SYNC
  */
-public class AlterMaterializedViewStmt extends DdlStmt {
+public class AlterMaterializedViewStatement extends DdlStmt {
 
     private TableName mvName;
     private String newMvName;
     private RefreshSchemeDesc refreshSchemeDesc;
 
-    public AlterMaterializedViewStmt(TableName mvName, String newMvName,
-                                     RefreshSchemeDesc refreshSchemeDesc) {
+    public AlterMaterializedViewStatement(TableName mvName, String newMvName,
+                                          RefreshSchemeDesc refreshSchemeDesc) {
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;

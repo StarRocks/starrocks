@@ -154,7 +154,7 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -2857,7 +2857,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void alterMaterializedView(AlterMaterializedViewStmt stmt)
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {
         stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
