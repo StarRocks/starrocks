@@ -50,6 +50,8 @@ under the License.
         <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.0</hudi.version>
+        <hive-apache.version>3.1.2-13</hive-apache.version>
+        <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
     </properties>
 
     <profiles>
@@ -574,14 +576,14 @@ under the License.
             <dependency>
                 <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.1.2-13</version>
+                <version>${hive-apache.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
             <dependency>
                 <groupId>com.aliyun.datalake</groupId>
                 <artifactId>metastore-client-hive3</artifactId>
-                <version>0.2.14</version>
+                <version>${dlf-metastore-client.version}</version>
             </dependency>
 
 

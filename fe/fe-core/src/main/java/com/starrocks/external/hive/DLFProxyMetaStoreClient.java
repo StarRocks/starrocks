@@ -150,7 +150,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class ProxyMetaStoreClient implements IMetaStoreClient {
+public class DLFProxyMetaStoreClient implements IMetaStoreClient {
     private static final Logger logger =
             LoggerFactory.getLogger(com.aliyun.datalake.metastore.hive2.ProxyMetaStoreClient.class);
     private static final String HIVE_FACTORY_CLASS = "org.apache.hadoop.hive.ql.metadata" +
@@ -178,11 +178,11 @@ public class ProxyMetaStoreClient implements IMetaStoreClient {
 
     private final String readWriteClientType;
 
-    public ProxyMetaStoreClient(Configuration hiveConf) throws MetaException {
+    public DLFProxyMetaStoreClient(Configuration hiveConf) throws MetaException {
         this(hiveConf, null, false);
     }
 
-    public ProxyMetaStoreClient(Configuration hiveConf, HiveMetaHookLoader hiveMetaHookLoader, Boolean allowEmbedded)
+    public DLFProxyMetaStoreClient(Configuration hiveConf, HiveMetaHookLoader hiveMetaHookLoader, Boolean allowEmbedded)
             throws MetaException {
         long startTime = System.currentTimeMillis();
         logger.info("ProxyMetaStoreClient start, datalake-metastore-client-version:{}",
