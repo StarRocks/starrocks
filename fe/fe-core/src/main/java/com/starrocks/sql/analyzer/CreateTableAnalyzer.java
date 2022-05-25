@@ -28,7 +28,6 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.Relation;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -58,8 +57,7 @@ public class CreateTableAnalyzer {
 
         FeNameFormat.verifyTableName(tableName.getTbl());
 
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(), PrivPredicate.CREATE)) {
+        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), tableName, PrivPredicate.CREATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }
 
