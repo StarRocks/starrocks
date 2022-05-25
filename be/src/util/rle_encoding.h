@@ -500,6 +500,8 @@ inline void RleEncoder<T>::FlushRepeatedRun() {
     // Don't try to handle run lengths that don't fit in an int32_t - just fail gracefully.
     // The Parquet standard does not allow longer runs - see PARQUET-1290.
     if (UNLIKELY(repeat_count_ > std::numeric_limits<int32_t>::max())) {
+        num_buffered_values_ = 0;
+        repeat_count_ = 0;
         LOG(WARNING) << "Run length don't fit in an int32_t";
         return;
     }
