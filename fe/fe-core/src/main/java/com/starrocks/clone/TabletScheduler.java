@@ -556,6 +556,9 @@ public class TabletScheduler extends MasterDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
+            if (tbl.isLakeTable()) {
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
+            }
 
             boolean isColocateTable = colocateTableIndex.isColocateTable(tbl.getId());
 
@@ -564,9 +567,6 @@ public class TabletScheduler extends MasterDaemon {
             Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
-            }
-            if (partition.isUseStarOS()) {
-                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
             }
 
             short replicaNum =

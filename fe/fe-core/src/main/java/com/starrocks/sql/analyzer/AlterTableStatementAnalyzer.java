@@ -34,7 +34,7 @@ public class AlterTableStatementAnalyzer {
                     tbl.getTbl(), tbl.getTbl());
         }
         try {
-            CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
+            CatalogUtils.checkIsLakeTable(tbl.getDb(), tbl.getTbl());
         } catch (AnalysisException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
         }
