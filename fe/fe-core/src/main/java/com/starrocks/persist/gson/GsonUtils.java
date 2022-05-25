@@ -63,11 +63,14 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.StructType;
@@ -127,6 +130,12 @@ public class GsonUtils {
                     .of(DistributionInfo.class, "clazz")
                     .registerSubtype(HashDistributionInfo.class, HashDistributionInfo.class.getSimpleName())
                     .registerSubtype(RandomDistributionInfo.class, RandomDistributionInfo.class.getSimpleName());
+
+    private static final RuntimeTypeAdapterFactory<PartitionInfo> partitionInfoTypeAdapterFactory =
+            RuntimeTypeAdapterFactory
+                    .of(PartitionInfo.class, "clazz")
+                    .registerSubtype(RangePartitionInfo.class, RangePartitionInfo.class.getSimpleName())
+                    .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName());
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> resourceTypeAdapterFactory = RuntimeTypeAdapterFactory
@@ -191,6 +200,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(loadJobStateUpdateInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(tabletTypeAdapterFactory)
             .registerTypeAdapterFactory(heartbeatResponseAdapterFactor)
+            .registerTypeAdapterFactory(partitionInfoTypeAdapterFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)

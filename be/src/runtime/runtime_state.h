@@ -116,6 +116,7 @@ public:
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
@@ -399,7 +400,7 @@ private:
             break;                                                                                                  \
         case MemTracker::QUERY:                                                                                     \
             str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
-                   "set session variable exec_mem_limit.";                                                          \
+                   "set session variable exec_mem_limit or query_mem_limit.";                                       \
             break;                                                                                                  \
         case MemTracker::PROCESS:                                                                                   \
             str << "Mem usage has exceed the limit of BE";                                                          \

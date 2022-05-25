@@ -28,6 +28,9 @@ public class ReplaceColumnRefRewriter {
     }
 
     public ScalarOperator rewrite(ScalarOperator origin) {
+        if (origin == null) {
+            return null;
+        }
         return origin.clone().accept(rewriter, null);
     }
 

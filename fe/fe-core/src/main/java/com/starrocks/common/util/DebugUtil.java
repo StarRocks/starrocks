@@ -92,10 +92,19 @@ public class DebugUtil {
         }
     }
 
+    public static String getPrettyStringNs(long timestampNs) {
+        return getPrettyStringMs(timestampNs / 1000 / 1000);
+    }
+
     public static String getPrettyStringMs(long timestampMs) {
         StringBuilder builder = new StringBuilder();
         printTimeMs(timestampMs, builder);
         return builder.toString();
+    }
+
+    public static String getPrettyStringBytes(long bytes) {
+        Pair<Double, String> valueAndUnit = getByteUint(bytes);
+        return String.format("%.3f%s", valueAndUnit.first, valueAndUnit.second);
     }
 
     public static Pair<Double, String> getByteUint(long value) {

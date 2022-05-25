@@ -20,7 +20,7 @@ syntax="proto2";
 package starrocks;
 option java_package = "com.starrocks.proto";
 
-message PStatus {
+message StatusPB {
     required int32 status_code = 1;
     repeated string error_msgs = 2;
 };

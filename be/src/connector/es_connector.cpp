@@ -201,11 +201,13 @@ void ESDataSource::_init_counter() {
 }
 
 Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
-    SCOPED_TIMER(_read_timer);
+    // Notice that some variables are not initialized
+    // if `_no_data == true` because of short-circuits logic.
     if (_no_data || (_line_eof && _batch_eof)) {
         return Status::EndOfFile("");
     }
 
+    SCOPED_TIMER(_read_timer);
     while (!_batch_eof) {
         RETURN_IF_CANCELLED(state);
         COUNTER_UPDATE(_read_counter, 1);

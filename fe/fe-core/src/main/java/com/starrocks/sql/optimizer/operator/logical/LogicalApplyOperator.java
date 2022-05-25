@@ -112,7 +112,6 @@ public class LogicalApplyOperator extends LogicalOperator {
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns =
                 (ColumnRefSet) expressionContext.getChildLogicalProperty(0).getOutputColumns().clone();
-        outputColumns.union(expressionContext.getChildLogicalProperty(1).getOutputColumns());
         if (output != null) {
             outputColumns.union(output);
         }
