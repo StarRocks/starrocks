@@ -76,6 +76,7 @@ public class CTASAnalyzer {
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
+                // lateral json_each(parse_json(c1)) will return null
                 if (slotRef.getTblNameWithoutAnalyzed() == null) {
                     continue;
                 }
