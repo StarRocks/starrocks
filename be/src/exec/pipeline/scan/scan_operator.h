@@ -101,7 +101,7 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+    static constexpr int MAX_IO_TASKS_PER_OP = 16;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
