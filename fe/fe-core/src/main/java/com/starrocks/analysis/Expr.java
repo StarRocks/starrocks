@@ -1031,7 +1031,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public int hashCode() {
         // in group by clause, group by list need to remove duplicate exprs, the expr may be not not analyzed, the id
-        // may be null
+        // may be null.
+        // NOTE that all the types of the related member variables must implement hashCode() and equals().
         if (id == null) {
             int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode);
             for (Expr child : children) {
