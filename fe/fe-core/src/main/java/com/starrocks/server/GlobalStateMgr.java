@@ -1133,6 +1133,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
             checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
@@ -1363,6 +1364,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
             checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
             dos.writeLong(checksum);
         }
