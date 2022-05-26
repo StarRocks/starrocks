@@ -1128,12 +1128,13 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.loadSmallFiles(dis, checksum);
             checksum = pluginMgr.loadPlugins(dis, checksum);
             checksum = loadDeleteHandler(dis, checksum);
-
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
             checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1358,12 +1359,13 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.saveSmallFiles(dos, checksum);
             checksum = pluginMgr.savePlugins(dos, checksum);
             checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
             checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = taskManager.saveTasks(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -3108,6 +3110,16 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            taskManager.removeOldTaskInfo();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old task failed", t);
+        }
+        try {
+            taskManager.removeOldTaskRunHistory();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old run history failed", t);
         }
     }
 }
