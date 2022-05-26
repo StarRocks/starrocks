@@ -377,7 +377,6 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     merged_perm.reserve(rows_to_keep);
     SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
-    DCHECK_EQ(_compare_strategy, ColumnWise);
     RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
                                                 &merged_perm));
     CHECK_GE(merged_perm.size(), rows_to_keep);
@@ -471,7 +470,6 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     big_chunk.reset(segments[new_permutation[0].chunk_index].chunk->clone_empty(rows_to_keep).release());
 
     // Initial this big chunk.
-    DCHECK_EQ(_compare_strategy, ColumnWise);
     std::vector<ChunkPtr> chunks;
     for (auto& segment : segments) {
         chunks.push_back(segment.chunk);
