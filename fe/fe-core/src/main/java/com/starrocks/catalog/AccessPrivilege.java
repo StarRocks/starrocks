@@ -36,7 +36,7 @@ public enum AccessPrivilege {
     DROP_PRIV(10, "Privilege for dropping database or table"),
     ADMIN_PRIV(11, "All privileges except NODE_PRIV"),
     USAGE_PRIV(12, "Privileage for use resource"),
-    IMPERSONATE_PRIV(13, "Privilege for impoersonate as other user");
+    IMPERSONATE_PRIV(13, "Privilege for impersonate as other user");
 
     private int flag;
     private String desc;
