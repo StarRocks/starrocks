@@ -273,6 +273,25 @@ public:
 };
 
 template <>
+class ReplaceAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<JsonColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(end - 1, src);
+    }
+
+    void append_data(Column* agg) override {
+        JsonColumn* col = down_cast<JsonColumn*>(agg);
+        JsonValue& per = const_cast<JsonValue&>(this->data());
+        col->append(std::move(per));
+    }
+};
+
+template <>
 class ReplaceAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
 public:
     void reset() override { this->data().reset(); }
@@ -610,6 +629,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_REPLACE(OLAP_FIELD_TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(OLAP_FIELD_TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(OLAP_FIELD_TYPE_PERCENTILE, PercentileColumn, PercentileValue)
+            CASE_REPLACE(OLAP_FIELD_TYPE_JSON, JsonColumn, JsonValue)
             CASE_DEFAULT_WARNING(type)
         }
     }
