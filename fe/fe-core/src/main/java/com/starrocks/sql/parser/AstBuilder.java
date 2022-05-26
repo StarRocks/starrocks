@@ -102,6 +102,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ScalarType;
@@ -127,7 +128,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -140,6 +143,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
@@ -1397,6 +1401,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    @Override
+    public ParseNode visitGrantImpersonate(StarRocksParser.GrantImpersonateContext context) {
+        UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
+        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+        return new GrantImpersonateStmt(authorizedUser, securedUser);
+    }
+
+    @Override
+    public ParseNode visitRevokeImpersonate(StarRocksParser.RevokeImpersonateContext context) {
+        UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
+        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+        return new RevokeImpersonateStmt(authorizedUser, securedUser);
+    }
+
+    @Override
+    public ParseNode visitExecuteAs(StarRocksParser.ExecuteAsContext context) {
+        UserIdentity toUser = ((UserIdentifier) visit(context.user())).getUserIdentity();
+        boolean allowRevert = context.WITH() == null;
+        // we only support WITH NO REVERT for now
+        return new ExecuteAsStmt(toUser, allowRevert);
     }
 
     @Override
