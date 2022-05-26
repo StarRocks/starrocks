@@ -152,8 +152,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowTables(StarRocksParser.ShowTablesContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
-        if (context.db != null) {
-            database = context.db.getText();
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
         }
 
         if (context.pattern != null) {
@@ -238,7 +238,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new InsertStmt(
                 new InsertTarget(targetTableName, partitionNames),
-                context.lable == null ? null : context.lable.getText(),
+                context.lable == null ? null : ((Identifier) visit(context.lable)).getValue(),
                 targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
@@ -1578,7 +1578,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             setType = SetType.SESSION;
         }
 
-        return new SysVariableDesc(context.identifier().getText(), setType);
+        return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
     @Override
