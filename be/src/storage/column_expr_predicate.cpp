@@ -31,6 +31,22 @@ ColumnExprPredicate::~ColumnExprPredicate() {
     }
 }
 
+void ColumnExprPredicate::_add_expr_ctxs(std::vector<ExprContext*> expr_ctxs) {
+    for (auto& expr : expr_ctxs) {
+        _add_expr_ctx(expr);
+    }
+}
+
+void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
+    if (expr_ctx != nullptr) {
+        DCHECK(expr_ctx->opened());
+        // Transfer the ownership to object pool
+        auto* ctx = _state->obj_pool()->add(expr_ctx.release());
+        _expr_ctxs.emplace_back(ctx);
+        _monotonic &= ctx->root()->is_monotonic();
+    }
+}
+
 void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
@@ -152,17 +168,15 @@ Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const Typ
     Expr* cast_expr = VectorizedCastExprFactory::from_type(input_type, to_type, column_ref, obj_pool);
     column_ref->set_monotonic(true);
     cast_expr->set_monotonic(true);
-    ExprContext* cast_expr_ctx = obj_pool->add(new ExprContext(cast_expr));
 
+    auto cast_expr_ctx = std::make_unique<ExprContext>(cast_expr);
     RETURN_IF_ERROR(cast_expr_ctx->prepare(_state));
     RETURN_IF_ERROR(cast_expr_ctx->open(_state));
 
     ColumnExprPredicate* pred =
             obj_pool->add(new ColumnExprPredicate(target_type_info, _column_id, _state, nullptr, _slot_desc));
-    for (ExprContext* ctx : _expr_ctxs) {
-        pred->_add_expr_ctx(ctx);
-    }
-    pred->_add_expr_ctx(cast_expr_ctx);
+    pred->_add_expr_ctxs(_expr_ctxs);
+    pred->_add_expr_ctx(std::move(cast_expr_ctx));
     *output = pred;
     return Status::OK();
 }
@@ -224,14 +238,14 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     }
     // build new ColumnExprPredicates
     for (auto& expr : exprs_after_rewrite) {
-        ExprContext* ctx = pool->add(new ExprContext(expr));
-        RETURN_IF_ERROR(ctx->prepare(_state));
-        RETURN_IF_ERROR(ctx->open(_state));
-        pool->add(new DeferOp([ctx, this]() { ctx->close(_state); }));
+        auto expr_rewrite = std::make_unique<ExprContext>(expr);
+        RETURN_IF_ERROR(expr_rewrite->prepare(_state));
+        RETURN_IF_ERROR(expr_rewrite->open(_state));
+
         ColumnExprPredicate* new_pred =
-                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc));
-        // copy other cast exprs
-        for (size_t i = 1; i < _expr_ctxs.size(); i++) {
+                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, nullptr, _slot_desc));
+        new_pred->_add_expr_ctx(std::move(expr_rewrite));
+        for (int i = 1; i < _expr_ctxs.size(); i++) {
             new_pred->_add_expr_ctx(_expr_ctxs[i]);
         }
         output->emplace_back(new_pred);
