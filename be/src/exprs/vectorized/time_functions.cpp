@@ -500,7 +500,8 @@ uint TimeFunctions::week_mode(uint mode) {
    @return number of days in that year
 */
 uint TimeFunctions::compute_days_in_year(uint year) {
-    return ((year & 3) == 0 && (year % 100 || (year % 400 == 0 && year)) ? 366 : 365);
+    return ((year & 3) == 0 && (year % 100 || (year % 400 == 0 && year)) ? TimeFunctions::NUMBER_OF_LEAP_YEAR
+                                                                         : TimeFunctions::NUMBER_OF_NON_LEAP_YEAR);
 }
 
 /*
@@ -529,7 +530,8 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
         return 0;
     }
 
-    delsum = static_cast<long>(365 * y + 31 * (static_cast<int>(month) - 1) + static_cast<int>(day));
+    delsum = static_cast<long>(TimeFunctions::NUMBER_OF_NON_LEAP_YEAR * y + 31 * (static_cast<int>(month) - 1) +
+                               static_cast<int>(day));
     if (month <= 2) {
         y--;
     } else {

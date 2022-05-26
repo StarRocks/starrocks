@@ -557,6 +557,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    // Following const variables used to obtains number days of year
+    constexpr static int NUMBER_OF_LEAP_YEAR = 366;
+    constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
+
     static long compute_daynr(uint year, uint month, uint day);
     static int compute_weekday(long daynr, bool sunday_first_day_of_week);
     static uint32_t compute_days_in_year(uint year);
