@@ -322,6 +322,7 @@ public class HiveMetaCache {
         }
     }
 
+
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         return HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
@@ -339,7 +340,7 @@ public class HiveMetaCache {
     private Database loadDatabase(String dbName) throws TException {
         // Check whether the db exists, if not, an exception will be thrown here
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
-        if (db.getName() == null) {
+        if (db == null || db.getName() == null) {
             throw new TException("Hive db " + dbName + " doesn't exist");
         }
         return HiveMetaStoreTableUtils.convertToSRDatabase(dbName);

@@ -13,6 +13,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowStmtAnalyzer {
@@ -68,14 +69,19 @@ public class ShowStmtAnalyzer {
         }
 
         String getFullDatabaseName(String db, ConnectContext session) {
+            String catalog = session.getCurrentCatalog();
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();
-                db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                if (CatalogMgr.isInternalCatalog(catalog)) {
+                    db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                }
                 if (Strings.isNullOrEmpty(db)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             } else {
-                db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                if (CatalogMgr.isInternalCatalog(catalog)) {
+                    db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                }
             }
             return db;
         }

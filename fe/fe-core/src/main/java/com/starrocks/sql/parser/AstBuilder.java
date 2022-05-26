@@ -2379,10 +2379,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
-        if (qualifiedName.getParts().size() == 2) {
-            return new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-        } else if (qualifiedName.getParts().size() == 1) {
-            return new TableName(null, qualifiedName.getParts().get(0));
+        // Hierarchy: catalog.database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 3) {
+            return new TableName(parts.get(0), parts.get(1), parts.get(2));
+        } else if (parts.size() == 2) {
+            return new TableName(null, qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
+        } else if (parts.size() == 1) {
+            return new TableName(null, null, qualifiedName.getParts().get(0));
         } else {
             throw new ParsingException("error table name ");
         }
