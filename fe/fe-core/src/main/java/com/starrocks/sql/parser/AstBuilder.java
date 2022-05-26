@@ -670,7 +670,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new InsertStmt(
                 new InsertTarget(targetTableName, partitionNames),
-                context.label == null ? null : context.label.getText(),
+                context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                 targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
@@ -2065,7 +2065,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             setType = SetType.SESSION;
         }
 
-        return new SysVariableDesc(context.identifier().getText(), setType);
+        return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
     @Override
