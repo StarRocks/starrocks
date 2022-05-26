@@ -210,6 +210,10 @@ public class ShowExecutorTest {
 
                 GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
                 minTimes = 0;
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default");
+                minTimes = 0;
+                result = Lists.newArrayList("testCluster:testDb");
             }
         };
 
@@ -243,8 +247,9 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertFalse(resultSet.next());
+        Assert.assertTrue(resultSet.next());
         Assert.assertEquals("Database", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals(resultSet.getResultRows().get(0).get(0), "testDb");
     }
 
     @Test
