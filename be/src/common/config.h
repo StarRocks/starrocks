@@ -81,12 +81,10 @@ CONF_Int32(create_tablet_worker_count, "3");
 CONF_Int32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
-// Rhe count of thread to high priority batch load.
+// The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
-// Rhe count of thread to publish version.
-CONF_Int32(publish_version_worker_count, "2");
-// The count of thread to publish version per partition.
-CONF_Int32(partition_publish_version_worker_count, "8");
+// The count of thread to publish version per transaction
+CONF_Int32(transaction_publish_version_worker_count, "8");
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // The count of thread to delete.
