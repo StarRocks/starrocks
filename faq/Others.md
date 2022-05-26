@@ -1,223 +1,227 @@
 # Other FAQs
 
-## When creating a table, do varchar (32) and string occupy the same storage space? Is the performance the same when querying？
+This topic provides answers to some general questions.
 
-They are all variable length storage, and the query performance is the same.
+## Do VARCHAR (32) and STRING occupy the same storage space?
 
-## How to deal with the txt file exported from Oracle that is still garbled after modifying the character set utf-8 of the file？
+Both are variable-length data types. When you store data of the same length, VARCHAR (32) and STRING occupy the same storage space.
 
-You can try converting the file character set as gbk. Using the file "origin.txt" as an example, suppose you look at its character set with a command and find that its current character set is iso-8859-1:
+## Do VARCHAR (32) and STRING perform the same for the data query?
 
-```plain text
-file --mime-encoding origin.txt
-Return value[assumed]：iso-8859-1
-```
+Yes.
 
-Use the iconv command to convert the file character set to utf-8:
+## Why do TXT files imported from Oracle still appear garbled after I set the character set to UTF-8？
 
-```shell
-iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
-```
+To solve this problem, perform the following steps:
 
-If we find that the converted origin_utf-8.txt file still has garbled code, we can recast the origin.txt original character set as gbk:
+1. For example, there is a file named **original**, whose text is garbled. The character set of this file is ISO-8859-1. Run the following code to obtain the character set of the file.
 
-```shell
-iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
-```
+    ```Plain%20Text
+    file --mime-encoding origin.txt
+    origin.txt：iso-8859-1
+    ```
 
-## Does the string length defined in MySQL correspond to that defined by StarRocks?
+2. Run the `iconv` command to convert the character set of this file into UTF-8.
 
-Currently in StarRocks, varchar (n), n is limited by bytes and MySQL is limited by characters, so for tables on MySQL, n can be three or four times larger, and generally does not account for more storage.
+    ```Plain%20Text
+    iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
+    ```
 
-## Can table partition fields be partitioned using float, double, decimal floating point types?
+3. After the conversion, the text of this file still appears garbled. You can then regrade the character set of this file as GBK and convert the character set into UTF-8 again.
 
-No, they can only be date, datetime, or int.
+    ```Plain%20Text
+    iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
+    ```
 
-## How do I see how much data in tables is stored?
+## Is the length of STRING defined by MySQL the same as that defined by StarRocks?
 
-You can see from the`show data`. It can display the amount of data, the number of copies, and the number of rows counted. Also, pay attention to data statistics, there is a certain time delay.
+For VARCHAR(n), StarRocks defines "n" by bytes and MySQL defines "n" by characters. According to UTF-8, one Chinese character is equal to three bytes. When StarRocks and MySQL define "n" as the same number, MySQL saves three times as many characters as StarRocks.
 
-## What happens if the data exceeds this quota? Can this value be changed?
+## Can the data type of partitioned fields of a table be FLOAT, DOUBLE, or DECIMAL?
 
-```sql
+No, only DATE, DATETIME, and INT are supported.
+
+## How to check the storage space that is occupied by the data in a table?
+
+Execute the SHOW DATA statement to see the corresponding storage space. You can also see the data volume, the number of copies, and the number of rows.
+
+**Note**: There is a time delay in data statistics.
+
+## How to request a quota increase for the StarRocks database?
+
+To request a quota increase, run the following code:
+
+```Plain%20Text
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-Change the quota of db to adjust the maximum storage capacity of this db.
+## Does StarRocks support updating particular fields in a table by executing the UPSERT statement?
 
-## Does StarRocks have a syntax like upsert that update some fields in the table without specifying the updated fields, and the values do not change？
+StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](https://docs.starrocks.com/en-us/2.2/table_design/Data_model#primary-key-model) in StarRocks 2.2.
 
-There is currently no upsert syntax to update individual fields in a table. For the time being, updates to the entire field can only be made through「Update Table Model」or「delete+insert」.
+## How to swap the data between two tables or two partitions？
 
-## Usage of Atomic Swap for Table/Partition in [Data Recovery]
+Execute the SWAP WITH statement to swap the data between two tables or two partitions. The SWAP WITH statement is more secure than the INSERT OVERWRITE statement. Before you swap the data, check the data first and then see whether the data after the swapping is consistent with the data before the swapping.
 
-Partition unloading, loading, cross-table partition movement functions like CK.
+- Swap two tables: For example, there is a table named table 1. If you want to replace table 1 with another one, perform the following steps:
 
-The following is an example of atomic swap of table 1 data, or partition data for table 1. It may be safer than insert overwrite as it can verify data beforehand.
+    1. Create a new table named table 2.
 
-### Atomic Swap「Table」
+        ```SQL
+        create table2 like table1;
+        ```
 
-1. Create a new table table2;
+    2. Use Stream Load, Broker Load, or Insert Into to load data from table 1 into table 2.
 
-    ```SQL
-    create table2 like table1;
-    ```
+    3. Replace table 1 with table 2.
 
-2. Import data into the new table table2 using stream load / broker load / insert into, etc.
+        ```SQL
+        ALTER TABLE table1 SWAP WITH table2;
+        ```
 
-3. Swap table1 with table2:
+        By doing so, the data is loaded accurately into table 1.
 
-    ```SQL
-    ATER TABLE table1 SWAP WITH table2;
-    ```
+- Swap two partitions: For example, there is a table named table 1. If you want to replace the partition data in table 1, perform the following steps:
 
-This enables atomic swap between tables.
+    1. Create a temporary partition.
 
-### Atomic Swap「Partition」
+        ```SQL
+        ALTER TABLE table1
 
-It can also be swapped  by "importing temporary partitions".
+        ADD TEMPORARY PARTITION tp1
 
-1. Create a temporary partition:
+        VALUES LESS THAN("2020-02-01");
+        ```
 
-    ```SQL
-    ALTER TABLE table1
-    ADD TEMPORARY PARTITION tp1
-    VALUES LESS THAN("2020-02-01");
-    ```
+    2. Load the partition data from table 1 into the temporary partition.
 
-2. Import data to the temporary partition;
+    3. Replace the partition of table 1 with the temporary partition.
 
-3. Atomic swap「partition」:
+        ```SQL
+        ALTER TABLE table1
 
-    ```SQL
-    ALTER TABLE table1
-    REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
-    ```
+        REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
+        ```
 
-In this way, the data can be imported, verified and swapped later, and the atomic swap of temporary partitions can be carried out.
+## This error "error to open replicated environment, will exit" occurs when I restart a frontend (FE)
 
-## fe restart error:error to open replicated environment，will exit
+This error occurs due to BDBJE's bug. To solve this problem, update the BDBJE version to 1.17 or later.
 
-**Issue Description：**
+## This error "Broker list path exception" occurs when I query data from a new Apache Hive table
 
-This error is reported after restarting the cluster Fe, and the Fe cannot be started.
+### Problem description
 
-**Solution：**
-
-It is a bug in bdbje. Before the community version and version 1.17 (excluding this version), restarting will trigger the bug with a small probability, you can upgrade to version 1.17 and later. This problem has been fixed.
-
-## Create hive table and query error: Broker list path exception
-
-**Issue Description：**
-
-```plain text
+```Plain%20Text
 msg:Broker list path exception
+
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
 ```
 
-**Solution：**
+### Solution
 
-Confirm with the operation and maintenance personnel whether the address and port of namenode are correct and whether the permission is enabled.
+Contact the StarRocks technical support and check whether the address and port of the namenode are correct and whether you have permission to access the address and port of the namenode.
 
-## Create hive table, query reports error: get hive partition meta data failed
+## This error "get hive partition metadata failed" occurs when I query data from a new Apache Hive table
 
-**Issue Description：**
+### Problem description
 
-```plain text
+```Plain%20Text
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
-**Solution：**
+### Solution
 
-You need to transfer a copy of the host file in the cluster to each be machine and confirm that the network is connected.
+Ensure that the network is connected and upload the **host** file to each backend (BE) in your StarRocks cluster.
 
-## Failure to access hive external table orc：do_open failed. reason = Invalid ORC postscript length
+## This error "do_open failed. reason = Invalid ORC postscript length" occurs when I access ORC external table in Apache Hive
 
-**Issue Description：**
+### Problem description
 
-When querying the same SQL, the previous queries were OK, but errors were reported later. After re creating the table, no errors were reported.
+The metadata of the Apache Hive is cached in the FEs. But there is a two-hours time lag for StarRocks to update the metadata. Before StarRocks finishes the update, If you insert new data or update data in the Apache Hive table, the data in HDFS scanned by the BEs and the data obtained by the FEs are different. Therefore, this error occurs.
 
-```plain text
+```Plain%20Text
 MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
+
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
 ```
 
-**Solution：**
+### Solution
 
-The information synchronization between fe and hive in the current version has a time lag of 2h. During this period, the table data is updated or inserted, which will lead to the inconsistency between the judgment of scan data and fe, resulting in this error. The new version adds the manual reflush function to refresh the table structure information synchronization.
+To solve this problem, perform one of the following operations:
 
-## Failure to connect mysql external table：caching_sha2_password cannot be loaded
+- Upgrade your current version to StarRocks 2.2 or later.
+- Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../using_starrocks/External_table#metadata-caching-strategy).
 
-**Issue Description：**
+## This error "caching_sha2_password cannot be loaded" occurs when I connect external tables of MySQL
 
-The default authentication method for MySQL 8.0 is caching_sha2_password.
+### Problem description
 
-The default authentication method for MySQL5.7 is mysql_native_password.
+The default authentication plugin of MySQL 8.0 is caching_sha2_password. The default authentication plugin of MySQL 5.7 is mysql_native_password. This error occurs because you use the wrong authentication plugin.
 
-The authentication method is different, and there is an error in the external table link.
+### Solution
 
-**Solution：**
+To solve this problem, perform one of the following operations:
 
-Two options:
+- Connect to the StarRocks.
 
-* Connect terminals
-
-```sql
+```SQL
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
 ```
 
-* Modify my.cnf file
+- Modify the `my.cnf` file.
 
-```plain text
+```Plain%20Text
 vim my.cnf
+
 [mysqld]
+
 default_authentication_plugin=mysql_native_password
 ```
 
-## Disk space is not released immediately after drop table
+## How to release disk space immediately after deleting a table?
 
-When you execute drop table, the disk space will be released later. If you want to quickly release the disk space, you can use drop table force, which will have a short waiting time. If you execute drop table force, the system will not check whether there are unfinished transactions in the table, and the table will be deleted directly and cannot be recovered. Generally, this operation is not recommended.
+If you execute the DROP TABLE statement to delete a table, StarRocks takes a while to release the allocated disk space. To release the allocated disk space immediately, execute the DROP TABLE FORCE statement to delete a table. When you execute the DROP TABLE FORCE statement, the StarRocks deletes the table directly without checking whether there are unfinished events in it. We recommend that you execute the DROP TABLE FORCE statement with caution. Because once the table is deleted, you cannot restore it.
 
-## How to view StarRocks version?
+## How to view the current version of StarRocks?
 
-View version by`select current_version();`Or the CLI executes`sh bin/show_fe_version.sh`
+Run the `select current_version();` command or the CLI command `sh bin/show_fe_version.sh` to view the current version.
 
-## How to set the fe memory size?
+## How to set the memory size of an FE?
 
-You can refer to the number of tablets. The metadata information is stored in fe memory. The memory of 10 million tablets is about 20g. At present, the maximum supported meta is about this level.
+FEs are used to store metadata. You can set the memory size of an FE based on the number of tablets. In StarRocks, you can set the memory size of an FE to 20 GB at most. 10 million tablets occupy about 20 GB of an FE memory.
 
-## How is the StarRocks query time calculated?
+## How does StarRocks calculate its query time?
 
-StarRocks is multi-threaded computing, query time is the time spent by query threads, and ScanTime is the sum of the time used by all threads. The query time can be viewed through the Total under Query under the execution plan.
+StarRocks supports querying data by using multiple threads. Query time refers to the time used by multiple threads to query data.
 
-## Does export currently support setting paths when exporting data locally?
+## Does StarRocks support setting the path when I export data locally?
 
 No.
 
-## What is the concurrency level of StarRocks?
+## What are the concurrency upper limits of StarRocks?
 
-The concurrency level of StarRocks is recommended to be tested according to the business scenario or simulated business scenario. In some customer scenarios, the pressure is over 20000 or 30000 QPS.
+You can test the concurrency limitations based on the actual business scenarios or simulated business scenarios. According to the feedback of some users, maximum of 20,000 QPS or 30,000 QPS can be achieved.
 
-## Why is the ssb test of StarRocks executed slowly for the first time and faster later?
+## Why is the first-time SSB test performance of StarRocks slower than that done the second time?
 
-The first query of disk reading is related to disk performance. After the first query, the pagecache of the operating system will take effect. The second query will scan the pagecache first and improve the speed.
+The speed to read disks for the first query relates to the performance of disks. After the first query, the page cache is generated for the subsequent queries, so the query is faster than before.
 
-## What is the minimum number of cluster BE configurations? Does it support single node deployment?
+## How many BEs need to be configured at least for a cluster?
 
-The minimum number of BE nodes is 1. It supports single node deployment. It is recommended that cluster deployment has better performance. The be node needs to support avx2. It is recommended to configure 8-core 16G and above machines.
+StarRocks supports single node deployment, so you need to configure at least one BE. BEs need to be run with AVX2, so we recommend that you deploy BEs on machines with 8-core and 16GB or higher configurations.
 
-## How to configure data permissions for superset + StarRocks?
+## How to set data permissions when I use Apache Superset to visualize the data in StarRocks？
 
-After creating an individual user, you can create View to authorize the user to control data permissions.
+You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 
-## After running set is_report_success = true, it does not display profile
+## Why does the profile fail to display after I set `is_report_success` to `true`?
 
-Only the leader node fe can view because the report information is only reported to the leader node.
+The report is only submitted to the leader FE for access.
 
-## Comments are added to the fields. How to view them in the table? The comment column is not displayed. Does StarRocks support it?
+## How to check field annotations in the tables of StarRocks?
 
-You can view it through `show create table xxx`
+Run the `show create table xxx` command.
 
-## Can't the column specify the default value of function like now() when creating the table?
+## When I create a table, how to specify the default value for the NOW() function?
 
-At present, the function default value is not supported, and it needs to be written as a constant.
+Only StarRocks 2.1 or later version supports specifying the default value for a function. For versions earlier than StarRocks 2.1, you can only specify a constant for a function.
