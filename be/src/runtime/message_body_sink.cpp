@@ -46,6 +46,10 @@ Status MessageBodyFileSink::open() {
     return Status::OK();
 }
 
+Status MessageBodyFileSink::append(const ByteBufferPtr& buf) {
+    return append(buf->ptr, buf->remaining());
+}
+
 Status MessageBodyFileSink::append(const char* data, size_t size) {
     auto written = ::write(_fd, data, size);
     if (written == size) {

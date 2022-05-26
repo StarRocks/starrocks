@@ -168,6 +168,9 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         ctx->body_sink.reset();
         RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
     } else {
+        if (ctx->format == TFileFormatType::FORMAT_JSON) {
+            ctx->body_sink->append(ctx->json_buffer);
+        }
         RETURN_IF_ERROR(ctx->body_sink->finish());
     }
 
@@ -299,24 +302,52 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
 
     int64_t start_read_data_time = MonotonicNanos();
-    while (evbuffer_get_length(evbuf) > 0) {
-        ByteBufferPtr bb = ByteBuffer::allocate(4096);
-        int remove_bytes;
-        {
-            // The memory is applied for in http server thread,
-            // so the release of this memory must be recorded in ProcessMemTracker
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+
+    if (ctx->format == TFileFormatType::FORMAT_JSON) {
+        // Since the json parser cannot parse json in stream mode.
+        // We constuct a complete json object and then push it to the stream load pipe.
+        while (evbuffer_get_length(evbuf) > 0) {
+            size_t sz = evbuffer_get_length(evbuf);
+            size_t cap = ctx->json_buffer->remaining();
+
+            // Extend buffer.
+            if (sz > cap) {
+                cap = BitUtil::RoundUpToPowerOfTwo(cap + sz);
+                ByteBufferPtr bb = ByteBuffer::allocate(cap);
+                bb->put_bytes(ctx->json_buffer->ptr, ctx->json_buffer->remaining());
+                std::swap(bb, ctx->json_buffer);
+            }
+
+            int remove_bytes;
+            {
+                // The memory is applied for in http server thread,
+                // so the release of this memory must be recorded in ProcessMemTracker
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+                remove_bytes = evbuffer_remove(evbuf, ctx->json_buffer->ptr, ctx->json_buffer->remaining());
+            }
+            ctx->receive_bytes += remove_bytes;
         }
-        bb->pos = remove_bytes;
-        bb->flip();
-        auto st = ctx->body_sink->append(bb);
-        if (!st.ok()) {
-            LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
-            ctx->status = st;
-            return;
+
+    } else {
+        while (evbuffer_get_length(evbuf) > 0) {
+            ByteBufferPtr bb = ByteBuffer::allocate(4096);
+            int remove_bytes;
+            {
+                // The memory is applied for in http server thread,
+                // so the release of this memory must be recorded in ProcessMemTracker
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+                remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+            }
+            bb->pos = remove_bytes;
+            bb->flip();
+            auto st = ctx->body_sink->append(bb->ptr, bb->remaining());
+            if (!st.ok()) {
+                LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
+                ctx->status = st;
+                return;
+            }
+            ctx->receive_bytes += remove_bytes;
         }
-        ctx->receive_bytes += remove_bytes;
     }
     ctx->read_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
 }

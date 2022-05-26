@@ -151,6 +151,8 @@ public:
     bool use_streaming = false;
     TFileFormatType::type format = TFileFormatType::FORMAT_CSV_PLAIN;
 
+    // json_buffer is used to construct a complete json. And then put it to the body_sink.
+    ByteBufferPtr json_buffer;
     std::shared_ptr<MessageBodySink> body_sink;
 
     TStreamLoadPutResult put_result;

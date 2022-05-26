@@ -21,9 +21,8 @@ StatusOr<int64_t> StreamLoadPipeInputStream::read(void* data, int64_t size) {
     return nread;
 }
 
-Status StreamLoadPipeInputStream::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz,
-                                                   size_t padding) {
-    return _file->read_one_message(buf, buf_cap, buf_sz, padding);
+Status StreamLoadPipeInputStream::read(ByteBufferPtr* buf) {
+    return _file->read(buf);
 }
 
 Status StreamLoadPipeInputStream::skip(int64_t n) {

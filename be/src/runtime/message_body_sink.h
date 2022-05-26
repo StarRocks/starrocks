@@ -32,11 +32,11 @@ class MessageBodySink {
 public:
     virtual ~MessageBodySink() = default;
     virtual Status append(const char* data, size_t size) = 0;
-    virtual Status append(const ByteBufferPtr& buf) { return append(buf->ptr, buf->remaining()); }
+    virtual Status append(const ByteBufferPtr& buf) = 0;
     // called when all data has been appended
-    virtual Status finish() { return Status::OK(); }
+    virtual Status finish() = 0;
     // called when read HTTP failed
-    virtual void cancel(const Status& status) {}
+    virtual void cancel(const Status& status) = 0;
 };
 
 // write message to a local file
@@ -47,6 +47,7 @@ public:
 
     Status open();
 
+    Status append(const ByteBufferPtr& buf) override;
     Status append(const char* data, size_t size) override;
     Status finish() override;
     void cancel(const Status& status) override;

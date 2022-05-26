@@ -3,6 +3,7 @@
 #pragma once
 
 #include "fs/fs.h"
+#include "util/byte_buffer.h"
 
 namespace starrocks {
 class StreamLoadPipe;
@@ -18,7 +19,7 @@ public:
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
 
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding = 0);
+    Status read(ByteBufferPtr *buf);
 
     Status skip(int64_t n) override;
 

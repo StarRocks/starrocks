@@ -51,6 +51,16 @@ public:
         return Status::OK();
     }
 
+    Status append(const ByteBufferPtr& buf) {
+        if (_write_buf != nullptr) {
+            ByteBufferPtr buf;
+            std::swap(buf, _write_buf);
+            buf->flip();
+            RETURN_IF_ERROR(_append(buf));
+        }
+        return _append(buf);
+    }
+
     Status append(const char* data, size_t size) override {
         size_t pos = 0;
         if (_write_buf != nullptr) {
@@ -75,12 +85,12 @@ public:
     }
 
     /* read_one_messages returns data that is written by append in one time.
-    * buf: the buffer to return data, and would be expaneded if the capacity is not enough.
+    * buf: the buffer to return data, and would be expanded if the capacity is not enough.
     * buf_cap: the capacity of buffer, and would be reset if the capacity is not enough.
     * buf_sz: the actual size of data to return.
     * padding: the extra space reserved in the buffer capacity.
     */
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) {
+    Status read(ByteBufferPtr *buf)  {
         std::unique_lock<std::mutex> l(_lock);
         while (!_cancelled && !_finished && _buf_queue.empty()) {
             _get_cond.wait(l);
@@ -93,21 +103,13 @@ public:
         // finished
         if (_buf_queue.empty()) {
             DCHECK(_finished);
-            *buf_sz = 0;
-            return Status::OK();
+            return Status::EndOfFile("all messages have been read");
         }
-        auto raw = _buf_queue.front();
-        auto raw_sz = raw->remaining();
 
-        if (*buf_cap < raw_sz + padding) {
-            buf->reset(new uint8_t[raw_sz + padding]);
-            *buf_cap = raw_sz + padding;
-        }
-        raw->get_bytes((char*)(buf->get()), raw_sz);
-        *buf_sz = raw_sz;
+        *buf = _buf_queue.front();
 
         _buf_queue.pop_front();
-        _buffered_bytes -= raw->limit;
+        _buffered_bytes -= (*buf)->limit;
         _put_cond.notify_one();
         return Status::OK();
     }
