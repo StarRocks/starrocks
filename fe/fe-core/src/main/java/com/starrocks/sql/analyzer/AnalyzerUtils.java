@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -200,7 +201,11 @@ public class AnalyzerUtils {
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = session.getDatabase();
             } else {
-                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+                if (CatalogMgr.isInternalCatalog(session.getCurrentCatalog())) {
+                    dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+                } else {
+                    return;
+                }
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
