@@ -21,7 +21,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -41,6 +40,7 @@ import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
@@ -49,6 +49,7 @@ import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.journal.JournalQueueEntity;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
@@ -79,6 +80,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -86,18 +89,27 @@ import java.util.List;
  */
 public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
-
-    private final EditLogOutputStream editStream = null;
-
-    private long txId = 0;
-
-    private long numTransactions;
-    private long totalTimeTransactions;
+    private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
     private final Journal journal;
 
+    private BlockingQueue<JournalQueueEntity> logQueue;
+
+    /**
+     * for ut only
+     */
+    public EditLog(Journal journal, BlockingQueue<JournalQueueEntity> logQueue) {
+        this.journal = journal;
+        this.logQueue = logQueue;
+    }
+
     public EditLog(String nodeName) {
         journal = JournalFactory.create(nodeName);
+        logQueue = new ArrayBlockingQueue<JournalQueueEntity>(Config.journal_queue_size);
+    }
+
+    public BlockingQueue<JournalQueueEntity> getLogQueue() {
+        return logQueue;
     }
 
     public long getMaxJournalId() {
@@ -896,63 +908,80 @@ public class EditLog {
     }
 
     /**
-     * Write an operation to the edit log. Do not sync to persistent store yet.
+     * put log to queue, wait for JournalWriter
      */
-    private synchronized void logEdit(short op, Writable writable) {
-        if (this.getNumEditStreams() == 0) {
-            LOG.error("Fatal Error : no editLog stream", new Exception());
-            throw new Error("Fatal Error : no editLog stream");
-        }
+    protected void logEdit(short op, Writable writable) {
+        logEdit(op, writable, -1);
+    }
 
+
+    protected void logEdit(short op, Writable writable, long maxWaitIntervalMs) {
         long start = System.currentTimeMillis();
-
-        Preconditions.checkState(GlobalStateMgr.getCurrentState().isMaster(),
-                "non-master fe can not write bdb log");
-
-        try {
-            journal.write(op, writable);
-        } catch (Exception e) {
-            LOG.error("Fatal Error : write stream Exception", e);
-            System.exit(-1);
-        }
-
-        // get a new transactionId
-        txId++;
-
-        // update statistics
-        long end = System.currentTimeMillis();
-        numTransactions++;
-        totalTimeTransactions += (end - start);
+        JournalQueueEntity entity = putLogToQueue(op, writable, maxWaitIntervalMs);
+        waitLogConsumed(entity);
         if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((end - start));
-        }
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("nextId = {}, numTransactions = {}, totalTimeTransactions = {}, op = {}",
-                    txId, numTransactions, totalTimeTransactions, op);
-        }
-
-        if (txId >= Config.edit_log_roll_num) {
-            LOG.info("txId {} is equal to or larger than edit_log_roll_num {}, will roll edit.",
-                    txId, Config.edit_log_roll_num);
-            rollEditLog();
-            txId = 0;
-        }
-
-        if (MetricRepo.isInit) {
-            MetricRepo.COUNTER_EDIT_LOG_WRITE.increase(1L);
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.currentTimeMillis() - start));
         }
     }
 
     /**
-     * Return the size of the current EditLog
+     * put log in queue and return immediately
      */
-    synchronized long getEditLogSize() throws IOException {
-        return editStream.length();
+    protected JournalQueueEntity putLogToQueue(short op, Writable writable, long maxWaitIntervalMs) {
+        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+
+        // 1. serialized
+        try {
+            JournalEntity entity = new JournalEntity();
+            entity.setOpCode(op);
+            entity.setData(writable);
+            entity.write(buffer);
+        } catch (IOException e) {
+            // The old implement swallow exception like this
+            LOG.info("failed to serialized: {}", e);
+        }
+        JournalQueueEntity entity = new JournalQueueEntity(op, buffer, maxWaitIntervalMs);
+
+        /*
+         * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
+         * This PR will continue to swallow exception and retry till the end of the world like before.
+         * Hope some day we'll fix it.
+         */
+        // 2. put to queue
+        int cnt = 0;
+        while (true) {
+            try {
+                if (cnt != 0) {
+                    Thread.sleep(1000);
+                }
+                this.logQueue.put(entity);
+                break;
+            } catch (InterruptedException e) {
+                // got interrupted while waiting if necessary for space to become available
+                LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
+            }
+            cnt++;
+        }
+
+        return entity;
     }
 
-    public synchronized long getTxId() {
-        return txId;
+    /**
+     * wait for JournalWriter commit all logs
+     */
+    protected void waitLogConsumed(JournalQueueEntity entity) {
+        int cnt = 0;
+        while (true) {
+            try {
+                if (cnt != 0) {
+                    Thread.sleep(1000);
+                }
+                entity.waitLatch();
+                return;
+            } catch (InterruptedException e) {
+                LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
+            }
+        }
     }
 
     public void logSaveNextId(long nextId) {
@@ -1141,10 +1170,6 @@ public class EditLog {
 
     public void logMasterInfo(MasterInfo info) {
         logEdit(OperationType.OP_MASTER_INFO_CHANGE, info);
-    }
-
-    public void logMetaVersion(int version) {
-        logEdit(OperationType.OP_META_VERSION, new Text(Integer.toString(version)));
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {

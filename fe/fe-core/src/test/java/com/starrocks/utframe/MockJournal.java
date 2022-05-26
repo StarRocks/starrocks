@@ -4,14 +4,22 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.protobuf.MapEntry;
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalQueueEntity;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections.map.HashedMap;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,6 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class MockJournal implements Journal {
     private final AtomicLong nextJournalId = new AtomicLong(1);
     private final Map<Long, JournalEntity> values = Maps.newConcurrentMap();
+    private Map<Long, JournalEntity> staggingEntityMap = new HashedMap();
+    private long staggingJournalId = -1;
 
     public MockJournal() {
     }
@@ -81,6 +91,31 @@ public class MockJournal implements Journal {
     @Override
     public List<Long> getDatabaseNames() {
         return Lists.newArrayList(0L);
+    }
+
+    @Override
+    public void writeWithinTxn(short op, DataOutputBuffer buffer) {
+        JournalEntity je = new JournalEntity();
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+            je.setOpCode(in.readShort());
+            je.setData(null);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        if (staggingJournalId == -1) {
+            staggingJournalId = nextJournalId.get();
+        }
+        staggingJournalId ++;
+        staggingEntityMap.put(staggingJournalId, je);
+    }
+
+    @Override
+    public void commitTxn() {
+        values.putAll(staggingEntityMap);
+        staggingEntityMap.clear();
+        nextJournalId.set(staggingJournalId);
+        staggingJournalId = -1;
     }
 
     private static class MockJournalCursor implements JournalCursor {

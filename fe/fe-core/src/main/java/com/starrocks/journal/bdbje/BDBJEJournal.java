@@ -26,6 +26,7 @@ import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.Transaction;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -56,7 +57,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
-    private static final int RETRY_TIME = 3;
+    static final int RETRY_TIME = 3;
+    static final int SLEEP_INTERVAL_SEC = 5;
 
     private String environmentPath = null;
     private String selfNodeName;
@@ -64,8 +66,23 @@ public class BDBJEJournal implements Journal {
 
     private BDBEnvironment bdbEnvironment = null;
     private CloseSafeDatabase currentJournalDB;
+    protected Transaction currentTrasaction = null;
+    // txn start journal id
+    protected long stagingStartJournalId = -1;
+    // uncommited journal id, This id is not visible
+    protected long staggingNextJournalId = -1;
     // the next journal's id. start from 1.
-    private AtomicLong nextJournalId = new AtomicLong(1);
+    // This id can be access from other interfaces
+    protected AtomicLong nextJournalId = new AtomicLong(1);
+
+    /**
+     * FOR UT ONLY
+     */
+    public BDBJEJournal(BDBEnvironment bdbEnvironment, CloseSafeDatabase currentJournalDB, AtomicLong nextJournalId) {
+        this.bdbEnvironment = bdbEnvironment;
+        this.currentJournalDB = currentJournalDB;
+        this.nextJournalId = nextJournalId;
+    }
 
     public BDBJEJournal(String nodeName) {
         initBDBEnv(nodeName);
@@ -121,6 +138,9 @@ public class BDBJEJournal implements Journal {
         }
     }
 
+    /**
+     * TODO remove this function in later PR, use writeWithinTxn instead.
+     */
     @Override
     public synchronized void write(short op, Writable writable) {
         JournalEntity entity = new JournalEntity();
@@ -141,7 +161,7 @@ public class BDBJEJournal implements Journal {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        DatabaseEntry theData = new DatabaseEntry(buffer.getData());
+        DatabaseEntry theData = new DatabaseEntry(buffer.getData(), 0, buffer.size());
         if (MetricRepo.isInit) {
             MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase((long) theData.getSize());
         }
@@ -161,7 +181,7 @@ public class BDBJEJournal implements Journal {
                 } catch (DatabaseException e) {
                     LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
                     try {
-                        Thread.sleep(5 * 1000);
+                        Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
                     } catch (InterruptedException e1) {
                         e1.printStackTrace();
                     }
@@ -388,6 +408,91 @@ public class BDBJEJournal implements Journal {
         }
 
         return bdbEnvironment.getDatabaseNames();
+    }
+
+    @Override
+    public void writeWithinTxn(short op, DataOutputBuffer buffer) {
+        if (currentTrasaction == null) {
+            staggingNextJournalId = nextJournalId.get();
+            stagingStartJournalId = staggingNextJournalId;
+        }
+        // id is the key
+        DatabaseEntry theKey = new DatabaseEntry();
+        TupleBinding<Long> idBinding = TupleBinding.getPrimitiveBinding(Long.class);
+        idBinding.objectToEntry(staggingNextJournalId, theKey);
+
+        // entity is the value
+        DatabaseEntry theData = new DatabaseEntry(buffer.getData(), 0, buffer.getLength());
+        if (MetricRepo.isInit) {
+            MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase((long) theData.getSize());
+        }
+        LOG.debug("opCode = {}, journal size = {}", op, theData.getSize());
+
+
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                // start txn
+                if (currentTrasaction == null) {
+                    currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                            null, bdbEnvironment.getTxnConfig());
+                }
+
+                // put, not commit
+                if (currentJournalDB.put(currentTrasaction, theKey, theData) == OperationStatus.SUCCESS) {
+                    LOG.debug("write journal {} within txn {} finished. db name {}",
+                            staggingNextJournalId, currentTrasaction.getId(), currentJournalDB.getDb().getDatabaseName());
+                    staggingNextJournalId += 1;
+                    return;
+                }
+            } catch (DatabaseException | InterruptedException e) {
+                LOG.error("catch an exception when writing to database. sleep and retry. journal id {}, txn {}",
+                        staggingNextJournalId, currentTrasaction, e);
+            }
+        }
+
+        // fail even after retry
+        String msg = "write bdb within txn failed. will exit. journalId: " + staggingNextJournalId + ", txnId: " +
+                currentTrasaction.getId() + ", bdb database Name: " + currentJournalDB.getDb().getDatabaseName();
+        LOG.error(msg);
+        Util.stdoutWithTime(msg);
+        System.exit(-1);
+    }
+
+    @Override
+    public void commitTxn() {
+        assert (currentTrasaction != null);
+
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                currentTrasaction.commit();
+            } catch (DatabaseException | InterruptedException e) {
+                LOG.error("catch an exception when commit to database. sleep and retry. journal id {}-{}, txnId {}.",
+                        stagingStartJournalId, staggingNextJournalId, currentTrasaction.getId(), e);
+                continue;
+            }
+
+            // Now that the txn is committed, we can let nextJournalId visible
+            nextJournalId.set(staggingNextJournalId);
+            currentTrasaction = null;
+            return;
+        } // for i in retry
+
+        // Still failed after retry, will exit for now.
+        String msg = "write bdb within txn failed. will exit. journalId: " + staggingNextJournalId + ", txnId: " +
+                currentTrasaction.getId() + ", bdb database Name: " + currentJournalDB.getDb().getDatabaseName();
+        LOG.error(msg);
+        Util.stdoutWithTime(msg);
+        System.exit(-1);
     }
 
     public BDBEnvironment getBdbEnvironment() {

@@ -17,6 +17,7 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 
 import java.util.List;
@@ -46,6 +47,7 @@ public interface Journal {
     public JournalCursor read(long fromKey, long toKey);
 
     // Write a journal and sync to disk
+    @Deprecated
     public void write(short op, Writable writable);
 
     // Delete journals whose max id is less than deleteToJournalId
@@ -57,4 +59,9 @@ public interface Journal {
     // Get all the dbs' name
     public List<Long> getDatabaseNames();
 
+    // Write a jounal within current transaction
+    public void writeWithinTxn(short op, DataOutputBuffer buffer);
+
+    // commit current transaction
+    public void commitTxn();
 }
