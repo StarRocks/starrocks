@@ -169,12 +169,11 @@ public class GsonUtils {
             .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
 
     // runtime adapter for HeartbeatResponse
-    private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor =
-            RuntimeTypeAdapterFactory
-                    .of(HeartbeatResponse.class, "clazz")
-                    .registerSubtype(BackendHbResponse.class, BackendHbResponse.class.getSimpleName())
-                    .registerSubtype(FrontendHbResponse.class, FrontendHbResponse.class.getSimpleName())
-                    .registerSubtype(BrokerHbResponse.class, BrokerHbResponse.class.getSimpleName());
+    private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor = RuntimeTypeAdapterFactory
+            .of(HeartbeatResponse.class, "clazz")
+            .registerSubtype(BackendHbResponse.class, BackendHbResponse.class.getSimpleName())
+            .registerSubtype(FrontendHbResponse.class, FrontendHbResponse.class.getSimpleName())
+            .registerSubtype(BrokerHbResponse.class, BrokerHbResponse.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

@@ -8,8 +8,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -20,8 +18,6 @@ import java.util.List;
  * 2  no overwrite toSql method，because we will redesign range partition grammar in the future
  */
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
-
-    private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfo.class);
 
     @SerializedName(value = "partitionExprs")
     private final List<Expr> partitionExprs;
