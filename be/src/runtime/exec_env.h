@@ -170,7 +170,9 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-    int64_t max_executor_threads() { return _max_executor_threads; }
+    int64_t max_executor_threads() const { return _max_executor_threads; }
+
+    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);

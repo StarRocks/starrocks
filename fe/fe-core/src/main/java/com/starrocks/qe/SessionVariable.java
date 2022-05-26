@@ -137,6 +137,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
+    public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
@@ -226,6 +227,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
+    private boolean enableTabletInternalParallel = false;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -1045,6 +1049,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
                 break;
         }
+
+        tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+
         return tResult;
     }
 
