@@ -8,6 +8,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -120,11 +121,15 @@ public class TaskRun {
         return status;
     }
 
-    public TaskRunStatus initStatus(String queryId) {
+    public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
         status.setTaskName(task.getName());
-        status.setCreateTime(System.currentTimeMillis());
+        if (createTime == null) {
+            status.setCreateTime(System.currentTimeMillis());
+        } else {
+            status.setCreateTime(createTime);
+        }
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         this.status = status;

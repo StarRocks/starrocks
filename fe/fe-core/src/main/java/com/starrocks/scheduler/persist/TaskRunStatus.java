@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.scheduler;
+package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
