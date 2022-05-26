@@ -15,6 +15,8 @@ Convert a date and time from one time zone to another.
 CONVERT_TZ(dt, from_tz, to_tz)
 ```
 
+> *The syntax of this function. Enclose the syntax in code blocks.*
+
 ## Parameters
 
 - `dt` : the data and time to convert. DATETIME is supported.
@@ -24,8 +26,8 @@ CONVERT_TZ(dt, from_tz, to_tz)
 - `to_tz`:  the destination time zone. VARCHAR is supported. Its format is the same as `from_tz`.
 
 > - *The format is* `*parameter*`*:* `*description*` *+* `*data type*` *(please list all the data types supported).*
-> - *The description must include information, such as parameters' meaning and formats, whether it is required or not, formats and units when using different data types.*
-> - *The data types must be capitalized.*
+> - *The description must include information, such as parameter description, value format, value range, whether this parameter is required, formats and units when different data types are used.*
+> - *The data types must be capitalized, for example, DATETIIME.*
 
 ## Return value
 
@@ -33,8 +35,8 @@ Returns a value of the DATETIME data type.
 
 > - *The data type must be capitalized.*
 > - *Additional notes can be provided if necessary, for example,*
->   - *Types of the return value if the input value supports multiple data types.*
->   - *Type of the error returned (for example, NULL) if the data type of the input value is not supported.*
+> - *Types of the return value if the input value supports multiple data types.*
+> - *Type of the error returned (for example, NULL) if the data type of the input value is not supported.*
 
 ## Usage notes
 
@@ -62,6 +64,7 @@ MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles'
 +--------------------------------------------------------------------+
 ```
 
-> - *Please describe the* *scenario* *of each example.*
+> - *Enclose the code of different use scenarios in different code blocks.*
+> - *Describe the* *scenario* *of each example.*
 > - *If you need to describe more than one scenario in an example, add a comment for each scenario to help* *users quickly distinguish between them.*
 > - *If the returned result is simple, the format in example* *1* *is recommended. Otherwise, the format in example 2 is recommended.*
