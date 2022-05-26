@@ -245,7 +245,9 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         ColumnExprPredicate* new_pred =
                 pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, nullptr, _slot_desc));
         new_pred->_add_expr_ctx(std::move(expr_rewrite));
-        new_pred->_add_expr_ctxs(_expr_ctxs);
+        for (int i = 1; i < _expr_ctxs.size(); i++) {
+            new_pred->_add_expr_ctx(_expr_ctxs[i]);
+        }
         output->emplace_back(new_pred);
     }
 
