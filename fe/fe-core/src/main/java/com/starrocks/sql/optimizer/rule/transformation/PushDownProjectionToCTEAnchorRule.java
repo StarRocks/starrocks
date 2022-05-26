@@ -8,7 +8,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -23,11 +22,10 @@ public class PushDownProjectionToCTEAnchorRule extends TransformationRule {
     public PushDownProjectionToCTEAnchorRule() {
         super(RuleType.TF_PUSH_DOWN_PROJECT_TO_CTE_ANCHOR,
                 Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(
-                        Pattern.create(OperatorType.LOGICAL_FILTER)
-                                .addChildren(Pattern.create(OperatorType.LOGICAL_CTE_ANCHOR)
-                                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
-                                        .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT,
-                                                OperatorType.PATTERN_LEAF)))
+                        (Pattern.create(OperatorType.LOGICAL_CTE_ANCHOR)
+                                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
+                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT,
+                                        OperatorType.PATTERN_LEAF)))
                 ));
     }
 
@@ -35,10 +33,7 @@ public class PushDownProjectionToCTEAnchorRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator projectOp = input.getOp().cast();
 
-        OptExpression filter = input.inputAt(0);
-        LogicalFilterOperator filterOp = filter.getOp().cast();
-
-        OptExpression cteAnchor = filter.inputAt(0);
+        OptExpression cteAnchor = input.inputAt(0);
         LogicalCTEAnchorOperator cteAnchorOp = cteAnchor.getOp().cast();
 
         OptExpression cteAnchorLeftChild = cteAnchor.inputAt(0);
@@ -58,10 +53,6 @@ public class PushDownProjectionToCTEAnchorRule extends TransformationRule {
                 .withOperator(cteAnchorOp)
                 .build(), cteAnchorLeftChild, newChildProject);
 
-        OptExpression newFilter = OptExpression.create(new LogicalFilterOperator.Builder()
-                .withOperator(filterOp)
-                .build(), newCteAnchor);
-
-        return Lists.newArrayList(newFilter);
+        return Lists.newArrayList(newCteAnchor);
     }
 }
