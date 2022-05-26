@@ -342,6 +342,15 @@ public class CTASAnalyzerTest {
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql2, ctx);
 
+        String ctasSql4 = "create table test_union_all as select * from \n" +
+                "(select * from (select 1 as k1) a\n" +
+                "left join (select 1 as k2) b\n" +
+                "on b.k2=a.k1\n" +
+                "union all\n" +
+                "select 2 as k1, 3 as k2\n" +
+                ")aa";
+        CreateTableAsSelectStmt createTableStmt4 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql4, ctx);
+
     }
 
 }

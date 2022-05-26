@@ -60,7 +60,10 @@ public class CTASAnalyzer {
         Map<String, Table> tableRefToTable = Maps.newHashMap();
 
         // For replication_num, we select the maximum value of all tables replication_num
-        int defaultReplicationNum = getReplicationNumAndGenTableRef((SelectStmt) queryStmt, tableRefToTable);
+        int defaultReplicationNum = 1;
+        if (queryStmt instanceof SelectStmt) {
+            defaultReplicationNum = getReplicationNumAndGenTableRef((SelectStmt) queryStmt, tableRefToTable);
+        }
 
         List<Field> allFields = queryRelation.getRelationFields().getAllFields();
         List<String> finalColumnNames = Lists.newArrayList();
@@ -143,10 +146,12 @@ public class CTASAnalyzer {
             String[] aliases = tableRef.getAliases();
             if (tableRef instanceof InlineViewRef) {
                 InlineViewRef inlineViewRef = (InlineViewRef) tableRef;
-                int detectReplicateNum = getReplicationNumAndGenTableRef((SelectStmt) inlineViewRef.getViewStmt(),
-                        tableRefToTable);
-                if (detectReplicateNum > defaultReplicationNum) {
-                    defaultReplicationNum = detectReplicateNum;
+                if (inlineViewRef.getViewStmt() instanceof SelectStmt) {
+                    int detectReplicateNum = getReplicationNumAndGenTableRef((SelectStmt) inlineViewRef.getViewStmt(),
+                            tableRefToTable);
+                    if (detectReplicateNum > defaultReplicationNum) {
+                        defaultReplicationNum = detectReplicateNum;
+                    }
                 }
             } else {
                 Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
