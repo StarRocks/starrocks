@@ -322,43 +322,51 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
     return result.build(ColumnHelper::is_all_const(columns));
 } // namespace starrocks::vectorized
 
-template <PrimitiveType primitive_type>
-void JsonFunctions::_build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value) {
-    if constexpr (primitive_type == TYPE_INT) {
-        int64_t i64;
-        auto err = value.get_int64().get(i64);
-        if (UNLIKELY(err)) {
-            result.append_null();
-            return;
-        }
+template <>
+void JsonFunctions::_build_column(ColumnBuilder<TYPE_INT>& result, simdjson::ondemand::value& value) {
+    int64_t i64;
+    auto err = value.get_int64().get(i64);
+    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
 
-        result.append(i64);
-        return;
+    result.append(i64);
+    return;
+}
 
-    } else if constexpr (primitive_type == TYPE_DOUBLE) {
-        double d;
-        auto err = value.get_double().get(d);
-        if (UNLIKELY(err)) {
-            result.append_null();
-            return;
-        }
+template <>
+void JsonFunctions::_build_column(ColumnBuilder<TYPE_DOUBLE>& result, simdjson::ondemand::value& value) {
+    double d;
+    auto err = value.get_double().get(d);
+    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
 
-        result.append(d);
-        return;
+    result.append(d);
+    return;
+}
 
-    } else if constexpr (primitive_type == TYPE_VARCHAR) {
+template <>
+void JsonFunctions::_build_column(ColumnBuilder<TYPE_VARCHAR>& result, simdjson::ondemand::value& value) {
+    simdjson::ondemand::json_type tp;
+    auto err = value.type().get(tp);
+    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
+
+    if (tp == simdjson::ondemand::json_type::string) {
         std::string_view sv;
         auto err = value.get_string().get(sv);
-        if (UNLIKELY(err)) {
-            result.append_null();
-            return;
-        }
+        APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
 
         result.append(Slice{sv.data(), sv.size()});
-        return;
     } else {
-        result.append_null();
+        // For compatible consideration, format json in non-string type as string.
+        std::string_view sv = simdjson::to_json_string(value);
+        std::unique_ptr<char[]> buf{new char[sv.size()]};
+        size_t new_length{};
+
+        auto err = simdjson::minify(sv.data(), sv.size(), buf.get(), new_length);
+        APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
+
+        result.append(Slice{buf.get(), new_length});
     }
+
+    return;
 }
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
