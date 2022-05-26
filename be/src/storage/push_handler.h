@@ -24,7 +24,7 @@ public:
     PushBrokerReader() = default;
     ~PushBrokerReader();
 
-    Status init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl);
+    Status init(const TBrokerScanRange& t_scan_range, const TPushReq& request);
     Status next_chunk(ChunkPtr* chunk);
 
     void print_profile();
