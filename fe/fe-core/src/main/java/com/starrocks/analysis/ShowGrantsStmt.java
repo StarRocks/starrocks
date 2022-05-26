@@ -52,9 +52,8 @@ public class ShowGrantsStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String col : AuthProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(100)));
-        }
+        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
         META_DATA = builder.build();
     }
 

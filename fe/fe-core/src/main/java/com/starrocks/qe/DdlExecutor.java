@@ -90,7 +90,9 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
@@ -164,9 +166,15 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof GrantStmt) {
             GrantStmt stmt = (GrantStmt) ddlStmt;
             globalStateMgr.getAuth().grant(stmt);
+        } else if (ddlStmt instanceof GrantImpersonateStmt) {
+            GrantImpersonateStmt stmt = (GrantImpersonateStmt) ddlStmt;
+            globalStateMgr.getAuth().grantImpersonate(stmt);
         } else if (ddlStmt instanceof RevokeStmt) {
             RevokeStmt stmt = (RevokeStmt) ddlStmt;
             globalStateMgr.getAuth().revoke(stmt);
+        } else if (ddlStmt instanceof RevokeImpersonateStmt) {
+            RevokeImpersonateStmt stmt = (RevokeImpersonateStmt) ddlStmt;
+            globalStateMgr.getAuth().revokeImpersonate(stmt);
         } else if (ddlStmt instanceof CreateRoleStmt) {
             globalStateMgr.getAuth().createRole((CreateRoleStmt) ddlStmt);
         } else if (ddlStmt instanceof DropRoleStmt) {

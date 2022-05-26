@@ -71,6 +71,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -586,6 +587,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                 data = ModifyTableColumnOperationLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_GRANT_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REVOKE_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
                 isRead = true;
                 break;
             }
