@@ -809,8 +809,8 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     std::unique_ptr<ThreadPool> threadpool;
     auto st =
             ThreadPoolBuilder("publish_version")
-                    .set_min_threads(config::partition_publish_version_worker_count)
-                    .set_max_threads(config::partition_publish_version_worker_count)
+                    .set_min_threads(config::transaction_publish_version_worker_count)
+                    .set_max_threads(config::transaction_publish_version_worker_count)
                     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
                     // But it seems that there's no limit for the number of tablets of a partition.
                     // Since a large queue size brings a little overhead, a big one is chosen here.
