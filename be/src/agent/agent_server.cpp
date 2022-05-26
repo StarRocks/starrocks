@@ -62,12 +62,8 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
     pool_name->start();
 
-#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)                                                    \
-    pool_name.reset(new MultiWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
-    pool_name->start();
 #else
 #define CREATE_AND_START_POOL(type, pool_name, worker_num)
-#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)
 #endif // BE_TEST
 
     CREATE_AND_START_POOL(CREATE_TABLE, _create_tablet_workers, config::create_tablet_worker_count);

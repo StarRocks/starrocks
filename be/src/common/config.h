@@ -84,8 +84,6 @@ CONF_Int32(drop_tablet_worker_count, "3");
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
-// The count of thread to publish version. Not used anymore
-CONF_Int32(publish_version_worker_count, "1");
 // The count of thread to publish version per transaction
 CONF_Int32(transaction_publish_version_worker_count, "8");
 // The count of thread to clear transaction task.
