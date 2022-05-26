@@ -364,13 +364,12 @@ public class AggregateTest extends PlanTestBase {
                 "lineitem group by L_LINENUMBER, day";
         String plan = getFragmentPlan(sql);
         // check use three stage aggregate
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(19: count)\n" +
+                "  |  group by: 4: L_LINENUMBER, 18: date_trunc");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
-        assertContains(plan, "4:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
-        assertContains(plan, "5:AGGREGATE (update finalize)\n" +
-                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  output: multi_distinct_count(1: L_ORDERKEY)\n" +
                 "  |  group by: 4: L_LINENUMBER, 18: date_trunc");
         FeConstants.runningUnitTest = false;
     }
