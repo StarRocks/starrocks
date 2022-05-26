@@ -13,7 +13,6 @@ namespace starrocks::vectorized {
 struct PermutationItem {
     uint32_t chunk_index;
     uint32_t index_in_chunk;
-    uint32_t rank_in_chunk;
 
     PermutationItem() = default;
     PermutationItem(uint32_t ci, uint32_t ii) : chunk_index(ci), index_in_chunk(ii) {}
