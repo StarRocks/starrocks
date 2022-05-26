@@ -19,6 +19,7 @@
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
@@ -329,6 +330,82 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     RETURN_IF_ERROR(_capture_tablet_rowsets());
 
     return Status::OK();
+}
+
+StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
+    pipeline::Morsels morsels;
+    for (const auto& scan_range : scan_ranges) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+    }
+
+    // None tablet to read shouldn't use tablet internal parallel.
+    if (morsels.empty()) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    // Disable by the session variable shouldn't use tablet internal parallel.
+    const auto& query_options = request.query_options;
+    bool enable =
+            query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
+    if (!enable) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    int64_t scan_dop;
+    int64_t splitted_scan_rows;
+    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, &scan_dop, &splitted_scan_rows));
+    if (!could) {
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
+
+    // Split tablet physically.
+    ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(scan_ranges));
+    if (ok) {
+        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+    }
+
+    // TODO: use LogicalSplitMorselQueue, when it can split tablet logically.
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+}
+
+StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
+                                                             const TExecPlanFragmentParams& request, int64_t* scan_dop,
+                                                             int64_t* splitted_scan_rows) const {
+    // The enough number of tablets shouldn't use tablet internal parallel.
+    int32_t dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
+    if (scan_ranges.size() >= dop) {
+        return false;
+    }
+
+    int64_t num_table_rows = 0;
+    for (const auto& tablet_scan_range : scan_ranges) {
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(&(tablet_scan_range.scan_range.internal_scan_range)));
+        num_table_rows += static_cast<int64_t>(tablet->num_rows());
+    }
+
+    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+    *splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_bytes / _estimated_scan_row_bytes;
+    *splitted_scan_rows =
+            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+    // scan_dop is restricted in the range [1, dop].
+    *scan_dop = num_table_rows / *splitted_scan_rows;
+    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, dop));
+
+    bool could = *scan_dop >= dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    return could;
+}
+
+StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const {
+    // Keys type needn't merge or aggregate.
+    ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
+    KeysType keys_type = first_tablet->tablet_schema().keys_type();
+    const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
+    bool is_keys_type_matched =
+            keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr);
+    return is_keys_type_matched;
 }
 
 Status OlapScanNode::collect_query_statistics(QueryStatistics* statistics) {

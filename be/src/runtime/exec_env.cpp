@@ -527,4 +527,13 @@ void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {
     _storage_engine = storage_engine;
 }
 
+int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+    if (pipeline_dop > 0) {
+        return pipeline_dop;
+    }
+
+    // Default dop is a half of the number of hardware threads.
+    return std::max<int32_t>(1, _max_executor_threads / 2);
+}
+
 } // namespace starrocks
