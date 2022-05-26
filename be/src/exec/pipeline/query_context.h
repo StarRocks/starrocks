@@ -74,8 +74,6 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    Status init_query(workgroup::WorkGroup* wg);
-
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
     int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
@@ -101,8 +99,6 @@ private:
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 
-    std::once_flag _init_query_once;
-    int64_t _query_begin_time = 0;
     std::atomic<int64_t> _cur_cpu_cost_ns = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
