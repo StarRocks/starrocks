@@ -294,8 +294,8 @@ private:
     uint64_t _hit_count{0};
 };
 
-static const int kNumShardBits = 5;
-static const int kNumShards = 1 << kNumShardBits;
+static const int kNumShardBits = 6;
+static const int kNumShards = 1 << kNumShardBits; // 64
 
 class ShardedLRUCache : public Cache {
 public:
