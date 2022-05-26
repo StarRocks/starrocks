@@ -83,8 +83,6 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,
                                                            size_t* limited) {
-    VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
-
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -123,15 +121,11 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
                 tie[null_range.first] = 0;
             }
         }
-
-        VLOG(7) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
     }
 
     // TODO(Murphy): avoid sort the null datums in the column
     RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation, tie, range,
                                           build_tie, limit, limited));
-
-    VLOG(7) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
 
     return Status::OK();
 }
@@ -143,9 +137,6 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
                                                   const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
-    VLOG(2) << fmt::format("nullable column before sort: column={} tie={}\n", dubug_column(column, permutation),
-                           fmt::join(tie, ","));
-
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -175,9 +166,6 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
                 tie[null_range.first] = 0;
             }
         }
-
-        VLOG(3) << fmt::format("after sort range[{}, {}] tie={} column={}\n", range_first, range_last,
-                               fmt::join(tie, ","), dubug_column(column, permutation));
     }
 
     // TODO(Murphy): avoid sort the null datums in the column, eliminate the extra overhead
@@ -195,9 +183,6 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
     // BM_fullsort_column_incr_nullable/32768/4 60430519397 ns   60424234298 ns            1   2.68435G       2.22126M/s    5.9056G    134.218M
     RETURN_IF_ERROR(
             sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie, range, build_tie));
-
-    VLOG(2) << fmt::format("nullable column after sort: tie={} column={}\n", fmt::join(tie, ","),
-                           dubug_column(column, permutation));
 
     return Status::OK();
 }
@@ -241,9 +226,6 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
         }
     };
 
-    VLOG(2) << fmt::format("column before sort: column={} tie={}\n", dubug_column(column, permutation),
-                           fmt::join(tie, ","));
-
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel)) {
@@ -265,13 +247,8 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
                 }
             }
         }
-
-        VLOG(7) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
-                               dubug_column(column, permutation));
     }
 
-    VLOG(7) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
-                           fmt::join(tie, ","));
     return Status::OK();
 }
 
