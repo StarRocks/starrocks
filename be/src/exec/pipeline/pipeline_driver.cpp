@@ -31,7 +31,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
-    _timeslot_schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleTimeSlotCount", TUnit::UNIT);
+    _schedule_time_runout_counter = ADD_COUNTER(_runtime_profile, "ScheduleTimeRunoutCount", TUnit::UNIT);
     _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
     _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
@@ -469,7 +469,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t last_move_chunks, size_t total_rows_moved, size_t time_spent) {
     _schedule_counter->update(1);
     if (last_move_chunks > 0) {
-        _timeslot_schedule_counter->update(1);
+        _schedule_time_runout_counter->update(1);
     }
     driver_acct().increment_schedule_times();
     driver_acct().update_last_chunks_moved(total_chunks_moved);
