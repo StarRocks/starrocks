@@ -31,15 +31,19 @@ struct ComparePairFirst final {
     }
 };
 
+enum FunnelMode : int { DEDUPLICATION = 1, ORDER = 2, DEDUPLICATION_ORDER = 3 };
+
 template <PrimitiveType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
     using TimeType = typename RunTimeTypeTraits<PT>::CppType;
     using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
+    using TimestampType = typename TimeType::type;
 
     // first args is timestamp, second is event position.
-    using TimestampEvent = std::pair<typename TimeType::type, uint8_t>;
+    using TimestampEvent = std::pair<TimestampType, uint8_t>;
     mutable std::vector<TimestampEvent> events_list;
+    using EventTimestampVector = std::vector<std::pair<TimestampType, int>>;
     int64_t window_size;
     int32_t mode;
     uint8_t events_size;
@@ -47,7 +51,7 @@ struct WindowFunnelState {
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
-    void update(typename TimeType::type timestamp, uint8_t event_level) {
+    void update(TimestampType timestamp, uint8_t event_level) {
         // keep only one as a placeholder for someone group.
         if (events_list.size() > 0 && event_level == 0) {
             return;
@@ -75,7 +79,7 @@ struct WindowFunnelState {
         bool other_sorted = (uint8_t)datum_array[1].get_int64();
 
         for (size_t i = 2; i < datum_array.size() - 1; i += 2) {
-            typename TimeType::type timestamp = datum_array[i].get_int64();
+            TimestampType timestamp = datum_array[i].get_int64();
             int64_t event_level = datum_array[i + 1].get_int64();
             other_list.emplace_back(std::make_pair(timestamp, uint8_t(event_level)));
         }
@@ -107,11 +111,11 @@ struct WindowFunnelState {
             array.reserve(size * 2 + 2);
             array.emplace_back((int64_t)events_size);
             array.emplace_back((int64_t)sorted);
-            auto begin = events_list.begin();
-            while (begin != events_list.end()) {
-                array.emplace_back((int64_t)(*begin).first);
-                array.emplace_back((int64_t)(*begin).second);
-                ++begin;
+            auto curr = events_list.begin();
+            while (curr != events_list.end()) {
+                array.emplace_back((int64_t)(*curr).first);
+                array.emplace_back((int64_t)(*curr).second);
+                ++curr;
             }
             array_column->append_datum(array);
         }
@@ -124,10 +128,10 @@ struct WindowFunnelState {
 
         auto const& ordered_events_list = events_list;
         if (!mode) {
-            std::vector<typename TimeType::type> events_timestamp(events_size, -1);
+            std::vector<TimestampType> events_timestamp(events_size, -1);
             auto begin = ordered_events_list.begin();
             while (begin != ordered_events_list.end()) {
-                typename TimeType::type timestamp = (*begin).first;
+                TimestampType timestamp = (*begin).first;
                 uint8_t event_idx = (*begin).second;
 
                 if (event_idx == 0) {
@@ -165,16 +169,16 @@ struct WindowFunnelState {
         int event_chiain_index = 0;
 
         /*
-         * first  of PAIR is the timestamp of event.
-         * second of PAIR is the event_chain_index, It used to eliminate last event chain in dudeplication and order mode.
+         * first  of EventTimestamp's element is the timestamp of event.
+         * second of EventTimestamp's element is the event_chain_index, It used to eliminate last event chain in dudeplication and order mode.
          */
-        std::vector<std::pair<typename TimeType::type, int>> events_timestamp(events_size, std::pair(-1, -1));
+        EventTimestampVector events_timestamp(events_size, std::pair(-1, -1));
         auto begin = ordered_events_list.begin();
         switch (mode) {
         // mode: deduplication
-        case 1: {
+        case DEDUPLICATION: {
             while (begin != ordered_events_list.end()) {
-                typename TimeType::type timestamp = (*begin).first;
+                TimestampType timestamp = (*begin).first;
                 uint8_t event_idx = (*begin).second;
 
                 if (event_idx == 0) {
@@ -214,10 +218,10 @@ struct WindowFunnelState {
             }
         } break;
         // mode: order
-        case 2: {
+        case ORDER: {
             bool first_event = false;
             while (begin != ordered_events_list.end()) {
-                typename TimeType::type timestamp = (*begin).first;
+                TimestampType timestamp = (*begin).first;
                 uint8_t event_idx = (*begin).second;
 
                 if (event_idx == 0) {
@@ -252,10 +256,10 @@ struct WindowFunnelState {
             }
         } break;
         // mode: deduplication | order
-        case 3: {
+        case DEDUPLICATION_ORDER: {
             bool first_event = false;
             while (begin != ordered_events_list.end()) {
-                typename TimeType::type timestamp = (*begin).first;
+                TimestampType timestamp = (*begin).first;
                 uint8_t event_idx = (*begin).second;
 
                 if (event_idx == 0) {
@@ -316,8 +320,7 @@ struct WindowFunnelState {
         }
     }
 
-    static void eliminate_last_event_chain(int8_t* curr_event_level,
-                                           std::vector<std::pair<typename TimeType::type, int>>* events_timestamp,
+    static void eliminate_last_event_chain(int8_t* curr_event_level, EventTimestampVector* events_timestamp,
                                            const int event_chain_index) {
         for (; (*curr_event_level) >= 0; --(*curr_event_level)) {
             if ((*events_timestamp)[(*curr_event_level)].second == event_chain_index) {
@@ -329,9 +332,8 @@ struct WindowFunnelState {
         }
     }
 
-    bool promote_to_next_level(std::vector<std::pair<typename TimeType::type, int>>* events_timestamp,
-                               const typename TimeType::type& timestamp, const int8_t event_idx,
-                               int8_t* curr_event_level) const {
+    bool promote_to_next_level(EventTimestampVector* events_timestamp, const TimestampType& timestamp,
+                               const int8_t event_idx, int8_t* curr_event_level) const {
         auto first_timestamp = (*events_timestamp)[event_idx - 1].first;
         bool time_matched = (timestamp <= (first_timestamp + window_size));
 
@@ -361,6 +363,7 @@ class WindowFunnelAggregateFunction final
         : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
     using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
     using TimeType = typename WindowFunnelState<PT>::TimeType;
+    using TimestampType = typename TimeType::type;
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
@@ -421,7 +424,7 @@ public:
         const TimeTypeColumn* timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
-            typename TimeType::type tv;
+            TimestampType tv;
             if constexpr (PT == TYPE_DATETIME) {
                 tv = timestamp_column->get(i).get_timestamp().to_unix_second();
             } else if constexpr (PT == TYPE_DATE) {
