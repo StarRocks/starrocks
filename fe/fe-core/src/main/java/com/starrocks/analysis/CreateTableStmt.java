@@ -390,11 +390,6 @@ public class CreateTableStmt extends DdlStmt {
             throw new AnalysisException("BITMAP_UNION must be used in AGG_KEYS");
         }
 
-        // TODO(mofei) support it
-        if (hasJson && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-            throw new AnalysisException("JSON type could only be used in DUPLICATE KEY table");
-        }
-
         if (engineName.equals("olap")) {
             // analyze partition
             if (partitionDesc != null) {
