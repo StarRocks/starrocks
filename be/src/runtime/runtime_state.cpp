@@ -181,14 +181,16 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-void RuntimeState::init_mem_trackers(int64_t instance_mem_limit, const std::shared_ptr<MemTracker>& query_mem_tracker) {
+void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
+
     auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
-    mem_tracker_counter->set(instance_mem_limit);
+    mem_tracker_counter->set(query_mem_tracker->limit());
+
     // all fragment instances in a BE shared a common query_mem_tracker.
     _query_mem_tracker = query_mem_tracker;
-    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), instance_mem_limit, runtime_profile()->name(),
-                                                         _query_mem_tracker.get());
+    _instance_mem_tracker =
+            std::make_shared<MemTracker>(_profile.get(), -1L, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 

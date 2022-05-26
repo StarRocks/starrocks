@@ -55,7 +55,8 @@ public class RuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
     private static final Set<String> NON_MERGE_COUNTER_NAMES =
-            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates");
+            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates",
+                    "MemoryLimit");
     private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
     private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
