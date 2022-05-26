@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Objects;
 
 public class CloneOperator extends ScalarOperator {
-    private final List<ScalarOperator> arguments;
+    private List<ScalarOperator> arguments;
 
     public CloneOperator(ScalarOperator argument) {
         super(OperatorType.CLONE, argument.getType());
@@ -60,5 +60,15 @@ public class CloneOperator extends ScalarOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         return arguments.get(0).getUsedColumns();
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        CloneOperator operator = (CloneOperator) super.clone();
+        // Deep copy here
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        this.arguments.forEach(p -> newArguments.add(p.clone()));
+        operator.arguments = newArguments;
+        return operator;
     }
 }
