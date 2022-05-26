@@ -17,6 +17,13 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 import java.util.Map;
 
+/*
+ *           Project(a)
+ *              |
+ *           CTEAnchor               --->              CTEAnchor
+ *          /        \                                /        \
+ *     CTEProduce     Project(b)                 CTEProduce     Project(b)
+ */
 public class PushDownProjectionToCTEAnchorRule extends TransformationRule {
 
     public PushDownProjectionToCTEAnchorRule() {
