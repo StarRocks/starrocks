@@ -2630,4 +2630,41 @@ public class JoinTest extends PlanTestBase {
                 "  4:HASH JOIN\n" +
                 "  |  join op: FULL OUTER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testCrossJoinWithRF() throws Exception {
+        // supported
+        String sql = "select * from t0 join t2 on t0.v1 < t2.v7";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 < 4: v7\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7), remote = false");
+
+        sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "build runtime filters");
+
+        sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t0.v1 ";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "build runtime filters");
+
+        sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t2.v8";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 < 4: v7 + 5: v8\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7 + 5: v8), remote = false");
+
+        // avoid push down CrossJoin RF across ExchangeNode
+        sql = "select * from t1 join [shuffle] t2 on v4 = v7 join t0 on v4 < v1 ";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:EXCHANGE\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 1, probe_expr = (1: v4)");
+    }
+
 }
