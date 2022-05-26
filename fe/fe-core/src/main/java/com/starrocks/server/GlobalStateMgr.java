@@ -1486,7 +1486,7 @@ public class GlobalStateMgr {
                 } catch (InsufficientLogException insufficientLogEx) {
                     // for InsufficientLogException we should refresh the log and
                     // then exit the process because we may have read dirty data.
-                    LOG.error("catch insufficient log exception. refresh and exit", insufficientLogEx);
+                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
                     ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
                     System.exit(-1);
                 } catch (Throwable e) {

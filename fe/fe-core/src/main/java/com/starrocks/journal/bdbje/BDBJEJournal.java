@@ -315,7 +315,7 @@ public class BDBJEJournal implements Journal {
                 nextJournalId.set(getMaxJournalId() + 1);
                 return;
             } catch (InsufficientLogException insufficientLogEx) {
-                LOG.warn("catch insufficient log exception. refresh the log and exit", insufficientLogEx);
+                LOG.warn("catch insufficient log exception. please restart", insufficientLogEx);
                 // for InsufficientLogException we should refresh the log and
                 // then exit the process because we may have read dirty data.
                 bdbEnvironment.refreshLog(insufficientLogEx);

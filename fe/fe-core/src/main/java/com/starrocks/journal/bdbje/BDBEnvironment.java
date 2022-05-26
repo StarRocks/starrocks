@@ -375,12 +375,12 @@ public class BDBEnvironment {
             } catch (InsufficientLogException e) {
                 // for InsufficientLogException we should refresh the log and
                 // then exit the process because we may have read dirty data.
-                LOG.warn("catch insufficient log exception. refresh and exit.", e);
+                LOG.warn("catch insufficient log exception. please restart.", e);
                 refreshLog(e);
                 System.exit(-1);
             } catch (RollbackException exception) {
                 // for RollbackException we should exit the process because we may have read dirty data.
-                LOG.warn("rollback exception, exit", exception);
+                LOG.warn("catch rollback exception, please restart", exception);
                 System.exit(-1);
             } catch (EnvironmentFailureException e) {
                 tried++;
