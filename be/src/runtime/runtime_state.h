@@ -89,7 +89,7 @@ public:
     // This function also initializes a user function mem tracker (in the fourth level).
     void init_mem_trackers(const TUniqueId& query_id, MemTracker* parent = nullptr);
 
-    void init_mem_trackers(int64_t instance_mem_limit, const std::shared_ptr<MemTracker>& query_mem_tracker);
+    void init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker);
 
     // for ut only
     Status init_instance_mem_tracker();
