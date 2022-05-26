@@ -43,8 +43,10 @@ ExprContext::ExprContext(Expr* root)
 
 ExprContext::~ExprContext() {
     // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    if (_prepared) {
+        close(_runtime_state);
+    }
     for (auto& _fn_context : _fn_contexts) {
-        _fn_context->impl()->close();
         delete _fn_context;
     }
 }
@@ -55,6 +57,7 @@ Status ExprContext::prepare(RuntimeState* state) {
     }
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
+    _runtime_state = state;
     _pool = std::make_unique<MemPool>();
     return _root->prepare(state, this);
 }
