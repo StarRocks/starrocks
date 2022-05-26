@@ -9,6 +9,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -65,6 +66,7 @@ public class HiveMetaCache {
 
     // HiveTableName => Table
     LoadingCache<HiveTableName, Table> tableCache;
+    LoadingCache<String, Database> databaseCache;
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
         this(hiveMetaClient, executor, null);
@@ -138,6 +140,14 @@ public class HiveMetaCache {
                     @Override
                     public Table load(HiveTableName key) throws Exception {
                         return loadTable(key);
+                    }
+                }, executor));
+
+        databaseCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE, REFRESH_TABLE_SCHEMA_SECONDS)
+                .build(asyncReloading(new CacheLoader<String, Database>() {
+                    @Override
+                    public Database load(String key) throws Exception {
+                        return loadDatabase(key);
                     }
                 }, executor));
     }
@@ -315,6 +325,24 @@ public class HiveMetaCache {
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         return HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+    }
+
+    public Database getDb(String dbName) {
+        try {
+            return databaseCache.get(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to get database {}", dbName, e);
+            return null;
+        }
+    }
+
+    private Database loadDatabase(String dbName) throws TException {
+        // Check whether the db exists, if not, an exception will be thrown here
+        org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
+        if (db.getName() == null) {
+            throw new TException("Hive db " + dbName + " doesn't exist");
+        }
+        return HiveMetaStoreTableUtils.convertToSRDatabase(dbName);
     }
 
     public void alterTableByEvent(HiveTableKey tableKey, HivePartitionKey hivePartitionKey,

@@ -34,7 +34,7 @@ Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::
     for (auto& expr : _lhs_ordering_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_orderby()) {
-            return Status::NotSupported(fmt::format("ordre by type {} is not supported", type_desc.debug_string()));
+            return Status::NotSupported(fmt::format("order by type {} is not supported", type_desc.debug_string()));
         }
     }
 

@@ -95,6 +95,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -189,6 +190,12 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+
+        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
+        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
+        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
+        summaryProfile.addInfoString(ProfileManager.QUERY_CPU_COST, DebugUtil.getPrettyStringNs(cpuCostNs));
+        summaryProfile.addInfoString(ProfileManager.QUERY_MEM_COST, DebugUtil.getPrettyStringBytes(memCostBytes));
         profile.addChild(summaryProfile);
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
@@ -443,6 +450,8 @@ public class StmtExecutor {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
                 handleDelSqlBlackListStmt();
+            } else if (parsedStmt instanceof ExecuteAsStmt) {
+                handleExecAsStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -793,6 +802,10 @@ public class StmtExecutor {
         }
     }
 
+    private void handleExecAsStmt() {
+        ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
+    }
+
     private void handleUnsupportedStmt() {
         context.getMysqlChannel().reset();
         // do nothing
@@ -806,7 +819,8 @@ public class StmtExecutor {
             if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
             }
-            context.getGlobalStateMgr().changeDb(context, useStmt.getDatabase());
+            // TODO: refactor useStmt and rename getDatabase
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;
@@ -989,6 +1003,12 @@ public class StmtExecutor {
         }
         if (statisticsForAuditLog.scanRows == null) {
             statisticsForAuditLog.scanRows = 0L;
+        }
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
+        }
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
         }
         return statisticsForAuditLog;
     }

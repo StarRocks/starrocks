@@ -853,6 +853,16 @@ public class EditLog {
                             (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                 }
+                case OperationType.OP_GRANT_IMPERSONATE: {
+                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantImpersonate(info);
+                    break;
+                }
+                case OperationType.OP_REVOKE_IMPERSONATE: {
+                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeImpersonate(info);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1159,6 +1169,14 @@ public class EditLog {
 
     public void logRevokePriv(PrivInfo info) {
         logEdit(OperationType.OP_REVOKE_PRIV, info);
+    }
+
+    public void logGrantImpersonate(ImpersonatePrivInfo info) {
+        logEdit(OperationType.OP_GRANT_IMPERSONATE, info);
+    }
+
+    public void logRevokeImpersonate(ImpersonatePrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_IMPERSONATE, info);
     }
 
     public void logSetPassword(PrivInfo info) {

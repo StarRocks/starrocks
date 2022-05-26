@@ -74,7 +74,7 @@ private:
 
     template <typename HashMapWithKey>
     void split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk) {
-        hash_map_with_key.append_chunk(chunk, _partition_columns, _mem_pool.get());
+        hash_map_with_key.append_chunk(chunk, _partition_columns, _mem_pool.get(), _obj_pool);
     }
 
     // Fetch chunks from hash map, return true if reaches eos
@@ -106,7 +106,7 @@ private:
         });
 
         while (partition_it != partition_end) {
-            std::vector<ChunkPtr>& chunks = partition_it->second.chunks;
+            std::vector<ChunkPtr>& chunks = partition_it->second->chunks;
             if (!_chunk_it.has_value()) {
                 _chunk_it = chunks.begin();
             }
@@ -171,6 +171,7 @@ private:
 
     RuntimeState* _state = nullptr;
     std::unique_ptr<MemPool> _mem_pool = nullptr;
+    ObjectPool* _obj_pool = nullptr;
 
     Columns _partition_columns;
     // Hash map which holds chunks of different partitions

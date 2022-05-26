@@ -295,7 +295,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         const TabletInfo& tablet_info = tablet_rs.first;
         const RowsetSharedPtr& rowset = tablet_rs.second;
         EnginePublishVersionTask publish_task(2222, 10, version, tablet_info, rowset);
-        auto st = publish_task.finish();
+        auto st = publish_task.execute();
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
     }

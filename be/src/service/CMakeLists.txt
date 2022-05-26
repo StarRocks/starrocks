@@ -25,11 +25,13 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
+add_subdirectory(service_be)
+add_subdirectory(service_cn)
+
 add_library(Service
     backend_options.cpp
-    backend_service.cpp
+    backend_base.cpp
     brpc_service.cpp
-    http_service.cpp
     internal_service.cpp
     mem_hook.cpp
 )

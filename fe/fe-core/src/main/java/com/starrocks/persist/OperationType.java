@@ -215,6 +215,9 @@ public class OperationType {
 
     // drop external catalog
     public static final short OP_DROP_CATALOG = 10061;
+    // grant & revoke impersonate
+    public static final short OP_GRANT_IMPERSONATE = 10062;
+    public static final short OP_REVOKE_IMPERSONATE = 10063;
 
     // task 10071 ~ 10090
     public static final short OP_CREATE_TASK = 10071;
@@ -222,5 +225,4 @@ public class OperationType {
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
-
 }

@@ -53,19 +53,26 @@ void QueryContext::cancel(const Status& status) {
 }
 
 int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
-                                              size_t pipeline_dop) {
+                                              size_t pipeline_dop, int64_t option_query_mem_limit) {
     // no mem_limit
-    if (per_instance_mem_limit == -1) {
+    if (per_instance_mem_limit <= 0 && option_query_mem_limit <= 0) {
         return -1;
     }
-    int64_t mem_limit = per_instance_mem_limit;
-    // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
-    static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
-    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop < mem_limit) {
-        mem_limit *= total_fragments() * pipeline_dop;
+
+    int64_t mem_limit;
+    if (option_query_mem_limit > 0) {
+        mem_limit = option_query_mem_limit;
     } else {
-        mem_limit = MEM_LIMIT_MAX;
+        mem_limit = per_instance_mem_limit;
+        // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
+        static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
+        if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
+            mem_limit *= static_cast<int64_t>(total_fragments()) * pipeline_dop;
+        } else {
+            mem_limit = MEM_LIMIT_MAX;
+        }
     }
+
     // query's mem_limit never exceeds its parent's limit if it exists
     return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
 }

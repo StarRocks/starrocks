@@ -24,6 +24,7 @@
 
 #include <string>
 
+#include "common/tracer.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -190,6 +191,7 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
 }
 
 void MetricsAction::handle(HttpRequest* req) {
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_metrics"));
     const std::string& type = req->param("type");
     std::string str;
     if (type == "core") {

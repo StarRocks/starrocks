@@ -220,13 +220,32 @@ Status ConvertDirectBufferVistor::do_visit(const BinaryColumn& column) {
     return Status::OK();
 }
 
-jobject JavaDataTypeConverter::convert_to_object_array(uint8_t** data, size_t offset, int num_rows) {
+jobject JavaDataTypeConverter::convert_to_states(uint8_t** data, size_t offset, int num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
-    jobjectArray arr = env->NewObjectArray(num_rows, helper.object_class(), nullptr);
+    int inputs[num_rows];
+    jintArray arr = env->NewIntArray(num_rows);
     for (int i = 0; i < num_rows; ++i) {
-        env->SetObjectArrayElement(arr, i, reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle());
+        inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
     }
+    env->SetIntArrayRegion(arr, 0, num_rows, inputs);
+    return arr;
+}
+
+jobject JavaDataTypeConverter::convert_to_states_with_filter(uint8_t** data, size_t offset, const uint8_t* filter,
+                                                             int num_rows) {
+    auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
+    int inputs[num_rows];
+    jintArray arr = env->NewIntArray(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        if (filter[i] == 0) {
+            inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
+        } else {
+            inputs[i] = -1;
+        }
+    }
+    env->SetIntArrayRegion(arr, 0, num_rows, inputs);
     return arr;
 }
 

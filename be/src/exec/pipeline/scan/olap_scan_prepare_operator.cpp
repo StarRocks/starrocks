@@ -45,6 +45,10 @@ bool OlapScanPrepareOperator::is_finished() const {
 StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
 
+    _morsel_queue->set_key_ranges(_ctx->key_ranges());
+    _morsel_queue->set_tablets(_tablets);
+    _morsel_queue->set_tablet_rowsets(_tablet_rowsets);
+
     _ctx->set_prepare_finished();
     if (!status.ok()) {
         _ctx->set_finished();

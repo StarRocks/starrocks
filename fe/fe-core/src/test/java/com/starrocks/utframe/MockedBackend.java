@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/utframe/MockedBackend.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -31,7 +27,7 @@ import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.PStatus;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.PBackendService;
@@ -325,7 +321,7 @@ public class MockedBackend {
         public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
             return executor.submit(() -> {
                 PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-                PStatus pStatus = new PStatus();
+                StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
                 result.status = pStatus;
                 return result;
@@ -336,7 +332,7 @@ public class MockedBackend {
         public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
-                PStatus pStatus = new PStatus();
+                StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
                 result.status = pStatus;
                 return result;
@@ -347,12 +343,14 @@ public class MockedBackend {
         public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
             return executor.submit(() -> {
                 PFetchDataResult result = new PFetchDataResult();
-                PStatus pStatus = new PStatus();
+                StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
 
                 PQueryStatistics pQueryStatistics = new PQueryStatistics();
                 pQueryStatistics.scanRows = 0L;
                 pQueryStatistics.scanBytes = 0L;
+                pQueryStatistics.cpuCostNs = 0L;
+                pQueryStatistics.memCostBytes = 0L;
 
                 result.status = pStatus;
                 result.packetSeq = 0L;

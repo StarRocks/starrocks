@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/mysql/privilege/PrivBitSet.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -23,6 +19,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.common.io.Writable;
 
@@ -38,6 +35,7 @@ import java.util.List;
 //        |--------last priv(7)
 public class PrivBitSet implements Writable {
 
+    @SerializedName("set")
     private long set = 0;
 
     public PrivBitSet() {
@@ -99,6 +97,10 @@ public class PrivBitSet implements Writable {
     public boolean containsDbTablePriv() {
         return containsPrivs(Privilege.SELECT_PRIV, Privilege.LOAD_PRIV, Privilege.ALTER_PRIV,
                 Privilege.CREATE_PRIV, Privilege.DROP_PRIV);
+    }
+
+    public boolean containsImpersonatePriv() {
+        return containsPrivs(Privilege.IMPERSONATE_PRIV);
     }
 
     public boolean containsPrivs(Privilege... privs) {

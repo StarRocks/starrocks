@@ -134,7 +134,6 @@ public:
 
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
-    PriorityThreadPool* etl_thread_pool() { return _etl_thread_pool; }
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
@@ -162,7 +161,6 @@ public:
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
 
-    PluginMgr* plugin_mgr() { return _plugin_mgr; }
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     Status init_mem_tracker();
 
@@ -172,7 +170,9 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-    int64_t max_executor_threads() { return _max_executor_threads; }
+    int64_t max_executor_threads() const { return _max_executor_threads; }
+
+    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -227,8 +227,7 @@ private:
     PriorityThreadPool* _thread_pool = nullptr;
     PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
     PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;
-    std::atomic<size_t> _num_scan_operators;
-    PriorityThreadPool* _etl_thread_pool = nullptr;
+    std::atomic<size_t> _num_scan_operators{0};
     PriorityThreadPool* _udf_call_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
@@ -257,8 +256,6 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
-
-    PluginMgr* _plugin_mgr = nullptr;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;

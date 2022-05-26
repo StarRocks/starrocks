@@ -23,6 +23,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -391,6 +392,11 @@ public abstract class PrivTable implements Writable {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             PrivEntry entry = PrivEntry.read(in);
+            try {
+                entry.analyse();
+            } catch (AnalysisException e) {
+                throw new IOException(e);
+            }
             UserIdentity newUser = entry.getUserIdent();
             List<PrivEntry> entries = map.computeIfAbsent(newUser, k -> new ArrayList<>());
             entries.add(entry);
