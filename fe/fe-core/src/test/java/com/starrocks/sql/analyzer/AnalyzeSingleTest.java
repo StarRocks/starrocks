@@ -333,6 +333,8 @@ public class AnalyzeSingleTest {
         Assert.assertEquals("'\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"\"\"\" ");
         Assert.assertEquals("'\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+
+        analyzeSuccess("select @@`sql_mode`");
     }
 
     @Test
