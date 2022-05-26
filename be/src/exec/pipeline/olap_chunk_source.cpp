@@ -37,6 +37,18 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
     _scan_range = scan_morsel->get_olap_scan_range();
 }
 
+OlapChunkSource::~OlapChunkSource() {
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
+void OlapChunkSource::close(RuntimeState* state) {
+    _update_counter();
+    _prj_iter->close();
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -460,12 +472,21 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.cpp
 void OlapChunkSource::close(RuntimeState* state) {
     _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
+=======
+int64_t OlapChunkSource::last_spent_cpu_time_ns() {
+    int64_t time_ns = _last_spent_cpu_time_ns;
+    _last_spent_cpu_time_ns += _reader->stats().decompress_ns;
+    _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
+    _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
+    return _last_spent_cpu_time_ns - time_ns;
+>>>>>>> 596b7c266 ([BugFix] fix #6319: dangling pointer at chunk_source (#6370)):be/src/exec/pipeline/scan/olap_chunk_source.cpp
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
