@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/null_predicate.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/service/http_service.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -21,31 +21,32 @@
 
 #pragma once
 
-#include <cstdint>
-#include <roaring/roaring.hh>
+#include <memory>
 
-#include "storage/column_predicate.h"
+#include "common/status.h"
 
 namespace starrocks {
 
-class NullPredicate : public ColumnPredicate {
+class ExecEnv;
+class EvHttpServer;
+class HttpHandler;
+class WebPageHandler;
+
+// HTTP service for StarRocks BE
+class HttpServiceBE {
 public:
-    NullPredicate(uint32_t column_id, bool is_null);
-    ~NullPredicate() override;
+    HttpServiceBE(ExecEnv* env, int port, int num_threads);
+    ~HttpServiceBE();
 
-    void evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const override;
-
-    Status evaluate(const Schema& schema, const vector<BitmapIndexIterator*>& iterators, uint32_t num_rows,
-                    Roaring* roaring) const override;
-
-    Status convert_to(const ColumnPredicate** outpout, FieldType from_type, FieldType to_type,
-                      ObjectPool* obj_pool) const override {
-        *outpout = this;
-        return Status::OK();
-    }
+    Status start();
 
 private:
-    bool _is_null; //true for null, false for not null
+    ExecEnv* _env;
+
+    std::unique_ptr<EvHttpServer> _ev_http_server;
+    std::unique_ptr<WebPageHandler> _web_page_handler;
+
+    std::vector<HttpHandler*> _http_handlers;
 };
 
-} //namespace starrocks
+} // namespace starrocks

@@ -32,6 +32,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/TStarrocksExternalService.h"
+#include "service/backend_base.h"
 
 namespace starrocks {
 
@@ -66,7 +67,7 @@ class TExportStatusResult;
 
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
-class BackendService : public BackendServiceIf {
+class BackendService : public BackendServiceBase {
 public:
     explicit BackendService(ExecEnv* exec_env);
 
@@ -92,43 +93,9 @@ public:
         _agent_server->publish_cluster_state(result, request);
     }
 
-    void submit_etl_task(TAgentResult& result, const TMiniLoadEtlTaskRequest& request) override {}
-
-    void get_etl_status(TMiniLoadEtlStatusResult& result, const TMiniLoadEtlStatusRequest& request) override {}
-
-    void delete_etl_files(TAgentResult& result, const TDeleteEtlFilesRequest& request) override {}
-
-    // StarrocksServer service
-    void exec_plan_fragment(TExecPlanFragmentResult& return_val, const TExecPlanFragmentParams& params) override;
-
-    void cancel_plan_fragment(TCancelPlanFragmentResult& return_val, const TCancelPlanFragmentParams& params) override;
-
-    void transmit_data(TTransmitDataResult& return_val, const TTransmitDataParams& params) override;
-
-    void fetch_data(TFetchDataResult& return_val, const TFetchDataParams& params) override;
-
-    void submit_export_task(TStatus& t_status, const TExportTaskRequest& request) override;
-
-    void get_export_status(TExportStatusResult& result, const TUniqueId& task_id) override;
-
-    void erase_export_task(TStatus& t_status, const TUniqueId& task_id) override;
-
     void get_tablet_stat(TTabletStatResult& result) override;
 
-    void submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) override;
-
-    // used for external service, open means start the scan procedure
-    void open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) override;
-
-    // used for external service, external use getNext to fetch data batch after batch until eos = true
-    void get_next(TScanBatchResult& result_, const TScanNextBatchParams& params) override;
-
-    // used for external service, close some context and release resource related with this context
-    void close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) override;
-
 private:
-    Status start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params);
-    ExecEnv* _exec_env;
     std::unique_ptr<AgentServer> _agent_server;
 };
 

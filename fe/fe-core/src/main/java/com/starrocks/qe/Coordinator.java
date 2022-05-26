@@ -66,7 +66,7 @@ import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.proto.PStatus;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
@@ -2027,7 +2027,7 @@ public class Coordinator {
                     @Override
                     public PExecPlanFragmentResult get() {
                         PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-                        PStatus pStatus = new PStatus();
+                        StatusPB pStatus = new StatusPB();
                         pStatus.errorMsgs = Lists.newArrayList();
                         pStatus.errorMsgs.add(e.getMessage());
                         // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.

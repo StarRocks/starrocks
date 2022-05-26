@@ -25,8 +25,6 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "service/brpc.h"
-#include "service/internal_service.h"
 
 namespace brpc {
 
@@ -45,10 +43,10 @@ BRpcService::BRpcService(ExecEnv* exec_env) : _exec_env(exec_env), _server(new b
 
 BRpcService::~BRpcService() = default;
 
-Status BRpcService::start(int port) {
+Status BRpcService::start(int port, google::protobuf::Service* service, google::protobuf::Service* doris_service) {
     // Add services.
-    _server->AddService(new PInternalServiceImpl<PInternalService>(_exec_env), brpc::SERVER_OWNS_SERVICE);
-    _server->AddService(new PInternalServiceImpl<doris::PBackendService>(_exec_env), brpc::SERVER_OWNS_SERVICE);
+    _server->AddService(service, brpc::SERVER_OWNS_SERVICE);
+    _server->AddService(doris_service, brpc::SERVER_OWNS_SERVICE);
     // Start services.
     brpc::ServerOptions options;
     if (config::brpc_num_threads != -1) {

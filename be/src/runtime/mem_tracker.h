@@ -85,10 +85,10 @@ public:
     /// If 'log_usage_if_zero' is false, this tracker (and its children) will not be included
     /// in LogUsage() output if consumption is 0.
     explicit MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
-                        bool auto_unregister = true, bool log_usage_if_zero = true);
+                        bool auto_unregister = true);
 
     explicit MemTracker(Type type, int64_t byte_limit = -1, std::string label = std::string(),
-                        MemTracker* parent = nullptr, bool auto_unregister = true, bool log_usage_if_zero = true);
+                        MemTracker* parent = nullptr, bool auto_unregister = true);
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
@@ -252,23 +252,6 @@ public:
 
     MemTracker* parent() const { return _parent; }
 
-    /// Logs the usage of this tracker and optionally its children (recursively).
-    /// If 'logged_consumption' is non-NULL, sets the consumption value logged.
-    /// 'max_recursive_depth' specifies the maximum number of levels of children
-    /// to include in the dump. If it is zero, then no children are dumped.
-    /// Limiting the recursive depth reduces the cost of dumping, particularly
-    /// for the process MemTracker.
-    /// TODO: once all memory is accounted in ReservationTracker hierarchy, move
-    /// reporting there.
-    std::string LogUsage(int max_recursive_depth, const std::string& prefix = "",
-                         int64_t* logged_consumption = nullptr) const;
-
-    /// Log the memory usage when memory limit is exceeded and return a status object with
-    /// details of the allocation which caused the limit to be exceeded.
-    /// If 'failed_allocation_size' is greater than zero, logs the allocation size. If
-    /// 'failed_allocation_size' is zero, nothing about the allocation size is logged.
-    Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
-
     Status check_mem_limit(const std::string& msg) const;
 
     std::string err_msg(const std::string& msg) const;
@@ -298,12 +281,6 @@ private:
         tracker->_child_tracker_it = _child_trackers.insert(_child_trackers.end(), tracker);
     }
 
-    /// Log consumption of all the trackers provided. Returns the sum of consumption in
-    /// 'logged_consumption'. 'max_recursive_depth' specifies the maximum number of levels
-    /// of children to include in the dump. If it is zero, then no children are dumped.
-    static std::string LogUsage(int max_recursive_depth, const std::string& prefix,
-                                const std::list<MemTracker*>& trackers, int64_t* logged_consumption);
-
     Type _type{NO_SET};
 
     int64_t _limit; // in bytes
@@ -327,10 +304,6 @@ private:
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;
-
-    /// If false, this tracker (and its children) will not be included in LogUsage() output
-    /// if consumption is 0.
-    bool _log_usage_if_zero;
 
     // If true, calls unregister_from_parent() in the dtor. This is only used for
     // the query wide trackers to remove it from the process mem tracker. The
