@@ -273,11 +273,11 @@ public class TaskManager {
                     }
                 }
             }
+            checksum ^= taskCount;
             LOG.info("finished replaying TaskManager from image");
         } catch (EOFException e) {
             LOG.info("no TaskManager to replay.");
         }
-        checksum ^= taskCount;
         return checksum;
     }
 
@@ -315,12 +315,16 @@ public class TaskManager {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
-        long lastUpdateTime = status.getCreateTime();
-        if (status.getFinishTime() > lastUpdateTime) {
-            lastUpdateTime = status.getFinishTime();
-        }
-        if ((System.currentTimeMillis() - lastUpdateTime) / 1000 > Config.label_keep_max_second) {
-            return;
+
+        if (status.getState() == Constants.TaskRunState.SUCCESS ||
+                status.getState() == Constants.TaskRunState.FAILED) {
+            long lastUpdateTime = status.getCreateTime();
+            if (status.getFinishTime() > lastUpdateTime) {
+                lastUpdateTime = status.getFinishTime();
+            }
+            if ((System.currentTimeMillis() - lastUpdateTime) / 1000 > Config.label_keep_max_second) {
+                return;
+            }
         }
 
         switch (status.getState()) {
