@@ -188,7 +188,7 @@
       + [STOP ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
     + 数据类型
-      + 数字类型
+      + 数值类型
         + [BIGINT](/sql-reference/sql-statements/data-types/BIGINT.md)
         + [LARGEINT](/sql-reference/sql-statements/data-types/LARGEINT.md)
         + [SMALLINT](/sql-reference/sql-statements/data-types/SMALLINT.md)
