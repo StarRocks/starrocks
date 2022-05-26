@@ -74,7 +74,10 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    // Record the number of rows read from the data source for big query checking
+    // Some statistic about the query, including cpu, scan_rows, scan_bytes
+    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
+    int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
+    int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
@@ -96,6 +99,7 @@ private:
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 
+    std::atomic<int64_t> _cur_cpu_cost_ns = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
 };
