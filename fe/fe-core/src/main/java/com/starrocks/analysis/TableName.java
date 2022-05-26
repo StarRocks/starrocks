@@ -29,6 +29,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
@@ -36,6 +37,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TableName implements Writable {
+    private String catalog;
     private String tbl;
     private String db;
 
@@ -44,11 +46,20 @@ public class TableName implements Writable {
     }
 
     public TableName(String db, String tbl) {
+        this(null, db, tbl);
+    }
+
+    public TableName(String catalog, String db, String tbl) {
+        this.catalog = catalog;
         this.db = db;
         this.tbl = tbl;
     }
 
     public void analyze(Analyzer analyzer) throws AnalysisException {
+        if (Strings.isNullOrEmpty(catalog)) {
+            catalog = analyzer.getDefaultCatalog();
+        }
+
         if (Strings.isNullOrEmpty(db)) {
             db = analyzer.getDefaultDb();
             if (Strings.isNullOrEmpty(db)) {
@@ -58,7 +69,10 @@ public class TableName implements Writable {
             if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
             }
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
+
+            if (CatalogMgr.isInternalCatalog(catalog)) {
+                db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
+            }
         }
 
         if (Strings.isNullOrEmpty(tbl)) {
@@ -68,6 +82,13 @@ public class TableName implements Writable {
 
     public void normalization(ConnectContext connectContext) {
         try {
+            if (Strings.isNullOrEmpty(catalog)) {
+                if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR);
+                }
+                catalog = connectContext.getCurrentCatalog();
+            }
+
             if (Strings.isNullOrEmpty(db)) {
                 db = connectContext.getDatabase();
                 if (Strings.isNullOrEmpty(db)) {
@@ -77,7 +98,10 @@ public class TableName implements Writable {
                 if (Strings.isNullOrEmpty(connectContext.getClusterName())) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
                 }
-                db = ClusterNamespace.getFullName(connectContext.getClusterName(), db);
+
+                if (CatalogMgr.isInternalCatalog(catalog)) {
+                    db = ClusterNamespace.getFullName(connectContext.getClusterName(), db);
+                }
             }
 
             if (Strings.isNullOrEmpty(tbl)) {
@@ -98,6 +122,14 @@ public class TableName implements Writable {
 
     public String getTbl() {
         return tbl;
+    }
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
     }
 
     public boolean isEmpty() {
