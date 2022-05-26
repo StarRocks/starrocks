@@ -10,17 +10,6 @@
 
 namespace starrocks::vectorized {
 
-enum RankType {
-    // Of this type, rank of [13, 13, 17, 17, 21, 25] is [1, 2, 3, 4, 5, 6]
-    RowNumber = 0,
-
-    // Of this type, rank of [13, 13, 17, 17, 21, 25] is [1, 1, 3, 3, 5, 6]
-    Rank = 1,
-
-    // Of this type, rank of [13, 13, 17, 17, 21, 25] is [1, 1, 2, 2, 3, 4]
-    DenseRank = 2,
-};
-
 enum CompareStrategy {
     Default = 0,
     RowWise = 1,
