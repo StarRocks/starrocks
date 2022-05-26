@@ -11,6 +11,26 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 public class MetaUtils {
+    public static Database getStarRocksDb(ConnectContext session, long dbId) {
+        Database db = session.getGlobalStateMgr().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not find", dbId);
+        }
+        return db;
+    }
+
+    public static Table getStarRocksTable(ConnectContext session, long dbId, long tableId) {
+        Database db = session.getGlobalStateMgr().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not find", dbId);
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            throw new SemanticException("Unknown table: %s", tableId);
+        }
+        return table;
+    }
+
     public static Database getStarRocks(ConnectContext session, TableName tableName) {
         Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {

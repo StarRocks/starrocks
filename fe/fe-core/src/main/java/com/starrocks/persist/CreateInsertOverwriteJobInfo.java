@@ -21,18 +21,13 @@ public class CreateInsertOverwriteJobInfo implements Writable {
     @SerializedName(value = "tableId")
     private long tableId;
 
-    @SerializedName(value = "tableName")
-    private String tableName;
-
     @SerializedName(value = "targetPartitionIds")
     private List<Long> targetPartitionIds;
 
-    public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId,
-                                        String tableName, List<Long> targetPartitionIds) {
+    public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
-        this.tableName = tableName;
         this.targetPartitionIds = targetPartitionIds;
     }
 
@@ -48,10 +43,6 @@ public class CreateInsertOverwriteJobInfo implements Writable {
         return tableId;
     }
 
-    public String getTableName() {
-        return tableName;
-    }
-
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
     }
@@ -62,7 +53,6 @@ public class CreateInsertOverwriteJobInfo implements Writable {
                 "jobId=" + jobId +
                 ", dbId=" + dbId +
                 ", tableId=" + tableId +
-                ", tableName='" + tableName + '\'' +
                 ", targetPartitionIds=" + targetPartitionIds +
                 '}';
     }

@@ -5,7 +5,7 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -17,16 +17,16 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "jobId")
     private long jobId;
     @SerializedName(value = "fromState")
-    private InsertOverwriteJob.OverwriteJobState fromState;
+    private InsertOverwriteJobState fromState;
     @SerializedName(value = "toState")
-    private InsertOverwriteJob.OverwriteJobState toState;
+    private InsertOverwriteJobState toState;
     @SerializedName(value = "sourcePartitionName")
     private List<String> sourcePartitionNames;
     @SerializedName(value = "newPartitionNames")
     private List<String> newPartitionNames;
 
-    public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJob.OverwriteJobState fromState,
-                                          InsertOverwriteJob.OverwriteJobState toState,
+    public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
+                                          InsertOverwriteJobState toState,
                                           List<String> sourcePartitionNames, List<String> newPartitionNames) {
         this.jobId = jobId;
         this.fromState = fromState;
@@ -39,11 +39,11 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         return jobId;
     }
 
-    public InsertOverwriteJob.OverwriteJobState getFromState() {
+    public InsertOverwriteJobState getFromState() {
         return fromState;
     }
 
-    public InsertOverwriteJob.OverwriteJobState getToState() {
+    public InsertOverwriteJobState getToState() {
         return toState;
     }
 

@@ -5,13 +5,18 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -67,14 +72,18 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public void submitJob(InsertOverwriteJob job) throws Exception {
+    public void submitJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {
         try {
             boolean registered = registerOverwriteJob(job);
             if (!registered) {
                 LOG.warn("register insert overwrite job:{} failed", job.getJobId());
                 throw new RuntimeException("register insert overwrite job failed");
             }
-            job.run();
+            // get db and table
+            Database database = MetaUtils.getStarRocksDb(context, job.getTargetDbId());
+            OlapTable table = (OlapTable) MetaUtils.getStarRocksTable(context, database.getId(), job.getTargetTableId());
+            InsertOverwriteJobRunner jobRunner = new InsertOverwriteJobRunner(job, context, stmtExecutor, database, table);
+            jobRunner.run();
         } finally {
             deregisterOverwriteJob(job.getJobId());
         }
@@ -173,7 +182,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobInfo jobInfo) {
         try {
             InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
-                    jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTableName(), jobInfo.getTargetPartitionIds());
+                    jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
             boolean registered = registerOverwriteJob(insertOverwriteJob);
             if (!registered) {
                 LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
@@ -190,7 +199,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         InsertOverwriteJob job = getOverwriteJob(info.getJobId());
-        job.replayStateChange(info);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        runner.replayStateChange(info);
         if (job.isFinished()) {
             deregisterOverwriteJob(job.getJobId());
             if (runningJobs != null) {
@@ -218,7 +228,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                         for (InsertOverwriteJob job : runningJobs) {
                             LOG.info("start to cancel unfinished insert overwrite job:{}", job.getJobId());
                             try {
-                                job.cancel();
+                                InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+                                runner.cancel();
                             } finally {
                                 deregisterOverwriteJob(job.getJobId());
                             }
