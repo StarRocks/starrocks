@@ -411,7 +411,11 @@ private:
     RuntimeProfile::Counter* _overhead_timer = nullptr;
     RuntimeProfile::Counter* _schedule_timer = nullptr;
     RuntimeProfile::Counter* _schedule_counter = nullptr;
-    RuntimeProfile::Counter* _schedule_time_runout_counter = nullptr;
+    RuntimeProfile::Counter* _yield_by_chunk_limit_counter = nullptr;
+    RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_precondition_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_output_full_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_input_empty_counter = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _input_empty_timer = nullptr;
