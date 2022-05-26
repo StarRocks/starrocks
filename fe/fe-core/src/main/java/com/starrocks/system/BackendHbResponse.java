@@ -23,6 +23,8 @@ package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -32,6 +34,9 @@ import java.io.IOException;
  * Backend heartbeat response contains Backend's be port, http port and brpc port
  */
 public class BackendHbResponse extends HeartbeatResponse implements Writable {
+
+    // for debug
+    private static final Logger LOG = LogManager.getLogger(BackendHbResponse.class);
 
     @SerializedName(value = "beId")
     private long beId;
@@ -127,6 +132,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         httpPort = in.readInt();
         brpcPort = in.readInt();
         starletPort = in.readInt();
+        // for debug
+        LOG.info("starletPort in BackendHbResponse.readFields in {}", starletPort);
     }
 
 }

@@ -30,6 +30,7 @@ import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
@@ -52,11 +53,11 @@ public class BackendsProcDir implements ProcDirInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BackendId").add("Cluster").add("IP").add("HostName").add("HeartbeatPort")
-            .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
-            .add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
-            .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
-            .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-            .add("DataUsedPct").add("CpuCores").build();
+            .add("BePort").add("HttpPort").add("BrpcPort").add("StarletPort").add("WorkerId")
+            .add("LastStartTime").add("LastHeartbeat").add("Alive").add("SystemDecommissioned")
+            .add("ClusterDecommissioned").add("TabletNum").add("DataUsedCapacity").add("AvailCapacity")
+            .add("TotalCapacity").add("UsedPct").add("MaxDiskUsedPct").add("ErrMsg").add("Version")
+            .add("Status").add("DataTotalCapacity").add("DataUsedPct").add("CpuCores").build();
 
     public static final int HOSTNAME_INDEX = 3;
 
@@ -120,6 +121,7 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
+
             backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
             if (Strings.isNullOrEmpty(clusterName)) {
@@ -128,6 +130,11 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add(String.valueOf(backend.getBePort()));
                 backendInfo.add(String.valueOf(backend.getHttpPort()));
                 backendInfo.add(String.valueOf(backend.getBrpcPort()));
+                if (Config.integrate_staros) {
+                    backendInfo.add(String.valueOf(backend.getStarletPort()));
+                    long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdfromBackendId(backendId);
+                    backendInfo.add(String.valueOf(workerId));
+                }
             }
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastUpdateMs()));

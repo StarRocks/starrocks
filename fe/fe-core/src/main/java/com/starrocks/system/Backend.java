@@ -647,6 +647,7 @@ public class Backend implements Writable {
             if (Config.integrate_staros && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
+                LOG.info("starletPort in Backend.handleHbResponse is {}", this.starletPort);
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

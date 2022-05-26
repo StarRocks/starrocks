@@ -100,6 +100,15 @@ public class StarOSAgent {
         return backendIds;
     }
 
+    public long getWorkerIdfromBackendId(long backendId) {
+        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+            if (entry.getValue().equals(backendId)) {
+                return entry.getKey();
+            }
+        }
+        return -1;
+    }
+
     public void registerAndBootstrapService(String serviceName) {
         if (serviceId != -1) {
             return;
