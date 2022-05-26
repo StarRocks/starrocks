@@ -31,4 +31,5 @@ Before contributing, please read this article carefully to quickly understand th
 
 ## Documentation template
 
-[Functions](./sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
+[Function template](../docs/sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
+[SQL command template](../docs/sql-reference/sql-statements/SQL%20command%20template.md)

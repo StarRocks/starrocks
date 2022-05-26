@@ -1,7 +1,7 @@
 # convert_tz
 
 > - *This article uses* `*CONVERT_TZ*` *as an example to illustrate the requirements for writing functions documentation.*
-> - If the documention cites the following syntax and examples, please use code blocks.
+> - If the documentation cites the following syntax and examples, please use code blocks.
 
 ## Description
 
@@ -27,7 +27,7 @@ CONVERT_TZ(dt, from_tz, to_tz)
 
 > - *The format is* `*parameter*`*:* `*description*` *+* `*data type*` *(please list all the data types supported).*
 > - *The description must include information, such as parameter description, value format, value range, whether this parameter is required, formats and units when different data types are used.*
-> - *The data types must be capitalized, for example, DATETIIME.*
+> - *The data types must be capitalized, for example, DATETIME.*
 
 ## Return value
 
