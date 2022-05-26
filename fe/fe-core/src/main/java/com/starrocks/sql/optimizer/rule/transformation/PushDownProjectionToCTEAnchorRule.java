@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -48,8 +49,8 @@ public class PushDownProjectionToCTEAnchorRule extends TransformationRule {
         LogicalProjectOperator childProjectOp = cteAnchorRightChild.getOp().cast();
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-        newProjectMap.putAll(childProjectOp.getColumnRefMap());
-        newProjectMap.putAll(projectOp.getColumnRefMap());
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(childProjectOp.getColumnRefMap());
+        projectOp.getColumnRefMap().forEach((key, value) -> newProjectMap.put(key, rewriter.rewrite(value)));
 
         OptExpression newChildProject = OptExpression.create(new LogicalProjectOperator.Builder()
                 .withOperator(childProjectOp)
