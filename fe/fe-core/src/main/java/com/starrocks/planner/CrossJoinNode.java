@@ -158,23 +158,26 @@ public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
                     continue;
                 }
 
+                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                    continue;
+                }
+
                 RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
                 rf.setFilterId(generator.getNextId().asInt());
                 rf.setBuildPlanNodeId(getId().asInt());
                 rf.setExprOrder(i);
                 rf.setJoinMode(distributionMode);
                 rf.setBuildCardinality(buildStageNode.getCardinality());
-                rf.setOnlyLocal(false);
+                rf.setOnlyLocal(true);
 
                 rf.setBuildExpr(right);
-                boolean accept = this.getChildren().get(0).pushDownRuntimeFilters(rf, left);
+                boolean accept = getChild(0).pushDownRuntimeFilters(rf, left);
                 if (accept) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
         }
     }
-
 
     @Override
     public int getNumInstances() {
