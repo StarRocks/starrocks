@@ -31,3 +31,4 @@
 ## 文档模板
 
 [函数文档模板](./sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
+[SQL命令模板](./sql-reference/How%20to%20write%20SQL%20command%20doc.md)
