@@ -100,6 +100,24 @@ public class EsNodeInfo {
         }
     }
 
+    public EsNodeInfo(String id, String seed) {
+        this.id = id;
+        String[] scratch = seed.split(":");
+        int port = 80;
+        if (scratch.length == 3) {
+            port = Integer.parseInt(scratch[2]);
+        }
+        String remoteHost = scratch[0] + ":" + scratch[1];
+        this.name = remoteHost;
+        this.host = remoteHost;
+        this.ip = remoteHost;
+        this.isClient = true;
+        this.isData = true;
+        this.isIngest = true;
+        this.publishAddress = new TNetworkAddress(remoteHost, port);
+        this.hasHttp = true;
+    }
+
     public boolean hasHttp() {
         return hasHttp;
     }

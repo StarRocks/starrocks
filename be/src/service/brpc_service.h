@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "service/brpc.h"
 
 namespace brpc {
 class Server;
@@ -39,7 +40,7 @@ public:
     BRpcService(ExecEnv* exec_env);
     ~BRpcService();
 
-    Status start(int port);
+    Status start(int port, google::protobuf::Service* service, google::protobuf::Service* doris_service);
     void join();
 
 private:

@@ -32,7 +32,6 @@
 #include "fmt/core.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "storage/null_predicate.h"
 #include "util/radix_sort.h"
 
 #define __StarRocksMysql MYSQL

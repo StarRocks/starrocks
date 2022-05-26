@@ -15,7 +15,8 @@ namespace pipeline {
 
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+                 int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks);
 
     ~ScanOperator() override;
 
@@ -68,6 +69,22 @@ private:
     Status _try_to_trigger_next_scan(RuntimeState* state);
     void _merge_chunk_source_profiles();
 
+    inline void _set_scan_status(const Status& status) {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        if (_scan_status.ok()) {
+            _scan_status = status;
+        }
+    }
+
+    inline Status _get_scan_status() const {
+        std::lock_guard<SpinLock> l(_scan_status_mutex);
+        return _scan_status;
+    }
+
+    bool _try_to_increase_committed_scan_tasks();
+    void _decrease_committed_scan_tasks() { _num_committed_scan_tasks.fetch_sub(1); }
+    bool _exceed_max_scan_concurrency(int num_committed_scan_tasks) const;
+
 protected:
     ScanNode* _scan_node = nullptr;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
@@ -79,19 +96,11 @@ protected:
 
     bool _is_finished = false;
 
+    const int _max_scan_concurrency;
+    // Shared by all the ScanOperators created by the same ScanOperatorFactory.
+    std::atomic<int>& _num_committed_scan_tasks;
+
 private:
-    inline void set_scan_status(const Status& status) {
-        std::lock_guard<SpinLock> l(_scan_status_mutex);
-        if (_scan_status.ok()) {
-            _scan_status = status;
-        }
-    }
-
-    inline Status get_scan_status() const {
-        std::lock_guard<SpinLock> l(_scan_status_mutex);
-        return _scan_status;
-    }
-
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
@@ -130,7 +139,10 @@ public:
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
 protected:
-    ScanNode* _scan_node;
+    ScanNode* const _scan_node;
+
+    const int _max_scan_concurrency;
+    std::atomic<int> _num_committed_scan_tasks{0};
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

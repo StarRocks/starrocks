@@ -42,15 +42,15 @@
 namespace starrocks {
 
 template <typename T>
-PInternalServiceImpl<T>::PInternalServiceImpl(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 template <typename T>
-PInternalServiceImpl<T>::~PInternalServiceImpl() = default;
+PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
 
 template <typename T>
-void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cntl_base,
-                                            const PTransmitDataParams* request, PTransmitDataResult* response,
-                                            google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::transmit_data(google::protobuf::RpcController* cntl_base,
+                                                const PTransmitDataParams* request, PTransmitDataResult* response,
+                                                google::protobuf::Closure* done) {
     VLOG_ROW << "Transmit data: fragment_instance_id = " << print_id(request->finst_id())
              << " node = " << request->node_id();
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
@@ -78,9 +78,9 @@ void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cnt
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
-                                             const PTransmitChunkParams* request, PTransmitChunkResult* response,
-                                             google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
+                                                 const PTransmitChunkParams* request, PTransmitChunkResult* response,
+                                                 google::protobuf::Closure* done) {
     VLOG_ROW << "transmit data: fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id();
     // NOTE: we should give a default value to response to avoid concurrent risk
@@ -114,10 +114,10 @@ void PInternalServiceImpl<T>::transmit_chunk(google::protobuf::RpcController* cn
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcController* cntl_base,
-                                                      const PTransmitRuntimeFilterParams* request,
-                                                      PTransmitRuntimeFilterResult* response,
-                                                      google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcController* cntl_base,
+                                                          const PTransmitRuntimeFilterParams* request,
+                                                          PTransmitRuntimeFilterResult* response,
+                                                          google::protobuf::Closure* done) {
     VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
               << " query_id=" << print_id(request->query_id()) << ", is_partial=" << request->is_partial()
               << ", filter_id=" << request->filter_id() << ", is_pipeline=" << request->is_pipeline();
@@ -128,18 +128,19 @@ void PInternalServiceImpl<T>::transmit_runtime_filter(google::protobuf::RpcContr
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcController* cntl_base,
-                                                 const PTabletWriterOpenRequest* request,
-                                                 PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer open, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", txn_id=" << request->txn_id();
-    _exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
+void PInternalServiceImplBase<T>::tablet_writer_open(google::protobuf::RpcController* cntl_base,
+                                                     const PTabletWriterOpenRequest* request,
+                                                     PTabletWriterOpenResult* response,
+                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
-                                                 const PExecPlanFragmentRequest* request,
-                                                 PExecPlanFragmentResult* response, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
+                                                     const PExecPlanFragmentRequest* request,
+                                                     PExecPlanFragmentResult* response,
+                                                     google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto st = _exec_plan_fragment(cntl);
@@ -150,36 +151,31 @@ void PInternalServiceImpl<T>::exec_plan_fragment(google::protobuf::RpcController
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_add_batch(google::protobuf::RpcController* controller,
-                                                      const PTabletWriterAddBatchRequest* request,
-                                                      PTabletWriterAddBatchResult* response,
-                                                      google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::tablet_writer_add_batch(google::protobuf::RpcController* controller,
+                                                          const PTabletWriterAddBatchRequest* request,
+                                                          PTabletWriterAddBatchResult* response,
+                                                          google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::RpcController* cntl_base,
-                                                      const PTabletWriterAddChunkRequest* request,
-                                                      PTabletWriterAddBatchResult* response,
-                                                      google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", sender_id=" << request->sender_id();
-    _exec_env->load_channel_mgr()->add_chunk(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
+void PInternalServiceImplBase<T>::tablet_writer_add_chunk(google::protobuf::RpcController* cntl_base,
+                                                          const PTabletWriterAddChunkRequest* request,
+                                                          PTabletWriterAddBatchResult* response,
+                                                          google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
-                                                   const PTabletWriterCancelRequest* request,
-                                                   PTabletWriterCancelResult* response,
-                                                   google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", sender_id=" << request->sender_id();
-    _exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base), *request, response, done);
-}
+void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
+                                                       const PTabletWriterCancelRequest* request,
+                                                       PTabletWriterCancelResult* response,
+                                                       google::protobuf::Closure* done) {}
 
 template <typename T>
-Status PInternalServiceImpl<T>::_exec_plan_fragment(brpc::Controller* cntl) {
+Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) {
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
@@ -220,9 +216,10 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
-                                                   const PCancelPlanFragmentRequest* request,
-                                                   PCancelPlanFragmentResult* result, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
+                                                       const PCancelPlanFragmentRequest* request,
+                                                       PCancelPlanFragmentResult* result,
+                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     TUniqueId tid;
     tid.__set_hi(request->finst_id().hi());
@@ -272,26 +269,27 @@ void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcControll
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::fetch_data(google::protobuf::RpcController* cntl_base, const PFetchDataRequest* request,
-                                         PFetchDataResult* result, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
+                                             const PFetchDataRequest* request, PFetchDataResult* result,
+                                             google::protobuf::Closure* done) {
     brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
     GetResultBatchCtx* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::trigger_profile_report(google::protobuf::RpcController* controller,
-                                                     const PTriggerProfileReportRequest* request,
-                                                     PTriggerProfileReportResult* result,
-                                                     google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcController* controller,
+                                                         const PTriggerProfileReportRequest* request,
+                                                         PTriggerProfileReportResult* result,
+                                                         google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto st = _exec_env->fragment_mgr()->trigger_profile_report(request);
     st.to_protobuf(result->mutable_status());
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
-                                       PProxyResult* response, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
+                                           PProxyResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
@@ -345,7 +343,7 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
     Status::OK().to_protobuf(response->mutable_status());
 }
 
-template class PInternalServiceImpl<PInternalService>;
-template class PInternalServiceImpl<doris::PBackendService>;
+template class PInternalServiceImplBase<PInternalService>;
+template class PInternalServiceImplBase<doris::PBackendService>;
 
 } // namespace starrocks

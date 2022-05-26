@@ -19,7 +19,7 @@ void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_n
 class JavaWindowFunction final : public JavaUDAFAggregateFunction<true> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        ctx->impl()->udaf_ctxs()->_func->reset(data(state).handle());
+        ctx->impl()->udaf_ctxs()->_func->reset(data(state).handle);
     }
 
     std::string get_name() const override { return "java_window"; }
@@ -40,7 +40,7 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
-        ctx->impl()->udaf_ctxs()->_func->window_update_batch(data(state).handle(), peer_group_start, peer_group_end,
+        ctx->impl()->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
                                                              frame_start, frame_end, num_args, args.data());
         // release input cols
         for (int i = 0; i < num_args; ++i) {
@@ -51,7 +51,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        jvalue val = ctx->impl()->udaf_ctxs()->_func->finalize(this->data(state).handle());
+        jvalue val = ctx->impl()->udaf_ctxs()->_func->finalize(this->data(state).handle);
         // insert values to column
         JNIEnv* env = helper.getEnv();
         MethodTypeDescriptor desc = {(PrimitiveType)ctx->get_return_type().type, true};

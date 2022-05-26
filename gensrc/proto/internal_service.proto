@@ -79,11 +79,11 @@ message PTransmitChunkParams {
 };
 
 message PTransmitDataResult {
-    optional PStatus status = 1;
+    optional StatusPB status = 1;
 };
 
 message PTransmitChunkResult {
-    optional PStatus status = 1;
+    optional StatusPB status = 1;
     optional int64 receive_timestamp = 2;
 };
 
@@ -114,7 +114,7 @@ message PTransmitRuntimeFilterParams {
 };
 
 message PTransmitRuntimeFilterResult {
-    optional PStatus status = 1;
+    optional StatusPB status = 1;
 };
 
 message PTabletWithPartition {
@@ -144,7 +144,7 @@ message PTabletWriterOpenRequest {
 };
 
 message PTabletWriterOpenResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
 };
 
 // Add batch to tablet writer.
@@ -183,7 +183,7 @@ message PTabletWriterAddChunkRequest {
 };
 
 message PTabletWriterAddBatchResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
@@ -203,7 +203,7 @@ message PExecPlanFragmentRequest {
 };
 
 message PExecPlanFragmentResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
 };
 
 enum PPlanFragmentCancelReason {
@@ -222,7 +222,7 @@ message PCancelPlanFragmentRequest {
 };
 
 message PCancelPlanFragmentResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
 };
 
 message PFetchDataRequest {
@@ -230,7 +230,7 @@ message PFetchDataRequest {
 };
 
 message PFetchDataResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
     // Valid when status is ok.
     optional int64 packet_seq = 2;
     optional bool eos = 3;
@@ -242,7 +242,7 @@ message PTriggerProfileReportRequest {
 };
 
 message PTriggerProfileReportResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
 };
 
 message PStringPair {
@@ -291,7 +291,7 @@ message PKafkaOffsetBatchProxyResult {
 }
 
 message PProxyResult {
-    required PStatus status = 1;
+    required StatusPB status = 1;
     optional PKafkaMetaProxyResult kafka_meta_result = 2;
     optional PKafkaOffsetProxyResult kafka_offset_result = 101;
     optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;

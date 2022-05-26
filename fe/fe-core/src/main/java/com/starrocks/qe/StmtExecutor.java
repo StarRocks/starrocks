@@ -190,6 +190,12 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+
+        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
+        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
+        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
+        summaryProfile.addInfoString(ProfileManager.QUERY_CPU_COST, DebugUtil.getPrettyStringNs(cpuCostNs));
+        summaryProfile.addInfoString(ProfileManager.QUERY_MEM_COST, DebugUtil.getPrettyStringBytes(memCostBytes));
         profile.addChild(summaryProfile);
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
@@ -813,7 +819,8 @@ public class StmtExecutor {
             if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
             }
-            context.getGlobalStateMgr().changeDb(context, useStmt.getDatabase());
+            // TODO: refactor useStmt and rename getDatabase
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;
@@ -999,6 +1006,9 @@ public class StmtExecutor {
         }
         if (statisticsForAuditLog.cpuCostNs == null) {
             statisticsForAuditLog.cpuCostNs = 0L;
+        }
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
         }
         return statisticsForAuditLog;
     }

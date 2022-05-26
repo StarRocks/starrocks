@@ -107,7 +107,7 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
                 quorumTablets.add(tDeleteInfo.getTabletId());
             }
         }
-        LOG.info("check delete job quorum, transaction id: {}, total tablets: {}, quorum tablets: {},",
+        LOG.info("check delete job quorum, txn_id: {}, total tablets: {}, quorum tablets: {},",
                 signature, totalTablets.size(), quorumTablets.size());
 
         if (finishedTablets.containsAll(totalTablets)) {

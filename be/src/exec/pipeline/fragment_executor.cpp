@@ -152,8 +152,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     } else {
         auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
         auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(),
-                                                                      per_instance_mem_limit, degree_of_parallelism);
+        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
+                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
         _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
     }
 
@@ -164,11 +165,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
-    auto instance_mem_limit = query_options.__isset.mem_limit && query_options.mem_limit > 0
-                                      ? query_options.mem_limit * degree_of_parallelism
-                                      : -1L;
-    runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
+    runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
@@ -203,14 +200,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
 }
 
 int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, exec_env->max_executor_threads() / 2);
-    }
-    return degree_of_parallelism;
+    int32_t degree_of_parallelism = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {

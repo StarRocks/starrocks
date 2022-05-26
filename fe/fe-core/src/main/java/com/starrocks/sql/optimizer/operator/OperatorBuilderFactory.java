@@ -5,6 +5,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -75,6 +76,8 @@ public class OperatorBuilderFactory {
             return new LogicalLimitOperator.Builder();
         } else if (operator instanceof LogicalCTEConsumeOperator) {
             return new LogicalCTEConsumeOperator.Builder();
+        } else if (operator instanceof LogicalCTEAnchorOperator) {
+            return new LogicalCTEAnchorOperator.Builder();
         } else {
             throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(), ErrorType.INTERNAL_ERROR);
         }
