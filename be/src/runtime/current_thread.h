@@ -152,6 +152,8 @@ public:
         }
     }
 
+    int64_t cache_size() { return _cache_size; }
+
 private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
@@ -234,20 +236,21 @@ private:
         }                                                                               \
     }
 
-#define TRY_CATCH_BAD_ALLOC(stmt)                                                           \
-    do {                                                                                    \
-        try {                                                                               \
-            SCOPED_SET_CATCHED(true);                                                       \
-            { stmt; }                                                                       \
-        } catch (std::bad_alloc const&) {                                                   \
-            MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
-            tls_exceed_mem_tracker = nullptr;                                               \
-            if (LIKELY(exceed_tracker != nullptr)) {                                        \
-                return Status::MemoryLimitExceeded(exceed_tracker->err_msg(""));            \
-            } else {                                                                        \
-                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
-            }                                                                               \
-        }                                                                                   \
+#define TRY_CATCH_BAD_ALLOC(stmt)                                                                                \
+    do {                                                                                                         \
+        try {                                                                                                    \
+            SCOPED_SET_CATCHED(true);                                                                            \
+            { stmt; }                                                                                            \
+        } catch (std::bad_alloc const&) {                                                                        \
+            MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                 \
+            tls_exceed_mem_tracker = nullptr;                                                                    \
+            if (LIKELY(exceed_tracker != nullptr)) {                                                             \
+                return Status::MemoryLimitExceeded(                                                              \
+                        exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.cache_size()))); \
+            } else {                                                                                             \
+                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                      \
+            }                                                                                                    \
+        }                                                                                                        \
     } while (0)
 
 } // namespace starrocks
