@@ -35,7 +35,7 @@ public:
     OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
                     OlapScanContext* scan_ctx);
 
-    ~OlapChunkSource() override = default;
+    ~OlapChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
@@ -96,15 +96,17 @@ private:
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
 
+    // For release memory.
+    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
+    std::vector<PredicatePtr> _predicate_free_pool;
+
+    // NOTE: _reader may reference the _predicate_free_pool, it should be released before the _predicate_free_pool
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
     const std::vector<std::string>* _unused_output_columns = nullptr;
     std::unordered_set<uint32_t> _unused_output_column_ids;
-    // For release memory.
-    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
-    std::vector<PredicatePtr> _predicate_free_pool;
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
