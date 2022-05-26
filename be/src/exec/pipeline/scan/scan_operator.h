@@ -66,7 +66,8 @@ private:
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
-    Status _try_to_trigger_next_scan(RuntimeState* state);
+    Status _try_to_trigger_next_scan(RuntimeState* state, bool io_thread);
+    void _finish_scan_task(int chunk_source_index);
     void _merge_chunk_source_profiles();
 
     inline void _set_scan_status(const Status& status) {
@@ -101,10 +102,11 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 16;
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
+    mutable std::mutex _submit_mutex; // Avoid concurrent submmit task
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
@@ -114,6 +116,9 @@ private:
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
+
+    RuntimeProfile::Counter* _io_thread_submit_tasks = nullptr;
+    RuntimeProfile::Counter* _exec_thread_submit_tasks = nullptr;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     std::atomic_int64_t _last_scan_rows_num = 0;
