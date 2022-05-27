@@ -299,9 +299,11 @@ select count(*) from profile_wos_p7;
   3. 在$FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf:/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
   4. resource 中的 uri 地址一定要使用域名，并且相应的 hive 和 hdfs 的域名与 ip 的映射都需要配置到/etc/hosts 中。
 
-#### S3 支持
+#### AWS S3/Tencent Cloud COS支持
 
-一. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
+一. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到$FE_HOME/lib/路径下。
+
+二. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
 
 ~~~xml
 <configuration>
@@ -342,6 +344,7 @@ select count(*) from profile_wos_p7;
 * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.s3a.access.key` 相同
 * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.s3a.secret.key` 相同
 * `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.s3a.endpoint` 相同
+* `object_storage_region` 只有腾讯COS需要额外添加该配置项。如：ap-beijing****
 
 三. 重启 FE，BE。
 
