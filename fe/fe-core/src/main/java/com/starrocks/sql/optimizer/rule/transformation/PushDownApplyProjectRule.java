@@ -57,7 +57,7 @@ public class PushDownApplyProjectRule extends TransformationRule {
         newApply.getInputs().addAll(child.getInputs());
 
         ColumnRefFactory factory = context.getColumnRefFactory();
-        Map<ColumnRefOperator, ScalarOperator> allOutput = Maps.newHashMap(project.getColumnRefMap());
+        Map<ColumnRefOperator, ScalarOperator> allOutput = Maps.newHashMap();
 
         // add all left outer column
         Arrays.stream(input.getInputs().get(0).getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)

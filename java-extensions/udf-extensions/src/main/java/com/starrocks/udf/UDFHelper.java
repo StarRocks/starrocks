@@ -499,7 +499,25 @@ public class UDFHelper {
     }
 
     // batch call void(Object...)
-    public static void batchUpdate(Object o, Method method, Object[] column)
+    public static void batchUpdate(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
+            throws Throwable {
+        Object[][] inputs = (Object[][]) column;
+        Object[] parameter = new Object[inputs.length + 1];
+        int numRows = states.length;
+        try {
+            for (int i = 0; i < numRows; ++i) {
+                parameter[0] = ctx.get(states[i]);
+                for (int j = 0; j < column.length; ++j) {
+                    parameter[j + 1] = inputs[j][i];
+                }
+                method.invoke(o, parameter);
+            }
+        } catch (InvocationTargetException e) {
+            throw e.getTargetException();
+        }
+    }
+
+    public static void batchUpdateState(Object o, Method method, Object[] column)
             throws Throwable {
         Object[][] inputs = (Object[][]) column;
         Object[] parameter = new Object[inputs.length];
@@ -514,7 +532,26 @@ public class UDFHelper {
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
         }
+    }
 
+    public static void batchUpdateIfNotNull(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
+            throws Throwable {
+        Object[][] inputs = (Object[][]) column;
+        Object[] parameter = new Object[inputs.length + 1];
+        int numRows = states.length;
+        try {
+            for (int i = 0; i < numRows; ++i) {
+                if (states[i] != -1) {
+                    parameter[0] = ctx.get(states[i]);
+                    for (int j = 0; j < column.length; ++j) {
+                        parameter[j + 1] = inputs[j][i];
+                    }
+                    method.invoke(o, parameter);
+                }
+            }
+        } catch (InvocationTargetException e) {
+            throw e.getTargetException();
+        }
     }
 
     // batch call Object(Object...)

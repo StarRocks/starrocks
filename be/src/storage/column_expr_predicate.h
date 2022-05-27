@@ -37,9 +37,9 @@ public:
 
     ~ColumnExprPredicate() override;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_bloom_filter() const override { return false; }
@@ -60,7 +60,14 @@ public:
                                               std::vector<const ColumnExprPredicate*>* output) const;
 
 private:
+    void _add_expr_ctxs(std::vector<ExprContext*> expr_ctxs);
+
+    // Take ownership of this expression, not necessary to clone
+    void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
+
+    // Share the ownership, is necessary to clone it
     void _add_expr_ctx(ExprContext* expr_ctx);
+
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;
@@ -72,9 +79,9 @@ class ColumnTruePredicate : public ColumnPredicate {
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(type_info, column_id) {}
     ~ColumnTruePredicate() override = default;
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
     bool support_bloom_filter() const override { return false; }
     PredicateType type() const override { return PredicateType::kTrue; }

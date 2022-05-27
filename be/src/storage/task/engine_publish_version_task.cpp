@@ -37,10 +37,9 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
           _tablet_info(tablet_info),
           _rowset(rowset) {}
 
-Status EnginePublishVersionTask::finish() {
-    VLOG(1) << "begin to publish version on tablet. "
-            << "tablet_id=" << _tablet_info.tablet_id << ", schema_hash=" << _tablet_info.schema_hash
-            << ", version=" << _version << ", transaction_id=" << _transaction_id;
+Status EnginePublishVersionTask::execute() {
+    VLOG(1) << "Begin publish txn tablet:" << _tablet_info.tablet_id << " version:" << _version
+            << " partition:" << _partition_id << " txn_id: " << _transaction_id << " rowset:" << _rowset->rowset_id();
 
     TabletSharedPtr tablet =
             StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
@@ -51,35 +50,18 @@ Status EnginePublishVersionTask::finish() {
         return Status::NotFound(fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
                                             _tablet_info.tablet_id, _transaction_id));
     }
-
-    Status st = Status::OK();
-    if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        VLOG(1) << "UpdateManager::on_rowset_published tablet:" << tablet->tablet_id()
-                << " rowset: " << _rowset->rowset_id().to_string() << " version: " << _version;
-        st = StorageEngine::instance()->txn_manager()->publish_txn2(_transaction_id, _partition_id, tablet, _version);
-    } else {
-        st = StorageEngine::instance()->txn_manager()->publish_txn(_partition_id, tablet, _transaction_id,
-                                                                   Version{_version, _version});
-    }
+    auto st = StorageEngine::instance()->txn_manager()->publish_txn(_partition_id, tablet, _transaction_id, _version,
+                                                                    _rowset);
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to publish version. rowset_id=" << _rowset->rowset_id()
-                     << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id=" << _transaction_id;
-        return st;
+        LOG(WARNING) << "Publish txn failed tablet:" << _tablet_info.tablet_id << " version:" << _version
+                     << " partition:" << _partition_id << " txn_id: " << _transaction_id
+                     << " rowset:" << _rowset->rowset_id();
+    } else {
+        LOG(INFO) << "Publish txn success tablet:" << _tablet_info.tablet_id << " version:" << _version
+                  << " partition:" << _partition_id << " txn_id: " << _transaction_id
+                  << " rowset:" << _rowset->rowset_id();
     }
-
-    if (tablet->keys_type() != KeysType::PRIMARY_KEYS) {
-        // add visible rowset to tablet
-        auto st = tablet->add_inc_rowset(_rowset);
-        if (!st.ok() && !st.is_already_exist()) {
-            LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << _rowset->rowset_id()
-                         << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id=" << _transaction_id
-                         << ", res=" << st;
-            return st;
-        }
-    }
-    LOG(INFO) << "Publish version successfully on tablet. tablet=" << tablet->full_name()
-              << ", transaction_id=" << _transaction_id << ", version=" << _version << ", res=" << st.to_string();
-    return Status::OK();
+    return st;
 }
 
 } // namespace starrocks

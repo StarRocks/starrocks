@@ -252,6 +252,227 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
+        super.analyze(analyzer);
+        tableName.analyze(analyzer);
+        FeNameFormat.checkTableName(tableName.getTbl());
+
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
+                tableName.getTbl(), PrivPredicate.CREATE)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+        }
+
+        analyzeEngineName();
+        analyzeCharsetName();
+
+        // analyze key desc
+        if (!(engineName.equals("mysql") || engineName.equals("broker") ||
+                engineName.equals("hive") || engineName.equals("iceberg") ||
+                engineName.equals("hudi") || engineName.equals("jdbc"))) {
+            // olap table
+            if (keysDesc == null) {
+                List<String> keysColumnNames = Lists.newArrayList();
+                int keyLength = 0;
+                boolean hasAggregate = false;
+                for (ColumnDef columnDef : columnDefs) {
+                    if (columnDef.getAggregateType() != null) {
+                        hasAggregate = true;
+                        break;
+                    }
+                }
+                if (hasAggregate) {
+                    for (ColumnDef columnDef : columnDefs) {
+                        if (columnDef.getAggregateType() == null) {
+                            keysColumnNames.add(columnDef.getName());
+                        }
+                    }
+                    keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames);
+                } else {
+                    for (ColumnDef columnDef : columnDefs) {
+                        keyLength += columnDef.getType().getIndexSize();
+                        if (keysColumnNames.size() >= FeConstants.shortkey_max_column_count
+                                || keyLength > FeConstants.shortkey_maxsize_bytes) {
+                            if (keysColumnNames.size() == 0
+                                    && columnDef.getType().getPrimitiveType().isCharFamily()) {
+                                keysColumnNames.add(columnDef.getName());
+                            }
+                            break;
+                        }
+                        if (!columnDef.getType().isKeyType()) {
+                            break;
+                        }
+                        if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                            keysColumnNames.add(columnDef.getName());
+                            break;
+                        }
+                        keysColumnNames.add(columnDef.getName());
+                    }
+                    if (columnDefs.isEmpty()) {
+                        throw new AnalysisException("Empty schema");
+                    }
+                    // The OLAP table must has at least one short key and the float and double should not be short key.
+                    // So the float and double could not be the first column in OLAP table.
+                    if (keysColumnNames.isEmpty()) {
+                        throw new AnalysisException(
+                                "Data type of first column cannot be " + columnDefs.get(0).getType());
+                    }
+                    keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
+                }
+            }
+
+            keysDesc.analyze(columnDefs);
+            for (int i = 0; i < keysDesc.keysColumnSize(); ++i) {
+                columnDefs.get(i).setIsKey(true);
+            }
+            if (keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+                AggregateType type = AggregateType.REPLACE;
+                // note: PRIMARY_KEYS uses REPLACE aggregate type for now
+                if (keysDesc.getKeysType() == KeysType.DUP_KEYS) {
+                    type = AggregateType.NONE;
+                }
+                for (int i = keysDesc.keysColumnSize(); i < columnDefs.size(); ++i) {
+                    columnDefs.get(i).setAggregateType(type);
+                }
+            }
+        } else {
+            // mysql, broker, iceberg, hudi and hive do not need key desc
+            if (keysDesc != null) {
+                throw new AnalysisException("Create " + engineName + " table should not contain keys desc");
+            }
+
+            for (ColumnDef columnDef : columnDefs) {
+                if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
+                    throw new AnalysisException(engineName + " external table don't support complex type");
+                }
+                columnDef.setIsKey(true);
+            }
+        }
+
+        // analyze column def
+        if (columnDefs == null || columnDefs.isEmpty()) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
+        }
+
+        int rowLengthBytes = 0;
+        boolean hasHll = false;
+        boolean hasBitmap = false;
+        boolean hasJson = false;
+        Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnDef columnDef : columnDefs) {
+            columnDef.analyze(engineName.equals("olap"));
+
+            if (columnDef.getAggregateType() == HLL_UNION) {
+                hasHll = true;
+            }
+
+            if (columnDef.getAggregateType() == BITMAP_UNION) {
+                hasBitmap = columnDef.getType().isBitmapType();
+            }
+
+            if (columnDef.getType().isJsonType()) {
+                hasJson = true;
+            }
+
+            if (!columnSet.add(columnDef.getName())) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
+            }
+
+            rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
+        }
+
+        if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals("olap")) {
+            throw new AnalysisException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
+                    + Config.max_layout_length_per_row);
+        }
+
+        if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+            throw new AnalysisException("HLL_UNION must be used in AGG_KEYS");
+        }
+
+        if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
+            throw new AnalysisException("BITMAP_UNION must be used in AGG_KEYS");
+        }
+
+        if (engineName.equals("olap")) {
+            // analyze partition
+            if (partitionDesc != null) {
+                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
+                    partitionDesc.analyze(columnDefs, properties);
+                } else {
+                    throw new AnalysisException(
+                            "Currently only support range and list partition with engine type olap");
+                }
+            }
+
+            // analyze distribution
+            if (distributionDesc == null) {
+                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                    if (properties == null) {
+                        properties = Maps.newHashMap();
+                        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+                    }
+                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
+                            Lists.newArrayList(columnDefs.get(0).getName()));
+                } else {
+                    throw new AnalysisException("Create olap table should contain distribution desc");
+                }
+            }
+            distributionDesc.analyze(columnSet);
+        } else if (engineName.equalsIgnoreCase("elasticsearch")) {
+            EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
+        } else {
+            if (partitionDesc != null || distributionDesc != null) {
+                throw new AnalysisException("Create " + engineName
+                        + " table should not contain partition or distribution desc");
+            }
+        }
+
+        for (ColumnDef columnDef : columnDefs) {
+            Column col = columnDef.toColumn();
+            if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
+                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
+                    keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
+                if (!col.isKey()) {
+                    col.setAggregationTypeImplicit(true);
+                }
+            }
+            columns.add(col);
+        }
+
+        if (CollectionUtils.isNotEmpty(indexDefs)) {
+            Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            Set<List<String>> distinctCol = new HashSet<>();
+
+            for (IndexDef indexDef : indexDefs) {
+                indexDef.analyze();
+                if (!engineName.equalsIgnoreCase("olap")) {
+                    throw new AnalysisException("index only support in olap engine at current version.");
+                }
+                for (String indexColName : indexDef.getColumns()) {
+                    boolean found = false;
+                    for (Column column : columns) {
+                        if (column.getName().equalsIgnoreCase(indexColName)) {
+                            indexDef.checkColumn(column, getKeysDesc().getKeysType());
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        throw new AnalysisException("BITMAP column does not exist in table. invalid column: "
+                                + indexColName);
+                    }
+                }
+                indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                        indexDef.getComment()));
+                distinct.add(indexDef.getIndexName());
+                distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
+            }
+            if (distinct.size() != indexes.size()) {
+                throw new AnalysisException("index name must be unique.");
+            }
+            if (distinctCol.size() != indexes.size()) {
+                throw new AnalysisException("same index columns have multiple index name is not allowed.");
+            }
+        }
     }
 
     public List<ColumnDef> getColumnDefs() {

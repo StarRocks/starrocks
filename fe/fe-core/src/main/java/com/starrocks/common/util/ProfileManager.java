@@ -61,6 +61,9 @@ public class ProfileManager {
     public static final String SQL_STATEMENT = "Sql Statement";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
+    public static final String QUERY_CPU_COST = "QueryCpuCost";
+    public static final String QUERY_MEM_COST = "QueryMemCost";
+    public static final String PROFILE_TIME = "Collect Profile Time";
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,

@@ -61,7 +61,7 @@ private:
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _push_workers;
-    std::unique_ptr<MultiWorkerPool> _publish_version_workers;
+    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
     std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
     std::unique_ptr<TaskWorkerPool> _delete_workers;
     std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;

@@ -116,7 +116,8 @@ public class Optimizer {
         // statistics won't set correctly after physicalRuleRewrite.
         // we need set plan costs before physical rewrite stage.
         final CostEstimate costs = Explain.buildCost(result);
-        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
+                .setPlanMemCosts(costs.getMemoryCost());
 
         OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
         OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
@@ -181,8 +182,6 @@ public class Optimizer {
     }
 
     void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
-
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
@@ -191,12 +190,15 @@ public class Optimizer {
             cleanUpMemoGroup(memo);
         }
 
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
+        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge

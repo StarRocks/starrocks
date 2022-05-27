@@ -68,7 +68,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -380,7 +380,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
@@ -764,7 +764,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
             // this is a duplicate request, just return previous txn id
-            LOG.info("duplicate request for stream load. request id: {}, txn: {}", e.getDuplicatedRequestId(),
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
                     e.getTxnId());
             result.setTxnId(e.getTxnId());
         } catch (LabelAlreadyUsedException e) {
@@ -821,7 +821,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn id: {}, backend: {}",
+        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -835,7 +835,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 status.addToError_msgs("Publish timeout. The data will be visible after a while");
             }
         } catch (UserException e) {
-            LOG.warn("failed to commit txn: {}: {}", request.getTxnId(), e.getMessage());
+            LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
         } catch (Throwable e) {
@@ -923,7 +923,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn id: {}, reason: {}, backend: {}",
+        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -976,7 +976,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn id: {}, load id: {}, backend: {}",
+        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
         LOG.debug("stream load put request: {}", request);

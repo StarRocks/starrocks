@@ -218,6 +218,7 @@ public class WindowTest extends PlanTestBase {
                         "  |  offset: 0");
     }
 
+    @Test
     public void testRankWithoutPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {

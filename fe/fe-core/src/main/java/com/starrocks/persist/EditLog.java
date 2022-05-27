@@ -64,6 +64,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.persist.DropTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
@@ -700,6 +705,32 @@ public class EditLog {
                     globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
                     break;
                 }
+                case OperationType.OP_CREATE_TASK: {
+                    final Task task = (Task) journal.getData();
+                    globalStateMgr.getTaskManager().replayCreateTask(task);
+                    break;
+                }
+                case OperationType.OP_DROP_TASKS: {
+                    DropTasksLog dropTasksLog = (DropTasksLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
+                    break;
+                }
+                case OperationType.OP_CREATE_TASK_RUN: {
+                    final TaskRunStatus status = (TaskRunStatus) journal.getData();
+                    globalStateMgr.getTaskManager().replayCreateTaskRun(status);
+                    break;
+                }
+                case OperationType.OP_UPDATE_TASK_RUN: {
+                    final TaskRunStatusChange statusChange =
+                            (TaskRunStatusChange) journal.getData();
+                    globalStateMgr.getTaskManager().replayUpdateTaskRun(statusChange);
+                    break;
+                }
+                case OperationType.OP_DROP_TASK_RUNS: {
+                    DropTaskRunsLog dropTaskRunsLog = (DropTaskRunsLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -821,6 +852,16 @@ public class EditLog {
                     DropCatalogLog dropCatalogLog =
                             (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
+                }
+                case OperationType.OP_GRANT_IMPERSONATE: {
+                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantImpersonate(info);
+                    break;
+                }
+                case OperationType.OP_REVOKE_IMPERSONATE: {
+                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeImpersonate(info);
+                    break;
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
@@ -948,6 +989,26 @@ public class EditLog {
 
     public void logWorkGroupOp(WorkGroupOpEntry op) {
         logEdit(OperationType.OP_WORKGROUP, op);
+    }
+
+    public void logCreateTask(Task info) {
+        logEdit(OperationType.OP_CREATE_TASK, info);
+    }
+
+    public void logDropTasks(List<Long> taskIdList) {
+        logEdit(OperationType.OP_DROP_TASKS, new DropTasksLog(taskIdList));
+    }
+
+    public void logTaskRunCreateStatus(TaskRunStatus status) {
+        logEdit(OperationType.OP_CREATE_TASK_RUN, status);
+    }
+
+    public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
+        logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logDropTaskRuns(List<String> queryIdList) {
+        logEdit(OperationType.OP_DROP_TASK_RUNS, new DropTaskRunsLog(queryIdList));
     }
 
     public void logAddPartition(PartitionPersistInfo info) {
@@ -1108,6 +1169,14 @@ public class EditLog {
 
     public void logRevokePriv(PrivInfo info) {
         logEdit(OperationType.OP_REVOKE_PRIV, info);
+    }
+
+    public void logGrantImpersonate(ImpersonatePrivInfo info) {
+        logEdit(OperationType.OP_GRANT_IMPERSONATE, info);
+    }
+
+    public void logRevokeImpersonate(ImpersonatePrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_IMPERSONATE, info);
     }
 
     public void logSetPassword(PrivInfo info) {

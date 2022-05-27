@@ -52,6 +52,17 @@ public class ShowDbStmt extends ShowStmt {
         this.where = where;
     }
 
+    public ShowDbStmt(String pattern, String catalogName) {
+        this.pattern = pattern;
+        this.catalogName = catalogName;
+    }
+
+    public ShowDbStmt(String pattern, Expr where, String catalogName) {
+        this.pattern = pattern;
+        this.where = where;
+        this.catalogName = catalogName;
+    }
+
     public String getPattern() {
         return pattern;
     }
@@ -87,8 +98,14 @@ public class ShowDbStmt extends ShowStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder("SHOW DATABASES");
+        if (catalogName != null) {
+            sb.append(" FROM ").append(catalogName);
+        }
         if (pattern != null) {
             sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE '").append(where).append("'");
         }
         return sb.toString();
     }

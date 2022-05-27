@@ -198,16 +198,19 @@ public:
         }
     }
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
+        return Status::OK();
     }
 
     PredicateType type() const override { return _predicate; }
@@ -474,19 +477,22 @@ public:
         }
     }
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
+        return Status::OK();
     }
 
-    uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
         // Get BinaryColumn
         const BinaryColumn* binary_column;
         if (column->is_nullable()) {
@@ -784,4 +790,61 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
     }
 }
 
+std::ostream& operator<<(std::ostream& os, PredicateType p) {
+    switch (p) {
+    case PredicateType::kUnknown:
+        os << "unknown";
+        break;
+    case PredicateType::kEQ:
+        os << "=";
+        break;
+    case PredicateType::kNE:
+        os << "!=";
+        break;
+    case PredicateType::kGT:
+        os << "<";
+        break;
+    case PredicateType::kGE:
+        os << "<=";
+        break;
+    case PredicateType::kLT:
+        os << ">";
+        break;
+    case PredicateType::kLE:
+        os << ">=";
+        break;
+
+    case PredicateType::kInList:
+        os << "IN";
+        break;
+    case PredicateType::kNotInList:
+        os << "NOT IN";
+        break;
+    case PredicateType::kIsNull:
+        os << "IS NULL";
+        break;
+    case PredicateType::kNotNull:
+        os << "IS NOT NULL";
+        break;
+    case PredicateType::kAnd:
+        os << "AND";
+        break;
+    case PredicateType::kOr:
+        os << "OR";
+        break;
+    case PredicateType::kExpr:
+        os << "expr";
+        break;
+    case PredicateType::kTrue:
+        os << "true";
+        break;
+    case PredicateType::kMap:
+        os << "map";
+        break;
+    default:
+        CHECK(false) << "unknown predicate " << p;
+    }
+
+    return os;
+}
 } //namespace starrocks::vectorized

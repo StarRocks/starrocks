@@ -24,17 +24,17 @@ public:
     ConjunctivePredicates& operator=(const ConjunctivePredicates&) = default;
     ConjunctivePredicates& operator=(ConjunctivePredicates&&) = default;
 
-    void evaluate(const Chunk* chunk, uint8_t* selection) const;
+    Status evaluate(const Chunk* chunk, uint8_t* selection) const;
 
-    void evaluate_or(const Chunk* chunk, uint8_t* selection) const;
+    Status evaluate_or(const Chunk* chunk, uint8_t* selection) const;
 
-    void evaluate_and(const Chunk* chunk, uint8_t* selection) const;
+    Status evaluate_and(const Chunk* chunk, uint8_t* selection) const;
 
-    void evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
-    void evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
-    void evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
     // [thread-unsafe]
     // Does NOT take the ownership of |pred|.
@@ -77,9 +77,9 @@ public:
     std::vector<const ColumnPredicate*>& non_vec_preds() { return _non_vec_preds; }
 
 private:
-    void _evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status _evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
-    void _evaluate_non_vec(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status _evaluate_non_vec(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
     std::vector<const ColumnPredicate*> _vec_preds;
     std::vector<const ColumnPredicate*> _non_vec_preds;

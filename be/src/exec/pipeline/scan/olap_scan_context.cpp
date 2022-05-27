@@ -72,14 +72,4 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     return Status::OK();
 }
 
-std::vector<OlapScanRange*> OlapScanContext::key_ranges() const {
-    std::vector<OlapScanRange*> results;
-    results.reserve(_key_ranges.size());
-    for (const auto& key_range : _key_ranges) {
-        results.emplace_back(key_range.get());
-    }
-
-    return results;
-}
-
 } // namespace starrocks::pipeline

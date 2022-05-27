@@ -58,7 +58,24 @@ public class SubqueryTest extends PlanTestBase {
                 + "FROM t0\n"
                 + "WHERE v1 = 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertNotNull(plan);
+        assertContains(plan, "  15:Project\n" +
+                "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
+                "  |  \n" +
+                "  14:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----13:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----10:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(9: v7)");
     }
 
     @Test
@@ -171,5 +188,62 @@ public class SubqueryTest extends PlanTestBase {
                 "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
                 "    ) IS NULL\n";
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testInSubQueryWithAggAndPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    "IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT(t1d)\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 4> : 4: t1d\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        FeConstants.runningUnitTest = false;
     }
 }
