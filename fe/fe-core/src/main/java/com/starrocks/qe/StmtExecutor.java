@@ -95,6 +95,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -449,6 +450,8 @@ public class StmtExecutor {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
                 handleDelSqlBlackListStmt();
+            } else if (parsedStmt instanceof ExecuteAsStmt) {
+                handleExecAsStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -797,6 +800,10 @@ public class StmtExecutor {
                 SqlBlackList.getInstance().delete(id);
             }
         }
+    }
+
+    private void handleExecAsStmt() {
+        ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
     private void handleUnsupportedStmt() {

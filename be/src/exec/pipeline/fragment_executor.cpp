@@ -165,7 +165,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    runtime_state->init_mem_trackers(-1L, query_mem_tracker);
+    runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
@@ -200,14 +200,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
 }
 
 int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, exec_env->max_executor_threads() / 2);
-    }
-    return degree_of_parallelism;
+    int32_t degree_of_parallelism = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {

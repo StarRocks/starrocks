@@ -53,7 +53,8 @@ public class RuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
     private static final Set<String> NON_MERGE_COUNTER_NAMES =
-            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates");
+            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates",
+                    "MemoryLimit", "MaxScanConcurrency");
 
     private final Counter counterTotalTime;
 

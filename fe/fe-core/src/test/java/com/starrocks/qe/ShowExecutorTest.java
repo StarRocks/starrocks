@@ -167,6 +167,10 @@ public class ShowExecutorTest {
                 db.getTable(anyString);
                 minTimes = 0;
                 result = table;
+
+                db.getTables();
+                minTimes = 0;
+                result = Lists.newArrayList(table);
             }
         };
 
@@ -214,6 +218,14 @@ public class ShowExecutorTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default");
                 minTimes = 0;
                 result = Lists.newArrayList("testCluster:testDb");
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default", "testCluster:testDb");
+                minTimes = 0;
+                result = db;
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default", "testCluster:emptyDb");
+                minTimes = 0;
+                result = null;
             }
         };
 

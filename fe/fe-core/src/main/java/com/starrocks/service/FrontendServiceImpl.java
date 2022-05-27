@@ -68,7 +68,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -380,7 +380,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());

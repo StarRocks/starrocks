@@ -537,41 +537,53 @@ public class ShowExecutor {
     private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getGlobalStateMgr().getDb(showTableStmt.getDb());
+        String catalog = ctx.getCurrentCatalog();
+        String dbName = showTableStmt.getDb();
+        Database db = metadataMgr.getDb(catalog, dbName);
+
+        PatternMatcher matcher = null;
+        if (showTableStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showTableStmt.getPattern(),
+                    CaseSensibility.TABLE.getCaseSensibility());
+        }
+
+        Map<String, String> tableMap = Maps.newTreeMap();
         if (db != null) {
-            Map<String, String> tableMap = Maps.newTreeMap();
             db.readLock();
             try {
-                PatternMatcher matcher = null;
-                if (showTableStmt.getPattern() != null) {
-                    matcher = PatternMatcher.createMysqlPattern(showTableStmt.getPattern(),
-                            CaseSensibility.TABLE.getCaseSensibility());
-                }
-                for (Table tbl : db.getTables()) {
-                    if (matcher != null && !matcher.match(tbl.getName())) {
-                        continue;
+                if (CatalogMgr.isInternalCatalog(catalog)) {
+                    for (Table tbl : db.getTables()) {
+                        if (matcher != null && !matcher.match(tbl.getName())) {
+                            continue;
+                        }
+                        // check tbl privs
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                db.getFullName(), tbl.getName(),
+                                PrivPredicate.SHOW)) {
+                            continue;
+                        }
+                        tableMap.put(tbl.getName(), tbl.getMysqlType());
                     }
-                    // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), tbl.getName(),
-                            PrivPredicate.SHOW)) {
-                        continue;
+                } else {
+                    List<String> tableNames = metadataMgr.listTableNames(catalog, dbName);
+                    if (matcher != null) {
+                        tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
                     }
-                    tableMap.put(tbl.getName(), tbl.getMysqlType());
+                    tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
                 }
             } finally {
                 db.readUnlock();
             }
-
-            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
-                if (showTableStmt.isVerbose()) {
-                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
-                } else {
-                    rows.add(Lists.newArrayList(entry.getKey()));
-                }
-            }
         } else {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showTableStmt.getDb());
+        }
+
+        for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+            if (showTableStmt.isVerbose()) {
+                rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+            } else {
+                rows.add(Lists.newArrayList(entry.getKey()));
+            }
         }
         resultSet = new ShowResultSet(showTableStmt.getMetaData(), rows);
     }
@@ -1386,7 +1398,7 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
-        List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getAuthInfo(showStmt.getUserIdent());
+        List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 

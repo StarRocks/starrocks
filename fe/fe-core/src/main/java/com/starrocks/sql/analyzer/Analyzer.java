@@ -21,11 +21,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
@@ -155,7 +157,19 @@ public class Analyzer {
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            GrantRevokeRoleAnalyzer.analyze(stmt, session);
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
 

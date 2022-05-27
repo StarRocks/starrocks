@@ -40,16 +40,21 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
@@ -64,6 +69,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -2132,4 +2138,217 @@ public class AuthTest {
         Assert.assertTrue(auth.checkTblPriv(user, db, "table1", PrivPredicate.SELECT));
         Assert.assertFalse(auth.checkTblPriv(user, db, "table2", PrivPredicate.SELECT));
      }
+
+     @Test
+     public void testGrantRevokeImpersonate() throws Exception {
+         // 1. prepare
+         // 1.1create harry, gregory, albert
+         UserIdentity harry = new UserIdentity("Harry", "%");
+         harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         UserIdentity gregory = new UserIdentity("Gregory", "%");
+         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         UserIdentity albert = new UserIdentity("Albert", "%");
+         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         List<UserIdentity> userToBeCreated = new ArrayList<>();
+         userToBeCreated.add(harry);
+         userToBeCreated.add(gregory);
+         userToBeCreated.add(albert);
+         for (UserIdentity userIdentity : userToBeCreated) {
+             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+             createUserStmt.analyze(analyzer);
+             auth.createUser(createUserStmt);
+         }
+
+
+         // 1.2 before test
+         Assert.assertFalse(auth.canImpersonate(harry, gregory));
+         Assert.assertFalse(auth.canImpersonate(harry, albert));
+
+         // 2. grant impersonate to gregory on harry
+         // 2.1 grant
+         GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 2.2 assert
+         Assert.assertTrue(auth.canImpersonate(harry, gregory));
+         Assert.assertFalse(auth.canImpersonate(harry, albert));
+
+         // 3. grant impersonate to albert on harry
+         // 3.1 grant
+         grantStmt = new GrantImpersonateStmt(harry, albert);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 3.2 assert
+         Assert.assertTrue(auth.canImpersonate(harry, gregory));
+         Assert.assertTrue(auth.canImpersonate(harry, albert));
+
+         // 4. revoke impersonate from albert on harry
+         // 4.1 revoke
+         RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.revokeImpersonate(revokeStmt);
+         // 4.2 assert
+         Assert.assertFalse(auth.canImpersonate(harry, gregory));
+         Assert.assertTrue(auth.canImpersonate(harry, albert));
+     }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        // 1. create 3 users
+        List<String> names = Arrays.asList("user1", "user2", "user3");
+        List<UserIdentity> userToBeCreated = new ArrayList<>();
+        for (String name : names) {
+            UserIdentity userIdentity = new UserIdentity(name, "%");
+            userIdentity.analyze("test_cluster");
+            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+            userToBeCreated.add(userIdentity);
+        }
+        UserIdentity emptyPrivilegeUser = userToBeCreated.get(0);
+        UserIdentity onePrivilegeUser = userToBeCreated.get(1);
+        UserIdentity manyPrivilegeUser = userToBeCreated.get(2);
+
+        // 1. emptyPrivilegeUser has one privilege
+        List<List<String>> infos = auth.getGrantsSQLs(emptyPrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
+        Assert.assertEquals("GRANT Select_priv ON test_cluster:information_schema.* TO 'test_cluster:user1'@'%'", infos.get(0).get(1));
+
+        // 2. grant table privilege to onePrivilegeUser
+        TablePattern table = new TablePattern("testdb", "table1");
+        table.analyze("test_cluster");
+        auth.grantPrivs(onePrivilegeUser, table, PrivBitSet.of(Privilege.SELECT_PRIV), false);
+        infos = auth.getGrantsSQLs(onePrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
+        String expectSQL = "GRANT Select_priv ON test_cluster:testdb.table1 TO 'test_cluster:user2'@'%'";
+        Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
+
+        // 3. grant resource & table & global & impersonate to manyPrivilegeUser
+        List<String> expectSQLs = new ArrayList<>();
+        TablePattern db = new TablePattern("testdb", "*");
+        db.analyze("test_cluster");
+        auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
+        expectSQLs.add("GRANT Select_priv, Load_priv ON test_cluster:testdb.* TO 'test_cluster:user3'@'%'");
+        TablePattern global = new TablePattern("*", "*");
+        global.analyze("test_cluster");
+        auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
+        expectSQLs.add("GRANT Grant_priv ON *.* TO 'test_cluster:user3'@'%'");
+        ResourcePattern resourcePattern = new ResourcePattern("test_resource");
+        resourcePattern.analyze();
+        auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
+        expectSQLs.add("GRANT Usage_priv ON RESOURCE 'test_resource' TO 'test_cluster:user3'@'%'");
+        auth.grantImpersonate(new GrantImpersonateStmt(manyPrivilegeUser, emptyPrivilegeUser));
+        expectSQLs.add("GRANT IMPERSONATE ON 'test_cluster:user1'@'%' TO 'test_cluster:user3'@'%'");
+        infos = auth.getGrantsSQLs(manyPrivilegeUser);
+        Assert.assertEquals(1, infos.size());
+        Assert.assertEquals(2, infos.get(0).size());
+        Assert.assertEquals(manyPrivilegeUser.toString(), infos.get(0).get(0));
+        for (String expect : expectSQLs) {
+            Assert.assertTrue(infos.get(0).get(1).contains(expect));
+        }
+
+        // 4. check all grants
+        infos = auth.getGrantsSQLs(null);
+        Assert.assertEquals(4, infos.size()); // the other is root
+        Set<String> nameSet = new HashSet<>();
+        for (List<String> line: infos) {
+            nameSet.add(line.get(0));
+        }
+        Assert.assertTrue(nameSet.contains(emptyPrivilegeUser.toString()));
+        Assert.assertTrue(nameSet.contains(onePrivilegeUser.toString()));
+        Assert.assertTrue(nameSet.contains(manyPrivilegeUser.toString()));
+    }
+
+    @Test
+    public void testImpersonateReplay(@Mocked EditLog editLog) throws Exception {
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+
+        List<ImpersonatePrivInfo> infos = new ArrayList<>();
+        new Expectations(editLog) {
+            {
+                editLog.logGrantImpersonate((ImpersonatePrivInfo)any);
+                minTimes = 0;
+                result = new Delegate() {
+                    void recordInfo(ImpersonatePrivInfo info) {
+                        infos.add(info);
+                    }
+                };
+            }
+            {
+                editLog.logRevokeImpersonate((ImpersonatePrivInfo)any);
+                minTimes = 0;
+                result = new Delegate() {
+                    void recordInfo(ImpersonatePrivInfo info) {
+                        infos.add(info);
+                    }
+                };
+            }
+            {
+                editLog.logCreateUser((PrivInfo)any);
+                minTimes = 0;
+            }
+        };
+
+        // 1. prepare
+        // 1.1create harry, gregory
+        UserIdentity harry = new UserIdentity("Harry", "%");
+        harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        UserIdentity gregory = new UserIdentity("Gregory", "%");
+        gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        List<UserIdentity> userToBeCreated = new ArrayList<>();
+        userToBeCreated.add(harry);
+        userToBeCreated.add(gregory);
+        for (UserIdentity userIdentity : userToBeCreated) {
+            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            createUserStmt.analyze(analyzer);
+            auth.createUser(createUserStmt);
+        }
+
+
+        // 2. grant impersonate to gregory on harry
+        // 2.1 grant
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+        GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 2.2 check
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
+
+        // 3. check log grant
+        Assert.assertEquals(1, infos.size());
+
+        // 4. replay grant
+        Auth newAuth = new Auth();
+        Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
+        newAuth.replayGrantImpersonate(infos.get(0));
+        Assert.assertTrue(newAuth.canImpersonate(harry, gregory));
+        infos.clear();
+        Assert.assertEquals(0, infos.size());
+
+        // 5. revoke impersonate to greogory from harry
+        RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.revokeImpersonate(revokeStmt);
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+
+        // 6. check log revoke
+        Assert.assertEquals(1, infos.size());
+
+        // 7. replay revoke
+        newAuth.replayRevokeImpersonate(infos.get(0));
+        Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
+    }
  }
