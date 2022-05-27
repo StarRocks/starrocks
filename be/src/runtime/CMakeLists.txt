@@ -62,7 +62,7 @@ set(RUNTIME_FILES
     export_sink.cpp
     load_channel_mgr.cpp
     load_channel.cpp
-    tablets_channel.cpp
+    local_tablets_channel.cpp
     snapshot_loader.cpp
     query_statistics.cpp 
     message_body_sink.cpp
