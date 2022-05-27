@@ -203,6 +203,8 @@ public class SplitAggregateRule extends TransformationRule {
                         return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
                                 operator.getGroupingKeys());
+                    // If agg node has limit or has a very good aggregation effect which could reduce the shuffle data,
+                    // we prefer to choose 2 phase aggregate
                     } else if (canGenerateTwoStageAggregate(operator, distinctColumns) &&
                             (operator.hasLimit() || hasAggregateEffect(input, distinctColumns))) {
                         return implementTwoStageAgg(input, operator);
