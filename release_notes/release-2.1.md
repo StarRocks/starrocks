@@ -1,5 +1,99 @@
 # StarRocks version 2.1
 
+## 2.1.7
+
+Release date: May 26, 2022
+
+### Improvements
+
+For window functions in which the frame is set to ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW, if the partition involved in a calculation is large, StarRocks caches all data of the partition before it performs the calculation. In this situation, a large number of memory resources are consumed. StarRocks has been optimized not to cache all data of the partition in this situation. [5829](https://github.com/StarRocks/starrocks/issues/5829)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- When data is loaded into a table that uses the Primary Key model, data processing errors may occur if the creation time of each data version stored in the system does not monotonically increase due to reasons such as backward-moved system time and related unknown bugs. Such data processing errors cause backends (BEs) to stop. [#6046](https://github.com/StarRocks/starrocks/issues/6046)
+- Some graphical user interface (GUI) tools automatically configure the set_sql_limit variable. As a result, the SQL statement ORDER BY LIMIT is ignored, and consequently an incorrect number of rows are returned for queries. [#5966](https://github.com/StarRocks/starrocks/issues/5966)
+- If the DROP SCHEMA statement is executed on a database, the database is forcibly deleted and cannot be restored. [#6201](https://github.com/StarRocks/starrocks/issues/6201)
+- When JSON-formatted data is loaded, BEs stop if the data contains JSON format errors. For example, key-value pairs are not separated by commas (,). [#6098](https://github.com/StarRocks/starrocks/issues/6098)
+- When a large amount of data is being loaded in a highly concurrent manner, tasks that are run to write data to disks are piled up on BEs. In this situation, the BEs may stop. [#3877](https://github.com/StarRocks/starrocks/issues/3877)
+- StarRocks estimates the amount of memory that is required before it performs a schema change on a table. If the table contains a large number of STRING fields, the memory estimation result may be inaccurate. In this situation, if the estimated amount of memory that is required exceeds the maximum memory that is allowed for a single schema change operation, schema change operations that are supposed to be properly run encounter errors. [#6322](https://github.com/StarRocks/starrocks/issues/6322)
+- After a schema change is performed on a table that uses the Primary Key model, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- If low-cardinality optimization is performed during Shuffle Join operations, partitioning errors may occur. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- If a colocation group (CG) contains a large number of tables and data is frequently loaded into the tables, the CG may not be able to stay in the stable state. In this case, the JOIN statement does not support Colocate Join operations. StarRocks has been optimized to wait for a little longer during data loading. This way, the integrity of the tablet replicas to which data is loaded can be maximized.
+
+## 2.1.6
+
+Release date: May 10, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- When you run queries after you perform multiple DELETE operations, you may obtain incorrect query results if optimization on low-cardinality columns is performed for the queries. [#5712](https://github.com/StarRocks/starrocks/issues/5712)
+- If tablets are migrated in specific data ingestion phases, data continues to be written to the original disk on which the tablets are stored. As a result, data is lost, and queries cannot be run properly. [#5160](https://github.com/StarRocks/starrocks/issues/5160)
+- If you covert values between the DECIMAL and STRING data types, the return values may be in an unexpected precision. [#5608](https://github.com/StarRocks/starrocks/issues/5608)
+- If you multiply a DECIMAL value by a BIGINT value, an arithmetic overflow may occur. A few adjustments and optimizations are made to fix this bug. [#4211](https://github.com/StarRocks/starrocks/pull/4211)
+
+## 2.1.5
+
+Release date: April 27, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The calculation result is not correct when decimal multiplication overflows. After the bug is fixed, NULL is returned when decimal multiplication overflows.
+- When statistics have a considerable deviation from the actual statistics, the priority of Collocate Join may be lower than Broadcast Join. As a result, the query planner may not choose Colocate Join as the more appropriate Join strategy. [#4817](https://github.com/StarRocks/starrocks/pull/4817)
+- Query fails because the plan for complex expressions is wrong when there are more than 4 tables to join.
+- BEs may stop working under Shuffle Join when the shuffle column is a low-cardinality column. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- BEs may stop working when the SPLIT function uses a NULL parameter. [#4092](https://github.com/StarRocks/starrocks/issues/4092)
+
+## 2.1.4
+
+Release date: April 8, 2022
+
+### New Features
+
+- The `UUID_NUMERIC` function is supported, which returns a LARGEINT value. Compared with `UUID` function, the performance of `UUID_NUMERIC` function can be improved by nearly 2 orders of magnitude.
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- After deleting columns, adding new partitions, and cloning tablets,  the columns' unique ids in old and new tablets may not be the same, which may cause BE to stop working because the system uses a shared tablet schema. [#4514](https://github.com/StarRocks/starrocks/issues/4514)
+- When data is loading to a StarRocks external table, if the configured FE of the target StarRocks cluster is not a Leader, it will cause the FE to stop working. [#4573](https://github.com/StarRocks/starrocks/issues/4573)
+- The results of `CAST` function are different in StarRocks version 1.19 and 2.1. [#4701](https://github.com/StarRocks/starrocks/pull/4701)
+- Query results may be incorrect, when a Duplicate Key table performs schema change and creates materialized view at the same time. [#4839](https://github.com/StarRocks/starrocks/issues/4839)
+
+## 2.1.3
+
+Release date: March 19, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The problem of possible data loss due to BE failure (solved by using Batch publish version). [#3140](https://github.com/StarRocks/starrocks/issues/3140)
+- Some queries may cause memory limit exceeded errors due to inappropriate execution plans.
+- The checksum between replicas may be inconsistent in different compaction processes. [#3438](https://github.com/StarRocks/starrocks/issues/3438)
+- Query may fail in some situation when JSON reorder projection is not processed correctly. [#4056](https://github.com/StarRocks/starrocks/pull/4056)
+
+## 2.1.2
+
+Release date: March 14, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- In a rolling upgrade from version 1.19 to 2.1, BE nodes stop working because of unmatched chunk sizes beween two versions. [#3834](https://github.com/StarRocks/starrocks/issues/3834)
+- Loading tasks may fail while StarRocks is updating from version 2.0 to 2.1. [#3828](https://github.com/StarRocks/starrocks/issues/3828)
+- Query fails when there is no appropriate execution plan for single-tablet table joins. [#3854](https://github.com/StarRocks/starrocks/issues/3854)
+- A deadlock problem may occur when an FE node collects information to build a global dictionary for low-cardinality optimization. [#3839]( https://github.com/StarRocks/starrocks/issues/3839)
+- Query fails when BE nodes are in suspended animation due to deadlock.
+- BI tools cannot connect to StarRocks when  the show variables command fails.[#3708](https://github.com/StarRocks/starrocks/issues/3708)
+
 ## 2.1.0
 
 Release date: February 24, 2022
@@ -28,7 +122,7 @@ Release date: February 24, 2022
 
 The following bugs are fixed:
 
-- Auto __op  mapping does not take effect if jsonpaths is specified in the command used for loading JSON data.
+- Auto __op mapping does not take effect if jsonpaths is specified in the command used for loading JSON data.
 - BE nodes fail because the source data changes during data loading using Broker Load.
 - Some SQL statements report errors after materialized views are created.
 - The routine load does not work due to quoted jsonpaths.
@@ -41,75 +135,3 @@ The API for disabling a Colocation Group is changed from `DELETE /api/colocate/g
 ### Others
 
 flink-connector-starrocks is now available for Flink to read StarRocks data in batches. This improves data read efficiency compared to the JDBC connector.
-
-## 2.1.2
-
-Release date: March 14, 2022
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- In a rolling upgrade from version 1.19 to 2.1, BE nodes stop working because of unmatched chunk sizes beween two versions. [#3834](https://github.com/StarRocks/starrocks/issues/3834)
-- Loading tasks may fail while StarRocks is updating from version 2.0 to 2.1. [#3828](https://github.com/StarRocks/starrocks/issues/3828)
-- Query fails when there is no appropriate execution plan for single-tablet table joins. [#3854](https://github.com/StarRocks/starrocks/issues/3854)
-- A deadlock problem may occur when an FE node collects information to build a global dictionary for low-cardinality optimization. [#3839]( https://github.com/StarRocks/starrocks/issues/3839)
-- Query fails when BE nodes are in suspended animation due to deadlock.
-- BI tools cannot connect to StarRocks when  the show variables command fails.[#3708](https://github.com/StarRocks/starrocks/issues/3708)
-
-## 2.1.3
-
-Release date: March 19, 2022
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- The problem of possible data loss due to BE failure (solved by using Batch publish version). [#3140](https://github.com/StarRocks/starrocks/issues/3140)
-- Some queries may cause memory limit exceeded errors due to inappropriate execution plans.
-- The checksum between replicas may be inconsistent in different compaction processes. [#3438](https://github.com/StarRocks/starrocks/issues/3438)
-- Query may fail in some situation when JSON reorder projection is not processed correctly. [#4056](https://github.com/StarRocks/starrocks/pull/4056)
-
-## 2.1.4
-
-Release date: April 8, 2022
-
-### New Feature
-
-- The `UUID_NUMERIC` function is supported, which returns a LARGEINT value. Compared with `UUID` function, the performance of `UUID_NUMERIC` function can be improved by nearly 2 orders of magnitude.
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- After deleting columns, adding new partitions, and cloning tablets,  the columns' unique ids in old and new tablets may not be the same, which may cause BE to stop working because the system uses a shared tablet schema. [#4514](https://github.com/StarRocks/starrocks/issues/4514)
-- When data is loading to a StarRocks external table, if the configured FE of the target StarRocks cluster is not a Leader, it will cause the FE to stop working. [#4573](https://github.com/StarRocks/starrocks/issues/4573)
-- The results of `CAST` function are different in StarRocks version 1.19 and 2.1. [#4701](https://github.com/StarRocks/starrocks/pull/4701)
-- Query results may be incorrect, when a Duplicate Key table performs schema change and creates materialized view at the same time. [#4839](https://github.com/StarRocks/starrocks/issues/4839)
-
-## 2.1.5
-
-Release date: April 27, 2022
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- The calculation result is not correct when decimal multiplication overflows. After the bug is fixed, NULL is returned when decimal multiplication overflows.
-- When statistics have a considerable deviation from the actual statistics, the priority of Collocate Join may be lower than Broadcast Join. As a result, the query planner may not choose Colocate Join as the more appropriate Join strategy. [#4817](https://github.com/StarRocks/starrocks/pull/4817)
-- Query fails because the plan for complex expressions is wrong when there are more than 4 tables to join.
-- BEs may stop working under Shuffle Join when the shuffle column is a low-cardinality column. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
-- BEs may stop working when the SPLIT function uses a NULL parameter. [#4092](https://github.com/StarRocks/starrocks/issues/4092)
-
-## 2.1.6
-
-Release date: May 10, 2022
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- When you run queries after you perform multiple DELETE operations, you may obtain incorrect query results if optimization on low-cardinality columns is performed for the queries. [#5712](https://github.com/StarRocks/starrocks/issues/5712)
-- If tablets are migrated in specific data ingestion phases, data continues to be written to the original disk on which the tablets are stored. As a result, data is lost, and queries cannot be run properly. [#5160](https://github.com/StarRocks/starrocks/issues/5160)
-- If you covert values between the DECIMAL and STRING data types, the return values may be in an unexpected precision. [#5608](https://github.com/StarRocks/starrocks/issues/5608)
-- If you multiply a DECIMAL value by a BIGINT value, an arithmetic overflow may occur. A few adjustments and optimizations are made to fix this bug. [#4211](https://github.com/StarRocks/starrocks/pull/4211)
