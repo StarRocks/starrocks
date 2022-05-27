@@ -279,6 +279,8 @@ vectorized_functions = [
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
+    [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
+    [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
