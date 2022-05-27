@@ -213,67 +213,6 @@ public:
 };
 
 template <>
-<<<<<<< HEAD:be/src/storage/vectorized/column_aggregate_func.cpp
-=======
-class ReplaceAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
-public:
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<BitmapColumn*>(src.get());
-        this->data() = *(data->get_object(row));
-    }
-
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
-        aggregate_impl(end - 1, src);
-    }
-
-    void append_data(Column* agg) override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(agg);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data());
-        col->append(std::move(bitmap));
-    }
-};
-
-template <>
-class ReplaceAggregator<HyperLogLogColumn, HyperLogLog> final
-        : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
-public:
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<HyperLogLogColumn*>(src.get());
-        this->data() = *(data->get_object(row));
-    }
-
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
-        aggregate_impl(end - 1, src);
-    }
-
-    void append_data(Column* agg) override {
-        HyperLogLogColumn* col = down_cast<HyperLogLogColumn*>(agg);
-        HyperLogLog& hll = const_cast<HyperLogLog&>(this->data());
-        col->append(std::move(hll));
-    }
-};
-
-template <>
-class ReplaceAggregator<PercentileColumn, PercentileValue> final
-        : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
-public:
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<PercentileColumn*>(src.get());
-        this->data() = *(data->get_object(row));
-    }
-
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
-        aggregate_impl(end - 1, src);
-    }
-
-    void append_data(Column* agg) override {
-        PercentileColumn* col = down_cast<PercentileColumn*>(agg);
-        PercentileValue& per = const_cast<PercentileValue&>(this->data());
-        col->append(std::move(per));
-    }
-};
-
-template <>
 class ReplaceAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
@@ -293,7 +232,6 @@ public:
 };
 
 template <>
->>>>>>> 228c79369 ([Feature] support create unique/primary key with JSON (#6544)):be/src/storage/column_aggregate_func.cpp
 class ReplaceAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
 public:
     void reset() override { this->data().reset(); }
@@ -628,13 +566,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_REPLACE(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
             CASE_REPLACE(OLAP_FIELD_TYPE_ARRAY, ArrayColumn, ArrayState)
-<<<<<<< HEAD:be/src/storage/vectorized/column_aggregate_func.cpp
-=======
-            CASE_REPLACE(OLAP_FIELD_TYPE_HLL, HyperLogLogColumn, HyperLogLog)
-            CASE_REPLACE(OLAP_FIELD_TYPE_OBJECT, BitmapColumn, BitmapValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_PERCENTILE, PercentileColumn, PercentileValue)
             CASE_REPLACE(OLAP_FIELD_TYPE_JSON, JsonColumn, JsonValue)
->>>>>>> 228c79369 ([Feature] support create unique/primary key with JSON (#6544)):be/src/storage/column_aggregate_func.cpp
             CASE_DEFAULT_WARNING(type)
         }
     }
