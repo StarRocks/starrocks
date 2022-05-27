@@ -32,6 +32,9 @@ public class Task implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    @SerializedName("expireTime")
+    private long expireTime = -1;
+
     public long getId() {
         return id;
     }
@@ -78,6 +81,14 @@ public class Task implements Writable {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public Long getExpireTime() {
+        return expireTime;
+    }
+
+    public void setExpireTime(Long expireTime) {
+        this.expireTime = expireTime;
     }
 
     public static Task read(DataInput in) throws IOException {

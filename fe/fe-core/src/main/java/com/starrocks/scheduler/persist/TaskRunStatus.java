@@ -41,6 +41,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("errorMessage")
     private String errorMessage;
 
+    @SerializedName("expireTime")
+    private long expireTime;
+
     public String getQueryId() {
         return queryId;
     }
@@ -111,6 +114,14 @@ public class TaskRunStatus implements Writable {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public long getExpireTime() {
+        return expireTime;
+    }
+
+    public void setExpireTime(long expireTime) {
+        this.expireTime = expireTime;
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {

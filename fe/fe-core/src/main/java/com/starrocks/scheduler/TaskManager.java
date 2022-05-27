@@ -216,7 +216,7 @@ public class TaskManager {
     }
 
     public void replayCreateTask(Task task) {
-        if ((System.currentTimeMillis() - task.getCreateTime()) / 1000 > Config.label_keep_max_second) {
+        if (task.getExpireTime() > 0  && System.currentTimeMillis() > task.getExpireTime()) {
             return;
         }
         createTask(task, true);
@@ -235,15 +235,19 @@ public class TaskManager {
         long createResult = createTask(task, false);
 
         String taskName = task.getName();
+        SubmitResult submitResult;
         if (createResult < 0) {
             if (createResult == TASK_EXISTS) {
                 throw new DdlException("Task " +  taskName + " already exist.");
+            } else {
+                LOG.warn("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
+                submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
             }
-            throw new DdlException("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
-        }
-        SubmitResult submitResult = executeTask(taskName);
-        if (submitResult.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
-            dropTasks(ImmutableList.of(task.getId()), false);
+        } else {
+            submitResult = executeTask(taskName);
+            if (submitResult.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
+                dropTasks(ImmutableList.of(task.getId()), false);
+            }
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -318,11 +322,7 @@ public class TaskManager {
 
         if (status.getState() == Constants.TaskRunState.SUCCESS ||
                 status.getState() == Constants.TaskRunState.FAILED) {
-            long lastUpdateTime = status.getCreateTime();
-            if (status.getFinishTime() > lastUpdateTime) {
-                lastUpdateTime = status.getFinishTime();
-            }
-            if ((System.currentTimeMillis() - lastUpdateTime) / 1000 > Config.label_keep_max_second) {
+            if (System.currentTimeMillis() > status.getExpireTime()) {
                 return;
             }
         }
@@ -389,24 +389,23 @@ public class TaskManager {
         long currentTimeMs = System.currentTimeMillis();
 
         List<Task> currentTask = showTasks(null);
+        Iterator<Task> iterator = currentTask.iterator();
         List<Long> taskIdToDelete = Lists.newArrayList();
-        currentTask.sort((o1, o2) -> Long.signum(o1.getCreateTime() - o2.getCreateTime()));
-        int labelKeepMaxSecond = Config.label_keep_max_second;
-        int numTaskToRemove = currentTask.size() - Config.label_keep_max_num;
-        for (Task task : currentTask) {
-            if ((currentTimeMs - task.getCreateTime()) / 1000 > labelKeepMaxSecond ||
-                    numTaskToRemove > 0) {
+        while (iterator.hasNext()) {
+            Task task = iterator.next();
+            Long expireTime = task.getExpireTime();
+            if (expireTime > 0 && currentTimeMs > expireTime) {
                 taskIdToDelete.add(task.getId());
-                --numTaskToRemove;
             }
         }
-        // this will do in checkpoint and does not need write log
+        // this will do in checkpoint thread and does not need write log
         dropTasks(taskIdToDelete, true);
     }
 
     public void removeOldTaskRunHistory() {
         long currentTimeMs = System.currentTimeMillis();
 
+        // only SUCCESS and FAILED in taskRunHistory
         Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
         List<String> historyToDelete = Lists.newArrayList();
 
@@ -414,20 +413,13 @@ public class TaskManager {
             return;
         }
         try {
-            int labelKeepMaxSecond = Config.label_keep_max_second;
-            int numHistoryToRemove = taskRunHistory.size() - Config.label_keep_max_num;
-            for (TaskRunStatus runStatus : taskRunHistory) {
-                // task run may run for a long time and then failed
-                // there may be no finish time when it fails
-                long lastUpdateTime = runStatus.getCreateTime();
-                if (runStatus.getFinishTime() > lastUpdateTime) {
-                    lastUpdateTime = runStatus.getFinishTime();
-                }
-                if ((currentTimeMs - lastUpdateTime) / 1000 > labelKeepMaxSecond ||
-                        numHistoryToRemove > 0) {
-                    historyToDelete.add(runStatus.getQueryId());
-                    taskRunHistory.remove();
-                    --numHistoryToRemove;
+            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
+            while (iterator.hasNext()) {
+                TaskRunStatus taskRunStatus = iterator.next();
+                long expireTime = taskRunStatus.getExpireTime();
+                if (currentTimeMs > expireTime) {
+                    historyToDelete.add(taskRunStatus.getQueryId());
+                    iterator.remove();
                 }
             }
         } finally {

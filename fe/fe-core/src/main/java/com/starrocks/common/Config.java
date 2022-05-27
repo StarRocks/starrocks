@@ -186,6 +186,18 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     *  for task set expire time
+     */
+    @ConfField(mutable = true)
+    public static int default_task_ttl = 3 * 24 * 3600;         // 3 day
+
+    /**
+     *  for task run set expire time
+     */
+    @ConfField(mutable = true)
+    public static int default_task_run_ttl = 3 * 24 * 3600;     // 3 day
+
+    /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
      */
