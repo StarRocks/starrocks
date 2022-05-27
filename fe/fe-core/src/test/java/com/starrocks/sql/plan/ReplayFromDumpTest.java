@@ -260,7 +260,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
         System.out.println(replayPair.second);
         // check d_date_sk distinct values has adjusted according to the cardinality
-        Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n" +
                 "  |  build runtime filters:\n" +
