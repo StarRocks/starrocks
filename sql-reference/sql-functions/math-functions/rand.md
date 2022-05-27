@@ -1,24 +1,22 @@
-# rand, random
+# RAND, RANDOM
 
 ## 功能
 
-返回 0 到 1 的随机数
+返回一个 0 (包含) 到 1（不包含）之间的随机浮点数。
 
 ## 语法
 
 ```Haskell
-RAND();
-
 RAND(x);
 ```
 
 ## 参数说明
 
-`x`: 支持的数据类型为 BIGINT
+`x`: 可选。支持的数据类型为 BIGINT。如果指定了`x`, 则返回一个可重复的随机数。如果没有指定 `x`，则返回一个完全随机数。
 
 ## 返回值说明
 
-返回值的数据类型为 DOUBLE
+返回值的数据类型为 DOUBLE。
 
 ## 示例
 
@@ -40,6 +38,6 @@ mysql> select rand(3);
 1 row in set (0.00 sec)
 ```
 
-## 关键词
+## Keyword
 
 RAND, RANDOM
