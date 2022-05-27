@@ -20,6 +20,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergResourceTest {
@@ -56,6 +57,10 @@ public class IcebergResourceTest {
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
         Assert.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
         Assert.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
+        Map<String, String> newURI = new HashMap<>();
+        newURI.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.2:9380");
+        resource.alterProperties(newURI);
+        Assert.assertEquals("thrift://127.0.0.2:9380", resource.getHiveMetastoreURIs());
     }
 
     @Test
