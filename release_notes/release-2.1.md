@@ -1,5 +1,100 @@
 # StarRocks version 2.1
 
+## 2.1.7
+
+发布日期：2022年5月26日
+
+### 功能优化
+
+对于 Frame 设置为 `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` 的窗口函数，如果计算中某个分区很大，系统会缓存这个分区的所有数据、然后再进行计算，导致消耗大量内存。现优化为这种情况下不再缓存分区的所有数据。[5829](https://github.com/StarRocks/starrocks/issues/5829)
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 往主键模型表导入数据时，系统内部保存的每个数据版本对应的创建时间如果不能保持严格增长（比如因为系统时间被往前调整过、或因为相关的未知 Bug），会导致处理出错，从而导致 BE 停止服务。[#6046](https://github.com/StarRocks/starrocks/issues/6046)
+
+- 某些图形化界面工具会自动设置 `set_sql_limit` 变量，导致 SQL 语句 ORDER BY LIMIT 被忽略，从而导致返回的数据行数不正确。[#5966](https://github.com/StarRocks/starrocks/issues/5966)
+
+- 执行 DROP SCHEMA 语句，会导致直接强制删除数据库，并且删除的数据库不可恢复。[#6201](https://github.com/StarRocks/starrocks/issues/6201)
+
+- 导入 JSON 格式的数据时，如果 JSON 格式有错误（比如多个键值对之间缺少逗号 “,” 分隔），会导致 BE 停止服务。[#6098](https://github.com/StarRocks/starrocks/issues/6098)
+
+- 在高并发导入场景下，BE 写磁盘的任务数量积压，可能导致 BE 停止服务。[#3877](https://github.com/StarRocks/starrocks/issues/3877)
+
+- 在做表结构变更之前，系统会先进行内存预估。如果该表中 STRING 类型的字段比较多，则内存预估结果会不准确。在这种情况下，如果预估的内存超过了单个表结构更改操作所允许的内存上限，会导致原本能正常执行的表结构更改操作报错。[#6322](https://github.com/StarRocks/starrocks/issues/6322)
+- 主键模型的表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- 在 Shuffle Join 时，如果使用了低基数优化，可能导致分区错误。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- 当一个 Colocation Group 中包含的表比较多、导入频率又比较高时，可能会导致该 Colocation Group 无法保持 `stable` 状态，从而导致 JOIN 语句无法使用 Colocate Join。现优化为导入数据时稍微多等一会，这样可以尽量保证导入的 Tablet 副本的完整性。
+
+## 2.1.6
+
+发布日期：2022年5月10日
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 在进行多个 DELETE 操作后，查询时，如果系统内部使用了低基数优化，则查询结果可能是错误的。[#5712](https://github.com/StarRocks/starrocks/issues/5712)
+- 在数据写入中的一些特殊阶段，如果 Tablet 进行并完成迁移，数据会继续写入至原先 Tablet 对应的磁盘，导致数据丢失，进而导致查询错误。[#5160](https://github.com/StarRocks/starrocks/issues/5160)
+- 当 DECIMAL 和 STRING 类型相互转换时，可能会导致精度错误。[#5608](https://github.com/StarRocks/starrocks/issues/5608)
+- 当 DECIMAL 和 BIGINT 类型相乘时，可能会导致运算结果溢出。此次进行了一些调整和优化。[#4211](https://github.com/StarRocks/starrocks/pull/4211)
+
+## 2.1.5
+
+发布日期： 2022年4月27日
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 原先 Decimal 乘法溢出，计算结果错误，修复后，Decimal 乘法溢出时返回 NULL。
+- 统计信息误差较大时，执行计划中 Colocate Join 的优先级可能低于 Broadcast Join，导致实际执行时 Colocate Join 未生效。[#4817](https://github.com/StarRocks/starrocks/pull/4817)
+- 当 4 张表以上进行 Join 时，复杂表达式规划错误，导致查询报错。
+- Shuffle Join 下，如果 Shuffle 的列是低基数列，可能会导致 BE 停止服务。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
+- SPLIT 函数使用 NULL 参数时，会导致 BE 停止服务。[#4092](https://github.com/StarRocks/starrocks/issues/4092)
+
+## 2.1.4
+
+发布日期： 2022年4月8日
+
+### 新功能
+
+- 新增 `UUID_NUMERIC` 函数，返回 LARGEINT 类型的值。相比于 `UUID` 函数，执行性能提升近 2 个数量级。
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
+- 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
+- `CAST`函数在 StarRocks 1.19 和 2.1 版本中的执行结果不一致。[#4701](https://github.com/StarRocks/starrocks/pull/4701)
+- 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
+
+## 2.1.3
+
+发布日期： 2022年3月19日
+
+### Bug 修复
+
+- 通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
+- 修复某些查询可能因为执行计划不合理而导致内存超限的问题。
+- 修复分片副本的校验和（checksum）在不同的 compaction 过程下结果可能不一致的问题。[#3438](https://github.com/StarRocks/starrocks/issues/3438)
+- 修复因 JOIN reorder projection 未正确处理而导致查询可能报错的问题。[#4056](https://github.com/StarRocks/starrocks/pull/4056)
+
+## 2.1.2
+
+发布日期： 2022年3月14日
+
+### Bug 修复
+
+- 修复从 1.19 升级到 2.1 会因 `chunk_size` 不匹配导致 BE 崩溃的问题。[#3834](https://github.com/StarRocks/starrocks/issues/3834)
+- 修复在从 2.0 升级到 2.1 的过程中有导入时，可能导致导入任务失败的问题。[#3828](https://github.com/StarRocks/starrocks/issues/3828)
+- 修复对单 tablet 的表在做聚合操作时因无法得到合理的执行计划而导致查询失败的问题。[#3854](https://github.com/StarRocks/starrocks/issues/3854)
+- 修复 FE 在低基数全局字典优化中收集信息时可能导致死锁的问题。[#3839](https://github.com/StarRocks/starrocks/issues/3839)
+- 修复因死锁导致 BE 节点假死且查询失败的问题。
+- 修复因 `SHOW VARIABLES` 命令出错而导致 BI 工具无法连接的问题。[#3708](https://github.com/StarRocks/starrocks/issues/3708)
+
 ## 2.1.0
 
 发布日期： 2022年2月24日
@@ -37,71 +132,3 @@
 修改关闭 Colocation Group 的 HTTP Restful API。为了使语义更好理解，关闭 Colocation Group 的 API 修改为 `POST /api/colocate/group_unstable`（旧接口为 `DELETE /api/colocate/group_stable` ）。
 
 > 如果需要重新开启 Colocation Group ，则可以使用 API `POST /api/colocate/group_stable`。
-
-## 2.1.2
-
-发布日期： 2022年3月14日
-
-### Bug 修复
-
-- 修复从 1.19 升级到 2.1 会因 `chunk_size` 不匹配导致 BE 崩溃的问题。[#3834](https://github.com/StarRocks/starrocks/issues/3834)
-- 修复在从 2.0 升级到 2.1 的过程中有导入时，可能导致导入任务失败的问题。[#3828](https://github.com/StarRocks/starrocks/issues/3828)
-- 修复对单 tablet 的表在做聚合操作时因无法得到合理的执行计划而导致查询失败的问题。[#3854](https://github.com/StarRocks/starrocks/issues/3854)
-- 修复 FE 在低基数全局字典优化中收集信息时可能导致死锁的问题。[#3839](https://github.com/StarRocks/starrocks/issues/3839)
-- 修复因死锁导致 BE 节点假死且查询失败的问题。
-- 修复因 `SHOW VARIABLES` 命令出错而导致 BI 工具无法连接的问题。[#3708](https://github.com/StarRocks/starrocks/issues/3708)
-
-## 2.1.3
-
-发布日期： 2022年3月19日
-
-### Bug 修复
-
-- 通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
-- 修复某些查询可能因为执行计划不合理而导致内存超限的问题。
-- 修复分片副本的校验和（checksum）在不同的 compaction 过程下结果可能不一致的问题。[#3438](https://github.com/StarRocks/starrocks/issues/3438)
-- 修复因 JOIN reorder projection 未正确处理而导致查询可能报错的问题。[#4056](https://github.com/StarRocks/starrocks/pull/4056)
-
-## 2.1.4
-
-发布日期： 2022年4月8日
-
-### 新功能
-
-- 新增 `UUID_NUMERIC` 函数，返回 LARGEINT 类型的值。相比于 `UUID` 函数，执行性能提升近 2 个数量级。
-
-### Bug 修复
-
-修复了如下 Bug：
-
-- 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
-- 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
-- `CAST`函数在 StarRocks 1.19 和 2.1 版本中的执行结果不一致。[#4701](https://github.com/StarRocks/starrocks/pull/4701)
-- 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
-
-## 2.1.5
-
-发布日期： 2022年4月27日
-
-### Bug 修复
-
-修复了如下 Bug：
-
-- 原先 Decimal 乘法溢出，计算结果错误，修复后，Decimal 乘法溢出时返回 NULL。
-- 统计信息误差较大时，执行计划中 Colocate Join 的优先级可能低于 Broadcast Join，导致实际执行时 Colocate Join 未生效。[#4817](https://github.com/StarRocks/starrocks/pull/4817)
-- 当 4 张表以上进行 Join 时，复杂表达式规划错误，导致查询报错。
-- Shuffle Join 下，如果 Shuffle 的列是低基数列，可能会导致 BE 停止服务。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
-- SPLIT 函数使用 NULL 参数时，会导致 BE 停止服务。[#4092](https://github.com/StarRocks/starrocks/issues/4092)
-
-## 2.1.6
-
-发布日期：2022年5月10日
-
-### Bug 修复
-
-修复了如下 Bug：
-
-- 在进行多个 DELETE 操作后，查询时，如果系统内部使用了低基数优化，则查询结果可能是错误的。[#5712](https://github.com/StarRocks/starrocks/issues/5712)
-- 在数据写入中的一些特殊阶段，如果 Tablet 进行并完成迁移，数据会继续写入至原先 Tablet 对应的磁盘，导致数据丢失，进而导致查询错误。[#5160](https://github.com/StarRocks/starrocks/issues/5160)
-- 当 DECIMAL 和 STRING 类型相互转换时，可能会导致精度错误。[#5608](https://github.com/StarRocks/starrocks/issues/5608)
-- 当 DECIMAL 和 BIGINT 类型相乘时，可能会导致运算结果溢出。此次进行了一些调整和优化。[#4211](https://github.com/StarRocks/starrocks/pull/4211)
