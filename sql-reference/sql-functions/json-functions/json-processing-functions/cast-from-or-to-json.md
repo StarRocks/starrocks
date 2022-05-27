@@ -2,13 +2,21 @@
 
 ## 功能
 
-使用 CAST 函数，实现 JSON 类型的数据与 SQL 类型间的互相转换。
+使用 CAST 函数，实现 JSON 类型数据与 SQL 类型间的相互转换。
 
 ## 语法
 
-- `CAST(json_expr AS sql_data_type)`: 将 JSON 类型的数据转为 SQL 类型。
+- 将 JSON 类型的数据转为 SQL 类型。
 
-- `CAST(sql_expr AS JSON)`: 将 SQL 类型的数据转为 JSON 类型。
+```sql
+CAST(json_expr AS sql_data_type)
+```
+
+- 将 SQL 类型的数据转为 JSON 类型。
+
+```sql
+CAST(sql_expr AS JSON)
+```
 
 ## 参数说明
 
