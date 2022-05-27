@@ -533,7 +533,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                                     rightPlan.getRootBuilder().getFieldMappings().stream())
                             .collect(Collectors.toList()));
 
-            Operator root = new LogicalApplyOperator(null, null, correlation, false);
+            Operator root = new LogicalApplyOperator(null, null, correlation, false, true);
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
                             expressionMapping), expressionMapping.getFieldMappings(), null);

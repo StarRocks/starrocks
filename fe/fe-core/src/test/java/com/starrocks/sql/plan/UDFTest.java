@@ -72,5 +72,8 @@ public class UDFTest extends PlanTestBase {
         Assert.assertTrue(
                 explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as SMALLINT) + 3 as VARCHAR)"));
 
+        sql = "select v1,v2,v3,t.unnest,o.unnest from t0,unnest([1,2,3]) t, unnest([4,5,6]) o ";
+        explain = getFragmentPlan(sql);
+        Assert.assertTrue(explain.contains("TableValueFunction"));
     }
 }
