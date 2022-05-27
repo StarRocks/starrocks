@@ -210,8 +210,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 workgroup::WorkGroupManager::instance()->should_yield_driver_worker(worker_id, _workgroup)) {
                 should_yield = true;
-                // COUNTER_UPDATE(_yield_by_chunk_limit_counter, total_chunks_moved >= YIELD_MAX_CHUNKS_MOVED);
-                // COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
                 break;
             }
         }
@@ -477,7 +476,6 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 }
 
 void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
-    _schedule_counter->update(1);
     driver_acct().increment_schedule_times();
     driver_acct().update_last_chunks_moved(total_chunks_moved);
     driver_acct().update_accumulated_rows_moved(total_rows_moved);
