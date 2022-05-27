@@ -19,7 +19,7 @@
 ### 功能优化
 
 - 重构CBO优化器的 Parser 和 Analyzer，优化代码结构并支持 Insert with CTE 等语法。提升复杂查询的性能，包括公用表表达式（Common Table Expression，CTE）复用等。
-- 优化查询Apache Hive外表中基于对象存储（Amazon S3、阿里云OSS、腾讯云COS）的外部表的性能，优化后基于对象存储的查询性能可以与基于HDFS的查询性能基本持平。支持ORC格式文件的延迟物化，提升小文件查询性能。相关文档，请参见  [Apache Hive 外表](../using_starrocks/External_table.md/#hive外表)。
+- 优化查询Apache Hive外表中基于对象存储（Amazon S3、阿里云OSS、腾讯云COS）的外部表的性能，优化后基于对象存储的查询性能可以与基于HDFS的查询性能基本持平。支持ORC格式文件的延迟物化，提升小文件查询性能。相关文档，请参见 [Apache Hive 外表](../using_starrocks/External_table.md/#hive外表)。
 - 通过外表查询 Apache Hive 的数据时，缓存更新通过定期消费 Hive Metastore 的事件（包括数据变更、分区变更等），实现自动增量更新元数据。并且，还支持查询 Apache Hive 中 DECIMAL 和 ARRAY 类型的数据。相关文档，请参见 [Apache Hive 外表](../using_starrocks/External_table.md/#hive外表)。
 - 优化 UNION ALL 算子性能，性能提升可达2-25倍。
 - 正式发布 Pipeline 引擎，支持自适应调节查询的并行度，并且优化了 Pipeline 引擎的 Profile。提升了高并发场景下小查询的性能。
@@ -35,4 +35,9 @@
 
 ### 其他
 
-- Flink 连接器 flink-connector-starrocks 支持 Flink 1.14 版本。
+Flink 连接器 flink-connector-starrocks 支持 Flink 1.14 版本。
+
+### 升级注意事项
+
+- 版本号低于 2.0.4 或者 2.1.x 中低于 2.1.6 的用户，升级参考 [StarRocks 升级注意事项](https://forum.starrocks.com/t/topic/2228).
+- 升级后如果碰到问题需要回滚，请在 fe.conf 文件中增加 `ignore_unknown_log_id=true`。这是因为新版本的元数据日志新增了类型，如果不加这个参数，则无法回滚。最好等做完 checkpoint 之后再设置 `ignore_unknown_log_id=false` 并重启 FE，恢复正常配置。
