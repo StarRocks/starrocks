@@ -373,6 +373,9 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
 }
 
 size_t DriverQueueWithWorkGroup::size() const {
+    // TODO: reduce the lock scope
+    std::unique_lock<std::mutex> lock(_global_mutex);
+
     size_t size = 0;
     for (auto wg : _ready_wgs) {
         size += wg->driver_queue()->size();

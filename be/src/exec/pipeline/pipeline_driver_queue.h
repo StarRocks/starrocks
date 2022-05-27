@@ -210,7 +210,7 @@ private:
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);
 
-    std::mutex _global_mutex;
+    mutable std::mutex _global_mutex;
     std::condition_variable _cv;
     // _ready_wgs contains the workgroups which include the drivers need to be run.
     std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
