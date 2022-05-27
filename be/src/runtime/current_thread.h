@@ -230,17 +230,18 @@ private:
     try {                             \
         SCOPED_SET_CATCHED(true);
 
-#define TRY_CATCH_ALLOC_SCOPE_END()                                                     \
-    }                                                                                   \
-    catch (std::bad_alloc const&) {                                                     \
-        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
-        tls_exceed_mem_tracker = nullptr;                                               \
-        tls_thread_status.set_is_catched(false);                                        \
-        if (LIKELY(exceed_tracker != nullptr)) {                                        \
-            return Status::MemoryLimitExceeded(exceed_tracker->err_msg(""));            \
-        } else {                                                                        \
-            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
-        }                                                                               \
+#define TRY_CATCH_ALLOC_SCOPE_END()                                                                           \
+    }                                                                                                         \
+    catch (std::bad_alloc const&) {                                                                           \
+        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                  \
+        tls_exceed_mem_tracker = nullptr;                                                                     \
+        tls_thread_status.set_is_catched(false);                                                              \
+        if (LIKELY(exceed_tracker != nullptr)) {                                                              \
+            return Status::MemoryLimitExceeded(                                                               \
+                    exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.try_consume()))); \
+        } else {                                                                                              \
+            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                       \
+        }                                                                                                     \
     }
 
 #define TRY_CATCH_BAD_ALLOC(stmt)                                                                                 \
