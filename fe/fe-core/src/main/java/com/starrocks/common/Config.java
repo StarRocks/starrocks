@@ -1499,12 +1499,4 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
-    
-    /**
-     * When starting the node, first try to use the ip.
-     * If this value is false then fqdn will be used first
-     * default is false
-     */
-    @ConfField
-    public static boolean start_use_ip_first = false;
 }
