@@ -9,7 +9,7 @@ Release date: May 25, 2022
 The following bugs are fixed:
 
 - Some graphical user interface (GUI) tools automatically configure the `set_sql_limit` variable. As a result, the SQL statement ORDER BY LIMIT is ignored, and consequently an incorrect number of rows are returned for queries. [#5966](https://github.com/StarRocks/starrocks/issues/5966)
-- After a cluster is upgraded from StarRocks v2.1.1 to StarRocks v2.1.6, the JOIN statement does not support Colocate Join operations.
+- If a colocation group (CG) contains a large number of tables and data is frequently loaded into the tables, the CG may not be able to stay in the `stable` state. In this case, the JOIN statement does not support Colocate Join operations. StarRocks has been optimized to wait for a little longer during data loading. This way, the integrity of the tablet replicas to which data is loaded can be maximized.
 - If a few replicas fail to be loaded due to reasons such as heavy loads or high network latencies, cloning on these replicas is triggered. In this case, deadlocks may occur, which may cause a situation in which the loads on processes are low but a large number of requests time out. [#5646](https://github.com/StarRocks/starrocks/issues/5646) [#6290](https://github.com/StarRocks/starrocks/issues/6290)
 - After the schema of a table that uses the Primary Key model is changed, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
 - If the DROP SCHEMA statement is executed on a database, the database is forcibly deleted and cannot be restored. [#6201](https://github.com/StarRocks/starrocks/issues/6201)
