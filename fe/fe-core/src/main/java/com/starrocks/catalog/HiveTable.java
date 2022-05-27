@@ -228,7 +228,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     break;
                 }
                 ScalarType type = convertColumnType(fieldSchema.getType());
-                if (type != column.getType()) {
+                if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
                 }

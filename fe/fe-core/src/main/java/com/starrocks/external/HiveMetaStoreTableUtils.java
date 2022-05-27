@@ -160,10 +160,8 @@ public class HiveMetaStoreTableUtils {
         if (primitiveType != PrimitiveType.DECIMAL32) {
             return ScalarType.createType(primitiveType);
         } else {
-            String[] parts = Utils.getPrecisionAndScale(hiveType);
-            int precision = Integer.parseInt(parts[0]);
-            int scale = Integer.parseInt(parts[1]);
-            return ScalarType.createUnifiedDecimalType(precision, scale);
+            int[] parts = Utils.getPrecisionAndScale(hiveType);
+            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 

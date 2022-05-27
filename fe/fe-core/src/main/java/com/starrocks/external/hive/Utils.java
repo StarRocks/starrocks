@@ -145,9 +145,9 @@ public class Utils {
     }
 
     // Decimal string like "Decimal(3,2)"
-    public static String[] getPrecisionAndScale(String typeStr) {
+    public static int[] getPrecisionAndScale(String typeStr) {
         String partWithComma = typeStr.substring(8, typeStr.length() - 1);
         String[] parts = partWithComma.split(",");
-        return new String[]{parts[0], parts[1]};
+        return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
     }
 }
