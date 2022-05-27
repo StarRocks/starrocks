@@ -184,6 +184,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
+    _join_mode = desc.build_join_mode;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -192,6 +193,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
             not_found = false;
             RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
         }
+    }
+
+    if (desc.__isset.bucketseq_to_instance) {
+        _bucketseq_to_partition = desc.bucketseq_to_instance;
     }
 
     if (not_found) {
@@ -307,6 +312,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             }
             auto* ctx = rf_desc->probe_expr_ctx();
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+            // for colocate grf
+            eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
             filter->evaluate(column.get(), &eval_context.running_context);
             // true_count is accummulated
             true_count = SIMD::count_nonzero(selection);
@@ -370,6 +377,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         }
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        // for colocate grf
+        eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
         // true count is not accummulated, it is evaluated for each RF respectively
         auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
