@@ -350,8 +350,6 @@ public:
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
 private:
-    // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
-    static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
@@ -368,12 +366,10 @@ private:
 
     // Update metrics when the driver yields.
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
-
-    RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
 
+    RuntimeState* _runtime_state = nullptr;
     Operators _operators;
-
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
 
