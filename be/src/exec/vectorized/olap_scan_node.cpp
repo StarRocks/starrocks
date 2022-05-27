@@ -334,13 +334,20 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
 
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
+    LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue [num_tablets=" << scan_ranges.size() << "]";
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(&(scan_range.scan_range.internal_scan_range)));
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue "
+                     << "[tablet_id=" << tablet->tablet_id() << "] "
+                     << "[tablet_path=" << tablet->tablet_id_path() << "] ";
     }
 
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 1";
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
@@ -349,6 +356,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     bool enable =
             query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
     if (!enable) {
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 2";
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
@@ -356,17 +364,20 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     int64_t splitted_scan_rows;
     ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, &scan_dop, &splitted_scan_rows));
     if (!could) {
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 3";
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(scan_ranges));
     if (ok) {
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 4";
         return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
+    LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 5";
     // TODO: use LogicalSplitMorselQueue, when it can split tablet logically.
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
@@ -376,6 +387,9 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
     int32_t dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
     dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
     if (scan_ranges.size() >= dop) {
+        LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 3.1 "
+                     << "[tablets=" << scan_ranges.size() << "] "
+                     << "[dop=" << dop << "] ";
         return false;
     }
 
@@ -395,6 +409,10 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, dop));
 
     bool could = *scan_dop >= dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    LOG(WARNING) << "[TEST] convert_scan_range_to_morsel_queue return 3.2 "
+                 << "[could=" << could << "] "
+                 << "[*scan_dop=" << *scan_dop << "] "
+                 << "[tablet_internal_parallel_min_scan_dop=" << config::tablet_internal_parallel_min_scan_dop << "]";
     return could;
 }
 

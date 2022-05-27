@@ -3,9 +3,11 @@
 #include "exec/pipeline/scan/morsel.h"
 
 #include "exec/olap_utils.h"
+#include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
@@ -16,6 +18,11 @@ namespace pipeline {
 /// Morsel.
 void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
+}
+
+void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
+    LOG(WARNING) << "[TEST] LogicalSplitScanMorsel::init_tablet_reader_params " << _short_key_ranges.size();
+    params->short_key_ranges = _short_key_ranges;
 }
 
 /// MorselQueue.
@@ -109,7 +116,8 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     return morsel;
 }
 
-rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) {
+rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key,
+                                                       bool lower) const {
     std::string index_key =
             key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
     uint32_t start_block_id;
@@ -132,7 +140,7 @@ rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const v
 }
 
 rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower,
-                                                       rowid_t end) {
+                                                       rowid_t end) const {
     std::string index_key =
             key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 
@@ -227,6 +235,328 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     _num_segment_rest_rows = _segment_scan_range.span_size();
 
     return Status::OK();
+}
+
+std::vector<TInternalScanRange*> LogicalSplitMorselQueue::olap_scan_ranges() const {
+    return _convert_morsels_to_olap_scan_ranges(_morsels);
+}
+
+void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
+    if (key_ranges.empty()) {
+        LOG(WARNING) << "[TEST] set_key_ranges empty";
+    }
+    for (const auto& key_range : key_ranges) {
+        LOG(WARNING) << "[TEST] set_key_ranges [key_range=" << key_range->begin_scan_range.size() << ", "
+                     << key_range->end_scan_range.size() << "]";
+
+        if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
+            continue;
+        }
+
+        _range_start_op = key_range->begin_include ? "ge" : "gt";
+        _range_end_op = key_range->end_include ? "le" : "lt";
+
+        _range_start_key.emplace_back(key_range->begin_scan_range);
+        _range_end_key.emplace_back(key_range->end_scan_range);
+    }
+}
+
+std::string slice_to_string(const Slice& slice) {
+    std::string str;
+    for (int i = 0; i < slice.get_size(); ++i) {
+        str += std::to_string(uint8_t(slice[i])) + "~";
+    }
+    return str;
+}
+
+std::string short_key_option_to_string(const vectorized::ShortKeyOptionPtr& key) {
+    if (key->is_infinite()) {
+        return "<infinite>";
+    }
+
+    if (key->tuple_key != nullptr) {
+        return key->tuple_key->debug_string();
+    }
+
+    return slice_to_string(key->short_key);
+}
+
+StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
+    DCHECK(!_tablets.empty());
+    DCHECK(!_tablet_rowsets.empty());
+    DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
+
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    if (_tablet_idx >= _tablets.size()) {
+        return nullptr;
+    }
+
+    while (!_has_init_any_tablet || _segment_group == nullptr || _tablet_finished()) {
+        if (!_next_tablet()) {
+            return nullptr;
+        }
+        RETURN_IF_ERROR(_init_tablet());
+    }
+
+    size_t num_taken_blocks = 0;
+    std::vector<vectorized::ShortKeyRangeOptionPtr> short_key_ranges;
+    vectorized::ShortKeyOptionPtr _cur_range_lower = nullptr;
+    vectorized::ShortKeyOptionPtr _cur_range_upper = nullptr;
+    bool need_more_blocks = true;
+    while (!_tablet_finished() &&
+           (_cur_range_lower != nullptr || (need_more_blocks && num_taken_blocks < _sample_splitted_scan_blocks))) {
+        auto& num_rest_blocks = _num_rest_blocks_per_seek_range[_range_idx];
+
+        if (_cur_range_lower == nullptr) {
+            _cur_range_lower = _create_range_lower();
+        }
+
+        size_t cur_num_taken_blocks = 0;
+        if (num_taken_blocks < _sample_splitted_scan_blocks) {
+            cur_num_taken_blocks = _sample_splitted_scan_blocks - num_taken_blocks;
+        } else {
+            cur_num_taken_blocks = std::max<int64_t>(_sample_splitted_scan_blocks / 4, 1);
+        }
+        cur_num_taken_blocks = std::min(cur_num_taken_blocks, num_rest_blocks);
+
+        if (_range_idx + 1 >= _block_ranges_per_seek_range.size() && num_rest_blocks > cur_num_taken_blocks &&
+            num_rest_blocks - cur_num_taken_blocks < _sample_splitted_scan_blocks) {
+            cur_num_taken_blocks = std::min(cur_num_taken_blocks, num_rest_blocks / 2);
+            need_more_blocks = false;
+        }
+
+        num_rest_blocks -= cur_num_taken_blocks;
+        num_taken_blocks += cur_num_taken_blocks;
+        _next_lower_block_iter += static_cast<ssize_t>(cur_num_taken_blocks);
+
+        _cur_range_upper = _create_range_upper();
+
+        if (num_rest_blocks == 0 || _valid_range(_cur_range_lower, _cur_range_upper)) {
+            LOG(WARNING) << "[TEST] short_key_ranges.emplace_back "
+                         << "[tablet_idx=" << _tablet_idx << "] "
+                         << "[range_idx=" << _range_idx << "] "
+                         << "[_sample_splitted_scan_blocks=" << _sample_splitted_scan_blocks << "] "
+                         << "[idx=" << short_key_ranges.size() << "] "
+                         << "[next_lower_block_id=" << _next_lower_block_iter.ordinal() << "] "
+                         << "[num_rest_blocks=" << num_rest_blocks << "] "
+                         << "[cur_num_taken_blocks=" << cur_num_taken_blocks << "] "
+                         << "[num_taken_blocks=" << num_taken_blocks << "] "
+                         << "[lower=" << short_key_option_to_string(_cur_range_lower) << "] "
+                         << "[upper=" << short_key_option_to_string(_cur_range_upper) << "] ";
+            short_key_ranges.emplace_back(std::make_shared<vectorized::ShortKeyRangeOption>(
+                    std::move(_cur_range_lower), std::move(_cur_range_upper)));
+        }
+
+        if (num_rest_blocks == 0) {
+            ++_range_idx;
+            if (!_tablet_finished()) {
+                _next_lower_block_iter = _block_ranges_per_seek_range[_range_idx].first;
+            }
+        }
+    }
+    DCHECK(_cur_range_lower == nullptr);
+    DCHECK(_cur_range_upper == nullptr);
+
+    auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
+    auto morsel = std::make_unique<LogicalSplitScanMorsel>(
+            scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
+    return morsel;
+}
+
+bool LogicalSplitMorselQueue::_valid_range(const vectorized::ShortKeyOptionPtr& lower,
+                                           const vectorized::ShortKeyOptionPtr& upper) const {
+    if (lower->is_infinite() || upper->is_infinite() ||
+        _block_ranges_per_seek_range[_range_idx].first == _block_ranges_per_seek_range[_range_idx].second) {
+        return true;
+    }
+
+    Slice lower_key = lower->short_key;
+    if (lower_key.empty()) {
+        lower_key = *_block_ranges_per_seek_range[_range_idx].first;
+    }
+
+    Slice upper_key = upper->short_key;
+    if (upper_key.empty()) {
+        auto end_iter = _block_ranges_per_seek_range[_range_idx].second;
+        --end_iter;
+        upper_key = *end_iter;
+    }
+
+    return lower_key.compare(upper_key) != 0;
+}
+
+vectorized::ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_lower() const {
+    if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].first) {
+        if (_tablet_seek_ranges.empty()) {
+            return std::make_unique<vectorized::ShortKeyOption>();
+        } else {
+            return std::make_unique<vectorized::ShortKeyOption>(&_tablet_seek_ranges[_range_idx].lower(),
+                                                                _tablet_seek_ranges[_range_idx].inclusive_lower());
+        }
+    } else {
+        Slice short_key = *_next_lower_block_iter;
+        return std::make_unique<vectorized::ShortKeyOption>(_short_key_schema, short_key, true);
+    }
+}
+
+vectorized::ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_upper() const {
+    if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].second) {
+        if (_tablet_seek_ranges.empty()) {
+            return std::make_unique<vectorized::ShortKeyOption>();
+        } else {
+            return std::make_unique<vectorized::ShortKeyOption>(&_tablet_seek_ranges[_range_idx].upper(),
+                                                                _tablet_seek_ranges[_range_idx].inclusive_upper());
+        }
+    } else {
+        Slice short_key = *_next_lower_block_iter;
+        return std::make_unique<vectorized::ShortKeyOption>(_short_key_schema, short_key, false);
+    }
+}
+
+bool LogicalSplitMorselQueue::_tablet_finished() const {
+    return _range_idx >= _block_ranges_per_seek_range.size();
+}
+
+Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSharedPtr>& rowsets) {
+    Rowset* largest_rowset = nullptr;
+    for (const auto& rowset : rowsets) {
+        if (largest_rowset == nullptr || largest_rowset->num_rows() < rowset->num_rows()) {
+            largest_rowset = rowset.get();
+        }
+    }
+
+    return largest_rowset;
+}
+
+SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(Rowset* rowset) const {
+    auto* beta_rowset = down_cast<BetaRowset*>(rowset);
+    SegmentSharedPtr largest_segment = nullptr;
+    for (const auto& segment : beta_rowset->segments()) {
+        if (largest_segment == nullptr || largest_segment->num_rows() < segment->num_rows()) {
+            largest_segment = segment;
+        }
+    }
+
+    return largest_segment;
+}
+
+StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(Rowset* rowset) {
+    std::vector<SegmentSharedPtr> segments;
+    if (rowset->rowset_meta()->is_segments_overlapping()) {
+        segments.emplace_back(_find_largest_segment(rowset));
+    } else {
+        auto* beta_rowset = down_cast<BetaRowset*>(rowset);
+        segments = beta_rowset->segments();
+    }
+
+    for (const auto& segment : segments) {
+        RETURN_IF_ERROR(segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    }
+
+    return std::make_unique<SegmentGroup>(std::move(segments));
+}
+
+bool LogicalSplitMorselQueue::_next_tablet() {
+    if (!_has_init_any_tablet) {
+        _has_init_any_tablet = true;
+    } else {
+        ++_tablet_idx;
+    }
+
+    return _tablet_idx < _tablets.size();
+}
+
+Status LogicalSplitMorselQueue::_init_tablet() {
+    _tablet_seek_ranges.clear();
+    _mempool.clear();
+    _largest_rowset = nullptr;
+    _segment_group = nullptr;
+    _short_key_schema = nullptr;
+    _block_ranges_per_seek_range.clear();
+    _num_rest_blocks_per_seek_range.clear();
+    _range_idx = 0;
+
+    RETURN_IF_ERROR(vectorized::TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
+                                                               _range_start_key, _range_end_key, &_tablet_seek_ranges,
+                                                               &_mempool));
+
+    _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);
+    if (_largest_rowset == nullptr || _largest_rowset->num_rows() == 0) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_largest_rowset->load());
+    ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
+
+    _short_key_schema = std::make_shared<vectorized::Schema>(
+            vectorized::ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
+    _sample_splitted_scan_blocks =
+            _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
+    _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);
+
+    if (_tablet_seek_ranges.empty()) {
+        _block_ranges_per_seek_range.emplace_back(_segment_group->begin(), _segment_group->end());
+        _num_rest_blocks_per_seek_range.emplace_back(_segment_group->num_blocks());
+        LOG(WARNING) << "[TEST] _tablet_seek_ranges empty";
+    } else {
+        for (const auto& range : _tablet_seek_ranges) {
+            LOG(WARNING) << "[TEST] _tablet_seek_ranges "
+                         << "[upper=" << range.upper().debug_string() << "] "
+                         << "[lower=" << range.lower().debug_string() << "] ";
+
+            ShortKeyIndexGroupIterator upper_block_iter;
+            if (!range.upper().empty()) {
+                upper_block_iter = _upper_bound_ordinal(range.upper(), !range.inclusive_upper());
+            } else {
+                upper_block_iter = _segment_group->end();
+            }
+
+            ShortKeyIndexGroupIterator lower_block_iter;
+            if (!range.lower().empty() && upper_block_iter.ordinal() > 0) {
+                lower_block_iter = _lower_bound_ordinal(range.lower(), range.inclusive_lower());
+            } else {
+                lower_block_iter = _segment_group->begin();
+            }
+
+            _num_rest_blocks_per_seek_range.emplace_back(upper_block_iter - lower_block_iter);
+            _block_ranges_per_seek_range.emplace_back(lower_block_iter, upper_block_iter);
+        }
+    }
+    _next_lower_block_iter = _block_ranges_per_seek_range[0].first;
+
+    return Status::OK();
+}
+
+ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const vectorized::SeekTuple& key,
+                                                                         bool lower) const {
+    std::string index_key =
+            key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+
+    auto start_iter = _segment_group->lower_bound(index_key);
+    if (start_iter.valid()) {
+        // Because previous block may contain this key, so we should set rowid to
+        // last block's first row.
+        if (start_iter.ordinal() > 0) {
+            --start_iter;
+        }
+    } else {
+        // When we don't find a valid index item, which means all short key is
+        // smaller than input key, this means that this key may exist in the last
+        // row block. so we set the rowid to first row of last row block.
+        start_iter = _segment_group->back();
+    }
+
+    return start_iter;
+}
+
+ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const vectorized::SeekTuple& key,
+                                                                         bool lower) const {
+    std::string index_key =
+            key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+
+    auto end_iter = _segment_group->upper_bound(index_key);
+    return end_iter;
 }
 
 } // namespace pipeline

@@ -31,6 +31,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/rowset/common.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -99,6 +100,11 @@ public:
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
+    Slice short_key(rowid_t rowid) const {
+        DCHECK_LT(rowid, num_rows());
+        return _sk_index_decoder->key(rowid / num_rows_per_block());
+    }
+
     uint32_t num_rows_per_block() const {
         DCHECK(_load_index_once.has_called() && _load_index_once.stored_result().ok());
         return _sk_index_decoder->num_rows_per_block();
@@ -148,6 +154,8 @@ public:
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(MemTracker* mem_tracker);
+
+    const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
 private:
     Segment(const Segment&) = delete;
