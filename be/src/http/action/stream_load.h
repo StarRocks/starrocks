@@ -58,6 +58,9 @@ private:
 
 private:
     ExecEnv* _exec_env;
+
+    const size_t _min_buf_sz = 64 * 1024;
+    ByteBufferPtr _buf = ByteBuffer::allocate(_min_buf_sz);
 };
 
 } // namespace starrocks
