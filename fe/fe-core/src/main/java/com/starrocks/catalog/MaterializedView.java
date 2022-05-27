@@ -61,6 +61,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         @SerializedName(value = "step")
         private long step;
+
         @SerializedName(value = "timeUnit")
         TimestampArithmeticExpr.TimeUnit timeUnit;
 

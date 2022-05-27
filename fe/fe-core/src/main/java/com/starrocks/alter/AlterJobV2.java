@@ -127,10 +127,6 @@ public abstract class AlterJobV2 implements Writable {
         return tableName;
     }
 
-    public long getTimeoutMs() {
-        return timeoutMs;
-    }
-
     public boolean isTimeout() {
         return System.currentTimeMillis() - createTimeMs > timeoutMs;
     }
