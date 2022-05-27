@@ -59,7 +59,7 @@ public class CreateTableAnalyzer {
         FeNameFormat.verifyTableName(tableName.getTbl());
 
         if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkTblPriv(ConnectContext.get(), tableName, PrivPredicate.CREATE)) {
+                .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(), PrivPredicate.CREATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }
 
