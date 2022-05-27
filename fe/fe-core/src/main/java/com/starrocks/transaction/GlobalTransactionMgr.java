@@ -574,10 +574,15 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
+        long now = System.currentTimeMillis();
         int numTransactions = in.readInt();
         for (int i = 0; i < numTransactions; ++i) {
             TransactionState transactionState = new TransactionState();
             transactionState.readFields(in);
+            if (transactionState.isExpired(now)) {
+                LOG.info("discard expired transaction state: {}", transactionState);
+                continue;
+            }
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
