@@ -43,8 +43,7 @@ public class PrivilegeChecker {
     public static boolean checkTblPriv(ConnectContext context,
                                        TableName tableName,
                                        PrivPredicate predicate) {
-        String catalogName = ""; // TODO: wait for TableName to add catalogName
-        return !CatalogMgr.isInternalCatalog(catalogName) ||
+        return !CatalogMgr.isInternalCatalog(tableName.getCatalog()) ||
                 GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                         context, tableName.getDb(), tableName.getTbl(), predicate);
     }
