@@ -666,7 +666,7 @@ CONF_Int64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 //
 // Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
-CONF_Int64(tablet_internal_parallel_min_scan_dop, "4");
+CONF_Int64(tablet_internal_parallel_min_scan_dop, "1");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
