@@ -69,7 +69,8 @@ public class AlterMaterializedViewTest {
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
         assertNotNull(((AsyncRefreshSchemeDesc)asyncRefreshSchemeDesc).getStartTime());
-        assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getValue()).getValue(), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getUnitIdentifier().getDescription(), "HOUR");
+        assertEquals((((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStep()), 1);
+        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getTimeUnit(),
+                TimestampArithmeticExpr.TimeUnit.HOUR);
     }
 }

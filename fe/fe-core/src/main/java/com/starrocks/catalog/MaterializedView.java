@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -16,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,12 +27,6 @@ import java.util.Set;
  */
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
-
-    public enum RefreshType {
-        SYNC,
-        ASYNC,
-        MANUAL
-    }
 
     public static class AsyncRefreshContext {
         // base table id -> (partitionid -> visible version)
@@ -60,16 +56,32 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
 
+        @SerializedName(value = "starTime")
+        private LocalDateTime startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+        @SerializedName(value = "timeUnit")
+        TimestampArithmeticExpr.TimeUnit timeUnit;
+
         public MvRefreshScheme() {
             this.type = RefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
+            this.startTime = LocalDateTime.now();
+            this.step = 0;
+            this.timeUnit = TimestampArithmeticExpr.TimeUnit.MINUTE;
         }
 
-        public MvRefreshScheme(RefreshType type, AsyncRefreshContext asyncRefreshContext, long lastRefreshTime) {
+        public MvRefreshScheme(com.starrocks.catalog.RefreshType type, AsyncRefreshContext asyncRefreshContext,
+                               long lastRefreshTime, LocalDateTime startTime, long step,
+                               TimestampArithmeticExpr.TimeUnit timeUnit) {
             this.type = type;
             this.asyncRefreshContext = asyncRefreshContext;
             this.lastRefreshTime = lastRefreshTime;
+            this.startTime = startTime;
+            this.step = step;
+            this.timeUnit = timeUnit;
         }
 
         public RefreshType getType() {
@@ -94,6 +106,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public void setLastRefreshTime(long lastRefreshTime) {
             this.lastRefreshTime = lastRefreshTime;
+        }
+
+        public LocalDateTime getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(LocalDateTime startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public TimestampArithmeticExpr.TimeUnit getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(TimestampArithmeticExpr.TimeUnit timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 

@@ -14,6 +14,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -28,6 +29,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.QueryRelation;
@@ -37,6 +39,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -271,17 +274,38 @@ public class MaterializedViewAnalyzer {
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
                                                         ConnectContext context) {
             statement.getMvName().normalization(context);
-            if (statement.getNewMvName() != null) {
-                String newTableName = statement.getNewMvName();
-                if (statement.getMvName().getTbl().equalsIgnoreCase(newTableName)) {
-                    throw new SemanticException("New table name can not equals to old name");
-                }
-            }
             final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
-            if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
-                    throw new SemanticException("Not support SYNC refresh type");
+            final String newMvName = statement.getNewMvName();
+            if (newMvName != null) {
+                if (statement.getMvName().getTbl().equals(newMvName)) {
+                    throw new SemanticException("Same materialized view name");
                 }
+            } else if (refreshSchemeDesc != null) {
+                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                    throw new SemanticException("Unsupported change to SYNC refresh type");
+                }
+                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+                    LocalDateTime startTime = async.getStartTime();
+                    TimestampArithmeticExpr.TimeUnit timeUnit = async.getTimeUnit();
+                    if (startTime != null && timeUnit == null) {
+                        throw new SemanticException("please input interval clause");
+                    }
+                    if (startTime != null) {
+                        if (startTime.isBefore(LocalDateTime.now())) {
+                            throw new IllegalArgumentException("Refresh start must be after current time");
+                        }
+                    } else {
+                        async.setStartTime(LocalDateTime.now());
+                    }
+                    if (timeUnit != null) {
+                        if (!async.getSupportedTimeUnitType().contains(timeUnit)) {
+                            throw new IllegalArgumentException("Unsupported time unit");
+                        }
+                    }
+                }
+            } else {
+                throw new SemanticException("Unsupported modification for materialized view");
             }
             return null;
         }

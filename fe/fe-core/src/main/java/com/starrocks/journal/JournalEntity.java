@@ -33,7 +33,6 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -60,6 +59,7 @@ import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ClusterInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -81,6 +81,7 @@ import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -255,10 +256,14 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE:
+            case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
+                data = new ChangeMaterializedViewRefreshSchemeLog();
+                ((ChangeMaterializedViewRefreshSchemeLog) data).readFields(in);
+                isRead = true;
+                break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
-                data = new MaterializedView();
-                ((MaterializedView) data).readFields(in);
+                data = new RenameMaterializedViewLog();
+                ((RenameMaterializedViewLog) data).readFields(in);
                 isRead = true;
                 break;
             case OperationType.OP_MODIFY_VIEW_DEF: {

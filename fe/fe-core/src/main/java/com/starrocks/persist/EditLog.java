@@ -264,7 +264,7 @@ public class EditLog {
                     globalStateMgr.replayRenameTable(info);
                     break;
                 }
-                case OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE: {
+                case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                     MaterializedView materializedView = (MaterializedView) journal.getData();
                     globalStateMgr.replayMaterializedViewChangeRefreshScheme(materializedView);
                     break;
@@ -1411,11 +1411,11 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 
-    public void logMvRename(MaterializedView materializedView) {
-        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, materializedView);
+    public void logMvRename(RenameMaterializedViewLog log) {
+        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
     }
 
-    public void logMvChangeRefreshScheme(MaterializedView materializedView) {
-        logEdit(OperationType.OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE, materializedView);
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 }

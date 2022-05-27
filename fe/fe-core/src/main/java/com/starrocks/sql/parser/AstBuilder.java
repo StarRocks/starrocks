@@ -2227,32 +2227,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
-        LocalDateTime startTime = LocalDateTime.now();
+        LocalDateTime startTime = null;
         IntervalLiteral intervalLiteral = null;
         if (context.ASYNC() != null) {
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
-                DateTimeFormatter dateTimeFormatter = null;
+                DateTimeFormatter dateTimeFormatter;
                 try {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
-                    LocalDateTime tempStartTime = DateUtils.
-                            parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
-                    if (tempStartTime.isBefore(LocalDateTime.now())) {
-                        throw new IllegalArgumentException("Refresh start must be after current time");
-                    }
-                    startTime = tempStartTime;
                 } catch (AnalysisException e) {
                     throw new IllegalArgumentException(
-                            "Refresh start " +
-                                    stringLiteral.getStringValue() + " is incorrect");
+                            "Refresh start " + stringLiteral.getStringValue() + " is incorrect");
+                }
+                startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+            }
+            long intervalVal = 0;
+
+            TimestampArithmeticExpr.TimeUnit timeUnit = null;
+            if (context.interval() != null) {
+                intervalLiteral = (IntervalLiteral) visit(context.interval());
+                final UnitIdentifier unitIdentifier = intervalLiteral.getUnitIdentifier();
+                Expr expr = intervalLiteral.getValue();
+                if (expr instanceof IntLiteral) {
+                    intervalVal = ((IntLiteral) expr).getLongValue();
+                } else {
+                    throw new IllegalArgumentException("Unsupported interval expr: " + expr);
+                }
+                if (unitIdentifier != null) {
+                    timeUnit = TimestampArithmeticExpr.TimeUnit.valueOf(unitIdentifier.getDescription().toUpperCase());
+                } else {
+                    throw new IllegalArgumentException("Unsupported interval expr: " + expr);
                 }
             }
-            intervalLiteral = (IntervalLiteral) visit(context.interval());
-            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                throw new IllegalArgumentException(
-                        "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
-            }
-            return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
+            return new AsyncRefreshSchemeDesc(startTime, intervalVal, timeUnit);
         } else if (context.SYNC() != null) {
             return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {

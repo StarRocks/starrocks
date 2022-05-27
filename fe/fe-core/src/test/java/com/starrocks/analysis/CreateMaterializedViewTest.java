@@ -18,7 +18,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class CreateMaterializedViewTest {
@@ -721,9 +721,9 @@ public class CreateMaterializedViewTest {
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
-            assertNotNull(asyncRefreshSchemeDesc.getStartTime());
-            assertEquals(((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue(), 2);
-            assertEquals(asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription(), "MINUTE");
+            assertNull(asyncRefreshSchemeDesc.getStartTime());
+            assertEquals((asyncRefreshSchemeDesc.getStep()), 2);
+            assertEquals(asyncRefreshSchemeDesc.getTimeUnit(), TimestampArithmeticExpr.TimeUnit.MINUTE);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

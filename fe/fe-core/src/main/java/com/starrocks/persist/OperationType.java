@@ -218,5 +218,5 @@ public class OperationType {
 
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10070;
 
-    public static final short OP_MATERIALIZED_VIEW_REFRESH_SCHEME_CHANGE = 10071;
+    public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10071;
 }
