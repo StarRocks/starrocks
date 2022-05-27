@@ -50,6 +50,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "MaxScanConcurrency", TUnit::UNIT);
     COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_max_scan_concurrency));
+    _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -315,6 +316,8 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
+        COUNTER_UPDATE(_morsels_counter, 1);
+
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
@@ -322,6 +325,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             _is_finished = true;
             return status;
         }
+
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 

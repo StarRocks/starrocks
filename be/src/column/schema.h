@@ -20,6 +20,11 @@ public:
 
     explicit Schema(Fields fields, KeysType keys_type);
 
+    Schema(const Schema&) = default;
+    Schema& operator=(const Schema&) = default;
+    Schema(Schema&&) = default;
+    Schema& operator=(Schema&&) = default;
+
     size_t num_fields() const { return _fields.size(); }
 
     size_t num_key_fields() const { return _num_keys; }

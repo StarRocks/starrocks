@@ -118,6 +118,8 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
+
+    RuntimeProfile::Counter* _morsels_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

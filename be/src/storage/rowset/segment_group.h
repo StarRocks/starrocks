@@ -1,0 +1,133 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+#pragma once
+
+#include "storage/rowset/segment.h"
+
+namespace starrocks {
+
+class ShortKeyIndexGroupIterator;
+class SegmentGroup;
+using SegmentGroupPtr = std::unique_ptr<SegmentGroup>;
+
+class ShortKeyIndexDecoderGroup {
+public:
+    explicit ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*> sk_index_decoders);
+
+    ShortKeyIndexGroupIterator begin() const;
+    ShortKeyIndexGroupIterator end() const;
+    ShortKeyIndexGroupIterator back() const;
+
+    ShortKeyIndexGroupIterator lower_bound(const Slice& key) const;
+    ShortKeyIndexGroupIterator upper_bound(const Slice& key) const;
+
+    void position(ssize_t ordinal, ssize_t* decoder_id, ssize_t* block_id_in_decoder) const;
+    Slice key(ssize_t ordinal) const;
+    Slice key(ssize_t decoder_id, ssize_t block_id_in_decoder) const;
+
+    ssize_t num_blocks() const { return _decoder_start_ordinals.back(); }
+
+private:
+    template <bool lower_bound>
+    ShortKeyIndexGroupIterator _seek(const Slice& key) const;
+
+private:
+    const std::vector<const ShortKeyIndexDecoder*> _sk_index_decoders;
+    std::vector<ssize_t> _decoder_start_ordinals;
+};
+
+class ShortKeyIndexGroupIterator {
+public:
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = Slice;
+    using pointer = Slice*;
+    using reference = Slice&;
+    using difference_type = ssize_t;
+
+    ShortKeyIndexGroupIterator() : _decoder_group(nullptr), _ordinal(0) {}
+
+    ShortKeyIndexGroupIterator(const ShortKeyIndexDecoderGroup* decoder_group, ssize_t ordinal);
+
+    ShortKeyIndexGroupIterator& operator-=(ssize_t step) {
+        _ordinal -= step;
+        _decoder_group->position(_ordinal, &_decoder_id, &_block_id_in_decoder);
+        return *this;
+    }
+
+    ShortKeyIndexGroupIterator& operator+=(ssize_t step) {
+        _ordinal += step;
+        _decoder_group->position(_ordinal, &_decoder_id, &_block_id_in_decoder);
+        return *this;
+    }
+
+    ShortKeyIndexGroupIterator& operator++() {
+        ++_ordinal;
+        _decoder_group->position(_ordinal, &_decoder_id, &_block_id_in_decoder);
+        return *this;
+    }
+
+    ShortKeyIndexGroupIterator& operator--() {
+        --_ordinal;
+        _decoder_group->position(_ordinal, &_decoder_id, &_block_id_in_decoder);
+        return *this;
+    }
+
+    bool operator!=(const ShortKeyIndexGroupIterator& rhs) const {
+        return _ordinal != rhs._ordinal || _decoder_group != rhs._decoder_group;
+    }
+
+    bool operator==(const ShortKeyIndexGroupIterator& rhs) const {
+        return _ordinal == rhs._ordinal && _decoder_group == rhs._decoder_group;
+    }
+
+    ssize_t operator-(const ShortKeyIndexGroupIterator& rhs) const { return _ordinal - rhs._ordinal; }
+
+    bool valid() const;
+
+    Slice operator*() const;
+
+    ssize_t ordinal() const { return _ordinal; }
+
+private:
+    const ShortKeyIndexDecoderGroup* _decoder_group;
+    ssize_t _ordinal;
+    ssize_t _decoder_id = 0;
+    ssize_t _block_id_in_decoder = 0;
+};
+
+class SegmentGroup {
+public:
+    SegmentGroup(std::vector<SegmentSharedPtr> segments);
+
+    ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group->lower_bound(key); }
+
+    ShortKeyIndexGroupIterator upper_bound(const Slice& key) const { return _decoder_group->upper_bound(key); }
+
+    ShortKeyIndexGroupIterator begin() const { return _decoder_group->begin(); }
+
+    ShortKeyIndexGroupIterator end() const { return _decoder_group->end(); }
+
+    ShortKeyIndexGroupIterator back() const { return _decoder_group->back(); }
+
+    ssize_t num_blocks() const { return _decoder_group->num_blocks(); }
+
+    uint32_t num_rows_per_block() const {
+        if (_segments.empty()) {
+            return 0;
+        }
+        return _segments[0]->num_rows_per_block();
+    }
+
+    size_t num_short_keys() const {
+        if (_segments.empty()) {
+            return 0;
+        }
+        return _segments[0]->num_short_keys();
+    }
+
+private:
+    std::vector<SegmentSharedPtr> _segments;
+    std::unique_ptr<ShortKeyIndexDecoderGroup> _decoder_group = nullptr;
+};
+
+} // namespace starrocks

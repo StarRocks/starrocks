@@ -609,12 +609,12 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-    if (conditional_key_columns > 1) {
-        for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
-            ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
-            if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
-                break;
-            }
+
+    scan_keys.set_is_convertible(conditional_key_columns > 1);
+    for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
+        ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
+        if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
+            break;
         }
     }
     return Status::OK();
