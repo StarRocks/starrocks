@@ -1,71 +1,126 @@
-# 什么是 StarRocks
+# StarRocks
 
-StarRocks 是**新一代极速全场景MPP数据库**。StarRocks 的愿景是能够让用户的**数据分析变得更加简单和敏捷**。用户无需经过复杂的预处理，就可以用 StarRocks 来支持多种数据分析场景的极速分析。
+  StarRocks 是一款高性能分析型数据仓库，使用向量化、MPP 架构、可实时更新的列式存储引擎等技术实现多维、实时、高并发的数据分析。StarRocks 既支持从各类实时和离线的数据源高效导入数据，也支持直接分析数据湖上各种格式的数据。StarRocks 兼容 MySQL 协议，可使用 MySQL 客户端和常用 BI 工具对接。同时 StarRocks 具备水平扩展，高可用，高可靠，易运维等特性。广泛应用于实时数仓、OLAP 报表、数据湖分析等场景。
 
-StarRocks 的**架构简洁**，采用了全面向量化引擎，并配备全新设计的 CBO 优化器，**查询速度（尤其是多表关联查询）远超同类产品**。
+<NavBox>
+<NavBoxPart title="StarRocks 入门">
+<NavBoxPartItem title="产品介绍​">
 
-StarRocks 能很好地支持实时数据分析，并能实现对实时更新数据的高效查询。StarRocks 还支持现代化物化视图，以进一步加速查询。
+- [产品优势和应用场景](/introduction/StarRocks_intro)
+- [系统架构](/introduction/system_architecture)
+- [产品特性](/introduction/features)
+- [视频资源](/faq/Video)
 
-使用 StarRocks，用户可以灵活构建包括大宽表、星型模型、雪花模型在内的各类模型。
+</NavBoxPartItem>
+</NavBoxPart>
 
-StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。
+<NavBoxPart>
+<NavBoxPartItem title="快速开始​">
 
-## 适用场景
+- [手动部署 StarRocks](/quick_start/Deploy)
+- [创建表](/quick_start/Create_table)
+- [导入和查询数据](/quick_start/Import_and_query)
 
-StarRocks 可以满足企业级用户的多种分析需求，包括 OLAP 多维分析、定制报表、实时数据分析和 Ad-hoc 数据分析等。
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-### OLAP 多维分析
+<NavBox>
+<NavBoxPart title="设计表​">
+<NavBoxPartItem>
 
-利用 StarRocks 的 MPP 框架和向量化执行引擎，用户可以灵活的选择雪花模型，星型模型，宽表模型或者预聚合模型。适用于灵活配置的多维分析报表，业务场景包括：
+- [表设计概览](/table_design/StarRocks_table_design)
+- [数据模型](/table_design/Data_model)
+- [数据分布](/table_design/Data_distribution)
+- [排序键和 shortkey index](/table_design/Sort_key)
 
-- 用户行为分析
+</NavBoxPartItem>
+</NavBoxPart>
 
-- 用户画像、标签分析、圈人
+<NavBoxPart title="导入数据​">
+<NavBoxPartItem>
 
-- 高维业务指标报表
+- [数据导入概览](/loading/Loading_intro)
+- [从本地或网络中导入数据](/loading/StreamLoad)
+- [从 Apache HDFS 或对象存储中导入数据](/loading/BrokerLoad)
+- [从 Apache Kafka® 中导入数据](/loading/RoutineLoad)
+- [利用 Apache Spark™ 资源导入数据](/loading/SparkLoad)
+- [从 MySQL 实时导入数据](/loading/Flink_cdc_load)
 
-- 自助式报表平台
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-- 业务问题探查分析
+<NavBox>
+<NavBoxPart title="高效查询数据​">
+<NavBoxPartItem title="提高查询性能">
 
-- 跨主题业务分析
+- [CBO 优化器](/using_starrocks/Cost_based_optimizer)
+- [物化视图](/using_starrocks/Materialized_view)
+- [Colocate Join](/using_starrocks/Colocate_join)
 
-- 财务报表
+</NavBoxPartItem>
+<NavBoxPartItem title="查询半结构化数据">
 
-- 系统监控分析
+- [JSON](/sql-reference/sql-statements/data-types/JSON)
+- [数组](/using_starrocks/Array)
 
-### 实时数据仓库
+</NavBoxPartItem>
+</NavBoxPart>
 
-StarRocks 设计和实现了 Primary-Key 模型，让数据可以更好地实时更新，并且具备极速的查询能力，可以，同时可以秒级同步 TP 数据库的变化，构建实时数仓，业务场景包括：
+<NavBoxPart>
+<NavBoxPartItem title="查询外部数据源​">
 
-- 电商大促数据分析
+- [Apache Hive™](/using_starrocks/External_table#hive-%E5%A4%96%E8%A1%A8)
+- [Apache Hudi](/using_starrocks/External_table#apache-hudi-%E5%A4%96%E8%A1%A8)
+- [Apache Iceberg](/using_starrocks/External_table#apache-iceberg-%E5%A4%96%E8%A1%A8)
+- [MySQL](/using_starrocks/External_table#mysql-%E5%A4%96%E9%83%A8%E8%A1%A8)
+- [Elasticsearch](/using_starrocks/External_table#elasticsearch-%E5%A4%96%E9%83%A8%E8%A1%A8)
+- [更多数据库（支持 JDBC 驱动程序）](/loading/Flink-connector-starrocks)
 
-- 物流行业的运单分析
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-- 金融行业绩效分析、指标计算
+<NavBox>
+<NavBoxPart title="管理 StarRocks">
+<NavBoxPartItem>
 
-- 直播质量分析
+- [部署使用](/administration/Build_in_docker)
+- [运维操作](/administration/Scale_up_down)
+- [数据恢复](/administration/Data_recovery)
+- [性能调优](/administration/Query_planning)
 
-- 广告投放分析
+</NavBoxPartItem>
+</NavBoxPart>
 
-- 管理驾驶舱
+<NavBoxPart title="参考​">
+<NavBoxPartItem>
 
-- 探针分析APM（Application Performance Management）
+- [SQL参考](/sql-reference/sql-statements/account-management/ALTER%20USER)
+- [函数参考](/sql-reference/sql-functions/date-time-functions/convert_tz)
 
-### 高并发查询
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-StarRocks 通过良好的数据分布特性，灵活的索引索引以及物化视图等特性，可以解决面向用户侧的分析场景，业务场景包括：
+<NavBox>
+<NavBoxPart title="常见问题​">
+<NavBoxPartItem>
 
-- 广告主报表分析
+- [导入和提取数据](/faq/loading/Loading_faq)
+- [部署运维](/faq/Deploy_faq)
+- [SQL](/faq/Sql_faq)
 
-- 零售行业渠道人员分析
+</NavBoxPartItem>
+</NavBoxPart>
 
-- SaaS 行业面向用户分析报表
+<NavBoxPart title="性能测试​">
+<NavBoxPartItem>
 
-- Dashbroad 多页面分析
+- [SSB 基准测试](/benchmarking/SSB_Benchmarking)
+- [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark)
 
-### 统一分析
-
-- 通过使用一套系统解决多维分析、高并发查询、预计算、实时分析查询等场景，降低系统复杂度和多技术栈开发与维护成本。
-
-- 使用StarRocks 来统一数据湖和数据仓库，将高并发和实时要求性很高的业务放在StarRocks中分析，把数据湖上的分析使用StarRocks外表查询，统一使用 StarRocks 管理湖仓数据。
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
