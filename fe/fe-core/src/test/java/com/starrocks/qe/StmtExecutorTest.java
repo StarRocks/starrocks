@@ -39,6 +39,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.service.FrontendOptions.StartFeSpecifiedHostType;
 import com.starrocks.thrift.TUniqueId;
 import java_cup.runtime.Symbol;
 import mockit.Expectations;
@@ -66,7 +67,7 @@ public class StmtExecutorTest {
     public static void start() {
         MetricRepo.init();
         try {
-            FrontendOptions.init();
+            FrontendOptions.init(new String[0]);
         } catch (UnknownHostException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();

@@ -514,6 +514,10 @@ public class NodeMgr {
                     System.exit(-1);
                 }
                 helpers = args[i + 1];
+                if (!helpers.contains(":")) {
+                    System.out.println("helper's format seems was wrong [" + helpers + "]");
+                    System.exit(-1);
+                }
                 break;
             }
         }
@@ -870,10 +874,6 @@ public class NodeMgr {
 
     public Pair<String, Integer> getSelfNode() {
         return this.selfNode;
-    }
-
-    public void setSelfNode(Pair<String, Integer> newSelfNode) {
-        this.selfNode = newSelfNode;
     }
 
     public String getNodeName() {

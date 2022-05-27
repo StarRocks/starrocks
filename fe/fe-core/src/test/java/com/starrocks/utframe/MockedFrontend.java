@@ -33,6 +33,8 @@ import com.starrocks.journal.JournalFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.service.FrontendOptions.StartFeSpecifiedHostType;
+
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.Level;
@@ -219,7 +221,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init();
+                FrontendOptions.init(new String[0]);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {

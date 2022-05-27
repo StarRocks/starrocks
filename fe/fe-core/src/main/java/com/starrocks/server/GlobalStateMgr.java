@@ -2466,10 +2466,6 @@ public class GlobalStateMgr {
         return nodeMgr.getSelfNode();
     }
 
-    public void setSelfNode(Pair<String, Integer> newSelfNode) {
-        nodeMgr.setSelfNode(newSelfNode);
-    }
-
     public String getNodeName() {
         return nodeMgr.getNodeName();
     }
