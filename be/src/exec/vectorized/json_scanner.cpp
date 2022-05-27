@@ -707,12 +707,19 @@ Status JsonReader::_read_and_parse_json() {
     StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         auto st = stream_file->pipe()->read();
-        if(!st.ok()) {
+        if (!st.ok()) {
             return st.status();
         }
         _parser_buf = st.value();
+
+        if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
+            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+            auto buf = ByteBuffer::allocate(_parser_buf->remaining() + simdjson::SIMDJSON_PADDING);
+            buf->put_bytes(_parser_buf->ptr, _parser_buf->remaining());
+            buf->flip();
+            std::swap(buf, _parser_buf);
+        }
     }
 
     data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
