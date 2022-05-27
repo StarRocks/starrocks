@@ -9,6 +9,7 @@
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
@@ -57,7 +58,7 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     }
 }
 
-void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
@@ -71,11 +72,13 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
     // The first one is expr context from planner
     // and others will be some cast exprs from one type to another
     // eg. [x as int >= 10]  [string->int] <- column(x as string)
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
         ExprContext* ctx = _expr_ctxs[i];
         chunk.update_column(bits, _slot_desc->id());
-        bits = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), &chunk);
+        ASSIGN_OR_RETURN(bits, ctx->evaluate(&chunk));
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     // deal with constant.
     if (bits->is_constant()) {
@@ -85,7 +88,7 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
             value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(bits);
         }
         memset(selection + from, value, (to - from));
-        return;
+        return Status::OK();
     }
 
     // deal with nullable.
@@ -96,39 +99,42 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
         for (uint16_t i = from; i < to; i++) {
             selection[i] = (!null_value[i]) & (data_value[i]);
         }
-        return;
+        return Status::OK();
     }
 
     // deal with non-nullable.
     uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
     memcpy(selection + from, data_value, (to - from));
-    return;
+    return Status::OK();
 }
 
-void ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
     uint16_t size = to - from;
     _tmp_select.reserve(size);
     uint8_t* tmp = _tmp_select.data();
-    evaluate(column, tmp, 0, size);
+    RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] &= tmp[i];
     }
+    return Status::OK();
 }
 
-void ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
     uint16_t size = to - from;
     _tmp_select.reserve(size);
     uint8_t* tmp = _tmp_select.data();
-    evaluate(column, tmp, 0, size);
+    RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] |= tmp[i];
     }
+
+    return Status::OK();
 }
 
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -254,14 +260,16 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 
-void ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     memset(selection + from, 0x1, to - from);
+    return Status::OK();
 }
-void ColumnTruePredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-    return;
+Status ColumnTruePredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+    return Status::OK();
 }
-void ColumnTruePredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnTruePredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     memset(sel + from, 0x1, to - from);
+    return Status::OK();
 }
 
 Status ColumnTruePredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,

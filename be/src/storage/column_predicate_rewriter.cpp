@@ -27,27 +27,20 @@
 namespace starrocks::vectorized {
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
-void ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
+Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
-            // a local dict size may greater than config::vector_chunk_size, so it may cause a overflow
-            // in Expr::evaluate (default s_all_not_null_column size was config::vector_chunk_size)
-            // so we will disable optimization when dict size greater than vector_chunk_size
-            int dict_size = down_cast<ScalarColumnIterator*>(_column_iterators[cid])->dict_size();
-            if (dict_size > config::vector_chunk_size) {
-                _need_rewrite[cid] = false;
-                continue;
-            }
-            _rewrite_predicate(pool, field);
+            RETURN_IF_ERROR(_rewrite_predicate(pool, field));
         }
     }
+    return Status::OK();
 }
 
-bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
     auto cid = field->id();
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
     auto iter = _predicates.find(cid);
@@ -214,7 +207,8 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
             }
 
             ColumnPredicate* ptr;
-            bool non_empty = _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), &ptr);
+            ASSIGN_OR_RETURN(bool non_empty,
+                             _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), &ptr));
             if (!non_empty) {
                 _scan_range = _scan_range.intersection(SparseRange());
             } else {
@@ -286,10 +280,10 @@ void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, Column
     *code_column = code_col;
 }
 
-bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate* raw_pred,
-                                                      const ColumnPtr& raw_dict_column,
-                                                      const ColumnPtr& raw_code_column, bool field_nullable,
-                                                      ColumnPredicate** ptr) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate* raw_pred,
+                                                                const ColumnPtr& raw_dict_column,
+                                                                const ColumnPtr& raw_code_column, bool field_nullable,
+                                                                ColumnPredicate** ptr) {
     *ptr = nullptr;
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
@@ -359,7 +353,7 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
 
 // member function for ConjunctivePredicatesRewriter
 
-void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
     std::vector<uint8_t> selection;
     auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {
@@ -372,7 +366,7 @@ void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
                 int dict_rows = codes.size();
                 selection.resize(dict_rows);
 
-                pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows);
+                RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
                 std::vector<uint8_t> code_mapping;
                 code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
@@ -385,10 +379,13 @@ void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
                 pool->add(const_cast<ColumnPredicate*>(pred));
             }
         }
+        return Status::OK();
     };
 
-    pred_rewrite(_predicates.non_vec_preds());
-    pred_rewrite(_predicates.vec_preds());
+    RETURN_IF_ERROR(pred_rewrite(_predicates.non_vec_preds()));
+    RETURN_IF_ERROR(pred_rewrite(_predicates.vec_preds()));
+
+    return Status::OK();
 }
 
 Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool,
