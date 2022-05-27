@@ -219,7 +219,6 @@
       + [seconds_diff](/sql-reference/sql-functions/date-time-functions/seconds_diff.md)
       + [weeks_diff](/sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [years_diff](/sql-reference/sql-functions/date-time-functions/years_diff.md)
-      + [year](/sql-reference/sql-functions/date-time-functions/year.md)
       + [quarter](/sql-reference/sql-functions/date-time-functions/quarter.md)
       + [timestamp](/sql-reference/sql-functions/date-time-functions/timestamp.md)
       + [time_to_sec](/sql-reference/sql-functions/date-time-functions/time_to_sec.md)
