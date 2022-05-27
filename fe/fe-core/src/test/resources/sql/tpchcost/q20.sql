@@ -328,6 +328,8 @@ partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=24.0
 cardinality: 86732673
+probe runtime filters:
+- filter_id = 4, probe_expr = (33: L_SUPPKEY)
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
