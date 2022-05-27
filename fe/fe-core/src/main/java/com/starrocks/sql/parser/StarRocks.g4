@@ -131,13 +131,13 @@ keyDesc
 
 aggDesc
     : SUM
-    |MAX
-    |MIN
-    |REPLACE
-    |HLL_UNION
-    |BITMAP_UNION
-    |PERCENTILE_UNION
-    |REPLACE_IF_NOT_NULL
+    | MAX
+    | MIN
+    | REPLACE
+    | HLL_UNION
+    | BITMAP_UNION
+    | PERCENTILE_UNION
+    | REPLACE_IF_NOT_NULL
     ;
 
 rollupDesc

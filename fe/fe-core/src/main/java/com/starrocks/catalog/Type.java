@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
  * Mostly contains static type instances and helper methods for convenience, as well
  * as abstract methods that subclasses must implement.
  */
-public abstract class Type implements Cloneable, ParseNode {
+public abstract class Type implements Cloneable {
     private static final Logger LOG = LogManager.getLogger(Type.class);
 
     // Maximum nesting depth of a type. This limit my be changed after running more

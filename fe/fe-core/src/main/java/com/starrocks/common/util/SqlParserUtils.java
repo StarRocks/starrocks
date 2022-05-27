@@ -117,7 +117,6 @@ public class SqlParserUtils {
     }
 
     public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext connectContext) {
-        LOG.info("begin to parse stmt: " + originStmt);
         StatementBase statementBase = null;
         try {
             statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,

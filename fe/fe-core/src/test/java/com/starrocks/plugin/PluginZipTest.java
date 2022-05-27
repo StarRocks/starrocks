@@ -131,8 +131,7 @@ public class PluginZipTest {
     @Test
     public void testExtract() {
         try {
-            Files.copy(PluginTestUtil.getTestPath("source/test.zip"), PluginTestUtil.getTestPath("source/test-a.zip"),
-                    StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(PluginTestUtil.getTestPath("source/test.zip"), PluginTestUtil.getTestPath("source/test-a.zip"));
             PluginZip util = new PluginZip(PluginTestUtil.getTestPathString("source/test-a.zip"), null);
 
             Path actualPath = util.extract(PluginTestUtil.getTestPath("target"));
