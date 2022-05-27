@@ -13,7 +13,6 @@ import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
-// import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -176,61 +175,4 @@ public class StarOSAgent {
         workerToBackend.put(workerId, backendId);
         LOG.info("add worker {} succ, backendId is {}", workerId, backendId);
     }
-
-    // Mock StarClient
-    /*private class StarClient {
-        // private Map<Long, List<Replica>> shardIdToWorkerIds;
-        private Map<Long, Worker> idToWorker;
-
-        private long id = System.currentTimeMillis();
-
-        public StarClient() {
-            idToWorker = Maps.newHashMap();
-        }
-
-        public synchronized List<Long> createShards(int numShards) {
-            // Get shard and workers from StarOS and update shardIdToWorkerIds
-            List<Long> shards = Lists.newArrayList();
-            for (int i = 0; i < numShards; ++i) {
-                shards.add(id++);
-            }
-            return shards;
-        }
-
-        public synchronized long getPrimaryWorkerIdByShard(long shardId) {
-            // Use primary replica of shard from StarOS
-            return getWorkerIdsByShard(shardId).get(0);
-        }
-
-        public synchronized List<Long> getWorkerIdsByShard(long shardId) {
-            // Use workers from StarOS
-            idToWorker.clear();
-            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-            for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
-                idToWorker.put(entry.getKey(), new Worker(entry.getKey(), entry.getValue().getHost()));
-            }
-            List<Long> workerIds = idToWorker.keySet().stream().sorted().collect(Collectors.toList());
-            return Lists.newArrayList(workerIds.get((int) (shardId % workerIds.size())));
-        }
-
-        public synchronized Worker getWorker(long id) {
-            return idToWorker.get(id);
-        }
-
-    }*/
-
-    // Mock StarOS Worker
-    /*private class Worker {
-        private long id;
-        private String host;
-
-        public Worker(long id, String host) {
-            this.id = id;
-            this.host = host;
-        }
-
-        public String getHost() {
-            return host;
-        }
-    }*/
 }
