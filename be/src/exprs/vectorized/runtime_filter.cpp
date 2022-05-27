@@ -109,8 +109,8 @@ bool SimdBlockFilter::check_equal(const SimdBlockFilter& bf) const {
 
 size_t JoinRuntimeFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
-    size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(_hash_partition_number) + sizeof(_join_mode);
-    if (_hash_partition_number == 0) {
+    size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(_num_hash_partitions) + sizeof(_join_mode);
+    if (_num_hash_partitions == 0) {
         size += _bf.max_serialized_size();
     } else {
         for (const auto& bf : _hash_partition_bf) {
@@ -127,11 +127,11 @@ size_t JoinRuntimeFilter::serialize(uint8_t* data) const {
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
-    JRF_COPY_FIELD(_hash_partition_number);
+    JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
 
-    if (_hash_partition_number == 0) {
+    if (_num_hash_partitions == 0) {
         offset += _bf.serialize(data + offset);
 
     } else {
@@ -149,14 +149,14 @@ size_t JoinRuntimeFilter::deserialize(const uint8_t* data) {
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
-    JRF_COPY_FIELD(_hash_partition_number);
+    JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
 
-    if (_hash_partition_number == 0) {
+    if (_num_hash_partitions == 0) {
         offset += _bf.deserialize(data + offset);
     } else {
-        for (size_t i = 0; i < _hash_partition_number; i++) {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
             SimdBlockFilter bf;
             offset += bf.deserialize(data + offset);
             _hash_partition_bf.emplace_back(std::move(bf));
@@ -167,13 +167,13 @@ size_t JoinRuntimeFilter::deserialize(const uint8_t* data) {
 }
 
 bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
-    bool first = (_has_null == rf._has_null && _size == rf._size &&
-                  _hash_partition_number == rf._hash_partition_number && _join_mode == rf._join_mode);
+    bool first = (_has_null == rf._has_null && _size == rf._size && _num_hash_partitions == rf._num_hash_partitions &&
+                  _join_mode == rf._join_mode);
     if (!first) return false;
-    if (_hash_partition_number == 0) {
+    if (_num_hash_partitions == 0) {
         if (!_bf.check_equal(rf._bf)) return false;
     } else {
-        for (size_t i = 0; i < _hash_partition_number; i++) {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
             if (!_hash_partition_bf[i].check_equal(rf._hash_partition_bf[i])) {
                 return false;
             }
