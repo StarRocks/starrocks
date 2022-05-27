@@ -166,7 +166,7 @@ public class ShowExecutor {
         metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
-    public ShowResultSet execute() throws AnalysisException {
+    public ShowResultSet execute() throws AnalysisException, DdlException {
         if (stmt instanceof ShowMaterializedViewStmt) {
             handleShowMaterializedView();
         } else if (stmt instanceof ShowAuthorStmt) {
@@ -460,7 +460,7 @@ public class ShowExecutor {
     }
 
     // Show clusters
-    private void handleShowCluster() throws AnalysisException {
+    private void handleShowCluster() {
         final ShowClusterStmt showStmt = (ShowClusterStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
         final List<String> clusterNames = ctx.getGlobalStateMgr().getClusterNames();
@@ -478,7 +478,7 @@ public class ShowExecutor {
     }
 
     // Show clusters
-    private void handleShowMigrations() throws AnalysisException {
+    private void handleShowMigrations() {
         final ShowMigrationsStmt showStmt = (ShowMigrationsStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
         final Set<BaseParam> infos = ctx.getGlobalStateMgr().getMigrations();
@@ -496,11 +496,19 @@ public class ShowExecutor {
     private void handleShowDb() throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
+        List<String> dbNames = new ArrayList<>();
+        String catalogName;
+        if (showDbStmt.getCatalogName() == null) {
+            catalogName = ctx.getCurrentCatalog();
+        } else {
+            catalogName = showDbStmt.getCatalogName();
+        }
+        boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
+        dbNames = metadataMgr.listDbNames(catalogName);
+
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(), CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
         for (String fullName : dbNames) {
@@ -510,11 +518,11 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName,
-                    PrivPredicate.SHOW)) {
-                continue;
+            if (isInternalCatalog) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
-
             dbNameSet.add(db);
         }
 
