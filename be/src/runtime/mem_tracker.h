@@ -157,7 +157,6 @@ public:
     WARN_UNUSED_RESULT
     MemTracker* try_consume(int64_t bytes) {
         if (UNLIKELY(bytes <= 0)) return nullptr;
-        _last_try_consume = bytes;
         int64_t i;
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
@@ -257,8 +256,6 @@ public:
 
     std::string err_msg(const std::string& msg) const;
 
-    int64_t last_try_consume() const { return _last_try_consume; }
-
     static const std::string COUNTER_NAME;
 
     std::string debug_string() {
@@ -314,8 +311,6 @@ private:
     // The query tracker has lifetime shared by multiple plan fragments so it's hard
     // to do cleanup another way.
     bool _auto_unregister = false;
-
-    int64_t _last_try_consume = 0;
 };
 
 template <typename T>
