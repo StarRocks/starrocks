@@ -35,6 +35,22 @@ public class RenameMaterializedViewLog implements Writable {
         this.newMaterializedViewName = newMaterializedViewName;
     }
 
+    public long getId() {
+        return id;
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public String getOldMaterializedViewName() {
+        return oldMaterializedViewName;
+    }
+
+    public String getNewMaterializedViewName() {
+        return newMaterializedViewName;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
@@ -46,10 +62,4 @@ public class RenameMaterializedViewLog implements Writable {
         return GsonUtils.GSON.fromJson(json, RenameMaterializedViewLog.class);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        id = in.readLong();
-        oldMaterializedViewName = Text.readString(in);
-        newMaterializedViewName = Text.readString(in);
-    }
 }

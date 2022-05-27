@@ -741,7 +741,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return partitionIdToRollupIndex;
     }
 
-
     public void setJobState(JobState jobState) {
         this.jobState = jobState;
     }

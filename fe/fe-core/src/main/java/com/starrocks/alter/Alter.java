@@ -83,6 +83,7 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -261,13 +262,15 @@ public class Alter {
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             throw new DdlException("unsupported change to SYNC refresh type");
         }
+        LocalDateTime startTime = null;
         long step = 0;
         TimestampArithmeticExpr.TimeUnit timeUnit = null;
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
-            newMvRefreshScheme.setStartTime(((AsyncRefreshSchemeDesc) refreshSchemeDesc).getStartTime());
+            startTime = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getStartTime();
             step = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getStep();
             timeUnit = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getTimeUnit();
+            newMvRefreshScheme.setStartTime(startTime);
             newMvRefreshScheme.setStep(step);
             newMvRefreshScheme.setTimeUnit(timeUnit);
         }
@@ -277,7 +280,7 @@ public class Alter {
         materializedView.setRefreshScheme(newMvRefreshScheme);
         final ChangeMaterializedViewRefreshSchemeLog log =
                 new ChangeMaterializedViewRefreshSchemeLog(materializedView.getId(), materializedView.getDbId(),
-                        newRefreshType, step, timeUnit);
+                        newRefreshType, startTime, step, timeUnit);
         editLog.logMvChangeRefreshScheme(log);
     }
 
@@ -298,47 +301,51 @@ public class Alter {
         editLog.logMvRename(renameMaterializedViewLog);
     }
 
-    public void replayRenameMaterializedView(MaterializedView materializedView) {
-        long dbId = materializedView.getDbId();
-        long tableId = materializedView.getId();
-        String materializedViewName = materializedView.getName();
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        long dbId = log.getDbId();
+        long materializedViewId = log.getId();
+        String newMaterializedViewName = log.getNewMaterializedViewName();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
         try {
-            MaterializedView oldMaterializedView = (MaterializedView) db.getTable(tableId);
+            MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
             String oldMaterializedViewName = oldMaterializedView.getName();
             db.dropTable(oldMaterializedViewName);
-            oldMaterializedView.setName(materializedViewName);
+            oldMaterializedView.setName(newMaterializedViewName);
             db.createTable(oldMaterializedView);
             LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedViewName,
-                    materializedViewName, oldMaterializedView.getId());
+                    newMaterializedViewName, oldMaterializedView.getId());
         } finally {
             db.writeUnlock();
         }
     }
 
-    public void replayMaterializedViewChangeRefreshScheme(MaterializedView materializedView) {
-        long dbId = materializedView.getDbId();
-        long tableId = materializedView.getId();
-        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        long dbId = log.getDbId();
+        long id = log.getId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         MaterializedView oldMaterializedView;
         final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        final String refreshType = refreshScheme.getType().name();
         db.writeLock();
         try {
-            oldMaterializedView = (MaterializedView) db.getTable(tableId);
-            newMvRefreshScheme.setAsyncRefreshContext(refreshScheme.getAsyncRefreshContext());
-            newMvRefreshScheme.setType(RefreshType.valueOf(refreshType));
-            newMvRefreshScheme.setLastRefreshTime(refreshScheme.getLastRefreshTime());
-            newMvRefreshScheme.setStartTime(refreshScheme.getStartTime());
-            newMvRefreshScheme.setStep(refreshScheme.getStep());
-            newMvRefreshScheme.setTimeUnit(refreshScheme.getTimeUnit());
+            oldMaterializedView = (MaterializedView) db.getTable(id);
+            final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
+            newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
+            newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
+            final RefreshType refreshType = log.getRefreshType();
+            final LocalDateTime startTime = log.getStartTime();
+            final long step = log.getStep();
+            final TimestampArithmeticExpr.TimeUnit timeUnit = log.getTimeUnit();
+            newMvRefreshScheme.setType(refreshType);
+            newMvRefreshScheme.setStartTime(startTime);
+            newMvRefreshScheme.setStep(step);
+            newMvRefreshScheme.setTimeUnit(timeUnit);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
-            LOG.info("replay materialized view [{}]'s refresh type {} to {}, id: {}",
-                    oldMaterializedView.getName(), oldMaterializedView.getRefreshScheme().getType().name(),
-                    refreshScheme.getType().name(), tableId);
+            LOG.info(
+                    "replay materialized view [{}]'s refresh type to {}, start time to {}, " +
+                            "interval step to {}, time unit to {}, id: {}",
+                    oldMaterializedView.getName(), refreshType.name(), startTime, step, timeUnit.toString(), id);
         } finally {
             db.writeUnlock();
         }

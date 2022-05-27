@@ -35,7 +35,6 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -270,13 +269,14 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
-                    MaterializedView materializedView = (MaterializedView) journal.getData();
-                    globalStateMgr.replayMaterializedViewChangeRefreshScheme(materializedView);
+                    ChangeMaterializedViewRefreshSchemeLog log =
+                            (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
+                    globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
-                    MaterializedView materializedView = (MaterializedView) journal.getData();
-                    globalStateMgr.replayRenameMaterializedView(materializedView);
+                    RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
+                    globalStateMgr.replayRenameMaterializedView(log);
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {

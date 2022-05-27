@@ -39,8 +39,12 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TJoinDistributionMode;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

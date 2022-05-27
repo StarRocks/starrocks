@@ -11,6 +11,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     @SerializedName(value = "MaterializedViewId")
@@ -22,6 +23,9 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     @SerializedName(value = "refreshType")
     private RefreshType refreshType;
 
+    @SerializedName(value = "startTime")
+    private LocalDateTime startTime;
+
     @SerializedName(value = "step")
     private long step;
 
@@ -31,11 +35,12 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     public ChangeMaterializedViewRefreshSchemeLog() {
     }
 
-    public ChangeMaterializedViewRefreshSchemeLog(long id, long dbId, RefreshType refreshType, long step,
-                                                  TimestampArithmeticExpr.TimeUnit timeUnit) {
+    public ChangeMaterializedViewRefreshSchemeLog(long id, long dbId, RefreshType refreshType, LocalDateTime startTime,
+                                                  long step, TimestampArithmeticExpr.TimeUnit timeUnit) {
         this.id = id;
         this.dbId = dbId;
         this.refreshType = refreshType;
+        this.startTime = startTime;
         this.step = step;
         this.timeUnit = timeUnit;
     }
@@ -52,6 +57,10 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return refreshType;
     }
 
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+
     public long getStep() {
         return step;
     }
@@ -66,11 +75,8 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         Text.writeString(out, json);
     }
 
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        id = in.readLong();
-        refreshType = RefreshType.valueOf(Text.readString(in));
-        step = in.readLong();
-        timeUnit = TimestampArithmeticExpr.TimeUnit.valueOf(Text.readString(in));
+    public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, ChangeMaterializedViewRefreshSchemeLog.class);
     }
 }

@@ -104,7 +104,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -182,6 +181,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -192,6 +192,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -2645,12 +2646,12 @@ public class GlobalStateMgr {
         localMetastore.replayRenameTable(tableInfo);
     }
 
-    public void replayRenameMaterializedView(MaterializedView materializedView) {
-        this.alter.replayRenameMaterializedView(materializedView);
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        this.alter.replayRenameMaterializedView(log);
     }
 
-    public void replayMaterializedViewChangeRefreshScheme(MaterializedView materializedView) {
-        this.alter.replayMaterializedViewChangeRefreshScheme(materializedView);
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        this.alter.replayChangeMaterializedViewRefreshScheme(log);
     }
 
     // the invoker should keep db write lock
