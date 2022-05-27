@@ -50,7 +50,11 @@ public:
         return st;
     }
 
-    Status append_json(const char* data, size_t size, char row_delimiter) { return append_and_flush(data, size); }
+    Status append_json(const char* data, size_t size, char row_delimiter) {
+        auto buf = ByteBuffer::allocate(size);
+        buf->put_bytes(data, size);
+        return append(std::move(buf));
+    }
 };
 
 } // end namespace starrocks

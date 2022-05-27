@@ -108,9 +108,7 @@ private:
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
     simdjson::ondemand::parser _simdjson_parser;
-    std::unique_ptr<uint8_t[]> _parser_buf;
-    size_t _parser_buf_sz = 0;
-    size_t _parser_buf_cap = 0;
+    ByteBufferPtr _parser_buf;
     bool _is_ndjson = false;
 
     std::unique_ptr<JsonParser> _parser;
