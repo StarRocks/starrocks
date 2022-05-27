@@ -100,7 +100,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFun
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectionToCTEAnchorRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
@@ -277,7 +277,7 @@ public class RuleSet {
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
-                new PushDownProjectionToCTEAnchorRule()
+                new PushDownProjectToCTEAnchorRule()
         ));
 
         rewriteRules.put(RuleSetType.COLLECT_CTE, ImmutableList.of(
