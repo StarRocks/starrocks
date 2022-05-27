@@ -1659,6 +1659,18 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testEscapeString() throws Exception {
+        String sql = "select concat('123123', 'abc', '\\\\zx')";
+        testView(sql);
+
+        sql = "select replace('123123', 'abc', '\\\\\\\\zx')";
+        testView(sql);
+
+        sql = "select replace('123123', 'abc', '\\\\\\\\zx')";
+        testView(sql);
+    }
+
+    @Test
     public void testAlter() throws Exception {
         String sql = "select v1 as c1, sum(v2) as c2 from t0 group by v1";
         String viewName = "view" + INDEX.getAndIncrement();

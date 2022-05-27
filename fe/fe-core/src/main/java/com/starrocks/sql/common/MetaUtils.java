@@ -7,6 +7,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 public class MetaUtils {
@@ -31,6 +32,12 @@ public class MetaUtils {
     }
 
     public static void normalizationTableName(ConnectContext connectContext, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                throw new SemanticException("No catalog selected");
+            }
+            tableName.setCatalog(connectContext.getCurrentCatalog());
+        }
         if (Strings.isNullOrEmpty(tableName.getDb())) {
             if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
                 throw new SemanticException("No database selected");
@@ -40,7 +47,9 @@ public class MetaUtils {
             if (Strings.isNullOrEmpty(connectContext.getClusterName())) {
                 throw new SemanticException("No cluster name");
             }
-            tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+            }
         }
 
         if (Strings.isNullOrEmpty(tableName.getTbl())) {

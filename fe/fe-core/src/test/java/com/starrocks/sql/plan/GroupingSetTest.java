@@ -222,4 +222,62 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  <slot 5> : clone(2: v2)");
     }
+
+    @Test
+    public void testSameGroupingAggIF() throws Exception {
+        String sql = "select xx, v2, max(v2 + 1) from " +
+                "(select if(v1=1, 2, 3) as xx, * from t0) ff group by grouping sets ((xx, v2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 0 lines [[2, 4]]\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 4> : if(1: v1 = 1, 2, 3)\n" +
+                "  |  <slot 5> : clone(2: v2) + 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testSameGroupingAggIF2() throws Exception {
+        String sql = "select xx, x2, max(xx + 1) from (" +
+                "select if(x1=1, 2, 3) as xx, * from (" +
+                "select abs(v1) as x1, v2, v3, max(v3) as x2 from t0 group by v1, v2, v3) " +
+                "yy) ff group by grouping sets ((xx, x2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  <slot 6> : 12: if\n" +
+                "  |  <slot 7> : CAST(clone(12: if) AS SMALLINT) + 1\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 10> : abs(1: v1)\n" +
+                "  |  <slot 11> : 10: abs = 1\n" +
+                "  |  <slot 12> : if(11: expr, 2, 3)");
+    }
+
+    @Test
+    public void testSameGroupingAggIF3() throws Exception {
+        String sql = "select u2, r1 from\n" +
+                "(select  v1, UNNEST u2, datediff(split(x1,',')[2],UNNEST) r1\n" +
+                "from (\n" +
+                "    select  v1, array_agg(v2) as x2, ARRAY_JOIN(array_agg(if(v1=0,'a','b')), ',') x1, max(x3)\n" +
+                "    from (\n" +
+                "            select  v1,v2 , sum(v3) as x3\n" +
+                "            FROM t0\n" +
+                "            GROUP by  v1,v2\n" +
+                "        ) tev GROUP BY v1\n" +
+                "    ) tev,unnest(x2) \n" +
+                ") tev group by GROUPING SETS((u2, r1)) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 10> : 10: unnest\n" +
+                "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
+                "  |  \n" +
+                "  5:TableValueFunction\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 6> : 6: array_agg\n" +
+                "  |  <slot 9> : array_join(7: array_agg, ',')");
+    }
 }

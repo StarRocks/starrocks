@@ -76,6 +76,10 @@ public class PrivPredicate {
                     Privilege.USAGE_PRIV),
             Operator.OR);
 
+    // impersonate
+    public static final PrivPredicate IMPERSONATE = PrivPredicate.of(PrivBitSet.of(Privilege.IMPERSONATE_PRIV),
+            Operator.OR);
+
     // all
     public static final PrivPredicate ALL = PrivPredicate.of(PrivBitSet.of(Privilege.NODE_PRIV,
                     Privilege.ADMIN_PRIV,

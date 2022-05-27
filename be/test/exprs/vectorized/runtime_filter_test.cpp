@@ -5,8 +5,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "column/column_helper.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "simd/simd.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -73,6 +76,37 @@ TEST_F(RuntimeFilterTest, TestSimdBlockFilterMerge) {
         EXPECT_TRUE(bf2.test_hash(i + 1));
         EXPECT_FALSE(bf2.test_hash(i + 2));
     }
+}
+static std::string alphabet0 =
+        "abcdefgh"
+        "igklmnop"
+        "qrstuvwx"
+        "yzABCDEF"
+        "GHIGKLMN"
+        "OPQRSTUV"
+        "WXYZ=%01"
+        "23456789";
+
+static std::string alphabet1 = "~!@#$%^&*()_+{}|:\"<>?[]\\;',./";
+
+static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string& alphabet, size_t avg_length,
+                                                              size_t num_rows) {
+    auto col = BinaryColumn::create();
+    col->reserve(num_rows);
+    std::random_device rd;
+    std::uniform_int_distribution<size_t> length_g(0, 2 * avg_length);
+    std::uniform_int_distribution<size_t> g(0, alphabet.size());
+
+    for (auto i = 0; i < num_rows; ++i) {
+        size_t length = length_g(rd);
+        std::string s;
+        s.reserve(length);
+        for (auto i = 0; i < length; ++i) {
+            s.push_back(alphabet[g(rd)]);
+        }
+        col->append(Slice(s));
+    }
+    return col;
 }
 
 TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
@@ -327,6 +361,170 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
     // out of scope, we expect aa and dd would be still alive.
     EXPECT_EQ(pbf0->min_value(), Slice("aa", 2));
     EXPECT_EQ(pbf0->max_value(), Slice("dd", 2));
+}
+
+typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>&)> PartitionByFunc;
+typedef std::function<void(JoinRuntimeFilter*, JoinRuntimeFilter::RunningContext*)> GrfConfigFunc;
+
+void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc part_func, GrfConfigFunc grf_config_func) {
+    std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
+    std::vector<JoinRuntimeFilter*> rfs(num_partitions);
+    for (auto p = 0; p < num_partitions; ++p) {
+        rfs[p] = &bfs[p];
+    }
+
+    ObjectPool pool;
+    auto column = gen_random_binary_column(alphabet0, 100, num_rows);
+    std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
+    std::vector<uint32_t> hash_values;
+    part_func(column.get(), hash_values, num_rows_per_partitions);
+    for (auto p = 0; p < num_partitions; ++p) {
+        bfs[p].init(num_rows_per_partitions[p]);
+    }
+
+    for (auto i = 0; i < num_rows; ++i) {
+        auto slice = column->get_slice(i);
+        bfs[hash_values[i]].insert(&slice);
+    }
+
+    std::vector<std::string> serialized_rfs(num_partitions);
+    for (auto p = 0; p < num_partitions; ++p) {
+        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rfs[p]);
+        serialized_rfs[p].resize(max_size, 0);
+        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rfs[p], (uint8_t*)serialized_rfs[p].data());
+        serialized_rfs[p].resize(actual_size);
+    }
+
+    RuntimeBloomFilter<TYPE_VARCHAR> grf;
+    for (auto p = 0; p < num_partitions; ++p) {
+        JoinRuntimeFilter* grf_component;
+        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
+                                                        serialized_rfs[p].size());
+        ASSERT_EQ(grf_component->size(), num_rows_per_partitions[p]);
+        grf.concat(grf_component);
+    }
+    ASSERT_EQ(grf.size(), num_rows);
+    JoinRuntimeFilter::RunningContext running_ctx;
+    grf_config_func(&grf, &running_ctx);
+    {
+        running_ctx.selection.assign(num_rows, 1);
+        auto true_count = grf.evaluate(column.get(), &running_ctx);
+        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
+        ASSERT_EQ(true_count, num_rows);
+        ASSERT_EQ(true_count, true_count2);
+    }
+    {
+        auto negative_column = gen_random_binary_column(alphabet1, 100, num_rows);
+        running_ctx.selection.assign(num_rows, 1);
+        auto true_count = grf.evaluate(negative_column.get(), &running_ctx);
+        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
+        ASSERT_LE((double)true_count / num_rows, 0.5);
+        ASSERT_EQ(true_count, true_count2);
+    }
+}
+void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
+                              std::vector<int> bucketseq_to_partition) {
+    auto part_by_func = [num_rows, num_partitions, num_buckets, &bucketseq_to_partition](
+                                BinaryColumn* column, std::vector<uint32_t>& hash_values,
+                                std::vector<size_t>& num_rows_per_partitions) {
+        hash_values.assign(num_rows, 0);
+        column->crc32_hash(hash_values.data(), 0, num_rows);
+        for (auto i = 0; i < num_rows; ++i) {
+            hash_values[i] %= num_buckets;
+            hash_values[i] = bucketseq_to_partition[hash_values[i]];
+            ++num_rows_per_partitions[hash_values[i]];
+        }
+    };
+    auto grf_config_func = [&bucketseq_to_partition](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
+        grf->set_join_mode(TRuntimeFilterBuildJoinMode::COLOCATE);
+        ctx->bucketseq_to_partition = &bucketseq_to_partition;
+    };
+    test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func);
+}
+
+TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter1) {
+    test_colocate_grf_helper(100, 3, 6, {1, 1, 0, 0, 2, 2});
+}
+
+TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter2) {
+    test_colocate_grf_helper(100, 3, 7, {0, 1, 2, 0, 1, 2, 1});
+}
+
+TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter3) {
+    test_colocate_grf_helper(100, 1, 7, {0, 0, 0, 0, 0, 0, 0});
+}
+
+void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions,
+                                                        TRuntimeFilterBuildJoinMode::type type) {
+    auto part_by_func = [num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
+                                                   std::vector<size_t>& num_rows_per_partitions) {
+        hash_values.assign(num_rows, HashUtil::FNV_SEED);
+        column->fnv_hash(hash_values.data(), 0, num_rows);
+        for (auto i = 0; i < num_rows; ++i) {
+            hash_values[i] %= num_partitions;
+            ++num_rows_per_partitions[hash_values[i]];
+        }
+    };
+    auto grf_config_func = [type](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
+        grf->set_join_mode(type);
+    };
+    test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func);
+}
+
+void test_partitioned_grf_helper(size_t num_rows, size_t num_partitions) {
+    test_partitioned_or_shuffle_hash_bucket_grf_helper(num_rows, num_partitions,
+                                                       TRuntimeFilterBuildJoinMode::PARTITIONED);
+}
+void test_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions) {
+    test_partitioned_or_shuffle_hash_bucket_grf_helper(num_rows, num_partitions,
+                                                       TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+}
+TEST_F(RuntimeFilterTest, TestPartitionedRuntimeFilter1) {
+    test_partitioned_grf_helper(100, 1);
+}
+TEST_F(RuntimeFilterTest, TestPartitionedRuntimeFilter2) {
+    test_partitioned_grf_helper(100, 3);
+}
+TEST_F(RuntimeFilterTest, TestPartitionedRuntimeFilter3) {
+    test_partitioned_grf_helper(100, 5);
+}
+
+TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter1) {
+    test_shuffle_hash_bucket_grf_helper(100, 1);
+}
+TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter2) {
+    test_shuffle_hash_bucket_grf_helper(100, 3);
+}
+TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter3) {
+    test_shuffle_hash_bucket_grf_helper(100, 5);
+}
+
+void test_local_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions) {
+    auto part_by_func = [num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
+                                                   std::vector<size_t>& num_rows_per_partitions) {
+        hash_values.assign(num_rows, 0);
+        column->crc32_hash(hash_values.data(), 0, num_rows);
+        for (auto i = 0; i < num_rows; ++i) {
+            hash_values[i] %= num_partitions;
+            ++num_rows_per_partitions[hash_values[i]];
+        }
+    };
+    auto grf_config_func = [](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
+        grf->set_join_mode(TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET);
+    };
+    test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func);
+}
+
+TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter1) {
+    test_local_hash_bucket_grf_helper(100, 1);
+}
+
+TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter2) {
+    test_local_hash_bucket_grf_helper(100, 3);
+}
+
+TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter3) {
+    test_local_hash_bucket_grf_helper(100, 5);
 }
 
 } // namespace vectorized

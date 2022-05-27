@@ -110,6 +110,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
     }

@@ -27,8 +27,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.Map;
@@ -212,6 +214,26 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
                     ConnectContext.get(), PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, ConnectContext session) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
+                    ConnectContext.get(), PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+            // check if current user has IMPERSONATE priv
+            if (!GlobalStateMgr.getCurrentState().getAuth().canImpersonate(
+                    session.getCurrentUserIdentity(), stmt.getToUser())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
             }
             return null;
         }

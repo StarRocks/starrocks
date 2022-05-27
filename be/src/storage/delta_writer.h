@@ -20,6 +20,7 @@ class SlotDescriptor;
 namespace vectorized {
 
 class MemTable;
+class MemTableSink;
 
 enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
 
@@ -123,6 +124,7 @@ private:
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
     std::unique_ptr<MemTable> _mem_table;
+    std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;

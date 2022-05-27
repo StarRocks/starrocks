@@ -22,11 +22,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
 
-    ReadWriteLock metaLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock metaLock = new ReentrantReadWriteLock();
     private final LocalMetastore localMetastore;
     private final Map<String, ConnectorMetadata> connectorMetadatas = new HashMap<>();
 
     public MetadataMgr(LocalMetastore localMetastore) {
+        Preconditions.checkNotNull(localMetastore, "localMetastore is null");
         this.localMetastore = localMetastore;
     }
 

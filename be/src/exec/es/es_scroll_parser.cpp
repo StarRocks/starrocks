@@ -228,7 +228,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             if (has_col) {
                 const rapidjson::Value& col = line[col_name];
                 // doc value
-                bool is_null = (pure_doc_value && col.IsArray() && col[0].IsNull()) || col.IsNull();
+                bool is_null = col.IsNull() || (pure_doc_value && col.IsArray() && (col.Empty() || col[0].IsNull()));
                 if (!is_null) {
                     // append value from ES to column
                     RETURN_IF_ERROR(
