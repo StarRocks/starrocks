@@ -143,4 +143,11 @@ public class Utils {
         }
         return keyword;
     }
+
+    // Decimal string like "Decimal(3,2)"
+    public static String[] getPrecisionAndScale(String typeStr) {
+        String partWithComma = typeStr.substring(8, typeStr.length() - 1);
+        String[] parts = partWithComma.split(",");
+        return new String[]{parts[0], parts[1]};
+    }
 }

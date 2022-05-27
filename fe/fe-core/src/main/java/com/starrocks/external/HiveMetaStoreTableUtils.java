@@ -108,40 +108,62 @@ public class HiveMetaStoreTableUtils {
         return allHiveColumns;
     }
 
-    public static PrimitiveType convertColumnType(String hiveType) throws DdlException {
+    public static ScalarType convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType;
         switch (typeUpperCase) {
             case "TINYINT":
-                return PrimitiveType.TINYINT;
+                primitiveType = PrimitiveType.TINYINT;
+                break;
             case "SMALLINT":
-                return PrimitiveType.SMALLINT;
+                primitiveType = PrimitiveType.SMALLINT;
+                break;
             case "INT":
             case "INTEGER":
-                return PrimitiveType.INT;
+                primitiveType = PrimitiveType.INT;
+                break;
             case "BIGINT":
-                return PrimitiveType.BIGINT;
+                primitiveType = PrimitiveType.BIGINT;
+                break;
             case "FLOAT":
-                return PrimitiveType.FLOAT;
+                primitiveType = PrimitiveType.FLOAT;
+                break;
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return PrimitiveType.DOUBLE;
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
             case "DECIMAL":
             case "NUMERIC":
-                return PrimitiveType.DECIMAL32;
+                primitiveType = PrimitiveType.DECIMAL32;
+                break;
             case "TIMESTAMP":
-                return PrimitiveType.DATETIME;
+                primitiveType = PrimitiveType.DATETIME;
+                break;
             case "DATE":
-                return PrimitiveType.DATE;
+                primitiveType = PrimitiveType.DATE;
+                break;
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return PrimitiveType.VARCHAR;
+                primitiveType = PrimitiveType.VARCHAR;
+                break;
             case "CHAR":
-                return PrimitiveType.CHAR;
+                primitiveType = PrimitiveType.CHAR;
+                break;
             case "BOOLEAN":
-                return PrimitiveType.BOOLEAN;
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
             default:
                 throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+        }
+
+        if (primitiveType != PrimitiveType.DECIMAL32) {
+            return ScalarType.createType(primitiveType);
+        } else {
+            String[] parts = Utils.getPrecisionAndScale(hiveType);
+            int precision = Integer.parseInt(parts[0]);
+            int scale = Integer.parseInt(parts[1]);
+            return ScalarType.createUnifiedDecimalType(precision, scale);
         }
     }
 
@@ -157,8 +179,8 @@ public class HiveMetaStoreTableUtils {
         List<Column> fullSchema = Lists.newArrayList();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            PrimitiveType srType = convertColumnType(fieldSchema.getType());
-            Column column = new Column(fieldSchema.getName(), ScalarType.createType(srType), true);
+            ScalarType srType = convertColumnType(fieldSchema.getType());
+            Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
         }
 
