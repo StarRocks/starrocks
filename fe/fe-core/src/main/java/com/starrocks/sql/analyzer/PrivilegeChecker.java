@@ -43,9 +43,26 @@ public class PrivilegeChecker {
     public static boolean checkTblPriv(ConnectContext context,
                                        TableName tableName,
                                        PrivPredicate predicate) {
-        return !CatalogMgr.isInternalCatalog(tableName.getCatalog()) ||
+        return checkTblPriv(context, tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl(), predicate);
+    }
+
+    public static boolean checkTblPriv(ConnectContext context,
+                                       String catalogName,
+                                       String dbName,
+                                       String tableName,
+                                       PrivPredicate predicate) {
+        return !CatalogMgr.isInternalCatalog(catalogName) ||
                 GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                        context, tableName.getDb(), tableName.getTbl(), predicate);
+                        context, dbName, tableName, predicate);
+    }
+
+    public static boolean checkDbPriv(ConnectContext context,
+                                       String catalogName,
+                                       String dbName,
+                                       PrivPredicate predicate) {
+        return !CatalogMgr.isInternalCatalog(catalogName) ||
+                GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(context, dbName, predicate);
     }
 
     private static class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
