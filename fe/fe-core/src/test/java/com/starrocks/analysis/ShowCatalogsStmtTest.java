@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -53,7 +54,7 @@ public class ShowCatalogsStmtTest {
     }
 
     @Test
-    public void testShowCatalogsNormal() throws AnalysisException {
+    public void testShowCatalogsNormal() throws AnalysisException, DdlException {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
