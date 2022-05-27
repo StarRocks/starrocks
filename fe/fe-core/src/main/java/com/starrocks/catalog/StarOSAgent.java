@@ -13,7 +13,6 @@ import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
-// import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,8 +87,6 @@ public class StarOSAgent {
             String ipPort = workerInfo.getIpPort();
             String host = ipPort.split(":")[0];
             long workerId = workerToId.get(ipPort);
-            // String host = ipPort.split(":")[0];
-            // long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(host);
             if (!workerToBackend.containsKey(workerId)) {
                 LOG.warn("Backend does not exists. host: {}", host);
                 continue;
