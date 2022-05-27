@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,18 +145,18 @@ public class SplitAggregateRule extends TransformationRule {
         return hasSameMultiColumn;
     }
 
-    private boolean isDistinctColumnWithHighCardinality(OptExpression input, List<ColumnRefOperator> distinctColumns) {
-        Statistics statistics = input.getGroupExpression().getInputs().get(0).getStatistics();
-        List<ColumnStatistic> distinctColumnStats = distinctColumns.stream().map(statistics::getColumnStatistic).
-                collect(Collectors.toList());
+    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
+        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
 
-        if (distinctColumnStats.stream().anyMatch(ColumnStatistic::isUnknown)) {
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
 
-        if (distinctColumnStats.stream().anyMatch(col -> col.getDistinctValuesCount() /
-                Math.max(1, statistics.getOutputRowCount()) >
-                StatisticsEstimateCoefficient.DEFAULT_HIGH_CARDINALITY_COEFFICIENT)) {
+        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
+        double rowCount = Math.max(1, statistics.getOutputRowCount());
+        if (rowCount / inputRowCount < StatisticsEstimateCoefficient.DEFAULT_AGGREGATE_EFFECT_COEFFICIENT) {
             return true;
         }
         return false;
@@ -203,7 +204,7 @@ public class SplitAggregateRule extends TransformationRule {
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
                                 operator.getGroupingKeys());
                     } else if (canGenerateTwoStageAggregate(operator, distinctColumns) &&
-                            (operator.hasLimit() || isDistinctColumnWithHighCardinality(input, distinctColumns))) {
+                            (operator.hasLimit() || hasAggregateEffect(input, distinctColumns))) {
                         return implementTwoStageAgg(input, operator);
                     } else {
                         return implementOneDistinctWithGroupByAgg(context.getColumnRefFactory(), input, operator,
