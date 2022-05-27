@@ -299,6 +299,12 @@ public class ExportMgr {
         return results;
     }
 
+    private boolean isJobExpired(ExportJob job, long currentTimeMs) {
+        return (currentTimeMs - job.getCreateTimeMs()) / 1000 > Config.history_job_keep_max_second
+                        && (job.getState() == ExportJob.JobState.CANCELLED
+                        || job.getState() == ExportJob.JobState.FINISHED);
+    }
+
     public void removeOldExportJobs() {
         long currentTimeMs = System.currentTimeMillis();
 
@@ -308,9 +314,8 @@ public class ExportMgr {
             while (iter.hasNext()) {
                 Map.Entry<Long, ExportJob> entry = iter.next();
                 ExportJob job = entry.getValue();
-                if ((currentTimeMs - job.getCreateTimeMs()) / 1000 > Config.history_job_keep_max_second
-                        && (job.getState() == ExportJob.JobState.CANCELLED
-                        || job.getState() == ExportJob.JobState.FINISHED)) {
+                if (isJobExpired(job, currentTimeMs)) {
+                    LOG.info("remove expired job: {}", job);
                     iter.remove();
                 }
             }
@@ -335,6 +340,10 @@ public class ExportMgr {
         try {
             ExportJob job = idToJob.get(jobId);
             job.updateState(newState, true);
+            if (isJobExpired(job, System.currentTimeMillis())) {
+                LOG.info("remove expired job: {}", job);
+                idToJob.remove(jobId);
+            }
         } finally {
             writeUnlock();
         }
@@ -356,6 +365,7 @@ public class ExportMgr {
     }
 
     public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
+        long currentTimeMs = System.currentTimeMillis();
         long newChecksum = checksum;
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_32) {
             int size = dis.readInt();
@@ -365,6 +375,11 @@ public class ExportMgr {
                 newChecksum ^= jobId;
                 ExportJob job = new ExportJob();
                 job.readFields(dis);
+                // discard expired job right away
+                if (isJobExpired(job, currentTimeMs)) {
+                    LOG.info("discard expired job: {}", job);
+                    continue;
+                }
                 unprotectAddJob(job);
             }
         }
