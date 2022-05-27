@@ -78,11 +78,8 @@ public class ShowStmtAnalyzer {
             } else {
                 catalogName = context.getCurrentCatalog();
             }
-            boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
-            if (!isInternalCatalog) {
-                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_CATALOG_ERROR);
-                }
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_CATALOG_ERROR);
             }
             return null;
         }

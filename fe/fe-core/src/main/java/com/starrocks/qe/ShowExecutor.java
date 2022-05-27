@@ -176,7 +176,7 @@ public class ShowExecutor {
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
         } else if (stmt instanceof ShowDbStmt) {
-            handleShowDb(ctx);
+            handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
             handleShowTable();
         } else if (stmt instanceof ShowTableStatusStmt) {
@@ -493,7 +493,7 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb(ConnectContext ctx) throws AnalysisException {
+    private void handleShowDb() throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> dbNames = new ArrayList<>();

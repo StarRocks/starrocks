@@ -105,6 +105,9 @@ public class ShowDbStmt extends ShowStmt {
         if (pattern != null) {
             sb.append(" LIKE '").append(pattern).append("'");
         }
+        if (where != null) {
+            sb.append(" WHERE '").append(where).append("'");
+        }
         return sb.toString();
     }
 
