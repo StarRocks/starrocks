@@ -1,25 +1,6 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/tablets_channel.cpp
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-#include "runtime/tablets_channel.h"
+#include "runtime/local_tablets_channel.h"
 
 #include <brpc/controller.h>
 #include <fmt/format.h>
@@ -40,10 +21,12 @@
 
 namespace starrocks {
 
-std::atomic<uint64_t> TabletsChannel::_s_tablet_writer_count;
+std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
-TabletsChannel::TabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
-        : _load_channel(load_channel),
+LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                         MemTracker* mem_tracker)
+        : TabletsChannel(),
+          _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
           _has_chunk_meta(false),
@@ -54,14 +37,14 @@ TabletsChannel::TabletsChannel(LoadChannel* load_channel, const TabletsChannelKe
     });
 }
 
-TabletsChannel::~TabletsChannel() {
+LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
     delete _row_desc;
     delete _schema;
     _mem_pool.reset();
 }
 
-Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = new OlapTableSchemaParam();
@@ -76,8 +59,8 @@ Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
     return Status::OK();
 }
 
-void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                               PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
+void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
+                                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
 
     auto t0 = std::chrono::steady_clock::now();
@@ -259,7 +242,7 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     }
 }
 
-Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
+Status LocalTabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
     }
@@ -274,7 +257,7 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     return Status::OK();
 }
 
-int TabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
+int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
     int n = _num_remaining_senders.fetch_sub(1);
     DCHECK_GE(n, 1);
     std::lock_guard l(_partitions_ids_lock);
@@ -284,7 +267,7 @@ int TabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_s
     return n - 1;
 }
 
-Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params) {
+Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params) {
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -343,14 +326,14 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
     return Status::OK();
 }
 
-void TabletsChannel::cancel() {
+void LocalTabletsChannel::cancel() {
     for (auto& it : _delta_writers) {
         (void)it.second->abort();
     }
 }
 
-Status TabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
-                                          faststring* uncompressed_buffer) {
+Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
+                                               faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
@@ -381,7 +364,7 @@ Status TabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chu
     return Status::OK();
 }
 
-StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_write_context(
+StatusOr<scoped_refptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
         const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
         google::protobuf::Closure* done) {
     if (!request.has_chunk() && !request.eos()) {
@@ -439,7 +422,7 @@ StatusOr<scoped_refptr<TabletsChannel::WriteContext>> TabletsChannel::_create_wr
     return std::move(context);
 }
 
-void TabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* info) {
+void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* info) {
     _context->update_status(st);
     if (info != nullptr) {
         PTabletInfo tablet_info;
@@ -456,17 +439,6 @@ void TabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetI
         _context->add_committed_tablet_info(&tablet_info);
     }
     delete this;
-}
-
-std::string TabletsChannelKey::to_string() const {
-    std::stringstream ss;
-    ss << *this;
-    return ss.str();
-}
-
-std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key) {
-    os << "(id=" << key.id << ",index_id=" << key.index_id << ")";
-    return os;
 }
 
 } // namespace starrocks
