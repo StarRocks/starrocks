@@ -1555,6 +1555,12 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test315() throws Exception {
+        String sql = "select * from t0 where case when true then (v1 is null ) in (true,false) else true end";
+        testView(sql);
+    }
+
+    @Test
     public void testAliasView() throws Exception {
         String sql = "select * from (select a.A, count(*) as cnt from ( SELECT 1 AS A UNION ALL SELECT 2 UNION ALL " +
                 "SELECT 2 UNION ALL SELECT 5 UNION ALL SELECT 3 UNION ALL SELECT 0 AS A ) a group by a.A order by a.A ) b;";
