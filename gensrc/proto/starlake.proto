@@ -7,7 +7,7 @@ option java_package = "com.starrocks.lake.proto";
 
 import "tablet_schema.proto";
 
-message RowsetMetaPB {
+message RowsetMetadataPB {
     optional uint32 id = 1;
     repeated bool overlapped = 2;
     repeated string segments = 3; 
@@ -16,37 +16,37 @@ message RowsetMetaPB {
     optional int64 data_size = 6;
 }
 
-message PersistentIndexMetaPB {
+message PrimaryIndexMetadataPB {
     optional uint64 key_size = 1;
     optional uint64 size = 2;
     optional string l0 = 3;
     optional string l1 = 4;
 }
 
-message TabletMetaPB {
+message TabletMetadataPB {
     optional int64 tablet_id = 1;
     optional int64 version = 2;
     optional int64 flags = 3; 
     optional TabletSchemaPB schema = 4;
-    repeated RowsetMetaPB rowsets = 5;
-    optional PersistentIndexMetaPB index_meta = 6;
+    repeated RowsetMetadataPB rowsets = 5;
+    optional PrimaryIndexMetadataPB primary_index = 6;
 }
 
 message TxnLogPB {
     message OpWrite {
-        repeated RowsetMetaPB rowset = 1;
+        repeated RowsetMetadataPB rowset = 1;
         repeated string deletes = 2; 
         repeated uint32 partial_column_ids = 3;
     }
     
     message OpCompaction {
         repeated uint32 input_rowsets = 1;
-        optional RowsetMetaPB output_rowset = 2;
+        optional RowsetMetadataPB output_rowset = 2;
         repeated string rssids = 3;
     }
     
     message OpSchemaChange {
-        repeated RowsetMetaPB rowsets = 1; 
+        repeated RowsetMetadataPB rowsets = 1; 
     }
     
     optional int64 tablet_id = 1;
