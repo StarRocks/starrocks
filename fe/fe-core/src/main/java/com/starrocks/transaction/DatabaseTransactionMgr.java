@@ -1523,6 +1523,10 @@ public class DatabaseTransactionMgr {
                 updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState, true);
+            if (transactionState.isExpired(System.currentTimeMillis())) {
+                LOG.info("remove expired transaction: {}", transactionState);
+                deleteTransaction(transactionState);
+            }
         } finally {
             writeUnlock();
         }
