@@ -50,3 +50,9 @@ Release date: May 22, 2022
 ### Others
 
 Flink-connector-starrocks supports Apache Flink® v1.14.
+
+### Upgrade notes
+
+- If you use a StarRocks version later than 2.0.4 or a StarRocks version 2.1.x later than 2.1.6, see [Upgrade notes for StarRocks](https://forum.starrocks.com/t/topic/2228).
+
+- To roll back to the previous version that was used before the upgrade, add the `ignore_unknown_log_id` parameter to the **fe.conf** file of each FE and set the parameter to `true`. The parameter is required because new types of logs are added in StarRocks v2.2.0. If you do not add the parameter, you cannot roll back to the previous version. We recommend that you set the `ignore_unknown_log_id` parameter to `false` in the **fe.conf** file of each FE after checkpoints are created. Then, restart the FEs to restore the FEs to the previous configurations.
