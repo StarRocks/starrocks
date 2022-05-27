@@ -258,9 +258,7 @@ public enum ErrorCode {
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown catalog.db '%s'"),
-    ERR_NO_CATALOG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
-            "No such catalog '%s'");
+            "Unknown catalog.db '%s'");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
