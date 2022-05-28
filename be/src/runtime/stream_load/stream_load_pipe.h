@@ -46,12 +46,13 @@ public:
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check
             _put_cond.wait(l, [&]() {
-                    return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+                return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
             });
+
             if (_cancelled) {
                 return _err_st;
             }
-           _buffered_bytes += buf->remaining();
+            _buffered_bytes += buf->remaining();
             _buf_queue.emplace_back(std::move(buf));
             _get_cond.notify_one();
         }
@@ -94,9 +95,8 @@ public:
     */
     StatusOr<ByteBufferPtr> read() {
         std::unique_lock<std::mutex> l(_lock);
-        while (!_cancelled && !_finished && _buf_queue.empty()) {
-            _get_cond.wait(l);
-        }
+        _get_cond.wait(l, [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
+
         // cancelled
         if (_cancelled) {
             return _err_st;
@@ -119,9 +119,8 @@ public:
         while (bytes_read < *data_size) {
             if (_read_buf == nullptr || !_read_buf->has_remaining()) {
                 std::unique_lock<std::mutex> l(_lock);
-                while (!_cancelled && !_finished && _buf_queue.empty()) {
-                    _get_cond.wait(l);
-                }
+                _get_cond.wait(l, [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
+
                 // cancelled
                 if (_cancelled) {
                     return _err_st;
@@ -186,9 +185,10 @@ private:
         if (buf != nullptr && buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check
-            while (!_cancelled && !_buf_queue.empty() && _buffered_bytes + buf->remaining() > _max_buffered_bytes) {
-                _put_cond.wait(l);
-            }
+            _put_cond.wait(l, [&]() {
+                return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+            });
+
             if (_cancelled) {
                 return _err_st;
             }
