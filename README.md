@@ -1,35 +1,47 @@
 
-  <a href="https://www.starrocks.com/en-US/index">
-    <img  height="180" src="https://github.com/kateshaowanjou/starrocks/blob/main/a9f9c004-e568-4a94-bb02-8815e1290eea.png">
- 
-  
-[Download](https://www.starrocks.com/en-US/download/community) · [Documentation](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)  · [Benchmarks](https://www.starrocks.com/en-us/blog/benchmark-test) 
-  
-![c++](https://img.shields.io/badge/Made%20with-C%2B%2B-red)
-[![open issues](https://img.shields.io/github/issues-raw/StarRocks/starrocks)](https://github.com/StarRocks/starrocks/issues)
-[![commit activity](https://img.shields.io/github/commit-activity/m/StarRocks/starrocks)](http://www.gnu.org/licenses/agpl-3.0)
-[![Website](https://img.shields.io/badge/Visit%20StarRocks-Website-green)](https://www.starrocks.com/en-US/index)
-[![Slack](https://img.shields.io/badge/Join-Slack-ff69b4)](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)
-[![Twitter]( https://img.shields.io/twitter/follow/StarRocksLabs?style=social)](https://twitter.com/StarRocksLabs) 
- 
-  
+ <p align="center">
+ <a href="https://www.starrocks.com/en-US/index">
+    <img  height="200" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
+   </a>
+</p>
+<p align="center">
+  <a href="https://www.starrocks.com/en-US/download/community">Download</a> | <a href="https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro">Docs</a> | <a href="https://www.starrocks.com/en-us/blog/benchmark-test)">Benchmarks</a>
+</p>
+<p align="center">
+
+  <img src="https://img.shields.io/badge/Made%20with-C%2B%2B-red" alt="C++">
+  <a href="http://www.gnu.org/licenses/agpl-3.0">
+    <img src="https://img.shields.io/github/commit-activity/m/StarRocks/starrocks" alt="Commit Activities">
+    </a>
+   <a href="https://github.com/StarRocks/starrocks/issues">
+    <img src="https://img.shields.io/github/issues-raw/StarRocks/starrocks" alt="Open Issues">
+  </a>
+  </a>
+   <a href="https://www.starrocks.com/en-US/index">
+    <img src="https://img.shields.io/badge/Visit%20StarRocks-Website-green" alt="Website">
+  </a>
+  </a>
+   <a href="https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw">
+    <img src="https://img.shields.io/badge/Join-Slack-ff69b4" alt="Slack">
+  </a>
+  </a>
+   <a href="https://twitter.com/StarRocksLabs">
+    <img src="https://img.shields.io/twitter/follow/StarRocksLabs?style=social" alt="Twitter">
+  </a>
+ </p>
+
+<div align="center"> 
+
+  </div>
 StarRocks is a next-gen data platform for real-time data analytics. Its blazing-fast query speed is 5 to 10 times faster than previous systems. 
 StarRocks can smoothly integrate into your favorite BI tools by supporting MySQL protocols and standard SQL syntax.
 StarRocks can be easily deployed, maintained, and scaled out due to its simple architecture that doesn't rely on any external systems.
 
 <br>
-  
-## Design Overview
 
-![App Screenshot](https://camo.githubusercontent.com/b53355f4cb764125160d949b37626b2afcde57fcfda09a45fc1eebc77604a465/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f313430302f312a466a6b38753661333966766567565f71325f5a5279772e706e67)
-
-  StarRocks’s streamlined architecture is mainly composed of two modules： Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data. 
-
-<br>
-  
 ## Features
 
-*  **🚀 Native vectorized SQL engine:** StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses, which is 5 to 10 times faster than previous systems.
+* **🚀 Native vectorized SQL engine:** StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses, which is 5 to 10 times faster than previous systems.
 * **🏠 Simple architecture:** StarRocks does not rely on any external systems. The simple architecture makes it easy to deploy, maintain and scale out. StarRocks also provides high availability, reliability, scalability and fault tolerance.
 * **📊 Standard SQL:** StarRocks supports ANSI SQL syntax (fully supported TPC-H and TPC-DS). It is also compatible with the MySQL protocol. Various clients and BI software can be used to access StarRocks.
 * **💡 Smart query optimization:** StarRocks can optimize complex queries through CBO (Cost Based Optimizer). With a better execution plan, the data analysis efficiency will be greatly improved.
@@ -38,17 +50,33 @@ StarRocks can be easily deployed, maintained, and scaled out due to its simple a
 * **⏩ Convenient query federation:** StarRocks allows direct access to data from Hive, MySQL and Elasticsearch without importing.
 
 <br>
+  
+## Architecture Overview
 
-## Documentation
+ <p align="center">
+    <img src="https://camo.githubusercontent.com/b53355f4cb764125160d949b37626b2afcde57fcfda09a45fc1eebc77604a465/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f313430302f312a466a6b38753661333966766567565f71325f5a5279772e706e67">
+   </a>
+</p>
 
-[Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy)｜ [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)｜[FAQs](https://docs.starrocks.com/en-us/main/faq/Deploy_faq)｜[Blogs](https://www.starrocks.com/en-US/blog)
+StarRocks’s streamlined architecture is mainly composed of two modules： Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data. 
 
 <br>
-  
-## Support
--   Check out the  xxx bootcamps/tutorials to get started with StarRocks.
--   Join our  [Slack community](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)  to chat to our engineers about your use cases, questions, and support queries; for Chinese users, you can also join our [Discourse Forum](https://forum.starrocks.com/).
--   Subscribe to the latest video tutorials on our  [YouTube channel](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured).
+
+## Resources
+
+### 📚 Read the docs
+
+| Section | Description |
+|-|-|
+| [Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy) | Learn how to run and configure StarRocks.|
+| [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)| Full documentation. |
+| [Blogs](https://www.starrocks.com/en-US/blog) | StarRocks deep dive and user stories.  |
+
+### ❓ Get support  
+-  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)join technical discussions, ask questions, and meet other users!
+-  [YouTube channel:](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) subscribe to the latest video tutorials and webcasts.
+-  [GitHub issues:](https://github.com/StarRocks/starrocks/issues) report an issue with StarRocks.
+
 
 <br>  
   
