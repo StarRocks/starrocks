@@ -85,4 +85,65 @@ public class UtilsTest {
         Assert.assertEquals(Lists.newArrayList("1", "2", "3"),
                 Utils.getPartitionValues(path, Lists.newArrayList("a", "b", "c")));
     }
+
+    @Test
+    public void testDecimalString() throws DdlException {
+        String t1 = "decimal(3,2)";
+        int[] res = Utils.getPrecisionAndScale(t1);
+        Assert.assertEquals(3, res[0]);
+        Assert.assertEquals(2, res[1]);
+
+        t1 = "decimal(222233,4442)";
+        res = Utils.getPrecisionAndScale(t1);
+        Assert.assertEquals(222233, res[0]);
+        Assert.assertEquals(4442, res[1]);
+
+        try {
+            t1 = "decimal(3.222,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(a,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(3, 2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(-1,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal()";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(1)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+    }
 }
