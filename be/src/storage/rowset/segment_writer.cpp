@@ -155,8 +155,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
-        std::unique_ptr<ColumnWriter> writer;
-        RETURN_IF_ERROR(ColumnWriter::create(opts, &column, _wfile.get(), &writer));
+        ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
     }
