@@ -51,7 +51,7 @@ public:
     }
 
     Status append_json(const char* data, size_t size, char row_delimiter) {
-        auto buf = ByteBuffer::allocate(size);
+        auto buf = ByteBuffer::allocate(size + simdjson::SIMDJSON_PADDING);
         buf->put_bytes(data, size);
         return append(std::move(buf));
     }
