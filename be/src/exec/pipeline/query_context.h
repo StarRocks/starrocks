@@ -75,7 +75,10 @@ public:
         DCHECK(_desc_tbl != nullptr);
         return _desc_tbl;
     }
-    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop);
+    // If option_query_mem_limit > 0, use it directly.
+    // Otherwise, use per_instance_mem_limit * num_fragments * pipeline_dop.
+    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop,
+                                    int64_t option_query_mem_limit);
     size_t total_fragments() { return _total_fragments; }
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
@@ -83,8 +86,9 @@ public:
     Status init_query(workgroup::WorkGroup* wg);
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
-    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
-    int64_t cpu_cost() const { return _cur_cpu_cost; }
+    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
+    int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
+    int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
@@ -117,7 +121,7 @@ private:
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
-    std::atomic<int64_t> _cur_cpu_cost = 0;
+    std::atomic<int64_t> _cur_cpu_cost_ns = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
 

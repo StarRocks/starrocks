@@ -906,7 +906,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public Database getDatabase(String databaseName) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_database(databaseName);
     }
 
     @Override

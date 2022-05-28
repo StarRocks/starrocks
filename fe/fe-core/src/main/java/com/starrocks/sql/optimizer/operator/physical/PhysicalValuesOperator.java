@@ -11,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
-import java.util.Objects;
 
 public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
@@ -49,23 +48,12 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalValuesOperator empty = (PhysicalValuesOperator) o;
-        return Objects.equals(columnRefSet, empty.columnRefSet) &&
-                Objects.equals(rows, empty.rows);
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), columnRefSet, rows);
+        return System.identityHashCode(this);
     }
 
     @Override

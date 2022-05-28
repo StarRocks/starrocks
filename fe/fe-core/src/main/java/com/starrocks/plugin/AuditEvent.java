@@ -75,6 +75,8 @@ public class AuditEvent {
     public long returnRows = -1;
     @AuditField(value = "CpuCostNs")
     public long cpuCostNs = -1;
+    @AuditField(value = "MemCostBytes")
+    public long memCostBytes = 0;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -168,6 +170,11 @@ public class AuditEvent {
          */
         public AuditEventBuilder setCpuCostNs(long cpuNs) {
             auditEvent.cpuCostNs = cpuNs;
+            return this;
+        }
+
+        public AuditEventBuilder setMemCostBytes(long memCostBytes) {
+            auditEvent.memCostBytes = memCostBytes;
             return this;
         }
 

@@ -510,7 +510,7 @@ public class ExpressionAnalyzer {
             }
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
-                        + cast.getTargetTypeDef().getType().toSql() + " in sql `" +
+                        + castType.toSql() + " in sql `" +
                         AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 

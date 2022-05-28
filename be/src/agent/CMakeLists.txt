@@ -29,6 +29,5 @@ add_library(Agent STATIC
     agent_server.cpp
     heartbeat_server.cpp
     task_worker_pool.cpp
-    multi_worker_pool.cpp
     utils.cpp
 )

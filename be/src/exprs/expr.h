@@ -94,6 +94,10 @@ public:
     int output_scale() const { return _output_scale; }
 
     void add_child(Expr* expr) { _children.push_back(expr); }
+
+    // only the expr after clone can call this function
+    // clear children
+    void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
 

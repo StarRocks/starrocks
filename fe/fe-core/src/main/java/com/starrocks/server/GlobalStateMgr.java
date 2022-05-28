@@ -129,6 +129,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -548,11 +549,11 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
-        this.metadataMgr = new MetadataMgr();
+        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
     }
 
     public static void destroyCheckpoint() {
@@ -572,6 +573,11 @@ public class GlobalStateMgr {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    @VisibleForTesting
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return localMetastore.getIdToDb();
     }
 
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
@@ -1127,11 +1133,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.loadSmallFiles(dis, checksum);
             checksum = pluginMgr.loadPlugins(dis, checksum);
             checksum = loadDeleteHandler(dis, checksum);
-
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = taskManager.loadTasks(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1355,11 +1364,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.saveSmallFiles(dos, checksum);
             checksum = pluginMgr.savePlugins(dos, checksum);
             checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2094,7 +2106,8 @@ public class GlobalStateMgr {
             sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
             sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
             sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
-            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\"\n");
+            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\",\n");
+            sb.append("\"es.nodes.wan.only\" = \"").append(esTable.wanOnly()).append("\"\n");
             sb.append(")");
         } else if (table.getType() == TableType.HIVE) {
             HiveTable hiveTable = (HiveTable) table;
@@ -2711,17 +2724,42 @@ public class GlobalStateMgr {
         this.alter.getClusterHandler().cancel(stmt);
     }
 
-    // Change current database of this session.
-    public void changeDb(ConnectContext ctx, String qualifiedDb) throws DdlException {
-        if (!auth.checkDbPriv(ctx, qualifiedDb, PrivPredicate.SHOW)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED, ctx.getQualifiedUser(), qualifiedDb);
+    // Change current catalog and database of this session.
+    // We can support 'USE CATALOG.DB'
+    public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
+        String currentCatalogName = ctx.getCurrentCatalog();
+        String dbName = ctx.getDatabase();
+
+        String[] parts = identifier.split("\\.");
+        if (parts.length != 1 && parts.length != 2) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+        } else if (parts.length == 1) {
+            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
+                    ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
+        } else {
+            String newCatalogName = parts[0];
+            if (catalogMgr.catalogExists(newCatalogName)) {
+                dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
+                        ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+            }
+            ctx.setCurrentCatalog(newCatalogName);
         }
 
-        if (getDb(qualifiedDb) == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, qualifiedDb);
+        // check auth for internal catalog
+        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+                !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
         }
 
-        ctx.setDatabase(qualifiedDb);
+        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        ctx.setDatabase(dbName);
     }
 
     // for test only
@@ -3077,6 +3115,16 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            taskManager.removeOldTaskInfo();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old task failed", t);
+        }
+        try {
+            taskManager.removeOldTaskRunHistory();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old run history failed", t);
         }
     }
 }

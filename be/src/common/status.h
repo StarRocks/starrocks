@@ -14,7 +14,7 @@
 
 namespace starrocks {
 
-class PStatus;
+class StatusPB;
 class TStatus;
 
 template <typename T>
@@ -56,7 +56,7 @@ public:
     // "Copy" c'tor from TStatus.
     Status(const TStatus& status); // NOLINT
 
-    Status(const PStatus& pstatus); // NOLINT
+    Status(const StatusPB& pstatus); // NOLINT
 
     static Status OK() { return Status(); }
 
@@ -158,7 +158,7 @@ public:
 
     // Convert into TStatus.
     void to_thrift(TStatus* status) const;
-    void to_protobuf(PStatus* status) const;
+    void to_protobuf(StatusPB* status) const;
 
     std::string get_error_msg() const {
         auto msg = message();

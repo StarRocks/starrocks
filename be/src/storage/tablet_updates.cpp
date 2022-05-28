@@ -424,21 +424,21 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
         std::lock_guard wl(_lock);
         if (version <= _edit_version_infos.back()->version.major()) {
             LOG(WARNING) << "ignored already committed version " << version << " of tablet " << _tablet.tablet_id()
-                         << " txn:" << rowset->txn_id();
+                         << " txn_id: " << rowset->txn_id();
             _ignore_rowset_commit(version, rowset);
             return Status::OK();
         } else if (version > _edit_version_infos.back()->version.major() + 1) {
             if (_pending_commits.size() >= config::tablet_max_pending_versions) {
                 // there must be something wrong, return error rather than accepting more commits
                 string msg = Substitute(
-                        "rowset commit failed too many pending rowsets tablet:$0 version:$1 txn:$2 #pending:$3",
+                        "rowset commit failed too many pending rowsets tablet:$0 version:$1 txn_id: $2 #pending:$3",
                         _tablet.tablet_id(), version, rowset->txn_id(), _pending_commits.size());
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             }
             if (!_pending_commits.emplace(version, rowset).second) {
                 LOG(WARNING) << "ignore add rowset to pending commits, same version already exists version:" << version
-                             << " txn:" << rowset->txn_id() << " " << _debug_string(false, false);
+                             << " txn_id: " << rowset->txn_id() << " " << _debug_string(false, false);
                 _ignore_rowset_commit(version, rowset);
             } else {
                 st = TabletMetaManager::pending_rowset_commit(
@@ -446,19 +446,19 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                         RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
                 if (!st.ok()) {
                     LOG(WARNING) << "add rowset to pending commits failed tablet:" << _tablet.tablet_id()
-                                 << " version:" << version << " txn:" << rowset->txn_id() << " " << st << " "
+                                 << " version:" << version << " txn_id: " << rowset->txn_id() << " " << st << " "
                                  << _debug_string(false, true);
                     return st;
                 }
                 LOG(INFO) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " txn:" << rowset->txn_id() << " #pending:" << _pending_commits.size();
+                          << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
             }
             return Status::OK();
         }
         st = _rowset_commit_unlocked(version, rowset);
         if (st.ok()) {
             LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
-                      << " txn:" << rowset->txn_id() << " " << rowset->rowset_id().to_string()
+                      << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
                       << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
                       << " #delfile:" << rowset->num_delete_files() << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
@@ -469,7 +469,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     }
     if (!st.ok()) {
         LOG(WARNING) << "rowset commit failed tablet:" << _tablet.tablet_id() << " version:" << version
-                     << " txn:" << rowset->txn_id() << " pending:" << _pending_commits.size() << " msg:" << st;
+                     << " txn_id: " << rowset->txn_id() << " pending:" << _pending_commits.size() << " msg:" << st;
     }
     return st;
 }
@@ -559,19 +559,19 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
             int64_t version = itr->first;
             if (version <= current_version) {
                 LOG(WARNING) << "ignore pending rowset tablet: " << _tablet.tablet_id() << " version:" << version
-                             << " txn:" << itr->second->txn_id() << " #pending:" << _pending_commits.size();
+                             << " txn_id: " << itr->second->txn_id() << " #pending:" << _pending_commits.size();
                 _ignore_rowset_commit(version, itr->second);
                 auto st = TabletMetaManager::delete_pending_rowset(_tablet.data_dir(), _tablet.tablet_id(), version);
                 LOG_IF(WARNING, !st.ok())
                         << "Failed to delete_pending_rowset tablet:" << _tablet.tablet_id() << " version:" << version
-                        << " txn:" << itr->second->txn_id() << " rowset: " << itr->second->rowset_id().to_string();
+                        << " txn_id: " << itr->second->txn_id() << " rowset: " << itr->second->rowset_id().to_string();
                 itr = _pending_commits.erase(itr);
             } else if (version == current_version + 1) {
                 auto& rowset = itr->second;
                 auto st = _rowset_commit_unlocked(version, rowset);
                 if (!st.ok()) {
                     LOG(ERROR) << "commit rowset (pending) failed tablet: " << _tablet.tablet_id()
-                               << " version:" << version << " txn:" << rowset->txn_id()
+                               << " version:" << version << " txn_id: " << rowset->txn_id()
                                << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
                                << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
                                << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
@@ -579,7 +579,7 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                     return;
                 }
                 LOG(INFO) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " txn:" << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                          << " txn_id: " << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
                           << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
                           << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                           << " #pending:" << _pending_commits.size();
@@ -595,7 +595,7 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
 void TabletUpdates::_ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     auto st = RowsetMetaManager::remove(_tablet.data_dir()->get_meta(), _tablet.tablet_uid(), rowset->rowset_id());
     LOG_IF(WARNING, !st.ok()) << "Failed to remove rowset meta tablet:" << _tablet.tablet_id() << " version:" << version
-                              << " txn:" << rowset->txn_id() << " rowset: " << rowset->rowset_id().to_string();
+                              << " txn_id: " << rowset->txn_id() << " rowset: " << rowset->rowset_id().to_string();
 }
 
 Status TabletUpdates::save_meta() {
@@ -939,8 +939,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " txn:" << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " "
-              << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
+              << " txn_id: " << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows
+              << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
@@ -1408,9 +1408,12 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     _erase_expired_versions(expire_time, &expired_edit_version_infos);
 
     if (!expired_edit_version_infos.empty()) {
-        std::unique_lock wrlock(_tablet.get_header_lock());
-        _tablet.save_meta();
-
+        int64_t tablet_id = 0;
+        {
+            std::unique_lock wrlock(_tablet.get_header_lock());
+            _tablet.save_meta();
+            tablet_id = _tablet.tablet_id();
+        }
         std::set<uint32_t> unused_rid;
         std::set<uint32_t> active_rid = _active_rowsets();
         for (const auto& expired_edit_version_info : expired_edit_version_infos) {
@@ -1437,7 +1440,6 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         /// Remove useless delete vectors.
         auto max_expired_version = expired_edit_version_infos.back()->version.major();
         auto meta_store = _tablet.data_dir()->get_meta();
-        auto tablet_id = _tablet.tablet_id();
 
         size_t n_delvec_range = 0;
         auto res = TabletMetaManager::list_del_vector(meta_store, tablet_id, max_expired_version + 1);

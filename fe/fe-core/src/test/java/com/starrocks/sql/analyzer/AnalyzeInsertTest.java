@@ -38,5 +38,8 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into tall(ta) values(min('x') over())", "Values clause cannot contain window function");
 
         analyzeSuccess("INSERT INTO tp  PARTITION(p1) VALUES(1,2,3)");
+
+        analyzeSuccess("insert into t0 with label l1 select * from t0");
+        analyzeSuccess("insert into t0 with label `l1` select * from t0");
     }
 }

@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
+import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -190,6 +191,15 @@ public class HiveMetaClient {
             return client.hiveClient.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
         } catch (Exception e) {
             LOG.warn("Failed to get table {}", hiveTableName, e);
+            throw e;
+        }
+    }
+
+    public Database getDb(String dbName) throws TException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getDatabase(dbName);
+        } catch (Exception e) {
+            LOG.warn("Failed to get database on {}", dbName, e);
             throw e;
         }
     }

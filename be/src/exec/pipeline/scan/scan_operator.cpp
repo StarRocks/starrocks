@@ -16,10 +16,13 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+                           int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
+          _max_scan_concurrency(max_scan_concurrency),
+          _num_committed_scan_tasks(num_committed_scan_tasks),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {
     for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
@@ -43,6 +46,10 @@ ScanOperator::~ScanOperator() {
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+
+    _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "MaxScanConcurrency", TUnit::UNIT);
+    COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_max_scan_concurrency));
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -82,7 +89,7 @@ bool ScanOperator::has_output() const {
         return false;
     }
     // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
-    if (!get_scan_status().ok()) {
+    if (!_get_scan_status().ok()) {
         return true;
     }
 
@@ -92,7 +99,8 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP ||
+        _exceed_max_scan_concurrency(_num_committed_scan_tasks.load())) {
         return false;
     }
 
@@ -124,7 +132,7 @@ bool ScanOperator::is_finished() const {
         return true;
     }
     // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
-    if (!get_scan_status().ok()) {
+    if (!_get_scan_status().ok()) {
         return false;
     }
 
@@ -150,7 +158,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
-    RETURN_IF_ERROR(get_scan_status());
+    RETURN_IF_ERROR(_get_scan_status());
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -211,6 +219,10 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
+    if (!_try_to_increase_committed_scan_tasks()) {
+        return Status::OK();
+    }
+
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
@@ -229,7 +241,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                             _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
                     if (!status.ok() && !status.is_end_of_file()) {
-                        set_scan_status(status);
+                        _set_scan_status(status);
                     }
                     // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
@@ -240,6 +252,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
+                _decrease_committed_scan_tasks();
                 _num_running_io_tasks--;
                 _is_io_task_running[chunk_source_index] = false;
             }
@@ -259,13 +272,14 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     Status status =
                             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
                     if (!status.ok() && !status.is_end_of_file()) {
-                        set_scan_status(status);
+                        _set_scan_status(status);
                     }
                     _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
+                _decrease_committed_scan_tasks();
                 _num_running_io_tasks--;
                 _is_io_task_running[chunk_source_index] = false;
             }
@@ -327,10 +341,26 @@ void ScanOperator::_merge_chunk_source_profiles() {
     _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
+bool ScanOperator::_try_to_increase_committed_scan_tasks() {
+    int old_num = _num_committed_scan_tasks.fetch_add(1);
+    if (_exceed_max_scan_concurrency(old_num)) {
+        _decrease_committed_scan_tasks();
+        return false;
+    }
+    return true;
+}
+
+bool ScanOperator::_exceed_max_scan_concurrency(int num_committed_scan_tasks) const {
+    // _max_scan_concurrency takes effect, only when it is positive.
+    return _max_scan_concurrency > 0 && num_committed_scan_tasks >= _max_scan_concurrency;
+}
+
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
+          _scan_node(scan_node),
+          _max_scan_concurrency(scan_node->max_scan_concurrency()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -355,10 +385,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories ops;
 
-    auto& morsel_queues = context->fragment_context()->morsel_queues();
-    auto source_id = scan_operator->plan_node_id();
-    DCHECK(morsel_queues.count(source_id));
-    auto& morsel_queue = morsel_queues[source_id];
+    const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_operator.get());
 
     // ScanOperator's degree_of_parallelism is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1

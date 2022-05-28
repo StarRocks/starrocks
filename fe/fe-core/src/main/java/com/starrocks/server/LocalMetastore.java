@@ -365,6 +365,10 @@ public class LocalMetastore implements ConnectorMetadata {
         idToCluster.put(cluster.getId(), cluster);
     }
 
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return idToDb;
+    }
+
     public void replayCreateDb(Database db) {
         tryLock(true);
         try {
@@ -2575,6 +2579,15 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
+    public Table getTable(String dbName, String tblName) {
+        Database database = getDb(dbName);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tblName);
+    }
+
+    @Override
     public Database getDb(String name) {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
@@ -2664,6 +2677,17 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public List<String> listDbNames() {
         return Lists.newArrayList(fullNameToDb.keySet());
+    }
+
+    @Override
+    public List<String> listTableNames(String dbName) throws DdlException {
+        Database database = getDb(dbName);
+        if (database != null) {
+            return database.getTables().stream()
+                    .map(Table::getName).collect(Collectors.toList());
+        } else {
+            throw new DdlException("Database " + dbName + " doesn't exist");
+        }
     }
 
     public List<String> getClusterDbNames(String clusterName) throws AnalysisException {

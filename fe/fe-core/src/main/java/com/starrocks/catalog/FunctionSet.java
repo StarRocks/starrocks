@@ -245,7 +245,7 @@ public class FunctionSet {
             ImmutableSet.<String>builder()
                     .add("truncate")
                     .add("round")
-                    .add("round_up_to")
+                    .add("dround")
                     .build();
 
     public static final Set<String> nonDeterministicFunctions =
@@ -740,10 +740,12 @@ public class FunctionSet {
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
 
-	// Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
-        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATE, Type.INT, Type.ARRAY_BOOLEAN),
+        // Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.DATE, Type.INT, Type.ARRAY_BOOLEAN),
                 Type.INT, Type.ARRAY_BIGINT, false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
                 Type.INT, Type.ARRAY_BIGINT, false, false, false));
 
         // analytic functions

@@ -379,10 +379,13 @@ public class TransactionState implements Writable {
         }
     }
 
-    public void beforeStateTransform(TransactionStatus transactionStatus) throws TransactionException {
-        // before status changed
+    public TxnStateChangeCallback beforeStateTransform(TransactionStatus transactionStatus)
+            throws TransactionException {
+        // callback will pass to afterStateTransform since it may be deleted from
+        // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
+        // before status changed
         if (callback != null) {
             switch (transactionStatus) {
                 case ABORTED:
@@ -404,18 +407,30 @@ public class TransactionState implements Writable {
                     break;
             }
         }
+
+        return callback;
     }
 
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) throws UserException {
-        afterStateTransform(transactionStatus, txnOperated, null);
-    }
-
-    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
-                                    String txnStatusChangeReason)
-            throws UserException {
         // after status changed
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
+        if (callback != null) {
+            switch (transactionStatus) {
+                case VISIBLE:
+                    callback.afterVisible(this, txnOperated);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
+            TxnStateChangeCallback callback,
+            String txnStatusChangeReason)
+            throws UserException {
+        // after status changed
         if (callback != null) {
             switch (transactionStatus) {
                 case ABORTED:
@@ -423,9 +438,6 @@ public class TransactionState implements Writable {
                     break;
                 case COMMITTED:
                     callback.afterCommitted(this, txnOperated);
-                    break;
-                case VISIBLE:
-                    callback.afterVisible(this, txnOperated);
                     break;
                 default:
                     break;
@@ -541,7 +553,7 @@ public class TransactionState implements Writable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("TransactionState. ");
-        sb.append("transaction id: ").append(transactionId);
+        sb.append("txn_id: ").append(transactionId);
         sb.append(", label: ").append(label);
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));

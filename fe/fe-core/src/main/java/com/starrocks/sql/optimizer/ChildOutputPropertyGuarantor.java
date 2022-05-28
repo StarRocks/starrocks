@@ -207,8 +207,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
     private void addChildEnforcer(PhysicalPropertySet oldOutputProperty,
                                   DistributionProperty newDistributionProperty,
                                   double childCost, Group childGroup) {
-        PhysicalPropertySet newOutputProperty = oldOutputProperty.copy();
-        newOutputProperty.setDistributionProperty(newDistributionProperty);
+        PhysicalPropertySet newOutputProperty = new PhysicalPropertySet(newDistributionProperty);
         GroupExpression enforcer = newDistributionProperty.appendEnforcers(childGroup);
 
         enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
