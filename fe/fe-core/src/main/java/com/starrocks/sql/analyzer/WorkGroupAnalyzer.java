@@ -197,6 +197,8 @@ public class WorkGroupAnalyzer {
                 }
                 continue;
             }
+
+            throw new SemanticException("Unknown property: " + key);
         }
     }
 }
