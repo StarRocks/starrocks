@@ -227,7 +227,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                ScalarType type = convertColumnType(fieldSchema.getType());
+                Type type = convertColumnType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -243,7 +243,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         nameToColumn.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            ScalarType srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertColumnType(fieldSchema.getType());
             Column srColumn = preNameToColumn.get(entry.getKey());
             Column column;
             if (srColumn != null) {
