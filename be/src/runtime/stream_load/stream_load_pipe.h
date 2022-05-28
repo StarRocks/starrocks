@@ -51,8 +51,8 @@ public:
             if (_cancelled) {
                 return _err_st;
             }
-            _buf_queue.emplace_back(buf);
-            _buffered_bytes += buf->remaining();
+           _buffered_bytes += buf->remaining();
+            _buf_queue.emplace_back(std::move(buf));
             _get_cond.notify_one();
         }
         return Status::OK();
