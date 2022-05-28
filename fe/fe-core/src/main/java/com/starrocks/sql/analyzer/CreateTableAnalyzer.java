@@ -45,7 +45,7 @@ import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableAnalyzer {
 
-    private final static Logger logger = LoggerFactory.getLogger(CreateTableAnalyzer.class);
+    private static final Logger logger = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
@@ -64,9 +64,9 @@ public class CreateTableAnalyzer {
         JDBC
     }
 
-    public enum CharsetType{
+    public enum CharsetType {
         UTF8,
-        GBK
+        GBK,
     }
 
     private static String analyzeEngineName(String engineName) {

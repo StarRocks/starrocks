@@ -21,19 +21,13 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.EmptyStmt;
 import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.StringReader;
 import java.util.List;
 
 // Utils about SQL parser
