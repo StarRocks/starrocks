@@ -16,9 +16,14 @@ import org.apache.hadoop.hive.common.StatsSetupConst;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Utils {
+    public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
+
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, false);
     }
@@ -145,9 +150,11 @@ public class Utils {
     }
 
     // Decimal string like "Decimal(3,2)"
-    public static int[] getPrecisionAndScale(String typeStr) {
-        String partWithComma = typeStr.substring(8, typeStr.length() - 1);
-        String[] parts = partWithComma.split(",");
-        return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+    public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
+        Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
+        if (matcher.find()) {
+            return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
+        }
+        throw new DdlException("Failed to get precision and scale at " + typeStr);
     }
 }
