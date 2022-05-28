@@ -47,7 +47,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
 
 TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqZero) {
     TestArray test_cases = {
-            {"0", ".00"},
+            {"0", "0.00"},
             {"9999999", "9,999,999.00"},
             {"-999999", "-999,999.00"},
             {"1", "1.00"},
@@ -62,7 +62,7 @@ TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqZero) {
 
 TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqTwo) {
     TestArray test_cases = {
-            {"0", ".00"},
+            {"0", "0.00"},
             {"9999999.99", "9,999,999.99"},
             {"-9999999.99", "-9,999,999.99"},
             {"1.01", "1.01"},
@@ -76,10 +76,9 @@ TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqTwo) {
 }
 
 TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqPrecision) {
-    TestArray test_cases = {
-            {"0", ".00"},         {"0.999999999", "1.00"}, {"-0.99", "-.99"},    {"0.000001", ".00"},
-            {"0.1234567", ".12"}, {"-0.101", "-.10"},      {"-0.55555", "-.56"}, {"0.555555", ".56"},
-    };
+    TestArray test_cases = {{"0", "0.00"},         {"0.999999999", "1.00"}, {"-0.99", "-0.99"},
+                            {"0.000001", "0.00"},  {"0.1234567", "0.12"},   {"-0.101", "-0.10"},
+                            {"-0.55555", "-0.56"}, {"0.555555", "0.56"},    {"-0.01", "-0.01"}};
     test_money_format_decimal<TYPE_DECIMAL32>(test_cases, 9, 9);
     test_money_format_decimal<TYPE_DECIMAL64>(test_cases, 18, 18);
     test_money_format_decimal<TYPE_DECIMAL128>(test_cases, 38, 38);
