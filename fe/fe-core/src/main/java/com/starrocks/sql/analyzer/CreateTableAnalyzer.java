@@ -30,6 +30,8 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.List;
@@ -42,52 +44,57 @@ import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableAnalyzer {
-    private static final Set<String> engineNames;
-    private static Set<String> charsetNames;
+
+    private final static Logger logger = LoggerFactory.getLogger(CreateTableAnalyzer.class);
+
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
-    static {
-        engineNames = Sets.newHashSet();
-        engineNames.add("olap");
-        engineNames.add("mysql");
-        engineNames.add("broker");
-        engineNames.add("elasticsearch");
-        engineNames.add("hive");
-        engineNames.add("iceberg");
-        engineNames.add("hudi");
-        engineNames.add("jdbc");
+    private static final String DEFAULT_ENGINE_NAME = "olap";
+
+    private static final String elasticsearch = "elasticsearch";
+
+    public enum EngineType {
+        OLAP,
+        MYSQL,
+        BROKER,
+        ELASTICSEARCH,
+        HIVE,
+        ICEBERG,
+        HUDI,
+        JDBC
     }
 
-    static {
-        charsetNames = Sets.newHashSet();
-        charsetNames.add("utf8");
-        charsetNames.add("gbk");
+    public enum CharsetType{
+        UTF8,
+        GBK
     }
 
-    private static void analyzeEngineName(String engineName) {
+    private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
-            engineName = "olap";
+            return DEFAULT_ENGINE_NAME;
         }
-        engineName = engineName.toLowerCase();
-
-        if (!engineNames.contains(engineName)) {
+        try {
+            return EngineType.valueOf(engineName.toUpperCase()).name();
+        } catch (IllegalArgumentException e) {
             throw new SemanticException("Unknown engine name: %s", engineName);
         }
+
     }
 
-    private static void analyzeCharsetName(String charsetName) {
+    private static String analyzeCharsetName(String charsetName) {
         if (Strings.isNullOrEmpty(charsetName)) {
-            charsetName = "utf8";
+            return DEFAULT_CHARSET_NAME;
         }
-        charsetName = charsetName.toLowerCase();
-
-        if (!charsetNames.contains(charsetName)) {
+        try {
+            CharsetType.valueOf(charsetName.toUpperCase());
+        } catch (IllegalArgumentException e) {
             throw new SemanticException("Unknown charset name: " + charsetName);
         }
         // be is not supported yet,so Display unsupported information to the user
-        if (!charsetName.equals(DEFAULT_CHARSET_NAME)) {
+        if (!charsetName.equalsIgnoreCase(DEFAULT_CHARSET_NAME)) {
             throw new SemanticException("charset name " + charsetName + " is not supported yet");
         }
+        return charsetName;
     }
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
@@ -101,17 +108,15 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
 
-        final String engineName = statement.getEngineName().toLowerCase();
-        analyzeEngineName(engineName);
-        analyzeCharsetName(statement.getCharsetName());
+        final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
+        statement.setEngineName(engineName);
+        statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
-        if (!(engineName.equals("mysql") || engineName.equals("broker") ||
-                engineName.equals("hive") || engineName.equals("iceberg") ||
-                engineName.equals("hudi") || engineName.equals("jdbc"))) {
+        if (engineName.equals(DEFAULT_ENGINE_NAME)) {
             // olap table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -205,8 +210,9 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(engineName.equals("olap"));
+                columnDef.analyze(engineName.equals(DEFAULT_ENGINE_NAME));
             } catch (AnalysisException e) {
+                logger.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
             }
 
@@ -229,9 +235,9 @@ public class CreateTableAnalyzer {
             rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
         }
 
-        if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals("olap")) {
-            throw new SemanticException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
-                    + Config.max_layout_length_per_row);
+        if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals(DEFAULT_ENGINE_NAME)) {
+            throw new SemanticException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: " +
+                    Config.max_layout_length_per_row);
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
@@ -243,7 +249,7 @@ public class CreateTableAnalyzer {
         }
 
         DistributionDesc distributionDesc = statement.getDistributionDesc();
-        if (engineName.equals("olap")) {
+        if (engineName.equals(DEFAULT_ENGINE_NAME)) {
             // analyze partition
             Map<String, String> properties = statement.getProperties();
             if (partitionDesc != null) {
@@ -251,6 +257,7 @@ public class CreateTableAnalyzer {
                     try {
                         partitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
+
                         throw new SemanticException(e.getMessage());
                     }
                 } else {
@@ -275,12 +282,14 @@ public class CreateTableAnalyzer {
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
-        } else if (engineName.equalsIgnoreCase("elasticsearch")) {
-            EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
         } else {
-            if (partitionDesc != null || distributionDesc != null) {
-                throw new SemanticException("Create " + engineName
-                        + " table should not contain partition or distribution desc");
+            if (engineName.equals(elasticsearch)) {
+                EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
+            } else {
+                if (partitionDesc != null || distributionDesc != null) {
+                    throw new SemanticException("Create " + engineName
+                            + " table should not contain partition or distribution desc");
+                }
             }
         }
         List<Column> columns = statement.getColumns();
@@ -303,7 +312,7 @@ public class CreateTableAnalyzer {
 
             for (IndexDef indexDef : indexDefs) {
                 indexDef.analyze();
-                if (!engineName.equalsIgnoreCase("olap")) {
+                if (!engineName.equals(DEFAULT_ENGINE_NAME)) {
                     throw new SemanticException("index only support in olap engine at current version.");
                 }
                 for (String indexColName : indexDef.getColumns()) {

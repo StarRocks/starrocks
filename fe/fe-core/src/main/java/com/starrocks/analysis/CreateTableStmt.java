@@ -261,6 +261,10 @@ public class CreateTableStmt extends DdlStmt {
         return engineName;
     }
 
+    public void setEngineName(String engineName) {
+        this.engineName = engineName;
+    }
+
     public String getCharsetName() {
         return charsetName;
     }

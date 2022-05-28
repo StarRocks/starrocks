@@ -35,7 +35,7 @@ public class CreateTableWithDecimalTypesTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         Config.enable_decimal_v3 = true;
         String createTableSql = "" +
-                "CREATE TABLE if not exists db1.decimalv4_table\n" +
+                "CREATE TABLE if not exists db1.decimalv3_table\n" +
                 "(\n" +
                 "key0 INT NOT NULL,\n" +
                 "col_decimal_p9s2 DECIMAL(9, 2) NOT NULL,\n" +
@@ -71,7 +71,7 @@ public class CreateTableWithDecimalTypesTest {
                 "col_nullable_decimal_p19s6,\n" +
                 "col_nullable_decimal_p27s9,\n" +
                 "col_nullable_decimal_p38s38 \n" +
-                " from decimalv4_table";
+                " from decimalv3_table";
 
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(selectSql, ctx);
         stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
@@ -203,7 +203,7 @@ public class CreateTableWithDecimalTypesTest {
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = AssertionError.class)
+    @Test(expected = IllegalArgumentException.class)
     public void createTableWithDecimalV3ScaleAbsent() throws Exception {
         createTableFail(true, "DECIMAL(9)");
         Assert.fail("should throw an exception");
@@ -233,7 +233,7 @@ public class CreateTableWithDecimalTypesTest {
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = AssertionError.class)
+    @Test(expected = IllegalArgumentException.class)
     public void createTableWithDecimalV2ScaleAbsent() throws Exception {
         createTableFail(false, "DECIMAL(9)");
         Assert.fail("should throw an exception");

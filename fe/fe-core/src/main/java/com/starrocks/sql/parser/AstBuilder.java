@@ -2627,22 +2627,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Type getBaseType(StarRocksParser.BaseTypeContext context) {
+        int length = -1;
         if (context.typeParameter() != null) {
-            int length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
-
-            if (context.VARCHAR() != null) {
-                return ScalarType.createVarchar(length);
-            } else if (context.CHAR() != null) {
-                return ScalarType.createCharType(length);
-            } else if (context.STRING() != null) {
-                return ScalarType.DEFAULT_STRING;
-            } else {
-                final ScalarType scalarType = ScalarType.createType(context.getChild(0).getText()).clone();
-                scalarType.setLength(length);
-                return scalarType;
-            }
+            length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
+        }
+        if (context.STRING() != null) {
+            ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+            type.setAssignedStrLenInColDefinition();
+            return type;
+        } else if (context.VARCHAR() != null) {
+            ScalarType type = ScalarType.createVarcharType(length);
+            type.setAssignedStrLenInColDefinition();
+            return type;
+        } else if (context.CHAR() != null) {
+            ScalarType type = ScalarType.createCharType(length);
+            type.setAssignedStrLenInColDefinition();
+            return type;
+        } else if (context.SIGNED() != null) {
+            return Type.INT;
+        } else if (context.HLL() != null) {
+            ScalarType type = ScalarType.createHllType();
+            type.setAssignedStrLenInColDefinition();
+            return type;
         } else {
-            return ScalarType.createType(context.getText());
+            return ScalarType.createType(context.getChild(0).getText());
         }
     }
 
@@ -2651,41 +2659,57 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Integer scale = null;
         if (context.precision != null) {
             precision = Integer.parseInt(context.precision.getText());
-            scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
+            if (context.scale != null) {
+                scale = Integer.parseInt(context.scale.getText());
+            }
         }
         if (context.DECIMAL() != null) {
             if (precision != null) {
-                return ScalarType.createUnifiedDecimalType(precision, scale);
-            } else {
-                return ScalarType.createUnifiedDecimalType(10, 0);
+                if (scale != null) {
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                }
+                try {
+                    return ScalarType.createUnifiedDecimalType(precision);
+                } catch (AnalysisException e) {
+                    throw new IllegalArgumentException(e);
+                }
             }
+            return ScalarType.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null) {
-            return getDecimalType(context, context.DECIMAL32().getText());
+            return getDecimalType(context, PrimitiveType.DECIMAL32);
         } else if (context.DECIMAL64() != null) {
-            return getDecimalType(context, context.DECIMAL64().getText());
+            return getDecimalType(context, PrimitiveType.DECIMAL64);
         } else if (context.DECIMAL128() != null) {
-            return getDecimalType(context, context.DECIMAL128().getText());
+            return getDecimalType(context, PrimitiveType.DECIMAL128);
         } else if (context.DECIMALV2() != null) {
             if (precision != null) {
-                return ScalarType.createDecimalV2Type(precision, scale);
-            } else {
-                return ScalarType.createDecimalV2Type();
+                if (scale != null) {
+                    return ScalarType.createDecimalV2Type(precision, scale);
+                }
+                return ScalarType.createDecimalV2Type(precision);
             }
+            return ScalarType.createDecimalV2Type();
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }
     }
 
     @NotNull
-    private ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context, String type) {
-        PrimitiveType primitiveType = ScalarType.createType(type.toUpperCase()).getPrimitiveType();
-        if (context.precision == null || context.scale == null) {
-            return ScalarType.createDecimalV3Type(primitiveType);
-        } else {
-            int precision = Integer.parseInt(context.precision.getText());
-            int scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
-            return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
+    private ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context, PrimitiveType primitiveType) {
+        try {
+            ScalarType.checkEnableDecimalV3();
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
         }
+        if (context.precision != null) {
+            int precision = Integer.parseInt(context.precision.getText());
+            if (context.scale != null) {
+                int scale = Integer.parseInt(context.scale.getText());
+                return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
+            }
+            return ScalarType.createDecimalV3Type(primitiveType, precision);
+        }
+        return ScalarType.createDecimalV3Type(primitiveType);
     }
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {

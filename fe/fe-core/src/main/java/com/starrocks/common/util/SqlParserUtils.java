@@ -90,44 +90,4 @@ public class SqlParserUtils {
         }
         return stmts;
     }
-
-    public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx) throws UserException {
-        LOG.info("begin to parse stmt: " + originStmt);
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        StatementBase statementBase;
-        try {
-            statementBase = SqlParserUtils.getFirstStmt(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            LOG.error("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        } catch (Exception e) {
-            String errorMsg = String.format("get exception when parse stmt. Origin stmt is %s . Error msg is %s.",
-                    originStmt, e.getMessage());
-            throw new AnalysisException(errorMsg);
-        }
-        statementBase.analyze(analyzer);
-        return statementBase;
-    }
-
-    public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext connectContext) {
-        StatementBase statementBase = null;
-        try {
-            statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
-            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
-        } catch (Exception e) {
-            String errorMsg = String.format("get exception when parse stmt. Origin stmt is %s . Error msg is %s.",
-                    originStmt, e.getMessage());
-            throw new SemanticException(errorMsg);
-        }
-
-        return statementBase;
-    }
 }

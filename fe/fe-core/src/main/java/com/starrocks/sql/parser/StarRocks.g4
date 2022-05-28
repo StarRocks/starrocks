@@ -865,6 +865,7 @@ baseType
     : BOOLEAN
     | TINYINT typeParameter?
     | SMALLINT typeParameter?
+    | SIGNED INT?
     | INT typeParameter?
     | INTEGER typeParameter?
     | BIGINT typeParameter?
