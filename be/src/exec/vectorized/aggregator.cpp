@@ -154,6 +154,17 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             // count(*) no input column, we manually resize it to 1 to process count(*)
             // like other agg function.
             _agg_intput_columns[i].resize(1);
+        } else  if (fn.name.function_name == "max_by" ||  fn.name.function_name == "min_by" ) {
+            bool is_input_nullable =
+                    !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
+            std::vector<PrimitiveType> arg_types;
+            for (const TTypeDesc& ttype_desc : fn.arg_types) {
+                TypeDescriptor arg_type = TypeDescriptor::from_thrift(ttype_desc);
+                arg_types.emplace_back(arg_type.type);
+            }
+            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+            auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_types, return_type.type, is_input_nullable);
+            _agg_functions[i] = func;
         } else {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);

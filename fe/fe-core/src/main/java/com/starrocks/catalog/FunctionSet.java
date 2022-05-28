@@ -53,6 +53,8 @@ public class FunctionSet {
     public static final String MAX = "max";
     public static final String MIN = "min";
     public static final String SUM = "sum";
+    public static final String MAX_BY = "max_BY";
+    public static final String MIN_BY = "min_BY";
     public static final String SUM_DISTINCT = "sum_distinct";
     public static final String AVG = "avg";
     public static final String MONEY_FORMAT = "money_format";
@@ -338,6 +340,7 @@ public class FunctionSet {
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
+        // 通过函数名，拿到对应的函数
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (fns == null) {
             return null;
@@ -599,6 +602,35 @@ public class FunctionSet {
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
 
+        // max_min_by
+        String[] maxMinByNames = {"max_by", "min_by"};
+        for (String name : maxMinByNames) {
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.BOOLEAN), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.TINYINT), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.SMALLINT), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.INT), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.DECIMAL32), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.BIGINT), Type.BIGINT, Type.BIGINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.DECIMAL64), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.LARGEINT), Type.LARGEINT, Type.LARGEINT, false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(name,
+                    Lists.newArrayList(Type.ANY_ELEMENT, Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
+        }
+
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",
                 Lists.newArrayList(Type.HLL), Type.BIGINT, Type.HLL,
@@ -852,32 +884,49 @@ public class FunctionSet {
      * </p>
      * TODO(zhuming): throws an exception on error, instead of return null.
      */
+    // 推断实际的参数和结果类型：
+    // 如果在函数的使用过程中使用了多态伪类型，那么我们需求确保与实际数据类型一致。
+    // 1. 返回值使用ANY_ELEMENTS，并且参数也是ANY_ELEMENTS，那么使用参数实际类型作为返回值
+    // 2. 返回值和参数都是ANY_ARRAY, 那么以参数的实际返回值作为返回值类型
+    // 3. 如果返回值类型是ANY_ARRAY或者ANY_ELEMENTS, 参数至少有一个是ANY_XX，那么从这些输入中推导出返回值类型，否则返回NULL
+    // 多态函数可以对许多不同的数据类型进行操作，具体数据类型为由在特定调用中实际传递给它的数据类型确定。
+    //
     private Function checkPolymorphicFunction(Function fn, Type[] paramTypes) {
+        // 函数是否是多态函数
         if (!fn.isPolymorphic()) {
             return fn;
         }
+        // 声明的类型: any_element, int
         Type[] declTypes = fn.getArgs();
+        // 实际类型
         Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
         ArrayType typeArray = null;
         Type typeElement = null;
+        // 返回值类型
         Type retType = fn.getReturnType();
         for (int i = 0; i < declTypes.length; i++) {
+            // 声明的类型
             Type declType = declTypes[i];
+            // 实际进来的参数类型
             Type realType = paramTypes[i];
+            // 处理any_array
             if (declType instanceof AnyArrayType) {
                 if (realType.isNull()) {
                     continue;
                 }
+                // 使用传入参数的实际类型
                 if (typeArray == null) {
                     typeArray = (ArrayType) realType;
                 } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
                     LOG.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+                // 处理any_elements
             } else if (declType instanceof AnyElementType) {
                 if (realType.isNull()) {
                     continue;
                 }
+                // 使用参数的实际类型
                 if (typeElement == null) {
                     typeElement = realType;
                 } else if ((typeElement = getSuperType(typeElement, realType)) == null) {
@@ -941,9 +990,12 @@ public class FunctionSet {
             newFn.setUserVisible(fn.isUserVisible());
             return newFn;
         }
+        // 处理聚合函数
         if (fn instanceof AggregateFunction) {
+            // 传入实际的类型: 函数名、参数类型、返回值类型
             AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(realTypes), retType,
                     ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
+            // 设置函数id
             newFn.setFunctionId(fn.getFunctionId());
             newFn.setChecksum(fn.getChecksum());
             newFn.setBinaryType(fn.getBinaryType());
