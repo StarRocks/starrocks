@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -1414,14 +1415,15 @@ public class PlanFragmentBuilder {
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
-                        topN.getPartitionLimit(), topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
-                        inputFragment);
+                        topN.getPartitionLimit(), topN.getOrderSpec(),
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), inputFragment);
             } else {
-                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
+                return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
+                        inputFragment, optExpr);
             }
         }
 
-        private PlanFragment buildFinalTopNFragment(ExecPlan context, long limit, long offset,
+        private PlanFragment buildFinalTopNFragment(ExecPlan context, TopNType topNType, long limit, long offset,
                                                     PlanFragment inputFragment,
                                                     OptExpression optExpr) {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
@@ -1433,9 +1435,16 @@ public class PlanFragmentBuilder {
 
             Preconditions.checkState(inputFragment.getPlanRoot() instanceof SortNode);
             SortNode sortNode = (SortNode) inputFragment.getPlanRoot();
+            sortNode.setTopNType(topNType);
             exchangeNode.setMergeInfo(sortNode.getSortInfo(), offset);
             exchangeNode.computeStatistics(optExpr.getStatistics());
-            exchangeNode.setLimit(limit);
+            if (TopNType.ROW_NUMBER.equals(topNType)) {
+                exchangeNode.setLimit(limit);
+            } else {
+                // if TopNType is RANK or DENSE_RANK, the number of rows may be greater than limit
+                // So we cannot set limit at exchange
+                exchangeNode.unsetLimit();
+            }
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
@@ -1449,7 +1458,7 @@ public class PlanFragmentBuilder {
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       List<ColumnRefOperator> partitionByColumns, long partitionLimit,
-                                                      OrderSpec orderSpec, long limit, long offset,
+                                                      OrderSpec orderSpec, TopNType topNType, long limit, long offset,
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
             List<Expr> partitionExprs = Lists.newArrayList();
@@ -1517,6 +1526,7 @@ public class PlanFragmentBuilder {
                     limit != Operator.DEFAULT_LIMIT,
                     limit == Operator.DEFAULT_LIMIT,
                     0);
+            sortNode.setTopNType(topNType);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;

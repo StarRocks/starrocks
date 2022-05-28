@@ -131,6 +131,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.statistic.AnalyzeJob;
@@ -503,7 +504,6 @@ public class ShowExecutor {
         } else {
             catalogName = showDbStmt.getCatalogName();
         }
-        boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
         dbNames = metadataMgr.listDbNames(catalogName);
 
         PatternMatcher matcher = null;
@@ -518,10 +518,9 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (isInternalCatalog) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
+                    fullName, PrivPredicate.SHOW)) {
+                continue;
             }
             dbNameSet.add(db);
         }
@@ -557,9 +556,8 @@ public class ShowExecutor {
                             continue;
                         }
                         // check tbl privs
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                db.getFullName(), tbl.getName(),
-                                PrivPredicate.SHOW)) {
+                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                         tableMap.put(tbl.getName(), tbl.getMysqlType());

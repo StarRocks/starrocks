@@ -21,6 +21,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -28,6 +29,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -46,10 +48,12 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -224,6 +228,21 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.tabletId = tabletId;
         this.createTime = createTime;
         this.infoService = GlobalStateMgr.getCurrentSystemInfo();
+        this.state = State.PENDING;
+    }
+
+    @VisibleForTesting
+    public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
+                          long idxId, long tabletId, long createTime, SystemInfoService infoService) {
+        this.type = type;
+        this.cluster = cluster;
+        this.dbId = dbId;
+        this.tblId = tblId;
+        this.partitionId = partId;
+        this.indexId = idxId;
+        this.tabletId = tabletId;
+        this.createTime = createTime;
+        this.infoService = infoService;
         this.state = State.PENDING;
     }
 
@@ -776,6 +795,40 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         this.state = State.RUNNING;
         return cloneTask;
+    }
+
+    public CreateReplicaTask createEmptyReplicaAndTask() {
+        // only create this task if force recovery is true
+        LOG.warn("tablet {} has only one replica {} on backend {}"
+                        + " and it is lost. create an empty replica to recover it on backend {}",
+                tabletId, tablet.getSingleReplica(), tablet.getSingleReplica().getBackendId(), destBackendId);
+
+        final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
+                globalStateMgr.getDbIncludeRecycleBin(dbId),
+                tblId);
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+        CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
+                tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
+                indexMeta.getSchemaHash(), visibleVersion,
+                indexMeta.getKeysType(),
+                TStorageType.COLUMN,
+                TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
+                olapTable.getCopiedIndexes(),
+                olapTable.isInMemory(),
+                olapTable.enablePersistentIndex(),
+                olapTable.getPartitionInfo().getTabletType(partitionId));
+        createReplicaTask.setIsRecoverTask(true);
+        taskTimeoutMs = Config.min_clone_task_timeout_sec * 1000;
+
+        Replica emptyReplica =
+                new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
+                        indexMeta.getSchemaHash());
+        // addReplica() method will add this replica to tablet inverted index too.
+        tablet.addReplica(emptyReplica);
+
+        state = State.RUNNING;
+        return createReplicaTask;
     }
 
     // timeout is between MIN_CLONE_TASK_TIMEOUT_MS and MAX_CLONE_TASK_TIMEOUT_MS

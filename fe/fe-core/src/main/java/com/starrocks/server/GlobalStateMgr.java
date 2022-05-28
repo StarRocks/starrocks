@@ -575,6 +575,11 @@ public class GlobalStateMgr {
         }
     }
 
+    @VisibleForTesting
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return localMetastore.getIdToDb();
+    }
+
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
     // but in some cases, we should get the serving globalStateMgr explicitly.
     public static GlobalStateMgr getServingState() {

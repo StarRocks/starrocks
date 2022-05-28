@@ -174,6 +174,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -187,7 +188,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.Type.DEFAULT_STRING;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
@@ -2627,104 +2627,68 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Type getBaseType(StarRocksParser.BaseTypeContext context) {
-        ScalarType scalarType;
-        if (context.BOOLEAN() != null) {
-            scalarType = ScalarType.BOOLEAN;
-        } else if (context.TINYINT() != null) {
-            scalarType = ScalarType.TINYINT;
-        } else if (context.SMALLINT() != null) {
-            scalarType = ScalarType.SMALLINT;
-        } else if (context.INT() != null) {
-            scalarType = ScalarType.INT;
-        } else if (context.INTEGER() != null) {
-            scalarType = ScalarType.INT;
-        } else if (context.BIGINT() != null) {
-            scalarType = ScalarType.BIGINT;
-        } else if (context.LARGEINT() != null) {
-            scalarType = ScalarType.LARGEINT;
-        } else if (context.FLOAT() != null) {
-            scalarType = ScalarType.FLOAT;
-        } else if (context.DOUBLE() != null) {
-            scalarType = ScalarType.DOUBLE;
-        } else if (context.DATE() != null) {
-            scalarType = ScalarType.DATE;
-        } else if (context.DATETIME() != null) {
-            scalarType = ScalarType.DATETIME;
-        } else if (context.TIME() != null) {
-            scalarType = ScalarType.TIME;
-        } else if (context.CHAR() != null) {
-            scalarType = ScalarType.CHAR;
-        } else if (context.VARCHAR() != null) {
-            scalarType = ScalarType.createVarcharType(-1);
-        } else if (context.STRING() != null) {
-            scalarType = DEFAULT_STRING;
-        } else if (context.BITMAP() != null) {
-            scalarType = ScalarType.BITMAP;
-        } else if (context.HLL() != null) {
-            scalarType = ScalarType.HLL;
-        } else if (context.PERCENTILE() != null) {
-            scalarType = ScalarType.PERCENTILE;
-        } else if (context.JSON() != null) {
-            scalarType = ScalarType.JSON;
-        } else {
-            throw new IllegalArgumentException("Unsupported type " + context.getText());
-        }
-        scalarType = scalarType.clone();
         if (context.typeParameter() != null) {
             int length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
-            scalarType.setLength(length);
+
+            if (context.VARCHAR() != null) {
+                return ScalarType.createVarchar(length);
+            } else if (context.CHAR() != null) {
+                return ScalarType.createCharType(length);
+            } else if (context.STRING() != null) {
+                return ScalarType.DEFAULT_STRING;
+            } else {
+                final ScalarType scalarType = ScalarType.createType(context.getChild(0).getText()).clone();
+                scalarType.setLength(length);
+                return scalarType;
+            }
+        } else {
+            return ScalarType.createType(context.getText());
         }
-        return scalarType;
     }
 
     public ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context) {
-        int precision = 10;
-        int precisionV2 = ScalarType.DEFAULT_PRECISION;
-        int scale = ScalarType.DEFAULT_SCALE;
+        Integer precision = null;
+        Integer scale = null;
         if (context.precision != null) {
             precision = Integer.parseInt(context.precision.getText());
-            precisionV2 = precision;
             scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
         }
         if (context.DECIMAL() != null) {
-            return ScalarType.createUnifiedDecimalType(precision, scale);
+            if (precision != null) {
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            } else {
+                return ScalarType.createUnifiedDecimalType(10, 0);
+            }
         } else if (context.DECIMAL32() != null) {
-            if (context.precision != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
-            } else {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32);
-            }
+            return getDecimalType(context, context.DECIMAL32().getText());
         } else if (context.DECIMAL64() != null) {
-            if (context.precision != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
-            } else {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64);
-            }
+            return getDecimalType(context, context.DECIMAL64().getText());
         } else if (context.DECIMAL128() != null) {
-            if (context.precision != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
-            } else {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128);
-            }
+            return getDecimalType(context, context.DECIMAL128().getText());
         } else if (context.DECIMALV2() != null) {
-            return ScalarType.createDecimalV2Type(precisionV2, scale);
+            if (precision != null) {
+                return ScalarType.createDecimalV2Type(precision, scale);
+            } else {
+                return ScalarType.createDecimalV2Type();
+            }
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
+        }
+    }
+
+    @NotNull
+    private ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context, String type) {
+        PrimitiveType primitiveType = ScalarType.createType(type.toUpperCase()).getPrimitiveType();
+        if (context.precision == null || context.scale == null) {
+            return ScalarType.createDecimalV3Type(primitiveType);
+        } else {
+            int precision = Integer.parseInt(context.precision.getText());
+            int scale = context.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(context.scale.getText());
+            return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
         }
     }
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
-        Type type;
-        final StarRocksParser.TypeContext typeContext = context.type();
-        if (typeContext.baseType() != null) {
-            type = getBaseType(typeContext.baseType());
-        } else if (typeContext.decimalType() != null) {
-            type = getDecimalType(typeContext.decimalType());
-        } else if (typeContext.arrayType() != null) {
-            type = getArrayType(typeContext.arrayType());
-        } else {
-            throw new IllegalArgumentException("Unsupported type " + typeContext.getText());
-        }
-        return new ArrayType(type);
+        return new ArrayType(getType(context.type()));
     }
 }
