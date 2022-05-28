@@ -236,7 +236,7 @@ public class TabletInvertedIndex {
                                                  */
                                                 LOG.info(
                                                         "failed to find partition commit info. table: {}, " +
-                                                                "partition: {}, tablet: {}, txn id: {}",
+                                                                "partition: {}, tablet: {}, txn_id: {}",
                                                         tabletMeta.getTableId(), partitionId, tabletId,
                                                         transactionState.getTransactionId());
                                             } else {

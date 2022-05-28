@@ -825,7 +825,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         if (!txnOperated) {
             String msg = String.format(
-                    "should not happen, we find that txnOperated if false when handling afterVisble. job id: %d, txn id: %d",
+                    "should not happen, we find that txnOperated if false when handling afterVisble. job id: %d, txn_id: %d",
                     id, txnState.getTransactionId());
             LOG.warn(msg);
             // print a log and return.
@@ -860,7 +860,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 // TODO(cmy): Normally, this should not happen. But for safe reason, just pause the job
                 String msg = String.format(
                         "should not happen, we find that task %s is not COMMITTED when handling afterVisble. " +
-                                "job id: %d, txn id: %d, txn status: %s",
+                                "job id: %d, txn_id: %d, txn status: %s",
                         DebugUtil.printId(routineLoadTaskInfo.getId()), id, txnState.getTransactionId(),
                         routineLoadTaskInfo.getTxnStatus().name());
                 LOG.warn(msg);

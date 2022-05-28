@@ -524,11 +524,12 @@ Status DataDir::load() {
                     rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
-                             << " tablet=" << rowset_meta->tablet_id() << " txn=" << rowset_meta->txn_id();
+                             << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
             } else {
                 LOG(INFO) << "Added committed rowset=" << rowset_meta->rowset_id()
                           << " tablet=" << rowset_meta->tablet_id()
-                          << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn=" << rowset_meta->txn_id();
+                          << " schema hash=" << rowset_meta->tablet_schema_hash()
+                          << " txn_id: " << rowset_meta->txn_id();
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
@@ -542,7 +543,7 @@ Status DataDir::load() {
         } else {
             LOG(WARNING) << "Found invalid rowset=" << rowset_meta->rowset_id()
                          << " tablet id=" << rowset_meta->tablet_id() << " tablet uid=" << rowset_meta->tablet_uid()
-                         << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn=" << rowset_meta->txn_id()
+                         << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn_id: " << rowset_meta->txn_id()
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
