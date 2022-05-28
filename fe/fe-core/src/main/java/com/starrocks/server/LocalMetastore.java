@@ -811,10 +811,10 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        if (engineName.equals("olap")) {
+        if (engineName.equalsIgnoreCase("olap")) {
             createOlapTable(db, stmt);
             return;
-        } else if (engineName.equals("mysql")) {
+        } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {

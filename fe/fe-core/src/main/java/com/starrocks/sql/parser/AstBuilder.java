@@ -328,7 +328,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ColumnDef> columnDefList = new ArrayList<>();
         for (StarRocksParser.ColumnDescContext context : columnDesc) {
             String columnName = ((Identifier) visit(context.identifier())).getValue();
-            TypeDef typeDef = new TypeDef((Type) visit(context.type()));
+            TypeDef typeDef = new TypeDef(getType(context.type()));
             String charsetName = context.charsetName() != null ?
                     ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
             boolean isKey = context.KEY() != null;
@@ -1961,7 +1961,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
-        return new CastExpr(new TypeDef((Type) visit(context.type())), (Expr) visit(context.expression()));
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
     }
 
     @Override
@@ -2615,20 +2615,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    @Override
-    public ParseNode visitType(StarRocksParser.TypeContext context) {
+    public Type getType(StarRocksParser.TypeContext context) {
         if (context.baseType() != null) {
-            return visit(context.baseType());
+            return getBaseType(context.baseType());
         } else if (context.decimalType() != null) {
-            return visit(context.decimalType());
+            return getDecimalType(context.decimalType());
         } else if (context.arrayType() != null) {
-            return visit(context.arrayType());
+            return getArrayType(context.arrayType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
 
-    @Override
-    public ParseNode visitBaseType(StarRocksParser.BaseTypeContext context) {
+    private Type getBaseType(StarRocksParser.BaseTypeContext context) {
         ScalarType scalarType;
         if (context.BOOLEAN() != null) {
             scalarType = ScalarType.BOOLEAN;
@@ -2679,8 +2677,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return scalarType;
     }
 
-    @Override
-    public ParseNode visitDecimalType(StarRocksParser.DecimalTypeContext context) {
+    public ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context) {
         int precision = 10;
         int precisionV2 = ScalarType.DEFAULT_PRECISION;
         int scale = ScalarType.DEFAULT_SCALE;
@@ -2716,8 +2713,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    @Override
-    public ParseNode visitArrayType(StarRocksParser.ArrayTypeContext context) {
-        return new ArrayType((Type) visit(context.type()));
+    public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
+        Type type;
+        final StarRocksParser.TypeContext typeContext = context.type();
+        if (typeContext.baseType() != null) {
+            type = getBaseType(typeContext.baseType());
+        } else if (typeContext.decimalType() != null) {
+            type = getDecimalType(typeContext.decimalType());
+        } else if (typeContext.arrayType() != null) {
+            type = getArrayType(typeContext.arrayType());
+        } else {
+            throw new IllegalArgumentException("Unsupported type " + typeContext.getText());
+        }
+        return new ArrayType(type);
     }
 }

@@ -102,7 +102,6 @@ public class CreateTableAnalyzer {
         }
 
         final String engineName = statement.getEngineName().toLowerCase();
-        statement.setEngineName(engineName);
         analyzeEngineName(engineName);
         analyzeCharsetName(statement.getCharsetName());
 
