@@ -226,38 +226,38 @@ AggregateFunctionPtr AggregateFactory::MakeLeadLagWindowFunction() {
     return std::make_shared<LeadLagWindowFunction<PT>>();
 }
 
-template <PrimitiveType PT>
+// MaxMinBy functions:
+template <PrimitiveType PT1, PrimitiveType PT2>
 AggregateFunctionPtr AggregateFactory::MakeMaxByAggregateFunction() {
-    return std::make_shared<
-            MaxMinByAggregateFunction<PT, MaxByAggregateData<PT>, MaxByOP<PT, MaxByAggregateData<PT>>>>();
+    return std::make_shared<MaxMinByAggregateFunction<PT1, PT2, MAX>>();
 }
 
-template <PrimitiveType PT>
+template <PrimitiveType PT1, PrimitiveType PT2>
 AggregateFunctionPtr AggregateFactory::MakeMinByAggregateFunction() {
-    return std::make_shared<
-            MaxMinByAggregateFunction<PT, MinByAggregateData<PT>, MinByOP<PT, MinByAggregateData<PT>>>>();
+    return std::make_shared<MaxMinByAggregateFunction<PT1, PT2, MIN>>();
 }
 
 // ----------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------
 
-typedef std::tuple<std::string, int, int, bool> Quadruple;
-
-struct AggregateFuncMapHash {
-    size_t operator()(const Quadruple& quadruple) const {
-        std::hash<std::string> hasher;
-        return hasher(std::get<0>(quadruple)) ^ std::get<1>(quadruple) ^ std::get<2>(quadruple) ^
-               std::get<3>(quadruple);
+std::string GetFunctionSignature(const std::string& name, const std::vector<PrimitiveType> arg_types,
+                                 const PrimitiveType return_type, const bool is_null) {
+    std::stringstream buf;
+    buf << name << "-";
+    for (const PrimitiveType arg_type : arg_types) {
+        buf << arg_type << "-";
     }
-};
+    buf << return_type << "-" << is_null;
+    return buf.str();
+}
 
 class AggregateFuncResolver {
     DECLARE_SINGLETON(AggregateFuncResolver);
 
 public:
-    const AggregateFunction* get_aggregate_info(const std::string& name, const PrimitiveType arg_type,
+    const AggregateFunction* get_aggregate_info(const std::string& name, const std::vector<PrimitiveType>& arg_types,
                                                 const PrimitiveType return_type, const bool is_null) const {
-        auto pair = _infos_mapping.find(std::make_tuple(name, arg_type, return_type, is_null));
+        auto pair = _infos_mapping.find(GetFunctionSignature(name, arg_types, return_type, is_null));
         if (pair == _infos_mapping.end()) {
             return nullptr;
         }
@@ -266,33 +266,41 @@ public:
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_aggregate_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, false),
                                create_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, true),
                                create_function<arg_type, return_type, true>(name));
+    }
+
+    template <PrimitiveType PT1, PrimitiveType PT2, PrimitiveType return_type>
+    void add_aggregate_mapping(std::string&& name) {
+        _infos_mapping.emplace(GetFunctionSignature(name, {PT1, PT2}, return_type, false),
+                               AggregateFactory::MakeMinByAggregateFunction<PT1, PT2>());
+        _infos_mapping.emplace(GetFunctionSignature(name, {PT1, PT2}, return_type, false),
+                               AggregateFactory::MakeMaxByAggregateFunction<PT1, PT2>());
     }
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_object_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, false),
                                create_object_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, true),
                                create_object_function<arg_type, return_type, true>(name));
     }
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_array_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, false),
                                create_array_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, true),
                                create_array_function<arg_type, return_type, true>(name));
     }
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_decimal_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, false),
                                create_decimal_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+        _infos_mapping.emplace(GetFunctionSignature(name, {arg_type}, return_type, true),
                                create_decimal_function<arg_type, return_type, true>(name));
     }
 
@@ -483,12 +491,6 @@ public:
                 auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg);
-            } else if (name == "max_by") {
-                auto max_by = AggregateFactory::MakeMaxAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxByAggregateData<ArgPT>>(max_by);
-            } else if (name == "min_by") {
-                auto min_by = AggregateFactory::MakeMinAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinByAggregateData<ArgPT>>(min_by);
             }
         } else {
             if (name == "count") {
@@ -578,12 +580,6 @@ public:
                 auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg_value);
-            }  else if (name == "max_by") {
-                auto max_by = AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxByAggregateData<ArgPT>>(max_by);
-            } else if (name == "min_by") {
-                auto min_by = AggregateFactory::MakeMinByAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinByAggregateData<ArgPT>>(min_by);
             }
         } else {
             if (name == "avg") {
@@ -602,10 +598,6 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
-            } else if (name == "max_by") {
-                return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
-            } else if (name == "min_by") {
-                return AggregateFactory::MakeMinByAggregateFunction<ArgPT>();
             }
         }
 
@@ -620,7 +612,7 @@ public:
     }
 
 private:
-    std::unordered_map<Quadruple, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
+    std::unordered_map<std::string, AggregateFunctionPtr> _infos_mapping;
     AggregateFuncResolver(const AggregateFuncResolver&) = delete;
     const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 };
@@ -685,9 +677,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     ADD_ALL_TYPE("max");
     ADD_ALL_TYPE("min");
-    ADD_ALL_TYPE("max_by");
-    ADD_ALL_TYPE("min_by");
     ADD_ALL_TYPE("any_value");
+
+    add_aggregate_mapping<TYPE_INT, TYPE_INT, TYPE_INT>("max_by");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");
@@ -986,11 +978,16 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
     }
 
     if (binary_type == TFunctionBinaryType::BUILTIN) {
-        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
+        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, {arg_type}, return_type, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
         return getJavaUDAFFunction(is_null);
     }
     return nullptr;
+}
+
+const AggregateFunction* get_aggregate_function(const std::string& name, std::vector<PrimitiveType> arg_types,
+                                                PrimitiveType return_type, bool is_null) {
+    return AggregateFuncResolver::instance()->get_aggregate_info(name, arg_types, return_type, is_null);
 }
 
 const AggregateFunction* get_window_function(const std::string& name, PrimitiveType arg_type, PrimitiveType return_type,

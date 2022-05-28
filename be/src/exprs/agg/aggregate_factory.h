@@ -114,10 +114,10 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeLeadLagWindowFunction();
 
-    template <PrimitiveType PT>
+    template <PrimitiveType PT1, PrimitiveType PT2>
     static AggregateFunctionPtr MakeMaxByAggregateFunction();
 
-    template <PrimitiveType PT>
+    template <PrimitiveType PT1, PrimitiveType PT2>
     static AggregateFunctionPtr MakeMinByAggregateFunction();
 };
 
@@ -130,6 +130,9 @@ const AggregateFunction* get_window_function(const std::string& name, PrimitiveT
                                              bool is_null,
                                              TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
                                              int func_version = 1);
+
+const AggregateFunction* get_aggregate_function(const std::string& name, std::vector<PrimitiveType> arg_type,
+                                                PrimitiveType return_type, bool is_null);
 
 } // namespace vectorized
 } // namespace starrocks
