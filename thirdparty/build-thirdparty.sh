@@ -31,6 +31,42 @@ set -e
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
+BUILD_STARLET=OFF
+if [ "$1" == "--build-starlet" ]; then
+    BUILD_STARLET=ON
+fi
+
+download_and_build_starlet(){
+    if [ ! -e "${STARROCKS_THIRDPARTY}/staros" ]; then
+        pushd "${STARROCKS_THIRDPARTY}"
+        git clone git@github.com:StarRocks/staros.git
+        popd
+    fi
+    if [ ! -e "${STARROCKS_THIRDPARTY}/installed/starlet" ]; then
+        mkdir "${STARROCKS_THIRDPARTY}/installed/starlet"
+    fi
+    # starlet building don't suport ninja,backup CMAKE_GENERATOR and reset to use make build.
+    SAVED_CMAKE_GENERATOR=${CMAKE_GENERATOR}
+    SAVED_BUILD_SYSTEM=${BUILD_SYSTEM}
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM="make"
+    pushd "${STARROCKS_THIRDPARTY}/staros/starlet"
+    INSTALL_DIR_PREFIX="${STARROCKS_THIRDPARTY}/installed/starlet" STARLET_THIRDPARTY="${STARROCKS_THIRDPARTY}/installed" sh -x ./build.sh
+    CMAKE_GENERATOR=${SAVED_CMAKE_GENERATOR}
+    BUILD_SYSTEM=${SAVED_BUILD_SYSTEM}
+    popd
+}
+
+if [ "${BUILD_STARLET}" == "ON" ]; then
+    echo "starlet to build starlet"
+    download_and_build_starlet
+    if [ $? -ne 0 ]; then
+        echo "Failed to build starlet"
+        exit 1
+    fi
+    exit 0
+fi
+
 export STARROCKS_HOME=$curdir/..
 export TP_DIR=$curdir
 
@@ -858,10 +894,14 @@ build_opentelemetry() {
     ${BUILD_SYSTEM} install
 }
 
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
 export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L -I${TP_INCLUDE_DIR}"
+
+
+
 
 build_libevent
 build_zlib

@@ -32,28 +32,23 @@ static Status to_status(absl::Status absl_status) {
     }
 }
 
-struct StarletUri {
-    static const std::string starlet_prefix;
-    staros::starlet::S3URI uri;
-};
-
-const std::string StarletUri::starlet_prefix = "staros://";
-std::shared_ptr<StarletUri> format_starlet_path(const std::string& path) {
-    auto uri = std::make_shared<StarletUri>();
-    if (HasPrefixString(path, StarletUri::starlet_prefix)) {
-        uri->uri.parse(path.substr(StarletUri::starlet_prefix.length()));
+static const char* const kStarletPrefix = "staros://";
+std::shared_ptr<staros::starlet::S3URI> parse_starlet_path(const std::string& path) {
+    auto uri = std::make_shared<staros::starlet::S3URI>();
+    if (HasPrefixString(path, kStarletPrefix)) {
+        uri->parse(path.substr(strlen(kStarletPrefix)));
     } else {
-        uri->uri.parse(path);
+        uri->parse(path);
     }
     return uri;
 };
 
-std::string format_starlet_path(std::shared_ptr<StarletUri> uri) {
+std::string format_starlet_path(std::shared_ptr<staros::starlet::S3URI> uri) {
     //    https://bucket-name.s3.Region.amazonaws.com/key-name
-    if (uri->uri.key().front() == '/') {
-        return fmt::format("{}://{}.{}{}", uri->uri.scheme(), uri->uri.bucket(), uri->uri.endpoint(), uri->uri.key());
+    if (uri->key().front() == '/') {
+        return fmt::format("{}://{}.{}{}", uri->scheme(), uri->bucket(), uri->endpoint(), uri->key());
     } else {
-        return fmt::format("{}://{}.{}/{}", uri->uri.scheme(), uri->uri.bucket(), uri->uri.endpoint(), uri->uri.key());
+        return fmt::format("{}://{}.{}/{}", uri->scheme(), uri->bucket(), uri->endpoint(), uri->key());
     }
 };
 
@@ -137,7 +132,7 @@ public:
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
-        auto uri = format_starlet_path(path);
+        auto uri = parse_starlet_path(path);
         auto format_str = format_starlet_path(uri);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
         auto st = object_store->new_object(format_str);
@@ -150,7 +145,7 @@ public:
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        auto uri = format_starlet_path(path);
+        auto uri = parse_starlet_path(path);
         auto format_str = format_starlet_path(uri);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
         auto st = object_store->new_object(format_str);
@@ -171,7 +166,7 @@ public:
         if (!path.empty() && path.back() == '/') {
             return Status::NotSupported(fmt::format("Starlet: cannot create file with name ended with '/': {}", path));
         }
-        auto uri = format_starlet_path(path);
+        auto uri = parse_starlet_path(path);
         auto format_str = format_starlet_path(uri);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
         auto st = object_store->new_object(format_str);
@@ -184,11 +179,11 @@ public:
     }
 
     Status delete_file(const std::string& path) override {
-        auto uri = format_starlet_path(path);
-        if (uri->uri.key().empty()) {
+        auto uri = parse_starlet_path(path);
+        if (uri->key().empty()) {
             return Status::InvalidArgument(fmt::format("root object can not be deleted", path));
         }
-        if (uri->uri.key().back() == '/') {
+        if (uri->key().back() == '/') {
             return Status::InvalidArgument(fmt::format("object {} with slash not name a file", path));
         }
         auto format_str = format_starlet_path(uri);
@@ -198,10 +193,10 @@ public:
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        auto uri = format_starlet_path(dir);
+        auto uri = parse_starlet_path(dir);
         auto format_str = format_starlet_path(uri);
 
-        if (!uri->uri.key().empty() && uri->uri.key().back() != '/') {
+        if (!uri->key().empty() && uri->key().back() != '/') {
             format_str.push_back('/');
         }
 
@@ -211,17 +206,17 @@ public:
     }
 
     Status create_dir(const std::string& dirname) override {
-        auto uri = format_starlet_path(dirname);
+        auto uri = parse_starlet_path(dirname);
         auto format_str = format_starlet_path(uri);
         auto st = is_directory(format_str);
         if (st.ok() && st.value()) {
             return Status::AlreadyExist(dirname);
         }
-        if (uri->uri.key().empty() || uri->uri.key() == "/") {
+        if (uri->key().empty() || uri->key() == "/") {
             return Status::AlreadyExist(fmt::format("root directory already exist"));
         }
 
-        if (uri->uri.key().back() != '/') {
+        if (uri->key().back() != '/') {
             format_str.push_back('/');
         }
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
@@ -243,25 +238,25 @@ public:
     Status create_dir_recursive(const std::string& dirname) override { return create_dir_if_missing(dirname, nullptr); }
 
     Status delete_dir(const std::string& dirname) override {
-        auto uri = format_starlet_path(dirname);
+        auto uri = parse_starlet_path(dirname);
         auto format_str = format_starlet_path(uri);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
-        std::set<std::string> files;
-        if (uri->uri.key().empty() || uri->uri.key() == "/") {
+        bool dir_empty = false;
+        if (uri->key().empty() || uri->key() == "/") {
             return Status::NotSupported("Cannot delete root directory of StarletFS");
         }
-        if (uri->uri.key().back() != '/') {
+        if (uri->key().back() != '/') {
             format_str.push_back('/');
         }
-        auto cb = [&files](std::string_view file) {
-            files.emplace(file);
+        auto cb = [&dir_empty](std::string_view file) {
+            dir_empty = false;
             return true;
         };
         auto st = object_store->iterate_objects(format_str, cb);
         if (!st.ok()) {
             return to_status(st);
         }
-        if (files.size() != 0) {
+        if (!dir_empty) {
             return Status::InternalError(fmt::format("dir {} is not empty", format_str));
         }
         auto res = object_store->delete_object(format_str);
@@ -269,14 +264,14 @@ public:
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        auto uri = format_starlet_path(dirname);
+        auto uri = parse_starlet_path(dirname);
         auto format_str = format_starlet_path(uri);
 
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
-        if (uri->uri.key().empty() || uri->uri.key() == "/") {
+        if (uri->key().empty() || uri->key() == "/") {
             return Status::NotSupported("Cannot delete root directory of StarletFS");
         }
-        if (uri->uri.key().back() != '/') {
+        if (uri->key().back() != '/') {
             format_str.push_back('/');
         }
         auto st = object_store->delete_objects(format_str);
@@ -285,10 +280,10 @@ public:
 
     // in starlet filesystem dir is an object with suffix '/' ;
     StatusOr<bool> is_directory(const std::string& path) override {
-        auto uri = format_starlet_path(path);
+        auto uri = parse_starlet_path(path);
         auto format_str = format_starlet_path(uri);
         // root directory
-        if (uri->uri.key().empty() || uri->uri.key() == "/") {
+        if (uri->key().empty() || uri->key() == "/") {
             return true;
         }
 

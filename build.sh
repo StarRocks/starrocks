@@ -182,10 +182,17 @@ else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
-# need config STAROS_DIR in custom.sh if USE_STAROS
-if [ "${USE_STAROS}" == "ON"  -a -z "${STAROS_DIR}" ]; then
-    echo "Please set STAROS_DIR when using staros"
-    exit 1
+if [ "${USE_STAROS}" == "ON"  -a ! -f "${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/libstarlet.a" ]; then
+    echo "start to build starlet"
+    if [ -f "${STARROCKS_THIRDPARTY}/build-thirdparty.sh"  ]; then
+        sh -x ${STARROCKS_THIRDPARTY}/build-thirdparty.sh --build-starlet
+    else
+        sh -x ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh --build-starlet
+    fi
+    if [ $? != 0 ] ; then
+        echo "failed to build starlet"
+        exit 1
+    fi
 fi
 
 # Clean and build Backend
@@ -212,10 +219,10 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
-                    -Dprotobuf_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib64/cmake/protobuf \
-                    -Dabsl_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib64/cmake/absl \
-                    -DgRPC_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib/cmake/grpc \
-                    -Dstarlet_DIR=${STAROS_DIR}/starlet/starlet_install/lib64/cmake ..
+                    -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
+                    -Dabsl_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/absl \
+                    -DgRPC_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib/cmake/grpc \
+                    -Dstarlet_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/cmake ..
     else
       ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \

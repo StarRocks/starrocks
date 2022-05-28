@@ -30,7 +30,11 @@ public:
     }
 
     std::string StarletPath(std::string_view path) {
-        return fmt::format("staros://s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
+        if (path.front() == '/') {
+            return fmt::format("staros://s3://{}.s3.{}.{}{}", kBucket, kRegion, kDomain, path);
+        } else {
+            return fmt::format("staros://s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
+        }
     }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
@@ -75,16 +79,6 @@ TEST_F(StarletFileSystemTest, test_write_and_read) {
 TEST_F(StarletFileSystemTest, test_directory) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros://http://"));
     bool created = false;
-
-    ASSERT_TRUE(fs->create_dir(StarletPath("/")).is_already_exist());
-    ASSERT_OK(fs->create_dir_if_missing(StarletPath("/"), &created));
-    ASSERT_FALSE(created);
-    CheckIsDirectory(fs.get(), StarletPath("/"), true, true);
-    ASSERT_OK(fs->iterate_dir(StarletPath("/"), [&](std::string_view /*name*/) -> bool {
-        CHECK(false) << "root directory should be empty";
-        return true;
-    }));
-    ASSERT_ERROR(fs->delete_dir(StarletPath(("/"))));
 
     //
     //  /dirname0/
@@ -214,7 +208,7 @@ TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
     };
 
     bool created;
-    ASSERT_OK(fs->delete_dir_recursive(StarletPath("/dirname0")));
+    fs->delete_dir_recursive(StarletPath("/dirname0"));
     EXPECT_OK(fs->create_dir_if_missing(StarletPath("/dirname0"), &created));
     ASSERT_OK(fs->delete_dir_recursive(StarletPath("/dirname0")));
     EXPECT_OK(fs->iterate_dir(StarletPath("/"), cb));
