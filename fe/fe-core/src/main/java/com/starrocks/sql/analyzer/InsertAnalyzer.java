@@ -36,8 +36,8 @@ public class InsertAnalyzer {
          *  Target table
          */
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
-        Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
+        Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
+        Table table = MetaUtils.getTable(session, insertStmt.getTableName());
 
         if (insertStmt.isOverwrite()) {
             if (!(table instanceof OlapTable)) {

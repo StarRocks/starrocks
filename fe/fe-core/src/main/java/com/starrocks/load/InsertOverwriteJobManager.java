@@ -80,8 +80,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 throw new RuntimeException("register insert overwrite job failed");
             }
             // get db and table
-            Database database = MetaUtils.getStarRocksDb(context, job.getTargetDbId());
-            OlapTable table = (OlapTable) MetaUtils.getStarRocksTable(context, database.getId(), job.getTargetTableId());
+            Database database = MetaUtils.getDatabase(context, job.getTargetDbId());
+            OlapTable table = (OlapTable) MetaUtils.getTable(context, database.getId(), job.getTargetTableId());
             InsertOverwriteJobRunner jobRunner = new InsertOverwriteJobRunner(job, context, stmtExecutor, database, table);
             jobRunner.run();
         } finally {

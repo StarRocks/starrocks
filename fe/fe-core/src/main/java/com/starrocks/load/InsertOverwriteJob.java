@@ -95,8 +95,7 @@ public class InsertOverwriteJob {
 
     public boolean isFinished() {
         return jobState == InsertOverwriteJobState.OVERWRITE_SUCCESS
-                || jobState == InsertOverwriteJobState.OVERWRITE_FAILED
-                || jobState == InsertOverwriteJobState.OVERWRITE_CANCELLED;
+                || jobState == InsertOverwriteJobState.OVERWRITE_FAILED;
     }
 
     public InsertStmt getInsertStmt() {

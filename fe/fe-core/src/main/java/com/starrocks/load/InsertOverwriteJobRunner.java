@@ -84,7 +84,7 @@ public class InsertOverwriteJobRunner {
             return;
         }
         try {
-            transferTo(InsertOverwriteJobState.OVERWRITE_CANCELLED);
+            transferTo(InsertOverwriteJobState.OVERWRITE_FAILED);
         } catch (Exception e) {
             LOG.warn("cancel insert overwrite job:{} failed", job.getJobId(), e);
         }
@@ -95,8 +95,7 @@ public class InsertOverwriteJobRunner {
             handle();
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} handle exception", job.getJobId(), e);
-            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_FAILED
-                    && job.getJobState() != InsertOverwriteJobState.OVERWRITE_CANCELLED) {
+            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_FAILED) {
                 transferTo(InsertOverwriteJobState.OVERWRITE_FAILED);
             }
             throw new RuntimeException("insert overwrite failed.", e);
@@ -108,11 +107,10 @@ public class InsertOverwriteJobRunner {
             case OVERWRITE_PENDING:
                 prepare();
                 break;
-            case OVERWRITE_PREPARED:
+            case OVERWRITE_RUNNING:
                 doLoad();
                 break;
             case OVERWRITE_FAILED:
-            case OVERWRITE_CANCELLED:
                 gc();
                 LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{} ms," +
                                 " waitInsertIntoElapse:{} ms, insertElapse:{} ms",
@@ -129,7 +127,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void doLoad() {
-        Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PREPARED);
+        Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         try {
             createTempPartitions();
             prepareInsert();
@@ -149,20 +147,14 @@ public class InsertOverwriteJobRunner {
         }
         // state can not be PENDING here
         switch (info.getToState()) {
-            case OVERWRITE_PREPARED:
+            case OVERWRITE_RUNNING:
                 job.setSourcePartitionNames(info.getSourcePartitionNames());
                 job.setNewPartitionNames(info.getNewPartitionsName());
-                job.setNewPartitionNames(info.getNewPartitionsName());
-                job.setJobState(InsertOverwriteJobState.OVERWRITE_PREPARED);
+                job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
                 break;
             case OVERWRITE_FAILED:
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
                 LOG.info("replay insert overwrite job:{} to FAILED", job.getJobId());
-                gc();
-                break;
-            case OVERWRITE_CANCELLED:
-                job.setJobState(InsertOverwriteJobState.OVERWRITE_CANCELLED);
-                LOG.info("replay insert overwrite job:{} to CANCELLED", job.getJobId());
                 gc();
                 break;
             case OVERWRITE_SUCCESS:
@@ -178,7 +170,7 @@ public class InsertOverwriteJobRunner {
 
     private void transferTo(InsertOverwriteJobState state) throws Exception {
         if (state == InsertOverwriteJobState.OVERWRITE_SUCCESS) {
-            Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PREPARED);
+            Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         }
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
@@ -197,7 +189,7 @@ public class InsertOverwriteJobRunner {
         List<String> sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
         job.setSourcePartitionNames(sourcePartitionNames);
         job.setNewPartitionNames(sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList()));
-        transferTo(InsertOverwriteJobState.OVERWRITE_PREPARED);
+        transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
     private void executeInsert() throws Exception {
@@ -309,7 +301,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void prepareInsert() {
-        Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PREPARED);
+        Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
         try {
             db.readLock();
@@ -329,7 +321,7 @@ public class InsertOverwriteJobRunner {
             while (!isPreviousLoadFinished() && !context.isKilled()) {
                 Thread.sleep(500);
             }
-            waitInsertIntoElapse = waitInsertStartTimestamp - waitInsertStartTimestamp;
+            waitInsertIntoElapse = System.currentTimeMillis() - waitInsertStartTimestamp;
             if (context.isKilled()) {
                 throw new RuntimeException("insert overwrite context is killed");
             }

@@ -769,8 +769,8 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws Exception {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = MetaUtils.getStarRocks(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
+        Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
 
         AnalyzeJob job = new AnalyzeJob();
         job.setDbId(db.getId());
@@ -1035,7 +1035,7 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) {
-        Database database = MetaUtils.getStarRocks(context, insertStmt.getTableName());
+        Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
             LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
@@ -1090,8 +1090,8 @@ public class StmtExecutor {
         }
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+        Database database = MetaUtils.getDatabase(context, stmt.getTableName());
+        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
