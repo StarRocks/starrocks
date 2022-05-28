@@ -4,8 +4,10 @@ package com.starrocks.external.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -144,6 +146,41 @@ public class UtilsTest {
             Assert.fail();
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+    }
+
+    @Test
+    public void testArrayString() throws DdlException {
+        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ArrayType arrayType = new ArrayType(new ArrayType(itemType));
+        String typeStr = "Array<Array<date>>";
+        Type resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.VARCHAR);
+        arrayType = new ArrayType(itemType);
+        typeStr = "Array<string>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.INT);
+        arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
+        typeStr = "array<Array<Array<int>>>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.BIGINT);
+        arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
+        typeStr = "array<Array<Array<bigint>>>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createUnifiedDecimalType(4, 2);
+        try {
+            new ArrayType(new ArrayType(itemType));
+            Assert.fail();
+        } catch (InternalError e) {
+            Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
         }
     }
 }
