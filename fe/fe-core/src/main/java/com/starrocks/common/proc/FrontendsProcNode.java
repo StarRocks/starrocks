@@ -48,8 +48,6 @@ public class FrontendsProcNode implements ProcNodeInterface {
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
-    public static final int HOSTNAME_INDEX = 2;
-
     private GlobalStateMgr globalStateMgr;
 
     public FrontendsProcNode(GlobalStateMgr globalStateMgr) {
