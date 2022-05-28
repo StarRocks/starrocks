@@ -105,6 +105,7 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: partsupp
 tabletRatio=10/10
+tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=16.0
 numNodes=0
@@ -127,6 +128,7 @@ PREDICATES: 23: S_COMMENT LIKE '%Customer%Complaints%'
 partitions=1/1
 rollup: supplier
 tabletRatio=1/1
+tabletList=10111
 cardinality=250000
 avgRowSize=105.0
 numNodes=0
@@ -146,6 +148,7 @@ PREDICATES: 10: P_BRAND != 'Brand#43', NOT (11: P_TYPE LIKE 'PROMO BURNISHED%'),
 partitions=1/1
 rollup: part
 tabletRatio=10/10
+tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=2304000
 avgRowSize=47.0
 numNodes=0

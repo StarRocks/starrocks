@@ -31,8 +31,12 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +145,23 @@ public class SplitAggregateRule extends TransformationRule {
         return hasSameMultiColumn;
     }
 
+    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
+        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            return false;
+        }
+
+        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
+        double rowCount = Math.max(1, statistics.getOutputRowCount());
+        if (rowCount / inputRowCount < StatisticsEstimateCoefficient.DEFAULT_AGGREGATE_EFFECT_COEFFICIENT) {
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         List<OptExpression> newExpressions = new ArrayList<>();
@@ -182,7 +203,10 @@ public class SplitAggregateRule extends TransformationRule {
                         return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
                                 operator.getGroupingKeys());
-                    } else if (canGenerateTwoStageAggregate(operator, distinctColumns) && operator.hasLimit()) {
+                    // If agg node has limit or has a very good aggregation effect which could reduce the shuffle data,
+                    // we prefer to choose 2 phase aggregate
+                    } else if (canGenerateTwoStageAggregate(operator, distinctColumns) &&
+                            (operator.hasLimit() || hasAggregateEffect(input, distinctColumns))) {
                         return implementTwoStageAgg(input, operator);
                     } else {
                         return implementOneDistinctWithGroupByAgg(context.getColumnRefFactory(), input, operator,
