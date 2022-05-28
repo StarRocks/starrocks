@@ -20,4 +20,17 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
+
+    @Test
+    public void testOuterJoinSatisfyAgg() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select distinct t0.v1  from t0 full outer join[shuffle] t1 on t0.v1 = t1.v4;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
 }
