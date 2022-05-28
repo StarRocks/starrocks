@@ -9,6 +9,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -33,8 +34,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "baseTableVisibleVersionMap")
         public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        TimestampArithmeticExpr.TimeUnit timeUnit;
+
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.step = 0;
+            this.timeUnit = TimestampArithmeticExpr.TimeUnit.MINUTE;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -43,6 +56,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public TimestampArithmeticExpr.TimeUnit getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(TimestampArithmeticExpr.TimeUnit timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 
@@ -56,33 +93,19 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
 
-        @SerializedName(value = "starTime")
-        private LocalDateTime startTime;
 
-        @SerializedName(value = "step")
-        private long step;
-
-        @SerializedName(value = "timeUnit")
-        TimestampArithmeticExpr.TimeUnit timeUnit;
 
         public MvRefreshScheme() {
             this.type = RefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
-            this.startTime = LocalDateTime.now();
-            this.step = 0;
-            this.timeUnit = TimestampArithmeticExpr.TimeUnit.MINUTE;
         }
 
         public MvRefreshScheme(com.starrocks.catalog.RefreshType type, AsyncRefreshContext asyncRefreshContext,
-                               long lastRefreshTime, LocalDateTime startTime, long step,
-                               TimestampArithmeticExpr.TimeUnit timeUnit) {
+                               long lastRefreshTime) {
             this.type = type;
             this.asyncRefreshContext = asyncRefreshContext;
             this.lastRefreshTime = lastRefreshTime;
-            this.startTime = startTime;
-            this.step = step;
-            this.timeUnit = timeUnit;
         }
 
         public RefreshType getType() {
@@ -109,29 +132,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.lastRefreshTime = lastRefreshTime;
         }
 
-        public LocalDateTime getStartTime() {
-            return startTime;
-        }
 
-        public void setStartTime(LocalDateTime startTime) {
-            this.startTime = startTime;
-        }
-
-        public long getStep() {
-            return step;
-        }
-
-        public void setStep(long step) {
-            this.step = step;
-        }
-
-        public TimestampArithmeticExpr.TimeUnit getTimeUnit() {
-            return timeUnit;
-        }
-
-        public void setTimeUnit(TimestampArithmeticExpr.TimeUnit timeUnit) {
-            this.timeUnit = timeUnit;
-        }
     }
 
     @SerializedName(value = "dbId")

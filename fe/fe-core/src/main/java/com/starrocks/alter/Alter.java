@@ -40,7 +40,6 @@ import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -78,12 +77,12 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -219,16 +218,6 @@ public class Alter {
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
             }
-            if (materializedView == null) {
-                for (Table t : db.getTables()) {
-                    if (t instanceof MaterializedView) {
-                        if (t.getName().equals(oldMvName)) {
-                            materializedView = (MaterializedView) t;
-                            break;
-                        }
-                    }
-                }
-            }
 
             if (materializedView == null) {
                 throw new MetaNotFoundException("Materialized view " + mvName + " is not find");
@@ -239,13 +228,12 @@ public class Alter {
                         + "Do not allow doing ALTER ops");
             }
 
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             //rename materialized view
             if (newMvName != null) {
-                processRenameMaterializedView(oldMvName, newMvName, db, materializedView, editLog);
+                processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
             } else if (refreshSchemeDesc != null) {
                 //change refresh scheme
-                processChangeRefreshScheme(refreshSchemeDesc, materializedView, editLog);
+                processChangeRefreshScheme(refreshSchemeDesc, materializedView);
             } else {
                 throw new DdlException("unsupported modification for materialized view");
             }
@@ -254,38 +242,38 @@ public class Alter {
         }
     }
 
-    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
-                                            EditLog editLog) throws DdlException {
+    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
+            throws DdlException {
         final MaterializedView.MvRefreshScheme oldRefreshScheme = materializedView.getRefreshScheme();
         final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
         final String refreshType = refreshSchemeDesc.getType().name();
+
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             throw new DdlException("unsupported change to SYNC refresh type");
         }
-        LocalDateTime startTime = null;
-        long step = 0;
-        TimestampArithmeticExpr.TimeUnit timeUnit = null;
+
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
-            startTime = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getStartTime();
-            step = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getStep();
-            timeUnit = ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getTimeUnit();
-            newMvRefreshScheme.setStartTime(startTime);
-            newMvRefreshScheme.setStep(step);
-            newMvRefreshScheme.setTimeUnit(timeUnit);
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = new MaterializedView.AsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            asyncRefreshContext.setStep(asyncRefreshSchemeDesc.getStep());
+            asyncRefreshContext.setTimeUnit(asyncRefreshSchemeDesc.getTimeUnit());
+            newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
         }
+
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
         newMvRefreshScheme.setType(newRefreshType);
         newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
         materializedView.setRefreshScheme(newMvRefreshScheme);
         final ChangeMaterializedViewRefreshSchemeLog log =
-                new ChangeMaterializedViewRefreshSchemeLog(materializedView.getId(), materializedView.getDbId(),
-                        newRefreshType, startTime, step, timeUnit);
+                new ChangeMaterializedViewRefreshSchemeLog(materializedView, newMvRefreshScheme);
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         editLog.logMvChangeRefreshScheme(log);
     }
 
-    private void processRenameMaterializedView(String oldMvName, String newMvName, Database db, MaterializedView materializedView,
-                           EditLog editLog) throws DdlException {
+    private void processRenameMaterializedView(String oldMvName, String newMvName, Database db,
+                                               MaterializedView materializedView) throws DdlException {
         if (oldMvName.equals(newMvName)) {
             throw new DdlException("Same materialized view name");
         }
@@ -293,11 +281,10 @@ public class Alter {
             throw new DdlException("Materialized view [" + newMvName + "] is already used");
         }
         materializedView.setName(newMvName);
-        db.dropTable(oldMvName);
         db.createTable(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
-                new RenameMaterializedViewLog(materializedView.getId(), materializedView.getDbId(), oldMvName,
-                        newMvName);
+                new RenameMaterializedViewLog(materializedView, oldMvName, newMvName);
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         editLog.logMvRename(renameMaterializedViewLog);
     }
 
@@ -310,11 +297,9 @@ public class Alter {
         db.writeLock();
         try {
             MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-            String oldMaterializedViewName = oldMaterializedView.getName();
-            db.dropTable(oldMaterializedViewName);
             oldMaterializedView.setName(newMaterializedViewName);
             db.createTable(oldMaterializedView);
-            LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedViewName,
+            LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                     newMaterializedViewName, oldMaterializedView.getId());
         } finally {
             db.writeUnlock();
@@ -334,18 +319,15 @@ public class Alter {
             newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
             final RefreshType refreshType = log.getRefreshType();
-            final LocalDateTime startTime = log.getStartTime();
-            final long step = log.getStep();
-            final TimestampArithmeticExpr.TimeUnit timeUnit = log.getTimeUnit();
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             newMvRefreshScheme.setType(refreshType);
-            newMvRefreshScheme.setStartTime(startTime);
-            newMvRefreshScheme.setStep(step);
-            newMvRefreshScheme.setTimeUnit(timeUnit);
+            newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "replay materialized view [{}]'s refresh type to {}, start time to {}, " +
                             "interval step to {}, time unit to {}, id: {}",
-                    oldMaterializedView.getName(), refreshType.name(), startTime, step, timeUnit.toString(), id);
+                    oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
+                    asyncRefreshContext.getStep(), asyncRefreshContext.getTimeUnit(), id);
         } finally {
             db.writeUnlock();
         }

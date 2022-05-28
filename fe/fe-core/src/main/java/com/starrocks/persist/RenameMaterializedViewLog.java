@@ -2,6 +2,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -24,13 +25,11 @@ public class RenameMaterializedViewLog implements Writable {
     @SerializedName(value = "newMaterializedViewName")
     private String newMaterializedViewName;
 
-    public RenameMaterializedViewLog() {
-    }
-
-    public RenameMaterializedViewLog(long id, long dbId, String oldMaterializedViewName,
+    public RenameMaterializedViewLog(MaterializedView materializedView, String oldMaterializedViewName,
                                      String newMaterializedViewName) {
-        this.id = id;
-        this.dbId = dbId;
+
+        this.id = materializedView.getId();
+        this.dbId = materializedView.getDbId();
         this.oldMaterializedViewName = oldMaterializedViewName;
         this.newMaterializedViewName = newMaterializedViewName;
     }
