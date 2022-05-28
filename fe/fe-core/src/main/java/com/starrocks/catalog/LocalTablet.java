@@ -149,6 +149,10 @@ public class LocalTablet extends Tablet {
         return this.replicas;
     }
 
+    public Replica getSingleReplica() {
+        return replicas.get(0);
+    }
+
     @Override
     public Set<Long> getBackendIds() {
         Set<Long> beIds = Sets.newHashSet();
