@@ -358,10 +358,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 modColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
-        // TODO(mofei) support it
-        if (modColumn.getType().isJsonType() && olapTable.getKeysType() != KeysType.DUP_KEYS) {
-            throw new DdlException(modColumn.getType() + " must be used in duplicate key");
-        }
 
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -654,9 +650,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
         }
 
-        if (newColumn.getType().isJsonType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + " must be used in duplicate key");
-        }
 
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
