@@ -83,8 +83,6 @@ public:
 
     void load_data_dirs(const std::vector<DataDir*>& stores);
 
-    Cache* index_stream_lru_cache() { return _index_stream_lru_cache; }
-
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
 
@@ -283,8 +281,6 @@ private:
     uint32_t _available_storage_medium_type_count;
 
     bool _is_all_cluster_id_exist;
-
-    Cache* _index_stream_lru_cache = nullptr;
 
     std::mutex _gc_mutex;
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func

@@ -152,8 +152,6 @@ Status StorageEngine::_open() {
 
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
-    _index_stream_lru_cache = new_lru_cache(config::index_stream_cache_capacity);
-
     starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
@@ -514,8 +512,6 @@ void StorageEngine::stop() {
         }
         _store_map.clear();
     }
-
-    SAFE_DELETE(_index_stream_lru_cache);
 
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
