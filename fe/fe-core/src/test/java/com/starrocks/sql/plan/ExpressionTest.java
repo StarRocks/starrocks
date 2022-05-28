@@ -813,7 +813,7 @@ public class ExpressionTest extends PlanTestBase {
         String sql232 =
                 "select case k1 when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col232 from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql232),
-                "CASE CAST(1: k1 AS VARCHAR(4)) WHEN substr(9: k7, 2, 1) THEN '2' WHEN '1' THEN 'a' WHEN '0' THEN '3' ELSE '0' END"));
+                "CASE CAST(1: k1 AS VARCHAR) WHEN substr(9: k7, 2, 1) THEN '2' WHEN '1' THEN 'a' WHEN '0' THEN '3' ELSE '0' END"));
 
         // 2.4 when expr has true but not equals case expr
         String sql24 = "select case 10 when true then 'a' when 2 then 'b' else 'other' end as col2;";

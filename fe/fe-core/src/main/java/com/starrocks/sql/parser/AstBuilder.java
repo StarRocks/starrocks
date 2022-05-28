@@ -2168,7 +2168,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitArrayConstructor(StarRocksParser.ArrayConstructorContext context) {
         if (context.arrayType() != null) {
             return new ArrayExpr(
-                    new ArrayType((Type) visit(context.arrayType().type())),
+                    new ArrayType(getType(context.arrayType().type())),
                     visit(context.expression(), Expr.class));
         }
 
@@ -2637,11 +2637,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return type;
         } else if (context.VARCHAR() != null) {
             ScalarType type = ScalarType.createVarcharType(length);
-            type.setAssignedStrLenInColDefinition();
+            if (length != -1) {
+                type.setAssignedStrLenInColDefinition();
+            }
             return type;
         } else if (context.CHAR() != null) {
             ScalarType type = ScalarType.createCharType(length);
-            type.setAssignedStrLenInColDefinition();
+            if (length != -1) {
+                type.setAssignedStrLenInColDefinition();
+            }
             return type;
         } else if (context.SIGNED() != null) {
             return Type.INT;
