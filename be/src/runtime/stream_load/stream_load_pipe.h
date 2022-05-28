@@ -107,7 +107,7 @@ public:
             DCHECK(_finished);
             return Status::EndOfFile("all data has been read");
         }
-        auto buf = _buf_queue.front();
+        auto& buf = _buf_queue.front();
         _buf_queue.pop_front();
         _buffered_bytes -= buf->limit;
         _put_cond.notify_one();
