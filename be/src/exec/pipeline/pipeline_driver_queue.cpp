@@ -102,6 +102,8 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
 }
 
 size_t QuerySharedDriverQueue::size() const {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
     size_t size = 0;
     for (const auto& sub_queue : _queues) {
         size += sub_queue.size();
@@ -110,6 +112,8 @@ size_t QuerySharedDriverQueue::size() const {
 }
 
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
 }
 
@@ -288,6 +292,9 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
 }
 
 size_t DriverQueueWithWorkGroup::size() const {
+    // TODO: reduce the lock scope
+    std::unique_lock<std::mutex> lock(_global_mutex);
+
     size_t size = 0;
     for (auto wg : _ready_wgs) {
         size += wg->driver_queue()->size();
