@@ -123,7 +123,7 @@ private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
     int64_t _level_time_slices[QUEUE_SIZE];
 
-    std::mutex _global_mutex;
+    mutable std::mutex _global_mutex;
     std::condition_variable _cv;
     bool _is_closed = false;
 };
@@ -210,7 +210,7 @@ private:
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroup* wg);
 
-    std::mutex _global_mutex;
+    mutable std::mutex _global_mutex;
     std::condition_variable _cv;
     // _ready_wgs contains the workgroups which include the drivers need to be run.
     std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
