@@ -237,6 +237,28 @@ public class WorkGroupStmtTest {
     }
 
     @Test
+    public void testCreateDResourceGroupWithUnknownProperty() throws Exception {
+        String sql = "create resource group rg_unknown\n" +
+                "to\n" +
+                "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
+                "    (user='rg1_user4')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'normal', \n" +
+                "    'unknown' = 'unknown'" +
+                ");";
+        try {
+            starRocksAssert.executeWorkGroupDdlSql(sql);
+            Assert.fail("should throw error");
+        } catch (Exception e) {
+            Assert.assertEquals("Unknown property: unknown", e.getMessage());
+        }
+    }
+
+
+    @Test
     public void testAlterResourceGroupDropManyClassifiers() throws Exception {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
