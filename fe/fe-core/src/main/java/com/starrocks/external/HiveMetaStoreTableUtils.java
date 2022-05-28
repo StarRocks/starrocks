@@ -11,6 +11,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorDatabaseId;
@@ -108,7 +109,7 @@ public class HiveMetaStoreTableUtils {
         return allHiveColumns;
     }
 
-    public static ScalarType convertColumnType(String hiveType) throws DdlException {
+    public static Type convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         PrimitiveType primitiveType;
         switch (typeUpperCase) {
@@ -153,6 +154,11 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
+            case "ARRAY":
+                Type type = Utils.convertToArrayType(hiveType);
+                if (type.isArrayType()) {
+                    return type;
+                }
             default:
                 throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
         }
@@ -177,7 +183,7 @@ public class HiveMetaStoreTableUtils {
         List<Column> fullSchema = Lists.newArrayList();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            ScalarType srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
         }
