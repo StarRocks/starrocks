@@ -577,7 +577,7 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     public ConcurrentHashMap<Long, Database> getIdToDb() {
-        return idToDb;
+        return localMetastore.getIdToDb();
     }
 
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
