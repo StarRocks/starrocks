@@ -15,6 +15,7 @@ public class CloneOperator extends ScalarOperator {
     public CloneOperator(ScalarOperator argument) {
         super(OperatorType.CLONE, argument.getType());
         arguments = Lists.newArrayList(argument);
+        setType(argument.getType());
     }
 
     @Override

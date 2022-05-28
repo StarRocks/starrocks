@@ -12,6 +12,7 @@ public class CloneExpr extends Expr {
     public CloneExpr(Expr child) {
         super();
         this.addChild(child);
+        setType(child.getType());
     }
 
     @Override
