@@ -160,9 +160,8 @@ struct SortParameters {
     }
 };
 
-static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy,
-                     PrimitiveType data_type, int num_chunks, int num_columns,
-                     SortParameters params = SortParameters()) {
+static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, PrimitiveType data_type, int num_chunks,
+                     int num_columns, SortParameters params = SortParameters()) {
     // state.PauseTiming();
     ChunkSorterBase suite;
     suite.SetUp();
@@ -219,14 +218,13 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
         }
         case MergeSort: {
             sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                              limit_rows, params.max_buffered_chunks));
+                                              limit_rows, TTopNType::ROW_NUMBER, params.max_buffered_chunks));
             expected_rows = limit_rows;
             break;
         }
         default:
             ASSERT_TRUE(false) << "unknown algorithm " << (int)sorter_algo;
         }
-        sorter->set_compare_strategy(strategy);
 
         int64_t iteration_data_size = 0;
         for (int i = 0; i < num_chunks; i++) {
@@ -404,57 +402,48 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
 
 // Sort full data: ORDER BY
 static void BM_fullsort_notnull(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1));
+    do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1));
 }
 static void BM_fullsort_nullable(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
+    do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_nullable(true));
 }
 static void BM_fullsort_varchar_column_incr(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnInc, TYPE_VARCHAR, state.range(0), state.range(1));
+    do_bench(state, FullSort, TYPE_VARCHAR, state.range(0), state.range(1));
 }
 
 // Low cardinality
 static void BM_fullsort_low_card_colinc(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), SortParameters::with_low_card(true));
+    do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_low_card(true));
 }
 static void BM_fullsort_low_card_nullable(benchmark::State& state) {
     SortParameters params = SortParameters::with_low_card(true);
     params.nullable = true;
-    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), params);
-}
-
-static void BM_heapsort_row_wise(benchmark::State& state) {
-    do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1));
-}
-static void BM_mergesort_row_wise(benchmark::State& state) {
-    do_bench(state, MergeSort, RowWise, TYPE_INT, state.range(0), state.range(1));
+    do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1), params);
 }
 
 // Sort partial data: ORDER BY xxx LIMIT
 static void BM_topn_limit_heapsort(benchmark::State& state) {
-    do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1),
-             SortParameters::with_limit(state.range(2)));
+    do_bench(state, HeapSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_limit(state.range(2)));
 }
 static void BM_topn_limit_mergesort_notnull(benchmark::State& state) {
-    do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1),
-             SortParameters::with_limit(state.range(2)));
+    do_bench(state, MergeSort, TYPE_INT, state.range(0), state.range(1), SortParameters::with_limit(state.range(2)));
 }
 static void BM_topn_limit_mergesort_nullable(benchmark::State& state) {
     SortParameters params = SortParameters::with_limit(state.range(2));
     params.nullable = true;
-    do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), params);
+    do_bench(state, MergeSort, TYPE_INT, state.range(0), state.range(1), params);
 }
 static void BM_topn_buffered_chunks(benchmark::State& state) {
     SortParameters params;
     params.max_buffered_chunks = state.range(0);
     params.limit = state.range(1);
-    do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
+    do_bench(state, MergeSort, TYPE_INT, 4096, 2, params);
 }
 static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
     SortParameters params;
     params.limit = state.range(1);
     params.max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(params.limit);
-    do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
+    do_bench(state, MergeSort, TYPE_INT, 4096, 2, params);
 }
 
 // Merge sorted runs
