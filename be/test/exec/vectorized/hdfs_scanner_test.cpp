@@ -25,6 +25,48 @@ struct SlotDesc {
 class HdfsScannerTest : public ::testing::Test {
 public:
     void SetUp() override {
+        default_parquet_descs = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                 {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                 {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                 {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+                                 {""}};
+
+        mtypes_orc_descs = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                            {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
+                            {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
+                            {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col_tinyint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+                            {"col_smallint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_SMALLINT)},
+                            {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                            {"col_bigint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                            {"col_largeint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                            {"col0_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col0_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"col1_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                            {"PART_x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                            {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                            {""}};
+
+        padding_char_varchar_desc = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+                                     {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                     {""}};
+                                     
+        string_key_value_orc_desc = {{"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                     {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                     {""}};
+
         _create_runtime_profile();
         _create_runtime_state("");
     }
@@ -39,6 +81,10 @@ protected:
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
 
+    std::vector<SlotDesc> default_parquet_descs;
+    std::vector<SlotDesc> mtypes_orc_descs;
+    std::vector<SlotDesc> padding_char_varchar_desc;
+    std::vector<SlotDesc> string_key_value_orc_desc;
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -124,20 +170,13 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
 
 // ========================= PARQUET SCANNER ============================
 
-static SlotDesc default_parquet_descs[] = {
-        {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-        {""}};
-
 std::string default_parquet_file = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
 
 TEST_F(HdfsScannerTest, TestParquetInit) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
-    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs.data());
     auto* param = _create_param(default_parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
@@ -148,7 +187,7 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
-    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs.data());
     auto* param = _create_param(default_parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
@@ -162,7 +201,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
     auto* range = _create_scan_range(default_parquet_file, 4, 1024);
-    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs.data());
     auto* param = _create_param(default_parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
@@ -304,34 +343,6 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         EXPECT_EQ(records, exp);                                                       \
     } while (0)
 
-static SlotDesc mtypes_orc_descs[] = {
-        {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
-        {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_tinyint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-        {"col_smallint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_SMALLINT)},
-        {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"col_bigint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_largeint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col0_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"PART_x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {""}};
 std::string mtypes_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
 
 static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -342,7 +353,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs.data());
     auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
@@ -408,7 +419,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs.data());
     auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
@@ -441,7 +452,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs.data());
     auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
@@ -474,7 +485,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs.data());
     auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
@@ -503,10 +514,6 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc string_key_value_orc_desc[] = {
-        {"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {""}};
 std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
 
 /**
@@ -542,7 +549,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(string_key_value_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(string_key_value_orc_desc);
+    auto* tuple_desc = _create_tuple_desc(string_key_value_orc_desc.data());
     auto* param = _create_param(string_key_value_orc_file, range, tuple_desc);
 
     // all in stripe1
@@ -684,9 +691,6 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
-                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-                                               {""}};
 std::string padding_char_varchar_orc_file = "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
 
 /**
@@ -750,7 +754,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(padding_char_varchar_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(padding_char_varchar_desc);
+    auto* tuple_desc = _create_tuple_desc(padding_char_varchar_desc.data());
     auto* param = _create_param(padding_char_varchar_orc_file, range, tuple_desc);
 
     // c0 <= "hello"

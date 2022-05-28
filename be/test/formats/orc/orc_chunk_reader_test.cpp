@@ -18,12 +18,30 @@
 
 namespace starrocks::vectorized {
 
+struct SlotDesc {
+    string name;
+    TypeDescriptor type;
+};
+
 class OrcChunkReaderTest : public testing::Test {
 public:
-    void SetUp() override { _create_runtime_state(); }
+    void SetUp() override {
+        _create_runtime_state();
+        default_slot_descs = {
+                {"lo_custkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+                {"lo_orderdate", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                {"lo_orderkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                {"lo_orderpriority", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                {"lo_partkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+                {"lo_suppkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                {""},
+        };
+    }
 
 protected:
     void _create_runtime_state();
+
+    std::vector<SlotDesc> default_slot_descs;
     ObjectPool _pool;
     std::shared_ptr<RuntimeState> _runtime_state;
 };
@@ -37,11 +55,6 @@ void OrcChunkReaderTest::_create_runtime_state() {
     runtime_state->init_instance_mem_tracker();
     _runtime_state = runtime_state;
 }
-
-struct SlotDesc {
-    string name;
-    TypeDescriptor type;
-};
 
 void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
     TDescriptorTableBuilder table_desc_builder;
@@ -162,16 +175,6 @@ static const uint64_t default_row_group_size = 1000;
 }
 */
 
-SlotDesc default_slot_descs[] = {
-        {"lo_custkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-        {"lo_orderdate", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"lo_orderkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"lo_orderpriority", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"lo_partkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-        {"lo_suppkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {""},
-};
-
 static uint64_t get_hit_rows(OrcChunkReader* reader) {
     uint64_t records = 0;
     for (;;) {
@@ -194,7 +197,7 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 
 TEST_F(OrcChunkReaderTest, Normal) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto input_stream = orc::readLocalFile(default_orc_file);
     reader.init(std::move(input_stream));
@@ -217,7 +220,7 @@ public:
 
 TEST_F(OrcChunkReaderTest, SkipStripe) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     reader.set_row_reader_filter(filter);
@@ -345,7 +348,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 
 TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
@@ -366,7 +369,7 @@ TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate == 200000
@@ -394,7 +397,7 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsInPred) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
@@ -447,7 +450,7 @@ private:
 
 TEST_F(OrcChunkReaderTest, SkipRowGroups) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs.data());
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     reader.set_row_reader_filter(filter);
