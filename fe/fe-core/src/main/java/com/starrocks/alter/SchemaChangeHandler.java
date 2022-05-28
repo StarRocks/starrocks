@@ -1075,6 +1075,33 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("No key column left. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
             }
 
+            // 4. check distribution key:
+            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
+                for (Column distributionCol : distributionColumns) {
+                    boolean found = false;
+                    for (Column alterColumn : alterSchema) {
+                        if (alterColumn.nameEquals(distributionCol.getName(), true)) {
+                            // 3.1 distribution column cannot be modified
+                            if (!alterColumn.equals(distributionCol)) {
+                                throw new DdlException("Can not modify distribution column["
+                                        + distributionCol.getName() + "]. index["
+                                        + olapTable.getIndexNameById(alterIndexId) + "]");
+                            }
+                            found = true;
+                            break;
+                        }
+                    } // end for alterColumns
+
+                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
+                        // 2.2 distribution column cannot be deleted.
+                        throw new DdlException("Distribution column[" + distributionCol.getName()
+                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                    }
+                } // end for distributionCols
+            }
+
             // 2. check compatible
             for (Column alterColumn : alterSchema) {
                 for (Column oriColumn : originSchema) {
@@ -1117,32 +1144,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 } // end for partitionColumns
             }
 
-            // 4. check distribution key:
-            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
-                for (Column distributionCol : distributionColumns) {
-                    boolean found = false;
-                    for (Column alterColumn : alterSchema) {
-                        if (alterColumn.nameEquals(distributionCol.getName(), true)) {
-                            // 3.1 distribution column cannot be modified
-                            if (!alterColumn.equals(distributionCol)) {
-                                throw new DdlException("Can not modify distribution column["
-                                        + distributionCol.getName() + "]. index["
-                                        + olapTable.getIndexNameById(alterIndexId) + "]");
-                            }
-                            found = true;
-                            break;
-                        }
-                    } // end for alterColumns
 
-                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                        // 2.2 distribution column cannot be deleted.
-                        throw new DdlException("Distribution column[" + distributionCol.getName()
-                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                    }
-                } // end for distributionCols
-            }
 
             // 5. calc short key
             short newShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,

@@ -122,7 +122,7 @@ public class PushTask extends AgentTask {
         if (taskType == TTaskType.REALTIME_PUSH) {
             request.setPartition_id(partitionId);
             request.setTransaction_id(transactionId);
-            request.setTime_zone(timeZone);
+            request.setTimezone(timeZone);
         }
         request.setIs_schema_changing(isSchemaChanging);
         switch (pushType) {

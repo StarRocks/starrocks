@@ -36,7 +36,9 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushR
     fragment_params.protocol_version = InternalServiceVersion::V1;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    query_globals.__set_time_zone(request.time_zone);
+    if (request.__isset.timezone) {
+        query_globals.__set_time_zone(request.timezone);
+    }
     _runtime_state =
             std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
                                            query_options, query_globals, ExecEnv::GetInstance());
