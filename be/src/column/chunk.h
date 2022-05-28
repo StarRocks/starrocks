@@ -261,7 +261,7 @@ inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
 }
 
 inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
-    DCHECK(is_slot_exist(slot_id));
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
     size_t idx = _slot_id_to_index[slot_id];
     return _columns[idx];
 }
