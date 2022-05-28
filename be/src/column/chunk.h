@@ -166,8 +166,9 @@ public:
     // Remove rows from this chunk according to the vector |selection|.
     // The n-th row will be removed if selection[n] is zero.
     // The size of |selection| must be equal to the number of rows.
-    // Return the number of rows after filter.
-    size_t filter(const Buffer<uint8_t>& selection);
+    // @param force whether check zero-count of filter, skip the filter procedure if no data to filter
+    // @return the number of rows after filter.
+    size_t filter(const Buffer<uint8_t>& selection, bool force = false);
 
     // Return the number of rows after filter.
     size_t filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
