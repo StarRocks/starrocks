@@ -153,6 +153,15 @@ public class StarOSAgent {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
             } else {
+                // get workerId from staros
+                try {
+                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                    workerId = workerInfo.getWorkerId();
+                } catch (StarClientException e2) {
+                    LOG.warn(e2);
+                    System.exit(-1);
+                }
+
                 workerToId.put(workerIpPort, workerId);
                 workerToBackend.put(workerId, backendId);
                 LOG.info("worker {} already added in starMgr", workerId);
