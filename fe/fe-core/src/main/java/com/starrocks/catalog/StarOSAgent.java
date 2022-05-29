@@ -144,7 +144,6 @@ public class StarOSAgent {
             return;
         }
         if (workerToId.containsKey(workerIpPort)) {
-            LOG.info("workerToId contains {}, workerId is {}", workerIpPort, workerToId.get(workerIpPort));
             return;
         }
         long workerId = -1;

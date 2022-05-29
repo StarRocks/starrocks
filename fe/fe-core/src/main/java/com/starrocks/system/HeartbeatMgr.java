@@ -185,10 +185,9 @@ public class HeartbeatMgr extends MasterDaemon {
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
                         }
                     } else {
-                        if (isChanged) {
+                        if (Config.integrate_staros) {
                             // addWorker
                             String starletHost = be.getHost() + ":" + be.getStarletPort();
-                            LOG.info("starletHost is {}", starletHost);
                             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), starletHost);
                         }
                     }
