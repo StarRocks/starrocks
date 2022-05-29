@@ -1023,9 +1023,6 @@ public class TabletScheduler extends MasterDaemon {
                 replica.getBackendId());
 
         Catalog.getCurrentCatalog().getEditLog().logDeleteReplica(info);
-
-        LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {}",
-                tabletCtx.getTabletId(), replica.getBackendId(), reason, force);
     }
 
     private void sendDeleteReplicaTask(long backendId, long tabletId, int schemaHash) {
@@ -1240,7 +1237,7 @@ public class TabletScheduler extends MasterDaemon {
         long tabletId = cloneTask.getTabletId();
         TabletSchedCtx tabletCtx = takeRunningTablets(tabletId);
         if (tabletCtx == null) {
-            LOG.warn("tablet info does not exist: {}", tabletId);
+            LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, cloneTask.getBackendId());
             // tablet does not exist, no need to keep task.
             return true;
         }

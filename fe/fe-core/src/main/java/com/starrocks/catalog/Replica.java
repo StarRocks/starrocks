@@ -121,7 +121,8 @@ public class Replica implements Writable {
     // we should ensure that all txns on this replicas are finished.
     private long watermarkTxnId = -1;
 
-    public Replica() {}
+    public Replica() {
+    }
 
     // for rollup
     // the new replica's version is -1 and last failed version is -1
@@ -256,7 +257,7 @@ public class Replica implements Writable {
     }
 
     public synchronized void updateRowCount(long newVersion, long newDataSize,
-                                               long newRowCount) {
+                                            long newRowCount) {
         updateReplicaInfo(newVersion, this.lastFailedVersion,
                 this.lastSuccessVersion, newDataSize, newRowCount);
     }
@@ -347,8 +348,8 @@ public class Replica implements Writable {
 
         // TODO: this case is unknown, add log to observe
         if (this.version > lastFailedVersion && lastFailedVersion > 0) {
-            LOG.debug("current version {} is larger than last failed version {}, "
-                            + "maybe a fatal error or be report version, print a stack here ",
+            LOG.info("current version {} is larger than last failed version {}, "
+                    + "maybe a fatal error or be report version, print a stack here ",
                     this.version, lastFailedVersion, new Exception());
         }
 
