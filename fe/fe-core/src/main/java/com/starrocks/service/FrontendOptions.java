@@ -39,13 +39,12 @@ import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 public class FrontendOptions {
     
-    public enum StartFeSpecifiedHostType {
+    public enum HostType {
         FQDN,
         IP,
         NOT_SPECIFIED,
@@ -76,37 +75,35 @@ public class FrontendOptions {
             return;
         }
 
-        List<InetAddress> hosts = new ArrayList<>();
-        NetUtils.getHosts(hosts);
+        List<InetAddress> hosts = NetUtils.getHosts();
         if (hosts.isEmpty()) {
             LOG.error("fail to get localhost");
             System.exit(-1);
         }
 
-        StartFeSpecifiedHostType specifiedHostType = StartFeSpecifiedHostType.NOT_SPECIFIED;
+        HostType specifiedHostType = HostType.NOT_SPECIFIED;
 
         for (int i = 0; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-hostType")) {
+            if (args[i].equalsIgnoreCase("-host_type")) {
                 if (i + 1 >= args.length) {
-                    System.out.println("-hostType need parameter FQDN or IP");
+                    System.out.println("-host_type need parameter FQDN or IP");
                     System.exit(-1);
                 }
                 String hostType = args[i + 1];
                 if (hostType.equalsIgnoreCase(HOST_TYPE_IP)) {
-                    specifiedHostType = StartFeSpecifiedHostType.IP;
+                    specifiedHostType = HostType.IP;
                 }
-
                 if (hostType.equalsIgnoreCase(HOST_TYPE_FQDN)) {
-                    specifiedHostType = StartFeSpecifiedHostType.FQDN;
+                    specifiedHostType = HostType.FQDN;
                 }
             }   
         } 
 
-        if (specifiedHostType.equals(StartFeSpecifiedHostType.FQDN)) {
+        if (specifiedHostType.equals(HostType.FQDN)) {
             initAddrUseFqdn(hosts);
             return;
         }
-        if (specifiedHostType.equals(StartFeSpecifiedHostType.IP)) {
+        if (specifiedHostType.equals(HostType.IP)) {
             initAddrUseIp(hosts);
             return;
         }
@@ -116,7 +113,7 @@ public class FrontendOptions {
             initAddrUseFqdn(hosts);
             return;
         }
-
+        
         Properties prop = new Properties();
         String hostType;
         try (FileInputStream in = new FileInputStream(roleFile)) {
@@ -133,7 +130,8 @@ public class FrontendOptions {
         initAddrUseFqdn(hosts);
     }
 
-    private static void initAddrUseFqdn(List<InetAddress> hosts) throws UnknownHostException {
+    @VisibleForTesting
+    static void initAddrUseFqdn(List<InetAddress> hosts) throws UnknownHostException {
         useFqdn = true;
         InetAddress uncheckedLocalAddr = InetAddress.getLocalHost();
         if (null == uncheckedLocalAddr) {
@@ -160,7 +158,8 @@ public class FrontendOptions {
         }
     }
 
-    private static void initAddrUseIp(List<InetAddress> hosts) {
+    @VisibleForTesting
+    static void initAddrUseIp(List<InetAddress> hosts) {
         useFqdn = false;
         analyzePriorityCidrs();
         // if not set frontend_address, get a non-loopback ip
@@ -199,7 +198,7 @@ public class FrontendOptions {
         try {
             Storage storage = new Storage(Config.meta_dir + "/image");
             String hostType = useFqdn ? HOST_TYPE_FQDN : HOST_TYPE_IP;
-            storage.writeFeStartFeHostTypeAndHost(hostType, getLocalHostAddress());
+            storage.writeFeStartFeHostType(hostType);
         } catch (IOException e) {
             LOG.error("fail to write fe start host type:" + e.getMessage());
             System.exit(-1);

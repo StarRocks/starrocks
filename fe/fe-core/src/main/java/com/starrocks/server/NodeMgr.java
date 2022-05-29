@@ -515,7 +515,8 @@ public class NodeMgr {
                 }
                 helpers = args[i + 1];
                 if (!helpers.contains(":")) {
-                    System.out.println("helper's format seems was wrong [" + helpers + "]");
+                    System.out.print("helper's format seems was wrong [" + helpers + "]");
+                    System.out.println(", eg. host:port,host:port");
                     System.exit(-1);
                 }
                 break;

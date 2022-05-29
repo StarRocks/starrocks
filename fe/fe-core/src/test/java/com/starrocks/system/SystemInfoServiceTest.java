@@ -64,10 +64,23 @@ public class SystemInfoServiceTest {
     }
     
     @Test
-    public void testUpdateBackendHost() throws Exception {
+    public void testUpdateBackendHostWithOneBe() throws Exception {
         mockFunc();
         Backend be = new Backend(100, "127.0.0.1", 1000);
         service.addBackend(be);
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
+        service.modifyBackendHost(clause);    
+        Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
+        Assert.assertNotNull(backend);
+    }
+
+    @Test
+    public void testUpdateBackendHostWithMoreBe() throws Exception {
+        mockFunc();
+        Backend be1 = new Backend(100, "127.0.0.1", 1000);
+        Backend be2 = new Backend(101, "127.0.0.1", 1001);
+        service.addBackend(be1);
+        service.addBackend(be2);
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
         service.modifyBackendHost(clause);    
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);

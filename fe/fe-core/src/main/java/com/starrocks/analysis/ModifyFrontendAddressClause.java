@@ -9,8 +9,6 @@ import com.starrocks.sql.ast.AstVisitor;
 public class ModifyFrontendAddressClause extends FrontendClause {
 
     protected String srcHost;
-    // Although the FQDN is declared here, 
-    // the value of this field may still be an IP
     protected String destHost;
     
     public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
