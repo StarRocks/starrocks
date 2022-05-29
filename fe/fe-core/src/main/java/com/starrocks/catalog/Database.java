@@ -73,8 +73,10 @@ public class Database extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Database.class);
 
     // empirical value.
-    // assume that the time a lock is held by thread is less then 100ms
+    // assume that the time a lock is held by thread is less than 100ms
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
+    public static final long SLOW_LOCK_MS = 3000L;
+    public static final long SLOW_LOCK_LOG_EVERY_MS = 3000L;
 
     private long id;
     private String fullQualifiedName;
@@ -91,6 +93,8 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
 
     private volatile long replicaQuotaSize;
+
+    private long lastSlowLockLogTime = 0;
 
     public enum DbState {
         NORMAL, LINK, MOVE
@@ -120,7 +124,14 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void readLock() {
+        long startMs = System.nanoTime() / 1000000;
         this.rwLock.readLock().lock();
+        long endMs = System.nanoTime() / 1000000;
+        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
+            lastSlowLockLogTime = endMs;
+            LOG.warn("slow read lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
+                    new Exception());
+        }
     }
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
@@ -137,7 +148,14 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void writeLock() {
+        long startMs = System.nanoTime() / 1000000;
         this.rwLock.writeLock().lock();
+        long endMs = System.nanoTime() / 1000000;
+        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
+            lastSlowLockLogTime = endMs;
+            LOG.warn("slow write lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
+                    new Exception());
+        }
     }
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
