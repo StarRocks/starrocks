@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshTableStatement;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
@@ -206,6 +207,12 @@ public class Analyzer {
         @Override
         public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshTableStatement(RefreshTableStatement statement, ConnectContext context) {
+            RefreshTableStatementAnalyzer.analyze(statement, context);
             return null;
         }
     }
