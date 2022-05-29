@@ -11,8 +11,6 @@ import com.starrocks.sql.ast.AstVisitor;
 public class ModifyBackendAddressClause extends BackendClause {
 
     protected String srcHost;
-    // Although the FQDN is declared here, 
-    // the value of this field may still be an IP
     protected String destHost;
     
     protected ModifyBackendAddressClause(List<String> hostPorts) {

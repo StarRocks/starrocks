@@ -210,12 +210,10 @@ public class Storage {
         }
     }
 
-    public void writeFeStartFeHostTypeAndHost(String hostType, String host) throws IOException {
+    public void writeFeStartFeHostType(String hostType) throws IOException {
         Preconditions.checkState(!Strings.isNullOrEmpty(hostType));
-        Preconditions.checkState(!Strings.isNullOrEmpty(host));
         Properties properties = new Properties();
         properties.setProperty("hostType", hostType);
-        properties.setProperty("host", host);
         writeFrontendRoleAndNodeName(this.role, this.nodeName);
         try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
             file.seek(file.length());
@@ -223,7 +221,6 @@ public class Storage {
                 properties.store(out, null);
                 file.setLength(out.getChannel().position());
             }
-            file.close();
         }
     }
 

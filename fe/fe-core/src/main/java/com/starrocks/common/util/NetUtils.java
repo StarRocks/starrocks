@@ -30,14 +30,15 @@ import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
 public class NetUtils {
 
-    public static void getHosts(List<InetAddress> hosts) {
+    public static List<InetAddress> getHosts() {
         Enumeration<NetworkInterface> n = null;
-
+        List<InetAddress> hosts = new ArrayList<>();
         try {
             n = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e1) {
@@ -52,6 +53,7 @@ public class NetUtils {
                 hosts.add(addr);
             }
         }
+        return hosts;
     }
 
     public static boolean isPortUsing(String host, int port) throws UnknownHostException {

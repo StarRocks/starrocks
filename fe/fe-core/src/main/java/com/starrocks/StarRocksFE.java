@@ -165,7 +165,7 @@ public class StarRocksFE {
     private static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
-        options.addOption("ht", "hostType", false, "Specify fe start use ip or fqdn");
+        options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");

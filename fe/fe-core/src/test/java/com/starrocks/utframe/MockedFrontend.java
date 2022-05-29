@@ -33,7 +33,6 @@ import com.starrocks.journal.JournalFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.service.FrontendOptions.StartFeSpecifiedHostType;
 
 import mockit.Mock;
 import mockit.MockUp;
