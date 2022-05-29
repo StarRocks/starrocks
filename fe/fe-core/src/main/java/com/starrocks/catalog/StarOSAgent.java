@@ -54,7 +54,7 @@ public class StarOSAgent {
     public List<Long> createShards(int numShards) {
         List<ShardInfo> shardInfos = Lists.newArrayList();
         try {
-            shardInfos = client.createShard(1, numShards);
+            shardInfos = client.createShard(serviceId, numShards);
         } catch (StarClientException e) {
             LOG.warn(e);
             return Lists.newArrayList();
@@ -74,7 +74,7 @@ public class StarOSAgent {
         Set<Long> backendIds = Sets.newHashSet();
         List<ShardInfo> shardInfos = Lists.newArrayList();
         try {
-            shardInfos = client.getShardInfo(1, Lists.newArrayList(shardId));
+            shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
         } catch (StarClientException e) {
             LOG.warn(e);
             return Sets.newHashSet();

@@ -41,7 +41,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int httpPort;
     @SerializedName(value = "brpcPort")
     private int brpcPort;
-    @SerializedName(value = "starletPort")
+
     private int starletPort;
     @SerializedName(value = "version")
     private String version = "";
@@ -126,7 +126,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         bePort = in.readInt();
         httpPort = in.readInt();
         brpcPort = in.readInt();
-        starletPort = in.readInt();
     }
 
 }

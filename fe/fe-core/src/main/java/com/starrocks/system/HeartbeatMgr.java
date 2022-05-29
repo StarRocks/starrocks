@@ -261,13 +261,8 @@ public class HeartbeatMgr extends MasterDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    if (Config.integrate_staros) {
-                        return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, starletPort,
-                                System.currentTimeMillis(), version, cpuCores);
-                    } else {
-                        return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
-                                version, cpuCores);
-                    }
+                    return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, starletPort,
+                            System.currentTimeMillis(), version, cpuCores);
                 } else {
                     return new BackendHbResponse(backendId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
