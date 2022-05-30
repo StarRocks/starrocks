@@ -141,7 +141,7 @@ DROP ANALYZE <ID>;
 
 - `sample_collect_rows`：抽样采集时的抽样行数。
 - `update_interval_sec`：自动定期任务的采集间隔时间，默认为 86400（一天），单位为秒。
-- `collect_interval_sec`：自动定期任务中，检测数据更新的间隔时间，默认为 7200（两小时），单位为秒。自动定期任务执行时，StarRocks 每隔一段时间会检查表中数据是否更新，如果检查到数据更新，且距离上一次采集时间已超过`update_interval_sec`，则 tarRocks 会重新采集统计信息；反之，则 StarRocks 不重新采集统计信息。
+- `collect_interval_sec`：自动定期任务中，检测数据更新的间隔时间，默认为 7200（两小时），单位为秒。自动定期任务执行时，StarRocks 每隔一段时间会检查表中数据是否更新，如果检查到数据更新，且距离上一次采集时间已超过`update_interval_sec`，则 StarRocks 会重新采集统计信息；反之，则 StarRocks 不重新采集统计信息。
 
 ## FE配置项
 
