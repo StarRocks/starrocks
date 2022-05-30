@@ -54,9 +54,7 @@ public class FrontendOptions {
 
     private static final String PRIORITY_CIDR_SEPARATOR = ";";
 
-    public static final String HOST_TYPE_IP = "IP";
-    public static final String HOST_TYPE_FQDN = "FQDN";
-    public static final String HOST_TYPE = "hostType";
+    private static final String HOST_TYPE = "hostType";
     private static final String ROLE_FILE_PATH = "/image/ROLE";
 
     @VisibleForTesting
@@ -89,21 +87,22 @@ public class FrontendOptions {
                     System.out.println("-host_type need parameter FQDN or IP");
                     System.exit(-1);
                 }
-                String hostType = args[i + 1];
-                if (hostType.equalsIgnoreCase(HOST_TYPE_IP)) {
-                    specifiedHostType = HostType.IP;
-                }
-                if (hostType.equalsIgnoreCase(HOST_TYPE_FQDN)) {
-                    specifiedHostType = HostType.FQDN;
+                String inputHostType = args[i + 1];
+                try {
+                    inputHostType = inputHostType.toUpperCase();
+                    specifiedHostType = HostType.valueOf(inputHostType);
+                } catch (Exception e) {
+                    System.out.println("-host_type need parameter FQDN or IP");
+                    System.exit(-1);
                 }
             }   
         } 
 
-        if (specifiedHostType.equals(HostType.FQDN)) {
+        if (specifiedHostType == HostType.FQDN) {
             initAddrUseFqdn(hosts);
             return;
         }
-        if (specifiedHostType.equals(HostType.IP)) {
+        if (specifiedHostType == HostType.IP) {
             initAddrUseIp(hosts);
             return;
         }
@@ -115,15 +114,15 @@ public class FrontendOptions {
         }
         
         Properties prop = new Properties();
-        String hostType;
+        String fileStoredHostType;
         try (FileInputStream in = new FileInputStream(roleFile)) {
             prop.load(in);
         } catch (IOException e) {
             LOG.error("failed to read role file");
             System.exit(-1);
         }
-        hostType = prop.getProperty(HOST_TYPE, null);
-        if (null == hostType || hostType.equals(HOST_TYPE_IP)) {
+        fileStoredHostType = prop.getProperty(HOST_TYPE, null);
+        if (null == fileStoredHostType || fileStoredHostType.equals(HostType.IP.toString())) {
             initAddrUseIp(hosts);
             return;
         }
@@ -197,7 +196,7 @@ public class FrontendOptions {
     public static void saveStartType() {
         try {
             Storage storage = new Storage(Config.meta_dir + "/image");
-            String hostType = useFqdn ? HOST_TYPE_FQDN : HOST_TYPE_IP;
+            String hostType = useFqdn ? HostType.FQDN.toString() : HostType.IP.toString();
             storage.writeFeStartFeHostType(hostType);
         } catch (IOException e) {
             LOG.error("fail to write fe start host type:" + e.getMessage());
