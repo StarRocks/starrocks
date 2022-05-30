@@ -121,6 +121,7 @@ private:
 
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _morsel_get_timer = nullptr;
+    RuntimeProfile::Counter* _trigger_scan_timer = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

@@ -52,6 +52,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_max_scan_concurrency));
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _morsel_get_timer = ADD_TIMER(_unique_metrics, "MorselGet");
+    _trigger_scan_timer = ADD_TIMER(_unique_metrics, "TriggerScan");
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -161,7 +162,10 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_get_scan_status());
-    RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
+    {
+        SCOPED_TIMER(_trigger_scan_timer);
+        RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
+    }
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
     }
