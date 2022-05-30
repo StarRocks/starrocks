@@ -303,6 +303,8 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     range.file_type = TFileType::FILE_LOCAL;
     broker_scan_range.ranges.push_back(range);
 
+    TPushReq request;
+    request.__set_desc_tbl(_t_desc_table);
     // data
     // k1_int k2_smallint varchar bigint
     // 0           0       a0      0
@@ -310,7 +312,7 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     // 1           4       a2      6
     PushBrokerReader reader;
     Schema schema = _create_schema();
-    reader.init(broker_scan_range, _t_desc_table);
+    reader.init(broker_scan_range, request);
     ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
 
     // next chunk
