@@ -166,7 +166,7 @@ private:
     jclass _direct_buffer_class;
     jmethodID _direct_buffer_clear;
 
-    std::unique_ptr<JVMClass> _function_states_clazz;
+    JVMClass* _function_states_clazz = nullptr;
 };
 
 // local object reference guard.
