@@ -145,10 +145,10 @@ public abstract class AggregateInfoBase {
 
                 // COUNT(), NDV() and NDV_NO_FINALIZE() are non-nullable. The latter two are used
                 // by compute stats and compute incremental stats, respectively.
-                if (aggExpr.getFnName().getFunction().equals(FunctionSet.COUNT)
-                        || aggExpr.getFnName().getFunction().equals(FunctionSet.NDV)
-                        || aggExpr.getFnName().getFunction().equals(FunctionSet.BITMAP_UNION_INT)
-                        || aggExpr.getFnName().getFunction().equals(FunctionSet.NDV_NO_FINALIZE)) {
+                if (aggExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.COUNT)
+                        || aggExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.NDV)
+                        || aggExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_INT)
+                        || aggExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.NDV_NO_FINALIZE)) {
                     // TODO: Consider making nullability a property of types or of builtin agg fns.
                     // row_number(), rank(), and dense_rank() are non-nullable as well.
                     slotDesc.setIsNullable(false);
