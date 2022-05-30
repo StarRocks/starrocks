@@ -66,7 +66,8 @@ public class TaskManager {
     private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
 
     // Use to concurrency control
-    private final QueryableReentrantLock lock;
+    private final QueryableReentrantLock taskLock;
+    private final QueryableReentrantLock taskRunLock;
 
     private AtomicBoolean isStart = new AtomicBoolean(false);
 
@@ -74,14 +75,15 @@ public class TaskManager {
         manualTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         taskRunManager = new TaskRunManager();
-        lock = new QueryableReentrantLock(true);
+        taskLock = new QueryableReentrantLock(true);
+        taskRunLock = new QueryableReentrantLock(true);
     }
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
             clearUnfinishedTaskRun();
             dispatchScheduler.scheduleAtFixedRate(() -> {
-                if (!tryLock()) {
+                if (!tryTaskRunLock()) {
                     return;
                 }
                 try {
@@ -90,14 +92,14 @@ public class TaskManager {
                 } catch (Exception ex) {
                     LOG.warn("failed to dispatch job.", ex);
                 } finally {
-                    unlock();
+                    taskRunUnlock();
                 }
             }, 0, 1, TimeUnit.SECONDS);
         }
     }
 
     private void clearUnfinishedTaskRun() {
-        if (!tryLock()) {
+        if (!tryTaskRunLock()) {
             return;
         }
         try {
@@ -123,12 +125,13 @@ public class TaskManager {
                 taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
             }
         } finally {
-            unlock();
+            taskRunUnlock();
         }
     }
 
     public long createTask(Task task, boolean isReplay) {
-        if (!tryLock()) {
+        // make sure nameToTaskMap and manualTaskMap consist
+        if (!tryTaskLock()) {
             return GET_TASK_LOCK_FAILED;
         }
         try {
@@ -145,7 +148,7 @@ public class TaskManager {
             }
             return task.getId();
         } finally {
-            unlock();
+            taskUnlock();
         }
     }
 
@@ -158,7 +161,8 @@ public class TaskManager {
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-        if (!tryLock()) {
+        // keep nameToTaskMap and manualTaskMap consist
+        if (!tryTaskLock()) {
             return;
         }
         try {
@@ -176,7 +180,7 @@ public class TaskManager {
                 GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskIdList);
             }
         } finally {
-            unlock();
+            taskUnlock();
         }
         LOG.info("drop tasks:{}", taskIdList);
     }
@@ -192,10 +196,10 @@ public class TaskManager {
         return taskList;
     }
 
-    private boolean tryLock() {
+    private boolean tryTaskLock() {
         try {
-            if (!lock.tryLock(1, TimeUnit.SECONDS)) {
-                Thread owner = lock.getOwner();
+            if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
+                Thread owner = taskLock.getOwner();
                 if (owner != null) {
                     LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
                 } else {
@@ -207,11 +211,33 @@ public class TaskManager {
         } catch (InterruptedException e) {
             LOG.warn("got exception while getting task lock", e);
         }
-        return lock.isHeldByCurrentThread();
+        return false;
     }
 
-    private void unlock() {
-        this.lock.unlock();
+    public void taskUnlock() {
+        this.taskLock.unlock();
+    }
+
+    private boolean tryTaskRunLock() {
+        try {
+            if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
+                Thread owner = taskRunLock.getOwner();
+                if (owner != null) {
+                    LOG.warn("task run lock is held by: {}", Util.dumpThread(owner, 50));
+                } else {
+                    LOG.warn("task run lock owner is null");
+                }
+                return false;
+            }
+            return true;
+        } catch (InterruptedException e) {
+            LOG.warn("got exception while getting task run lock", e);
+        }
+        return false;
+    }
+
+    public void taskRunUnlock() {
+        this.taskRunLock.unlock();
     }
 
     public void replayCreateTask(Task task) {
@@ -387,15 +413,20 @@ public class TaskManager {
     public void removeOldTaskInfo() {
         long currentTimeMs = System.currentTimeMillis();
 
-        List<Task> currentTask = showTasks(null);
-        Iterator<Task> iterator = currentTask.iterator();
         List<Long> taskIdToDelete = Lists.newArrayList();
-        while (iterator.hasNext()) {
-            Task task = iterator.next();
-            Long expireTime = task.getExpireTime();
-            if (expireTime > 0 && currentTimeMs > expireTime) {
-                taskIdToDelete.add(task.getId());
+        if (!tryTaskLock()) {
+            return;
+        }
+        List<Task> currentTask = showTasks(null);
+        try {
+            for (Task task : currentTask) {
+                Long expireTime = task.getExpireTime();
+                if (expireTime > 0 && currentTimeMs > expireTime) {
+                    taskIdToDelete.add(task.getId());
+                }
             }
+        } finally {
+            taskUnlock();
         }
         // this will do in checkpoint thread and does not need write log
         dropTasks(taskIdToDelete, true);
@@ -404,13 +435,13 @@ public class TaskManager {
     public void removeOldTaskRunHistory() {
         long currentTimeMs = System.currentTimeMillis();
 
-        // only SUCCESS and FAILED in taskRunHistory
-        Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
         List<String> historyToDelete = Lists.newArrayList();
 
-        if (!tryLock()) {
+        if (!tryTaskRunLock()) {
             return;
         }
+        // only SUCCESS and FAILED in taskRunHistory
+        Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
         try {
             Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
             while (iterator.hasNext()) {
@@ -422,7 +453,7 @@ public class TaskManager {
                 }
             }
         } finally {
-            unlock();
+            taskRunUnlock();
         }
         LOG.info("remove run history:{}", historyToDelete);
     }

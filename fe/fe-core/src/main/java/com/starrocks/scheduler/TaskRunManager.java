@@ -39,7 +39,7 @@ public class TaskRunManager {
     public SubmitResult submitTaskRun(TaskRun taskRun) {
         // duplicate submit
         if (taskRun.getStatus() != null) {
-            return null;
+            return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
         }
 
         if (pendingTaskRunMap.keySet().size() > Config.pending_task_run_num_limit) {
@@ -82,6 +82,8 @@ public class TaskRunManager {
 
     // schedule the pending TaskRun that can be run into running TaskRun map
     public void scheduledPendingTaskRun() {
+        int currentRunning = runningTaskRunMap.size();
+
         Iterator<Long> pendingIterator = pendingTaskRunMap.keySet().iterator();
         while (pendingIterator.hasNext()) {
             Long taskId = pendingIterator.next();
@@ -91,10 +93,14 @@ public class TaskRunManager {
                 if (taskRunQueue.size() == 0) {
                     pendingIterator.remove();
                 } else {
+                    if (currentRunning >= Config.running_task_run_num_limit) {
+                        break;
+                    }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     runningTaskRunMap.put(taskId, pendingTaskRun);
                     // RUNNING state persistence is not necessary currently
+                    currentRunning++;
                 }
             }
         }

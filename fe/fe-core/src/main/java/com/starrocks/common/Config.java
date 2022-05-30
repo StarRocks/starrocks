@@ -739,11 +739,16 @@ public class Config extends ConfigBase {
     public static int export_running_job_num_limit = 5;
     /**
      * Limitation of the pending TaskRun.
-     * Default is 20.
-     * 0 is unlimited
+     * Default is 500.
      */
     @ConfField(mutable = false)
-    public static int pending_task_run_num_limit = 20;
+    public static int pending_task_run_num_limit = 500;
+    /**
+     * Limitation of the running TaskRun.
+     * Default is 20.
+     */
+    @ConfField(mutable = false)
+    public static int running_task_run_num_limit = 20;
     /**
      * Default timeout of export jobs.
      */
