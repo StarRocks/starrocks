@@ -986,8 +986,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
                 return Status::InternalError(msg);
             } else {
                 input_rowsets[i] = itr->second;
-                input_rowsets_size = input_rowsets[i]->data_disk_size();
-                input_row_num = input_rowsets[i]->num_rows();
+                input_rowsets_size += input_rowsets[i]->data_disk_size();
+                input_row_num += input_rowsets[i]->num_rows();
             }
         }
     }
