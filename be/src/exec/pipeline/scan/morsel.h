@@ -283,6 +283,7 @@ private:
     bool _has_init_any_tablet = false;
     std::atomic<size_t> _tablet_idx = 0;
 
+    // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
     Rowset* _largest_rowset = nullptr;

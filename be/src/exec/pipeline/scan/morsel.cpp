@@ -468,8 +468,6 @@ bool LogicalSplitMorselQueue::_next_tablet() {
 }
 
 Status LogicalSplitMorselQueue::_init_tablet() {
-    _tablet_seek_ranges.clear();
-    _mempool.clear();
     _largest_rowset = nullptr;
     _segment_group = nullptr;
     _short_key_schema = nullptr;
@@ -477,9 +475,12 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     _num_rest_blocks_per_seek_range.clear();
     _range_idx = 0;
 
-    RETURN_IF_ERROR(vectorized::TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
-                                                               _range_start_key, _range_end_key, &_tablet_seek_ranges,
-                                                               &_mempool));
+    if (_tablet_idx == 0) {
+        // All the tablets have the same schema, so call parse_seek_range once when init the first tablet.
+        RETURN_IF_ERROR(vectorized::TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op,
+                                                                   _range_end_op, _range_start_key, _range_end_key,
+                                                                   &_tablet_seek_ranges, &_mempool));
+    }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);
     if (_largest_rowset == nullptr || _largest_rowset->num_rows() == 0) {
