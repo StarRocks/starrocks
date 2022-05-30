@@ -187,8 +187,11 @@ public class HeartbeatMgr extends MasterDaemon {
                     } else {
                         if (Config.integrate_staros) {
                             // addWorker
-                            String starletHost = be.getHost() + ":" + be.getStarletPort();
-                            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), starletHost);
+                            int starletPort = be.getStarletPort();
+                            if (starletPort != 0) {
+                                String starletHost = be.getHost() + ":" + starletPort;
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), starletHost);
+                            }
                         }
                     }
                     return isChanged;
@@ -245,7 +248,7 @@ public class HeartbeatMgr extends MasterDaemon {
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
                     int brpcPort = -1;
-                    int starletPort = -1;
+                    int starletPort = 0;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
                     }
