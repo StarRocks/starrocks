@@ -71,6 +71,7 @@ public class FunctionSet {
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String NDV = "ndv";
+    public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
