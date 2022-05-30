@@ -45,6 +45,8 @@ CG内表的一致的数据分布定义和子表副本映射，能够保证分桶
 
 建表时，可以在 PROPERTIES 中指定属性 `"colocate_with" = "group_name"`，表示这个表是一个 Colocation Join 表，并且归属于一个指定的 Colocation Group。
 
+> 注意：StarRocks 仅支持对**同一 Database** 中的表进行 Colocate Join 操作。
+
 示例：
 
 ~~~SQL
