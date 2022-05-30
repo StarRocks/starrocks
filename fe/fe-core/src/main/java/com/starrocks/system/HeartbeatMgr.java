@@ -244,10 +244,13 @@ public class HeartbeatMgr extends MasterDaemon {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
-                    int starletPort = tBackendInfo.getStarlet_port();
                     int brpcPort = -1;
+                    int starletPort = -1;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
+                    }
+                    if (tBackendInfo.isSetStarlet_port()) {
+                        starletPort = tBackendInfo.getStarlet_port();
                     }
                     String version = "";
                     if (tBackendInfo.isSetVersion()) {

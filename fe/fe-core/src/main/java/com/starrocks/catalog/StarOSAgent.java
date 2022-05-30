@@ -159,7 +159,7 @@ public class StarOSAgent {
                     workerId = workerInfo.getWorkerId();
                 } catch (StarClientException e2) {
                     LOG.warn(e2);
-                    System.exit(-1);
+                    return;
                 }
 
                 workerToId.put(workerIpPort, workerId);
