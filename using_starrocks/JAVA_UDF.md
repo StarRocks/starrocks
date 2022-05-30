@@ -478,7 +478,7 @@ SELECT t1.a,t1.b,t1.c1 FROM t1;
 1,2.1,"hello world"
 2,2.2,"hello UDTF."
 
--- 使用UDFSplit函数
+-- 使用 MY_UDF_SPLIT 函数
 SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1); 
 > output:
 1,2.1,"hello"
