@@ -23,7 +23,7 @@ PushBrokerReader::~PushBrokerReader() {
     _scanner.reset();
 }
 
-Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl) {
+Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushReq& request) {
     // init runtime state, runtime profile, counter
     TUniqueId dummy_id;
     dummy_id.hi = 0;
@@ -36,13 +36,16 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
     fragment_params.protocol_version = InternalServiceVersion::V1;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
+    if (request.__isset.timezone) {
+        query_globals.__set_time_zone(request.timezone);
+    }
     _runtime_state =
             std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
     RETURN_IF_ERROR(
-            DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl, config::vector_chunk_size));
+            DescriptorTbl::create(_runtime_state->obj_pool(), request.desc_tbl, &desc_tbl, config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();
@@ -555,7 +558,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
             t_scan_range.ranges[0].__set_start_offset(0);
             t_scan_range.ranges[0].__set_size(_request.broker_scan_range.ranges[0].file_size);
         }
-        st = reader->init(t_scan_range, _request.desc_tbl);
+        st = reader->init(t_scan_range, _request);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init reader. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name();
             return st;
