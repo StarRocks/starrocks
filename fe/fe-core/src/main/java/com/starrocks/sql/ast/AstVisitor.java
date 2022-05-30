@@ -150,7 +150,7 @@ public abstract class AstVisitor<R, C> {
         return visitBaseViewStatement(statement, context);
     }
 
-    public R visitRefreshTableStatement(RefreshTableStatement statement, C context) {
+    public R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

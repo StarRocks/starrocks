@@ -128,7 +128,7 @@ showTableStatusStatement
     ;
 
 refreshTableStatement
-    : REFRESH TABLE FROM (table=qualifiedName)
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

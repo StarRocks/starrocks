@@ -92,7 +92,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.RefreshTableStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -244,7 +244,7 @@ public class DdlExecutor {
             globalStateMgr.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
             globalStateMgr.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
-        } else if (ddlStmt instanceof RefreshExternalTableStmt || ddlStmt instanceof RefreshTableStatement) {
+        } else if (ddlStmt instanceof RefreshExternalTableStmt || ddlStmt instanceof RefreshTableStmt) {
             globalStateMgr.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
             globalStateMgr.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);

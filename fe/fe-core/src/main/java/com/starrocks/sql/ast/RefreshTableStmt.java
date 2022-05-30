@@ -5,11 +5,15 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
-public class RefreshTableStatement extends DdlStmt {
-    private TableName tableName;
+import java.util.List;
 
-    public RefreshTableStatement(TableName tableName) {
+public class RefreshTableStmt extends DdlStmt {
+    private TableName tableName;
+    private List<String> partitionNames;
+
+    public RefreshTableStmt(TableName tableName, List<String> partitionNames) {
         this.tableName = tableName;
+        this.partitionNames = partitionNames;
     }
 
     public String getDbName() {
@@ -22,6 +26,10 @@ public class RefreshTableStatement extends DdlStmt {
 
     public TableName getTbl() {
         return tableName;
+    }
+
+    public List<String> getPartitions() {
+        return partitionNames;
     }
 
     @Override

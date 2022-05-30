@@ -143,7 +143,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
-import com.starrocks.sql.ast.RefreshTableStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -344,7 +344,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRefreshTableStatement(StarRocksParser.RefreshTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        return new RefreshTableStatement(targetTableName);
+        List<String> partitionNames = null;
+        if (context.string() == null) {
+            partitionNames = context.string().stream()
+                    .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        }
+        return new RefreshTableStmt(targetTableName, partitionNames);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
