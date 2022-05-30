@@ -34,6 +34,7 @@ import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.sleepycat.je.rep.NoConsistencyRequiredPolicy;
 import com.sleepycat.je.rep.NodeType;
+import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.RollbackException;
@@ -460,6 +461,13 @@ public class BDBEnvironment {
             lock.writeLock().unlock();
         }
         return closeSuccess;
+    }
+
+    public void flushVLSNMapping() {
+        if (replicatedEnvironment != null) {
+            RepInternal.getRepImpl(replicatedEnvironment).getVLSNIndex()
+                    .flushToDatabase(Durability.COMMIT_SYNC);
+        }
     }
 
     private SyncPolicy getSyncPolicy(String policy) {
