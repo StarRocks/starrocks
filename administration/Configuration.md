@@ -7,6 +7,7 @@
 |配置项|默认值|作用|
 |---|---|---|
 |log_roll_size_mb|1024|日志拆分的大小，每1G拆分一个日志|
+|small_file_dir|STARROCKS_HOME_DIR/small_files|小文件的根目录|
 |sys_log_dir|StarRocksFe.STARROCKS_HOME_DIR/log|日志保留的目录|
 |sys_log_level|INFO|日志级别，INFO < WARN < ERROR < FATAL|sys_log_roll_num|10|日志保留的数目|
 |sys_log_verbose_modules|空字符串|日志打印的模块，写org.apache.starrocks.catalog就只打印catalog模块下的日志|
@@ -115,6 +116,7 @@
 |alter_tablet_timeout_seconds|86400|Schema change超时时间|
 |sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括INFO, WARNING, ERROR, FATAL等日志|
 |user_function_dir|${STARROKCS_HOME}/lib/udf|UDF程序存放的地方|
+|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|
 |sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每1G拆分一个日志|
 |sys_log_roll_num|10|日志保留的数目|
