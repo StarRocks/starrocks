@@ -24,7 +24,7 @@
 
 - 在做表结构变更之前，系统会先进行内存预估。如果该表中 STRING 类型的字段比较多，则内存预估结果会不准确。在这种情况下，如果预估的内存超过了单个表结构更改操作所允许的内存上限，会导致原本能正常执行的表结构更改操作报错。[#6322](https://github.com/StarRocks/starrocks/issues/6322)
 - 主键模型的表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
-- 在 Shuffle Join 时，如果使用了低基数优化，可能导致分区错误。[#4890(https://github.com/StarRocks/starrocks/issues/4890)
+- 在 Shuffle Join 时，如果使用了低基数优化，可能导致分区错误。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
 - 当一个 Colocation Group 中包含的表比较多、导入频率又比较高时，可能会导致该 Colocation Group 无法保持 `stable` 状态，从而导致 JOIN 语句无法使用 Colocate Join。现优化为导入数据时稍微多等一会，这样可以尽量保证导入的 Tablet 副本的完整性。
 
 ## 2.1.6
