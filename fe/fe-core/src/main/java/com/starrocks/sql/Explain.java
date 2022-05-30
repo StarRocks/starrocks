@@ -4,6 +4,7 @@ package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -673,13 +674,13 @@ public class Explain {
             String fnName = call.getFnName();
 
             switch (fnName) {
-                case "add":
+                case FunctionSet.ADD:
                     return print(call.getChild(0)) + " + " + print(call.getChild(1));
-                case "subtract":
+                case FunctionSet.SUBTRACT:
                     return print(call.getChild(0)) + " - " + print(call.getChild(1));
-                case "multiply":
+                case FunctionSet.MULTIPLY:
                     return print(call.getChild(0)) + " * " + print(call.getChild(1));
-                case "divide":
+                case FunctionSet.DIVIDE:
                     return print(call.getChild(0)) + " / " + print(call.getChild(1));
             }
 

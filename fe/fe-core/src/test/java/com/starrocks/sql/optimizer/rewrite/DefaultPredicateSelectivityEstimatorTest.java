@@ -2,6 +2,7 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -595,7 +596,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
     public void testExpressionBinaryPredicate() {
         DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
                 new DefaultPredicateSelectivityEstimator();
-        CallOperator callOperator = new CallOperator("max", Type.INT, Lists.newArrayList(v1));
+        CallOperator callOperator = new CallOperator(FunctionSet.MAX, Type.INT, Lists.newArrayList(v1));
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
         ConstantOperator constantOperatorInt1 = ConstantOperator.createInt(0);

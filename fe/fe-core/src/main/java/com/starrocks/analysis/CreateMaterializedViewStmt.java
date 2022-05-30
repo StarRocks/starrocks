@@ -393,7 +393,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Expr defineExpr = null;
         Type type;
         switch (functionName.toLowerCase()) {
-            case "sum":
+            case FunctionSet.SUM:
                 mvColumnName = baseColumnName;
                 mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                 PrimitiveType baseColumnType = baseColumnRef.getType().getPrimitiveType();
@@ -406,8 +406,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     type = baseType;
                 }
                 break;
-            case "min":
-            case "max":
+            case FunctionSet.MIN:
+            case FunctionSet.MAX:
                 mvColumnName = baseColumnName;
                 mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                 type = baseType;
@@ -482,9 +482,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 String functionName = functionCallExpr.getFnName().getFunction();
                 SlotRef baseSlotRef = slots.get(0);
                 switch (functionName.toLowerCase()) {
-                    case "sum":
-                    case "min":
-                    case "max":
+                    case FunctionSet.SUM:
+                    case FunctionSet.MIN:
+                    case FunctionSet.MAX:
                         result.put(baseColumnName, null);
                         break;
                     case FunctionSet.BITMAP_UNION:

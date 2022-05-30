@@ -51,9 +51,9 @@ public class PreAggregateTurnOnRule {
 
     private static class PreAggregateVisitor extends OptExpressionVisitor<Void, PreAggregationContext> {
         private static final List<String> AGGREGATE_ONLY_KEY = ImmutableList.<String>builder()
-                .add("NDV")
+                .add(FunctionSet.NDV)
                 .add(FunctionSet.MULTI_DISTINCT_COUNT)
-                .add("APPROX_COUNT_DISTINCT")
+                .add(FunctionSet.APPROX_COUNT_DISTINCT)
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
@@ -267,7 +267,8 @@ public class PreAggregateTurnOnRule {
                     }
 
                     // value column
-                    if ("HLL_UNION_AGG|HLL_RAW_AGG".contains(call.getFnName().toUpperCase())) {
+                    if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(call.getFnName()) ||
+                            FunctionSet.HLL_RAW_AGG.equalsIgnoreCase(call.getFnName())) {
                         // skip
                     } else if (AGGREGATE_ONLY_KEY.contains(call.getFnName().toUpperCase())) {
                         scan.setTurnOffReason(

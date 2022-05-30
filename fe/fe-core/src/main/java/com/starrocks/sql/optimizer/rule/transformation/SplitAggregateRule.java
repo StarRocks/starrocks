@@ -203,8 +203,8 @@ public class SplitAggregateRule extends TransformationRule {
                         return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
                                 operator.getGroupingKeys());
-                    // If agg node has limit or has a very good aggregation effect which could reduce the shuffle data,
-                    // we prefer to choose 2 phase aggregate
+                        // If agg node has limit or has a very good aggregation effect which could reduce the shuffle data,
+                        // we prefer to choose 2 phase aggregate
                     } else if (canGenerateTwoStageAggregate(operator, distinctColumns) &&
                             (operator.hasLimit() || hasAggregateEffect(input, distinctColumns))) {
                         return implementTwoStageAgg(input, operator);
@@ -274,7 +274,7 @@ public class SplitAggregateRule extends TransformationRule {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
-        } else if (functionName.equalsIgnoreCase("SUM")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
@@ -376,7 +376,7 @@ public class SplitAggregateRule extends TransformationRule {
         if (childProjection != null) {
             childProjection.getColumnRefMap().entrySet().stream()
                     .filter(entry -> groupByColumns.contains(entry.getKey())).forEach(entry -> columnRefMap.put(
-                    entry.getKey(), entry.getValue()));
+                            entry.getKey(), entry.getValue()));
         }
 
         LogicalAggregationOperator distinctGlobalWithProjection = new LogicalAggregationOperator.Builder()

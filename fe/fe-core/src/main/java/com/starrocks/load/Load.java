@@ -49,6 +49,7 @@ import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -639,7 +640,7 @@ public class Load {
             FunctionCallExpr funcExpr = (FunctionCallExpr) originExpr;
             String funcName = funcExpr.getFnName().getFunction();
 
-            if (funcName.equalsIgnoreCase("replace_value")) {
+            if (funcName.equalsIgnoreCase(FunctionSet.REPLACE_VALUE)) {
                 List<Expr> exprs = Lists.newArrayList();
                 SlotRef slotRef = new SlotRef(null, columnName);
                 // We will convert this to IF(`col` != child0, `col`, child1),
@@ -705,28 +706,28 @@ public class Load {
                 LOG.debug("replace_value expr: {}", exprs);
                 FunctionCallExpr newFn = new FunctionCallExpr("if", exprs);
                 return newFn;
-            } else if (funcName.equalsIgnoreCase("strftime")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
                 // FROM_UNIXTIME(val)
-                FunctionName fromUnixName = new FunctionName("FROM_UNIXTIME");
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));
 
                 return fromUnixFunc;
-            } else if (funcName.equalsIgnoreCase("time_format")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.TIME_FORMAT)) {
                 // DATE_FORMAT(STR_TO_DATE(dt_str, dt_fmt))
-                FunctionName strToDateName = new FunctionName("STR_TO_DATE");
+                FunctionName strToDateName = new FunctionName(FunctionSet.STR_TO_DATE);
                 List<Expr> strToDateExprs = Lists.newArrayList(funcExpr.getChild(2), funcExpr.getChild(1));
                 FunctionCallExpr strToDateFuncExpr = new FunctionCallExpr(
                         strToDateName, new FunctionParams(false, strToDateExprs));
 
-                FunctionName dateFormatName = new FunctionName("DATE_FORMAT");
+                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(strToDateFuncExpr, funcExpr.getChild(0));
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
                         dateFormatName, new FunctionParams(false, dateFormatArgs));
 
                 return dateFormatFunc;
-            } else if (funcName.equalsIgnoreCase("alignment_timestamp")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.ALIGNMENT_TIMESTAMP)) {
                 /*
                  * change to:
                  * UNIX_TIMESTAMP(DATE_FORMAT(FROM_UNIXTIME(ts), "%Y-01-01 00:00:00"));
@@ -734,7 +735,7 @@ public class Load {
                  */
 
                 // FROM_UNIXTIME
-                FunctionName fromUnixName = new FunctionName("FROM_UNIXTIME");
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));
@@ -753,26 +754,26 @@ public class Load {
                 } else {
                     throw new UserException("Unknown precision(" + precision.getStringValue() + ")");
                 }
-                FunctionName dateFormatName = new FunctionName("DATE_FORMAT");
+                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(fromUnixFunc, format);
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
                         dateFormatName, new FunctionParams(false, dateFormatArgs));
 
                 // UNIX_TIMESTAMP
-                FunctionName unixTimeName = new FunctionName("UNIX_TIMESTAMP");
+                FunctionName unixTimeName = new FunctionName(FunctionSet.UNIX_TIMESTAMP);
                 List<Expr> unixTimeArgs = Lists.newArrayList();
                 unixTimeArgs.add(dateFormatFunc);
                 FunctionCallExpr unixTimeFunc = new FunctionCallExpr(
                         unixTimeName, new FunctionParams(false, unixTimeArgs));
 
                 return unixTimeFunc;
-            } else if (funcName.equalsIgnoreCase("default_value")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.DEFAULT_VALUE)) {
                 return funcExpr.getChild(0);
-            } else if (funcName.equalsIgnoreCase("now")) {
-                FunctionName nowFunctionName = new FunctionName("NOW");
+            } else if (funcName.equalsIgnoreCase(FunctionSet.NOW)) {
+                FunctionName nowFunctionName = new FunctionName(FunctionSet.NOW);
                 FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, new FunctionParams(null));
                 return newFunc;
-            } else if (funcName.equalsIgnoreCase("substitute")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
             }
         }

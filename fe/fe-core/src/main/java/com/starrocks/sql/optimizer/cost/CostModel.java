@@ -174,8 +174,8 @@ public class CostModel {
             }
             // only one stage agg node has not rewrite distinct function here
             return node.getType().isGlobal() && !node.isSplit() &&
-                    (aggOperator.getFnName().equalsIgnoreCase("COUNT") ||
-                            aggOperator.getFnName().equalsIgnoreCase("SUM")) &&
+                    (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
+                            aggOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) &&
                     aggOperator.isDistinct();
         }
 
