@@ -17,6 +17,8 @@ Colocate Join 使用 Colocation Group（CG）管理一组表 ，同一 CG 内的
 
 建表时，可以在 PROPERTIES 中指定属性 `"colocate_with" = "group_name"`，表示这个表是一个 Colocate Join 表，并且归属于一个指定的 Colocation Group。
 
+> 注意：StarRocks 仅支持对**同一 Database** 中的表进行 Colocate Join 操作。
+
 ~~~SQL
 CREATE TABLE tbl (k1 int, v1 int sum)
 DISTRIBUTED BY HASH(k1)
