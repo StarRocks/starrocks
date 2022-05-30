@@ -120,6 +120,7 @@ private:
     std::atomic_int64_t _last_scan_bytes = 0;
 
     RuntimeProfile::Counter* _morsels_counter = nullptr;
+    RuntimeProfile::Counter* _morsel_get_timer = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
