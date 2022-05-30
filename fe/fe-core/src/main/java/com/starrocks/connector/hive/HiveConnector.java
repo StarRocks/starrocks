@@ -3,11 +3,13 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,5 +48,21 @@ public class HiveConnector implements Connector {
             }
         }
         return metadata;
+    }
+
+    @Override
+    public void onCreate() {
+        if (Config.enable_hms_events_incremental_sync) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .registerExternalCatalogResource(resourceName);
+        }
+    }
+
+    @Override
+    public void onDrop() {
+        if (Config.enable_hms_events_incremental_sync) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .unregisterExternalCatalogResource(resourceName);
+        }
     }
 }

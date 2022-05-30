@@ -32,15 +32,20 @@ public class RefreshTableStatementAnalyzer {
 
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
-            TableName tableName = statement.getTbl();
+            TableName tableName = statement.getTableName();
             MetaUtils.normalizationTableName(context, tableName);
-            if (tableName == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
-            }
+            String catalogName = tableName.getCatalog();
+            String dbName = tableName.getDb();
+            String tblName = tableName.getTbl();
 
-            Table table = metadataMgr.getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
-            if (table == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+            if (metadataMgr.getDb(catalogName, dbName) == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName);
+            }
+            if (metadataMgr.getTable(catalogName, dbName, tblName) == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
             }
 
             return null;

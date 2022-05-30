@@ -2101,6 +2101,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> columns = stmt.getColumns();
         long tableId = getNextId();
         HiveTable hiveTable = new HiveTable(tableId, tableName, columns, stmt.getProperties());
+        hiveTable.setSrFullDbName(db.getFullName());
         // partition key, commented for show partition key
         String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
         if (Strings.isNullOrEmpty(stmt.getComment())) {

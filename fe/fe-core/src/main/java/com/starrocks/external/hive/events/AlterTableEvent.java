@@ -4,8 +4,13 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveTableKey;
+import com.starrocks.external.hive.HiveTableName;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONAlterTableMessage;
@@ -26,6 +31,8 @@ public class AlterTableEvent extends MetastoreTableEvent {
     protected Table tableAfter;
     // true if this alter event was due to a rename operation
     protected final boolean isRename;
+    // true if this alter event was due to a schema change operation
+    protected final boolean isSchemaChange;
 
     private AlterTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
@@ -37,6 +44,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
             hmsTbl = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
             tableAfter = Preconditions.checkNotNull(alterTableMessage.getTableObjAfter());
             tableBefore = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
+            isSchemaChange = isSchemaChange(tableBefore.getSd().getCols(), tableAfter.getSd().getCols());
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter table message"), e);
@@ -48,6 +56,22 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
         return Lists.newArrayList(new AlterTableEvent(event, metaCache));
+    }
+
+    private boolean isSchemaChange(List<FieldSchema> before, List<FieldSchema> after) {
+        if (before.size() != after.size()) {
+            return true;
+        }
+
+        if (!before.equals(after)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public boolean isSchemaChange() {
+        return isSchemaChange;
     }
 
     @Override
@@ -96,6 +120,18 @@ public class AlterTableEvent extends MetastoreTableEvent {
         }
 
         try {
+            if (isSchemaChange) {
+                if (HiveMetaStoreTableUtils.isInternalCatalog(cache.getResourceName())) {
+                    HiveTable srTable = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                            .getHiveTable(cache.getResourceName(), dbName, tblName);
+                    if (srTable == null) {
+                        return;
+                    }
+                    srTable.refreshExternalTableSchema(tableAfter);
+                } else {
+                    cache.refreshConnectorTableSchema(HiveTableName.of(dbName, tblName));
+                }
+            }
             cache.alterTableByEvent(HiveTableKey.gen(dbName, tblName), getHivePartitionKey(),
                     tableAfter.getSd(), tableAfter.getParameters());
         } catch (Exception e) {

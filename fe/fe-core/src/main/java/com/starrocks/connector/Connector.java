@@ -24,4 +24,8 @@ public interface Connector {
      * For example, hive connector must require "hive.metastore.uris" property.
      */
     default void validate() {}
+
+    default void onCreate() {}
+
+    default void onDrop() {}
 }

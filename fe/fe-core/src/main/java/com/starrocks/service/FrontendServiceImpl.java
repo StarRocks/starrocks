@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
@@ -1056,9 +1057,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TRefreshTableResponse refreshTable(TRefreshTableRequest request) throws TException {
         try {
-            GlobalStateMgr.getCurrentState().refreshExternalTable(request.getDb_name(),
-                    request.getTable_name(),
-                    request.getPartitions());
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
+                            request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
