@@ -29,6 +29,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MetaObject;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -231,7 +232,7 @@ public class ConsistencyChecker extends MasterDaemon {
      * we use a priority queue to sort db/table/partition/index/tablet by 'lastCheckTime'.
      * chose a tablet which has the smallest 'lastCheckTime'.
      */
-    private List<Long> chooseTablets() {
+    public List<Long> chooseTablets() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetaObject chosenOne = null;
 
@@ -266,7 +267,12 @@ public class ConsistencyChecker extends MasterDaemon {
                     List<Table> tables = db.getTables();
                     Queue<MetaObject> tableQueue = new PriorityQueue<>(Math.max(tables.size(), 1), COMPARATOR);
                     for (Table table : tables) {
-                        if (table.getType() != TableType.OLAP) {
+                        // Only check the OLAP table who is in NORMAL state.
+                        // Because some tablets of the not NORMAL table may just a temporary presence in memory,
+                        // if we check those tablets and log FinishConsistencyCheck to bdb,
+                        // it will throw NullPointerException when replaying the log.
+                        if (table.getType() != TableType.OLAP
+                                || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
                             continue;
                         }
                         tableQueue.add(table);
