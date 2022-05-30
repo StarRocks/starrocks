@@ -22,7 +22,7 @@ import org.apache.commons.codec.binary.Hex;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-// Execute a basic task of SQL
+// Execute a basic task of SQL\
 public class SqlTaskRunProcessor implements TaskRunProcessor {
 
     @Override
@@ -109,6 +109,9 @@ public class SqlTaskRunProcessor implements TaskRunProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
+        if (queryStmt == null) {
+            return "";
+        }
         String digest;
         if (queryStmt instanceof QueryStmt) {
             digest = ((QueryStmt) queryStmt).toDigest();

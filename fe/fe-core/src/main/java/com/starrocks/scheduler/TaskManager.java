@@ -417,8 +417,8 @@ public class TaskManager {
         if (!tryTaskLock()) {
             return;
         }
-        List<Task> currentTask = showTasks(null);
         try {
+            List<Task> currentTask = showTasks(null);
             for (Task task : currentTask) {
                 Long expireTime = task.getExpireTime();
                 if (expireTime > 0 && currentTimeMs > expireTime) {
@@ -440,9 +440,9 @@ public class TaskManager {
         if (!tryTaskRunLock()) {
             return;
         }
-        // only SUCCESS and FAILED in taskRunHistory
-        Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
         try {
+            // only SUCCESS and FAILED in taskRunHistory
+            Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
             Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
             while (iterator.hasNext()) {
                 TaskRunStatus taskRunStatus = iterator.next();
