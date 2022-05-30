@@ -316,6 +316,7 @@ BE 配置项暂不支持在线修改，生效需在 be.conf 中修改并重启 b
 |alter_tablet_timeout_seconds|86400|Schema change 超时时间|
 |sys_log_dir|${DORIS_HOME}/log|存放日志的地方，包括 INFO, WARNING, ERROR, FATAL 等日志|
 |user_function_dir|${DORIS_HOME}/lib/udf|UDF 程序存放的地方|
+|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|
 |sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志|
 |sys_log_roll_num|10|日志保留的数目|
