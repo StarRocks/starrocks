@@ -4290,14 +4290,9 @@ public class LocalMetastore implements ConnectorMetadata {
         System.gc();
     }
 
-    // create new partitions from source partitions.
-    // new partitions have the same indexes as source partitions.
-    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
-                                                              String namePostfix, List<Long> sourcePartitionIds) {
-        Preconditions.checkState(table instanceof OlapTable);
-        OlapTable olapTable = (OlapTable) table;
+    @VisibleForTesting
+    public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds, Map<Long, String> origPartitions) {
         OlapTable copiedTbl;
-        Map<Long, String> origPartitions = Maps.newHashMap();
         db.readLock();
         try {
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -4311,31 +4306,52 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.readUnlock();
         }
+        return copiedTbl;
+    }
+
+    @VisibleForTesting
+    public List<Partition> getNewPartitionsFromPartitions(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
+                                                          Map<Long, String> origPartitions, OlapTable copiedTbl, String namePostfix,
+                                                          Set<Long> tabletIdSet) throws DdlException {
+        List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
+        for (Long sourcePartitionId : sourcePartitionIds) {
+            long newPartitionId = getNextId();
+            String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
+            if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
+                // to prevent creating the same partitions when failover
+                // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
+                LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
+                continue;
+            }
+            PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
+            partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
+            partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
+            partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
+            partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
+
+            Partition newPartition =
+                    createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+            newPartitions.add(newPartition);
+        }
+        return newPartitions;
+    }
+
+    // create new partitions from source partitions.
+    // new partitions have the same indexes as source partitions.
+    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
+                                                              String namePostfix, List<Long> sourcePartitionIds) {
+        Preconditions.checkState(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        Map<Long, String> origPartitions = Maps.newHashMap();
+        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
 
         // 2. use the copied table to create partitions
-        List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
+        List<Partition> newPartitions = null;
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
-            for (Long sourcePartitionId : sourcePartitionIds) {
-                long newPartitionId = getNextId();
-                String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
-                if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
-                    // to prevent creating the same partitions when failover
-                    // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
-                    LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
-                    continue;
-                }
-                PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
-                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
-                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
-                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
-
-                Partition newPartition =
-                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
-                newPartitions.add(newPartition);
-            }
+            newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
+                    copiedTbl, namePostfix, tabletIdSet);
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (Exception e) {
             // create partition failed, remove all newly created tablets

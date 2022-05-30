@@ -73,12 +73,12 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     }
 
     public void submitJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {
+        boolean registered = registerOverwriteJob(job);
+        if (!registered) {
+            LOG.warn("register insert overwrite job:{} failed", job.getJobId());
+            throw new RuntimeException("register insert overwrite job failed");
+        }
         try {
-            boolean registered = registerOverwriteJob(job);
-            if (!registered) {
-                LOG.warn("register insert overwrite job:{} failed", job.getJobId());
-                throw new RuntimeException("register insert overwrite job failed");
-            }
             // get db and table
             Database database = MetaUtils.getDatabase(context, job.getTargetDbId());
             OlapTable table = (OlapTable) MetaUtils.getTable(context, database.getId(), job.getTargetTableId());
