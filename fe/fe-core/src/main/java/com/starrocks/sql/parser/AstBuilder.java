@@ -146,6 +146,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStatement;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -769,7 +770,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
-        return new ShowAnalyzeStmt();
+        if (context.STATUS() != null) {
+            return new ShowAnalyzeStatusStatement();
+        } else {
+            return new ShowAnalyzeStmt();
+        }
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------

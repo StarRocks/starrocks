@@ -266,7 +266,7 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE
+    : SHOW ANALYZE STATUS?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------

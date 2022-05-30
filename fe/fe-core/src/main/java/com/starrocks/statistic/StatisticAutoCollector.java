@@ -152,6 +152,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             }
             analyzeJob.setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeStatusWithLog(analyzeJob);
         }
     }
 
