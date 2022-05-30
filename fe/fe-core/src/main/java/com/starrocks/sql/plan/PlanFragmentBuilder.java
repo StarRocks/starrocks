@@ -1296,7 +1296,9 @@ public class PlanFragmentBuilder {
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     inputFragment.getPlanRoot().canUsePipeLine();
-            if (pipelineDopEnabled && notNeedLocalShuffle) {
+            boolean tabletInternalParallelEnabled = ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isEnableTabletInternalParallel();
+            if (pipelineDopEnabled && notNeedLocalShuffle && !tabletInternalParallelEnabled) {
                 inputFragment.setNeedsLocalShuffle(false);
             }
 

@@ -1001,6 +1001,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableOptimizerTraceLog;
     }
 
+    public boolean isEnableTabletInternalParallel() {
+        return enableTabletInternalParallel;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
