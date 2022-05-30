@@ -99,7 +99,6 @@ public class InsertOverwriteJobManagerTest {
                 result = true;
             }
         };
-        // InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(1100L, 100L, 110L, targetPartitionIds);
 
         CreateInsertOverwriteJobInfo jobInfo = new CreateInsertOverwriteJobInfo(
                 1100L, 100L, 110L, targetPartitionIds);

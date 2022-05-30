@@ -3,24 +3,18 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -29,6 +23,9 @@ import org.junit.Test;
 public class InsertOverwriteJobRunnerTest {
 
     private static ConnectContext connectContext;
+
+    @Mocked
+    private InsertOverwriteJobManager insertOverwriteJobManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -59,7 +56,7 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
-    public void createReplayInsertOverwrite() {
+    public void testReplayInsertOverwrite() {
         Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
@@ -85,5 +82,13 @@ public class InsertOverwriteJobRunnerTest {
         runner2.replayStateChange(stateChangeInfo);
         runner2.cancel();
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
+    }
+
+    @Test
+    public void testInsertOverwriteFromStmtExecutor() throws Exception {
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        executor.handleInsertOverwrite(insertStmt);
     }
 }
