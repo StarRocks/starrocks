@@ -72,7 +72,6 @@ import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.RevokeStmt;
@@ -244,8 +243,8 @@ public class DdlExecutor {
             globalStateMgr.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
             globalStateMgr.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
-        } else if (ddlStmt instanceof RefreshExternalTableStmt || ddlStmt instanceof RefreshTableStmt) {
-            globalStateMgr.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
+        } else if (ddlStmt instanceof RefreshTableStmt) {
+            globalStateMgr.refreshExternalTable((RefreshTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
             globalStateMgr.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof DropWorkGroupStmt) {
