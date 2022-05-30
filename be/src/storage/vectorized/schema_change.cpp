@@ -1080,10 +1080,19 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
     Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
+<<<<<<< HEAD:be/src/storage/vectorized/schema_change.cpp
     // memtable max buffer size set 80% of memory limit so that it will do _merge() if reach 80%
     // do finialize() and flush() if reach 90%
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
                                                 _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+=======
+    // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
+    // set max memtable size to 4G since some column has limit size, it will make invalid data
+    size_t max_buffer_size = std::min<size_t>(
+            4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink, max_buffer_size,
+                                                CurrentThread::mem_tracker());
+>>>>>>> 758a29f61 ([Enhancement] Add memory limit for sorting schema change (#6595)):be/src/storage/schema_change.cpp
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -1103,8 +1112,13 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
+<<<<<<< HEAD:be/src/storage/vectorized/schema_change.cpp
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
                                                    _memory_limitation * 0.9, CurrentThread::mem_tracker());
+=======
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
+>>>>>>> 758a29f61 ([Enhancement] Add memory limit for sorting schema change (#6595)):be/src/storage/schema_change.cpp
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -1135,8 +1149,13 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
+<<<<<<< HEAD:be/src/storage/vectorized/schema_change.cpp
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
                                                    _memory_limitation * 0.8, CurrentThread::mem_tracker());
+=======
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
+>>>>>>> 758a29f61 ([Enhancement] Add memory limit for sorting schema change (#6595)):be/src/storage/schema_change.cpp
         }
 
         mem_pool->clear();
@@ -1535,10 +1554,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                 return Status::InternalError("process failed");
             }
         }
+<<<<<<< HEAD:be/src/storage/vectorized/schema_change.cpp
         // Add the new version of the data to the header,
         // To prevent deadlocks, be sure to lock the old table first and then the new one
         sc_params.new_tablet->obtain_push_lock();
         DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
+=======
+        sc_params.rowset_readers[i]->close();
+>>>>>>> 758a29f61 ([Enhancement] Add memory limit for sorting schema change (#6595)):be/src/storage/schema_change.cpp
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
