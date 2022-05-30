@@ -4291,7 +4291,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @VisibleForTesting
-    public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds, Map<Long, String> origPartitions) {
+    public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
+                                    Map<Long, String> origPartitions) {
         OlapTable copiedTbl;
         db.readLock();
         try {
@@ -4311,15 +4312,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @VisibleForTesting
     public List<Partition> getNewPartitionsFromPartitions(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
-                                                          Map<Long, String> origPartitions, OlapTable copiedTbl, String namePostfix,
-                                                          Set<Long> tabletIdSet) throws DdlException {
+                                                          Map<Long, String> origPartitions, OlapTable copiedTbl,
+                                                          String namePostfix, Set<Long> tabletIdSet) throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
         for (Long sourcePartitionId : sourcePartitionIds) {
             long newPartitionId = getNextId();
             String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
             if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
                 // to prevent creating the same partitions when failover
-                // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
+                // this will happen when OverwriteJob crashed after created temp partitions,
+                // but before changing to PREPARED state
                 LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
                 continue;
             }
