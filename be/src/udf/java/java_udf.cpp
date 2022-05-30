@@ -162,7 +162,7 @@ void JVMFunctionHelper::_init() {
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
-    _function_states_clazz = std::make_unique<JVMClass>(std::move(loaded_clazz));
+    _function_states_clazz = new JVMClass(std::move(loaded_clazz));
 }
 
 // https://stackoverflow.com/questions/45232522/how-to-set-classpath-of-a-running-jvm-in-cjni
