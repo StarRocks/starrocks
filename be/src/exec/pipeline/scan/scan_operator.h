@@ -123,6 +123,8 @@ private:
     RuntimeProfile::Counter* _morsel_get_timer = nullptr;
     RuntimeProfile::Counter* _trigger_scan_timer = nullptr;
     RuntimeProfile::Counter* _commit_task_timer = nullptr;
+    RuntimeProfile::Counter* _pickup_morsel_timer = nullptr;
+    RuntimeProfile::Counter* _trigger_next_scan_timer = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

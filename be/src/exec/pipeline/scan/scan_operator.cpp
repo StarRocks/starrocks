@@ -54,6 +54,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _morsel_get_timer = ADD_TIMER(_unique_metrics, "MorselGet");
     _trigger_scan_timer = ADD_TIMER(_unique_metrics, "TriggerScan");
     _commit_task_timer = ADD_TIMER(_unique_metrics, "CommitTask");
+    _pickup_morsel_timer = ADD_TIMER(_unique_metrics, "PickUpMorsel");
+    _trigger_next_scan_timer = ADD_TIMER(_unique_metrics, "TriggerNextScan");
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -226,6 +228,8 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
+    SCOPED_TIMER(_trigger_next_scan_timer);
+
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
     }
@@ -317,6 +321,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 }
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
+    SCOPED_TIMER(_pickup_morsel_timer);
+
     DCHECK(_morsel_queue != nullptr);
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
