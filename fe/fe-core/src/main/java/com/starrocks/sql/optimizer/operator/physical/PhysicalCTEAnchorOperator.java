@@ -6,15 +6,17 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 
 import java.util.Objects;
 
 public class PhysicalCTEAnchorOperator extends PhysicalOperator {
     private final int cteId;
 
-    public PhysicalCTEAnchorOperator(int cteId) {
+    public PhysicalCTEAnchorOperator(int cteId, Projection projection) {
         super(OperatorType.PHYSICAL_CTE_ANCHOR);
         this.cteId = cteId;
+        this.projection = projection;
     }
 
     public int getCteId() {

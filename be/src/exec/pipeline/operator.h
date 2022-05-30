@@ -269,22 +269,7 @@ public:
     RowDescriptor* row_desc() { return &_row_desc; }
 
 protected:
-    void _prepare_runtime_in_filters(RuntimeState* state) {
-        auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
-        for (auto& holder : holders) {
-            DCHECK(holder->is_ready());
-            auto* collector = holder->get_collector();
-
-            collector->rewrite_in_filters(_tuple_slot_mappings);
-
-            auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
-            for (auto* filter : in_filters) {
-                filter->prepare(state);
-                filter->open(state);
-                _runtime_in_filters.push_back(filter);
-            }
-        }
-    }
+    void _prepare_runtime_in_filters(RuntimeState* state);
 
     const int32_t _id;
     const std::string _name;

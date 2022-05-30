@@ -130,4 +130,41 @@ public class SetStmtTest {
             Assert.assertEquals("resource group not exists: not_exists", e.getMessage());
         }
     }
+
+    @Test
+    public void testSetNonNegativeLongVariable() throws UserException {
+        List<String> fields = Lists.newArrayList(
+                SessionVariable.LOAD_MEM_LIMIT,
+                SessionVariable.QUERY_MEM_LIMIT,
+                SessionVariable.SQL_SELECT_LIMIT);
+
+        for (String field : fields) {
+            Assert.assertThrows("is not a number", AnalysisException.class, () -> {
+                SetVar setVar = new SetVar(SetType.DEFAULT, field, new StringLiteral("non_number"));
+                setVar.analyze(analyzer);
+            });
+
+            Assert.assertThrows("must be equal or greater than 0", AnalysisException.class, () -> {
+                SetVar setVar = new SetVar(SetType.DEFAULT, field, new StringLiteral("-1"));
+                setVar.analyze(analyzer);
+            });
+
+            SetVar var = new SetVar(SetType.DEFAULT, field, new StringLiteral("0"));
+            var.analyze(analyzer);
+            Assert.assertEquals(String.format("DEFAULT %s = '0'", field), var.toString());
+
+            var = new SetVar(SetType.DEFAULT, field, new StringLiteral("10"));
+            var.analyze(analyzer);
+            Assert.assertEquals(String.format("DEFAULT %s = '10'", field), var.toString());
+
+            var = new SetVar(SetType.DEFAULT, field, new IntLiteral(0));
+            var.analyze(analyzer);
+            Assert.assertEquals(String.format("DEFAULT %s = 0", field), var.toString());
+
+            var = new SetVar(SetType.DEFAULT, field, new IntLiteral(10));
+            var.analyze(analyzer);
+            Assert.assertEquals(String.format("DEFAULT %s = 10", field), var.toString());
+        }
+    }
+
 }

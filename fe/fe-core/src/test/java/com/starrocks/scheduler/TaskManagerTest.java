@@ -2,10 +2,10 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.statistic.Constants;
@@ -81,16 +81,16 @@ public class TaskManagerTest {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        taskManager.createTask(task);
+        taskManager.createTask(task, true);
         // taskManager.executeTask(taskList.get(0).getName());
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.addTaskRun(taskRun);
+        taskRunManager.submitTaskRun(taskRun);
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
-        List<TaskRunStatus> taskRuns = taskManager.getTaskRunManager().showTaskRunStatus(null);
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
 
     }

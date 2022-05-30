@@ -111,6 +111,6 @@ else
         ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$1
     else    
         echo "Run Frontend UT"
-        ${MVN_CMD} test -DfailIfNoTests=false 
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false
     fi 
 fi

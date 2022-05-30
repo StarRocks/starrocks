@@ -196,7 +196,6 @@ public class StatisticAutoCollector extends MasterDaemon {
             }
         }
 
-
         List<TableCollectJob> tableCollectJobs = new ArrayList<>(allTableJobMap.values());
         for (TableCollectJob tableCollectJob : tableCollectJobs) {
             List<Partition> partitions = Lists.newArrayList(((OlapTable) tableCollectJob.table).getPartitions());

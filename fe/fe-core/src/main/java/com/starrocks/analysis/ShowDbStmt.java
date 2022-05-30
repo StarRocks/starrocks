@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
@@ -50,6 +51,17 @@ public class ShowDbStmt extends ShowStmt {
     public ShowDbStmt(String pattern, Expr where) {
         this.pattern = pattern;
         this.where = where;
+    }
+
+    public ShowDbStmt(String pattern, String catalogName) {
+        this.pattern = pattern;
+        this.catalogName = catalogName;
+    }
+
+    public ShowDbStmt(String pattern, Expr where, String catalogName) {
+        this.pattern = pattern;
+        this.where = where;
+        this.catalogName = catalogName;
     }
 
     public String getPattern() {
@@ -87,8 +99,14 @@ public class ShowDbStmt extends ShowStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder("SHOW DATABASES");
+        if (catalogName != null) {
+            sb.append(" FROM ").append(catalogName);
+        }
         if (pattern != null) {
             sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE '").append(where).append("'");
         }
         return sb.toString();
     }

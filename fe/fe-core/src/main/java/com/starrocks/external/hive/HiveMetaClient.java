@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
+import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -74,6 +75,8 @@ public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
+    public static final String DLF_HIVE_METASTORE = "dlf";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -119,8 +122,13 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                    HiveMetaStoreThriftClient.class.getName());
+            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                        HiveMetaStoreThriftClient.class.getName());
+            } else {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                        DLFProxyMetaStoreClient.class.getName());
+            }
         }
 
         @Override
@@ -190,6 +198,15 @@ public class HiveMetaClient {
             return client.hiveClient.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
         } catch (Exception e) {
             LOG.warn("Failed to get table {}", hiveTableName, e);
+            throw e;
+        }
+    }
+
+    public Database getDb(String dbName) throws TException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getDatabase(dbName);
+        } catch (Exception e) {
+            LOG.warn("Failed to get database on {}", dbName, e);
             throw e;
         }
     }

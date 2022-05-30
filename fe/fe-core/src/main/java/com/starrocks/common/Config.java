@@ -726,6 +726,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int export_running_job_num_limit = 5;
     /**
+     * Limitation of the pending TaskRun.
+     * Default is 20.
+     * 0 is unlimited
+     */
+    @ConfField(mutable = false)
+    public static int pending_task_run_num_limit = 20;
+    /**
      * Default timeout of export jobs.
      */
     @ConfField(mutable = true)
@@ -983,17 +990,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_balancing_tablets = 100;
 
-    // This threshold is to avoid piling up too many report task in FE, which may cause OOM exception.
-    // In some large StarRocks cluster, eg: 100 Backends with ten million replicas, a tablet report may cost
-    // several seconds after some modification of metadata(drop partition, etc..).
-    // And one Backend will report tablets info every 1 min, so unlimited receiving reports is unacceptable.
-    // TODO(cmy): we will optimize the processing speed of tablet report in future, but now, just discard
-    // the report if queue size exceeding limit.
-    // Some online time cost:
-    // 1. disk report: 0-1 ms
-    // 2. task report: 0-1 ms
-    // 3. tablet report
-    //      10000 replicas: 200ms
+    @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
 

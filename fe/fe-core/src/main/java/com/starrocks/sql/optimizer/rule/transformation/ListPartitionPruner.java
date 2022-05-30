@@ -190,7 +190,7 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         TreeMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(leftChild);
         Set<Long> nullPartitions = columnToNullPartitions.get(leftChild);
-        if (partitionValueMap == null || nullPartitions == null) {
+        if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
             return null;
         }
 
@@ -307,7 +307,7 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         TreeMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(child);
         Set<Long> nullPartitions = columnToNullPartitions.get(child);
-        if (partitionValueMap == null || nullPartitions == null) {
+        if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
             return null;
         }
 

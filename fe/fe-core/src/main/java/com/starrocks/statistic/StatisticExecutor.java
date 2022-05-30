@@ -105,7 +105,7 @@ public class StatisticExecutor {
     }
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
-        String sql = null;
+        String sql;
         if (Config.enable_collect_full_statistics) {
             sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
         } else {
@@ -409,7 +409,7 @@ public class StatisticExecutor {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_FULL_TEMPLATE);
 
-            builder.append(sw.toString());
+            builder.append(sw);
             builder.append(" UNION ALL ");
         }
 
@@ -510,7 +510,7 @@ public class StatisticExecutor {
                 DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_TYPE_SAMPLE_TEMPLATE);
             }
 
-            builder.append(sw.toString());
+            builder.append(sw);
             builder.append(" UNION ALL ");
         }
 

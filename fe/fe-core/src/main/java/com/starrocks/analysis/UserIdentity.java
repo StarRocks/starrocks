@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -44,9 +45,13 @@ import java.io.IOException;
 // cmy@192.168.%
 // cmy@[domain.name]
 public class UserIdentity implements Writable {
+    @SerializedName("user")
     private String user;
+    @SerializedName("host")
     private String host;
+    @SerializedName("isDomain")
     private boolean isDomain;
+    @SerializedName("isAnalyzed")
     private boolean isAnalyzed = false;
 
     public static final UserIdentity ROOT;
@@ -56,7 +61,10 @@ public class UserIdentity implements Writable {
         ROOT.setIsAnalyzed();
     }
 
-    private UserIdentity() {
+    /**
+     * Allow empty construction for gson
+     */
+    public UserIdentity() {
     }
 
     public UserIdentity(String user, String host) {

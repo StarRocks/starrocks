@@ -313,6 +313,10 @@ public class CTASAnalyzerTest {
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+
+        String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
+        CreateTableAsSelectStmt createTableStmt3 =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
     }
 
     @Test

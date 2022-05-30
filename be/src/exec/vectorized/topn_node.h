@@ -31,6 +31,7 @@ public:
 
 private:
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
+    const TPlanNode& _tnode;
 
     // Only used for profile
     std::string _sort_keys;

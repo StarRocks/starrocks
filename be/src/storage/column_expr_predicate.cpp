@@ -9,6 +9,7 @@
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
@@ -31,6 +32,22 @@ ColumnExprPredicate::~ColumnExprPredicate() {
     }
 }
 
+void ColumnExprPredicate::_add_expr_ctxs(std::vector<ExprContext*> expr_ctxs) {
+    for (auto& expr : expr_ctxs) {
+        _add_expr_ctx(expr);
+    }
+}
+
+void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
+    if (expr_ctx != nullptr) {
+        DCHECK(expr_ctx->opened());
+        // Transfer the ownership to object pool
+        auto* ctx = _state->obj_pool()->add(expr_ctx.release());
+        _expr_ctxs.emplace_back(ctx);
+        _monotonic &= ctx->root()->is_monotonic();
+    }
+}
+
 void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
@@ -41,7 +58,7 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     }
 }
 
-void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
@@ -55,11 +72,13 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
     // The first one is expr context from planner
     // and others will be some cast exprs from one type to another
     // eg. [x as int >= 10]  [string->int] <- column(x as string)
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
         ExprContext* ctx = _expr_ctxs[i];
         chunk.update_column(bits, _slot_desc->id());
-        bits = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), &chunk);
+        ASSIGN_OR_RETURN(bits, ctx->evaluate(&chunk));
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     // deal with constant.
     if (bits->is_constant()) {
@@ -69,7 +88,7 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
             value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(bits);
         }
         memset(selection + from, value, (to - from));
-        return;
+        return Status::OK();
     }
 
     // deal with nullable.
@@ -80,39 +99,42 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
         for (uint16_t i = from; i < to; i++) {
             selection[i] = (!null_value[i]) & (data_value[i]);
         }
-        return;
+        return Status::OK();
     }
 
     // deal with non-nullable.
     uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
     memcpy(selection + from, data_value, (to - from));
-    return;
+    return Status::OK();
 }
 
-void ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
     uint16_t size = to - from;
     _tmp_select.reserve(size);
     uint8_t* tmp = _tmp_select.data();
-    evaluate(column, tmp, 0, size);
+    RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] &= tmp[i];
     }
+    return Status::OK();
 }
 
-void ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     // Does not support range evaluatation.
     DCHECK(from == 0);
 
     uint16_t size = to - from;
     _tmp_select.reserve(size);
     uint8_t* tmp = _tmp_select.data();
-    evaluate(column, tmp, 0, size);
+    RETURN_IF_ERROR(evaluate(column, tmp, 0, size));
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] |= tmp[i];
     }
+
+    return Status::OK();
 }
 
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
@@ -152,17 +174,15 @@ Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const Typ
     Expr* cast_expr = VectorizedCastExprFactory::from_type(input_type, to_type, column_ref, obj_pool);
     column_ref->set_monotonic(true);
     cast_expr->set_monotonic(true);
-    ExprContext* cast_expr_ctx = obj_pool->add(new ExprContext(cast_expr));
 
+    auto cast_expr_ctx = std::make_unique<ExprContext>(cast_expr);
     RETURN_IF_ERROR(cast_expr_ctx->prepare(_state));
     RETURN_IF_ERROR(cast_expr_ctx->open(_state));
 
     ColumnExprPredicate* pred =
             obj_pool->add(new ColumnExprPredicate(target_type_info, _column_id, _state, nullptr, _slot_desc));
-    for (ExprContext* ctx : _expr_ctxs) {
-        pred->_add_expr_ctx(ctx);
-    }
-    pred->_add_expr_ctx(cast_expr_ctx);
+    pred->_add_expr_ctxs(_expr_ctxs);
+    pred->_add_expr_ctx(std::move(cast_expr_ctx));
     *output = pred;
     return Status::OK();
 }
@@ -224,14 +244,14 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     }
     // build new ColumnExprPredicates
     for (auto& expr : exprs_after_rewrite) {
-        ExprContext* ctx = pool->add(new ExprContext(expr));
-        RETURN_IF_ERROR(ctx->prepare(_state));
-        RETURN_IF_ERROR(ctx->open(_state));
-        pool->add(new DeferOp([ctx, this]() { ctx->close(_state); }));
+        auto expr_rewrite = std::make_unique<ExprContext>(expr);
+        RETURN_IF_ERROR(expr_rewrite->prepare(_state));
+        RETURN_IF_ERROR(expr_rewrite->open(_state));
+
         ColumnExprPredicate* new_pred =
-                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc));
-        // copy other cast exprs
-        for (size_t i = 1; i < _expr_ctxs.size(); i++) {
+                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, nullptr, _slot_desc));
+        new_pred->_add_expr_ctx(std::move(expr_rewrite));
+        for (int i = 1; i < _expr_ctxs.size(); i++) {
             new_pred->_add_expr_ctx(_expr_ctxs[i]);
         }
         output->emplace_back(new_pred);
@@ -240,14 +260,16 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 
-void ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     memset(selection + from, 0x1, to - from);
+    return Status::OK();
 }
-void ColumnTruePredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
-    return;
+Status ColumnTruePredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+    return Status::OK();
 }
-void ColumnTruePredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+Status ColumnTruePredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
     memset(sel + from, 0x1, to - from);
+    return Status::OK();
 }
 
 Status ColumnTruePredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,

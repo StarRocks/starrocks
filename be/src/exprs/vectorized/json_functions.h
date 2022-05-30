@@ -186,6 +186,15 @@ public:
     }
 
 private:
+#define APPEND_NULL_AND_RETURN_IF_ERROR(builder, err) \
+    do {                                              \
+        const simdjson::error_code& e = err;          \
+        if (UNLIKELY(e)) {                            \
+            builder.append_null();                    \
+            return;                                   \
+        }                                             \
+    } while (false)
+
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
 

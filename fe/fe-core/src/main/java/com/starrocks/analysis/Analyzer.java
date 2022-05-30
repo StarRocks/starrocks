@@ -1359,6 +1359,10 @@ public class Analyzer {
         return globalState.context.getDatabase();
     }
 
+    public String getDefaultCatalog() {
+        return globalState.context.getCurrentCatalog();
+    }
+
     public String getClusterName() {
         return globalState.context.getClusterName();
     }

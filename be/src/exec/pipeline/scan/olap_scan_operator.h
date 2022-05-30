@@ -33,7 +33,7 @@ private:
 class OlapScanOperator final : public ScanOperator {
 public:
     OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                     OlapScanContextPtr ctx);
+                     int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks, OlapScanContextPtr ctx);
 
     ~OlapScanOperator() override;
 

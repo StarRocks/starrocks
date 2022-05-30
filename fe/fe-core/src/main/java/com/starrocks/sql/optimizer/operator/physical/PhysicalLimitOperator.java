@@ -9,8 +9,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 
-import java.util.Objects;
-
 public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
 
@@ -37,21 +35,11 @@ public class PhysicalLimitOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalLimitOperator that = (PhysicalLimitOperator) o;
-        return offset == that.offset;
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), offset);
+        return System.identityHashCode(this);
     }
 }

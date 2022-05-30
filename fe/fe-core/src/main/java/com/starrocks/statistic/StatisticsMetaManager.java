@@ -71,7 +71,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
 
-        COLUMNS_V2 = ImmutableList.of(
+        FULL_STATISTICS_COLUMNS = ImmutableList.of(
                 new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
                 new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
@@ -91,7 +91,7 @@ public class StatisticsMetaManager extends MasterDaemon {
 
     private static final List<ColumnDef> COLUMNS;
 
-    private static final List<ColumnDef> COLUMNS_V2;
+    private static final List<ColumnDef> FULL_STATISTICS_COLUMNS;
 
     // If all replicas are lost more than 3 times in a row, rebuild the statistics table
     private int lossTableCount = 0;
@@ -130,7 +130,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         return db.getTable(Constants.FullStatisticsTableName) != null;
     }
 
-    private boolean checkReplicateNormal() {
+    private boolean checkReplicateNormal(String tableName) {
         int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
         // maybe cluster just shutdown, ignore
@@ -141,7 +141,7 @@ public class StatisticsMetaManager extends MasterDaemon {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
         Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
 
         boolean check = true;
@@ -167,7 +167,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             "table_id", "column_name", "db_id"
     );
 
-    private static final List<String> keyColumnNamesV2 = ImmutableList.of(
+    private static final List<String> fullStatisticsKeyColumns = ImmutableList.of(
             "partition_id", "column_name"
     );
 
@@ -205,7 +205,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         return checkTableExist();
     }
 
-    private boolean createTableV2() {
+    private boolean createFullStatisticsTable() {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(Constants.StatisticsDBName,
                 Constants.FullStatisticsTableName);
@@ -214,10 +214,10 @@ public class StatisticsMetaManager extends MasterDaemon {
                 GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName, COLUMNS_V2, "olap",
-                new KeysDesc(KeysType.PRIMARY_KEYS, keyColumnNamesV2),
+                tableName, FULL_STATISTICS_COLUMNS, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, fullStatisticsKeyColumns),
                 null,
-                new HashDistributionDesc(10, keyColumnNamesV2),
+                new HashDistributionDesc(10, fullStatisticsKeyColumns),
                 properties,
                 null,
                 "");
@@ -254,7 +254,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         return !checkTableExist();
     }
 
-    private boolean dropTableV2() {
+    private boolean dropFullStatisticsTable() {
         LOG.info("drop statistics table start");
         TableName tableName = new TableName(Constants.StatisticsDBName, Constants.FullStatisticsTableName);
         DropTableStmt stmt = new DropTableStmt(true, tableName, true);
@@ -288,15 +288,12 @@ public class StatisticsMetaManager extends MasterDaemon {
             trySleep(10000);
         }
 
-        /*
-        while (checkTableExist() && !checkReplicateNormal()) {
+        while (checkTableExist() && !checkReplicateNormal(Constants.StatisticsTableName)) {
             if (dropTable()) {
                 break;
             }
             trySleep(10000);
         }
-
-         */
 
         while (!checkTableExist()) {
             if (createTable()) {
@@ -306,8 +303,15 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
 
         if (Config.enable_collect_full_statistics) {
+            while (checkFullStatisticsTableExist() && !checkReplicateNormal(Constants.FullStatisticsTableName)) {
+                if (dropFullStatisticsTable()) {
+                    break;
+                }
+                trySleep(10000);
+            }
+
             while (!checkFullStatisticsTableExist()) {
-                if (createTableV2()) {
+                if (createFullStatisticsTable()) {
                     break;
                 }
                 trySleep(10000);

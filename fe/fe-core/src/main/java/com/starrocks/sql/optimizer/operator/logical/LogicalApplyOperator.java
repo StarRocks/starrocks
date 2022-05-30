@@ -48,8 +48,16 @@ public class LogicalApplyOperator extends LogicalOperator {
      */
     private final boolean useSemiAnti;
 
+    private final boolean needOutputRightChildColumns;
+
     public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
                                 List<ColumnRefOperator> correlationColumnRefs, boolean useSemiAnti) {
+        this(output, subqueryOperator, correlationColumnRefs, useSemiAnti, false);
+    }
+
+    public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
+                                List<ColumnRefOperator> correlationColumnRefs, boolean useSemiAnti,
+                                boolean needOutputRightChildColumns) {
         super(OperatorType.LOGICAL_APPLY);
         this.output = output;
         this.subqueryOperator = subqueryOperator;
@@ -57,6 +65,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         this.correlationConjuncts = null;
         this.needCheckMaxRows = isScalar();
         this.useSemiAnti = useSemiAnti;
+        this.needOutputRightChildColumns = needOutputRightChildColumns;
     }
 
     public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
@@ -70,6 +79,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         this.predicate = predicate;
         this.needCheckMaxRows = needCheckMaxRows;
         this.useSemiAnti = useSemiAnti;
+        this.needOutputRightChildColumns = false;
     }
 
     public ColumnRefOperator getOutput() {
@@ -92,6 +102,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         return subqueryOperator;
     }
 
+
     public List<ColumnRefOperator> getCorrelationColumnRefs() {
         return correlationColumnRefs;
     }
@@ -112,8 +123,9 @@ public class LogicalApplyOperator extends LogicalOperator {
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         ColumnRefSet outputColumns =
                 (ColumnRefSet) expressionContext.getChildLogicalProperty(0).getOutputColumns().clone();
-        outputColumns.union(expressionContext.getChildLogicalProperty(1).getOutputColumns());
-        if (output != null) {
+        if (needOutputRightChildColumns) {
+            outputColumns.union(expressionContext.getChildLogicalProperty(1).getOutputColumns());
+        } else if (output != null) {
             outputColumns.union(output);
         }
         return outputColumns;

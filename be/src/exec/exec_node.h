@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -51,11 +52,14 @@ class DataSink;
 
 namespace pipeline {
 class OperatorFactory;
+class SourceOperatorFactory;
 class PipelineBuilderContext;
 class RefCountedRuntimeFilterProbeCollector;
 } // namespace pipeline
 using OperatorFactory = starrocks::pipeline::OperatorFactory;
 using OperatorFactoryPtr = std::shared_ptr<OperatorFactory>;
+using SourceOperatorFactory = starrocks::pipeline::SourceOperatorFactory;
+using SourceOperatorFactoryPtr = std::shared_ptr<SourceOperatorFactory>;
 using OpFactories = std::vector<OperatorFactoryPtr>;
 using RcRfProbeCollector = starrocks::pipeline::RefCountedRuntimeFilterProbeCollector;
 using RcRfProbeCollectorPtr = std::shared_ptr<RcRfProbeCollector>;
@@ -214,8 +218,10 @@ public:
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
-    // local runtime filters that are conducted on this ExecNode are planned by FE.
+    // local runtime filters that are conducted on this ExecNode.
     const std::set<TPlanNodeId>& local_rf_waiting_set() const { return _local_rf_waiting_set; }
+
+    std::set<TPlanNodeId>& local_rf_waiting_set() { return _local_rf_waiting_set; }
 
     // initialize OperatorFactories' fields involving runtime filters.
     void init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,

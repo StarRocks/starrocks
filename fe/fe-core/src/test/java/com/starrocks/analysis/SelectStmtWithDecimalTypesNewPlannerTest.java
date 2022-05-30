@@ -274,8 +274,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimal32Stddev() throws Exception {
         String sql = "select stddev(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet =
-                "stddev[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -283,8 +282,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimal32Variance() throws Exception {
         String sql = "select variance(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet =
-                "variance[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))";
         Assert.assertTrue(plan.contains(snippet));
     }
 

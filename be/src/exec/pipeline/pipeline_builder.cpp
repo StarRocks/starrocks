@@ -41,13 +41,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
                                                                                  OpFactories& pred_operators,
-                                                                                 int num_receivers) {
+                                                                                 int num_receivers, bool force) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
-    if (source_operator->degree_of_parallelism() == num_receivers) {
+    if (!force && source_operator->degree_of_parallelism() == num_receivers) {
         return pred_operators;
     }
 
@@ -145,6 +145,16 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
 
     return operators_source_with_local_exchange;
+}
+
+MorselQueue* PipelineBuilderContext::morsel_queue_of_source_operator(const SourceOperatorFactory* source_op) {
+    if (!source_op->with_morsels()) {
+        return nullptr;
+    }
+    auto& morsel_queues = _fragment_context->morsel_queues();
+    auto source_id = source_op->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    return morsel_queues[source_id].get();
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {

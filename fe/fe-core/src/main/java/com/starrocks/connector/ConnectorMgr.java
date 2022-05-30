@@ -10,12 +10,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
     private final ConcurrentHashMap<String, Connector> connectors = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
+    private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
     private final MetadataMgr metadataMgr;
 
@@ -42,16 +45,33 @@ public class ConnectorMgr {
         String type = context.getType();
         ConnectorFactory connectorFactory = connectorFactories.get(type);
         Preconditions.checkNotNull(connectorFactory, "Cannot load %s connector factory", type);
-        Preconditions.checkState(!connectors.containsKey(catalogName), "Connector of catalog '%s' already exists", catalogName);
+        readLock();
+        try {
+            Preconditions.checkState(!connectors.containsKey(catalogName),
+                    "Connector of catalog '%s' already exists", catalogName);
+        } finally {
+            readUnlock();
+        }
 
         Connector connector = connectorFactory.createConnector(context);
-        connectors.put(catalogName, connector);
+
+        writeLock();
+        try {
+            connectors.put(catalogName, connector);
+        } finally {
+            writeUnLock();
+        }
 
         // TODO (stephen): to test behavior that failed to create connector when fe starting.
         try {
             registerConnectorInternal(connector, context);
         } catch (Exception e) {
-            connectors.remove(catalogName);
+            writeLock();
+            try {
+                connectors.remove(catalogName);
+            } finally {
+                writeUnLock();
+            }
             throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
                     catalogName, type), e);
         }
@@ -59,13 +79,29 @@ public class ConnectorMgr {
     }
 
     public void removeConnector(String catalogName) {
-        Preconditions.checkState(connectors.containsKey(catalogName), "Connector of catalog '%s' doesn't exist", catalogName);
+        readLock();
+        try {
+            Preconditions.checkState(connectors.containsKey(catalogName), "Connector of catalog '%s' doesn't exist", catalogName);
+        } finally {
+            readUnlock();
+        }
+
         removeConnectorInternal(catalogName);
-        connectors.remove(catalogName);
+        writeLock();
+        try {
+            connectors.remove(catalogName);
+        } finally {
+            writeUnLock();
+        }
     }
 
     public boolean connectorExists(String catalogName) {
-        return connectors.containsKey(catalogName);
+        readLock();
+        try {
+            return connectors.containsKey(catalogName);
+        } finally {
+            readUnlock();
+        }
     }
 
     private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
@@ -75,4 +111,21 @@ public class ConnectorMgr {
     private void removeConnectorInternal(String catalogName) {
         metadataMgr.removeMetadata(catalogName);
     }
+
+    private void readLock() {
+        this.connectorLock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        this.connectorLock.readLock().unlock();
+    }
+
+    private void writeLock() {
+        this.connectorLock.writeLock().lock();
+    }
+
+    private void writeUnLock() {
+        this.connectorLock.writeLock().unlock();
+    }
+
 }
