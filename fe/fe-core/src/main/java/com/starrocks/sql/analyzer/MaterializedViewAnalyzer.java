@@ -289,7 +289,7 @@ public class MaterializedViewAnalyzer {
             }
             FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
             String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equals(FunctionSet.DATE_TRUNC)) {
+            if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {

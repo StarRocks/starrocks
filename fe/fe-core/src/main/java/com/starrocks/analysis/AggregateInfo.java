@@ -587,7 +587,7 @@ public final class AggregateInfo extends AggregateInfoBase {
                     Preconditions.checkNotNull(ifExpr);
                     ifExpr.analyzeNoThrow(analyzer);
                     aggExpr = new FunctionCallExpr(FunctionSet.COUNT, Lists.newArrayList(ifExpr));
-                } else if (inputExpr.getFnName().getFunction().equals(FunctionSet.GROUP_CONCAT)) {
+                } else if (inputExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
                     // Syntax: GROUP_CONCAT([DISTINCT] expression [, separator])
                     ArrayList<Expr> exprList = Lists.newArrayList();
                     // Add "expression" parameter. Need to get it from the inputDesc's slots so the

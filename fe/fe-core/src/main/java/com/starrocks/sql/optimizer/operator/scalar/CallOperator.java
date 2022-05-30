@@ -65,7 +65,7 @@ public class CallOperator extends ScalarOperator {
     }
 
     public boolean isCountStar() {
-        return fnName.equals(FunctionSet.COUNT) && arguments.isEmpty();
+        return fnName.equalsIgnoreCase(FunctionSet.COUNT) && arguments.isEmpty();
     }
 
     public boolean isAggregate() {
@@ -80,13 +80,13 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public String debugString() {
-        if (fnName.equals(FunctionSet.ADD)) {
+        if (fnName.equalsIgnoreCase(FunctionSet.ADD)) {
             return getChild(0).debugString() + " + " + getChild(1).debugString();
-        } else if (fnName.equals(FunctionSet.SUBTRACT)) {
+        } else if (fnName.equalsIgnoreCase(FunctionSet.SUBTRACT)) {
             return getChild(0).debugString() + " - " + getChild(1).debugString();
-        } else if (fnName.equals(FunctionSet.MULTIPLY)) {
+        } else if (fnName.equalsIgnoreCase(FunctionSet.MULTIPLY)) {
             return getChild(0).debugString() + " * " + getChild(1).debugString();
-        } else if (fnName.equals(FunctionSet.DIVIDE)) {
+        } else if (fnName.equalsIgnoreCase(FunctionSet.DIVIDE)) {
             return getChild(0).debugString() + " / " + getChild(1).debugString();
         }
 
