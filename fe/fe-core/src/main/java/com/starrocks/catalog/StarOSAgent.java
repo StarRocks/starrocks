@@ -113,7 +113,7 @@ public class StarOSAgent {
 
         try {
             serviceId = client.bootstrapService("starrocks", serviceName);
-            LOG.info("get serviceId: {} by bootstrapService to strMgr", serviceId);
+            LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
@@ -135,7 +135,7 @@ public class StarOSAgent {
             LOG.warn(e);
             System.exit(-1);
         }
-        LOG.info("get serviceId: {} by getServiceInfo from strMgr", serviceId);
+        LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
     public void addWorker(long backendId, String workerIpPort) {
@@ -152,6 +152,7 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
+                return;
             } else {
                 // get workerId from staros
                 try {
