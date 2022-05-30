@@ -53,6 +53,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _morsel_get_timer = ADD_TIMER(_unique_metrics, "MorselGet");
     _trigger_scan_timer = ADD_TIMER(_unique_metrics, "TriggerScan");
+    _commit_task_timer = ADD_TIMER(_unique_metrics, "CommitTask");
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -293,7 +294,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         // TODO(by satanson): set a proper priority
         task.priority = 20;
 
-        offer_task_success = _io_threads->try_offer(task);
+        {
+            SCOPED_TIMER(_commit_task_timer);
+            offer_task_success = _io_threads->try_offer(task);
+        }
     }
 
     if (offer_task_success) {
