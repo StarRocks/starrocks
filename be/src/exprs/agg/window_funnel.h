@@ -31,7 +31,7 @@ struct ComparePairFirst final {
     }
 };
 
-enum FunnelMode : int { DEDUPLICATION = 1, ORDER = 2, DEDUPLICATION_ORDER = 3 };
+enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3 };
 
 template <PrimitiveType PT>
 struct WindowFunnelState {
@@ -43,7 +43,7 @@ struct WindowFunnelState {
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
     mutable std::vector<TimestampEvent> events_list;
-    using EventTimestampVector = std::vector<std::pair<TimestampType, int>>;
+    using TimestampVector = std::vector<TimestampType>;
     int64_t window_size;
     int32_t mode;
     uint8_t events_size;
@@ -128,7 +128,7 @@ struct WindowFunnelState {
 
         auto const& ordered_events_list = events_list;
         if (!mode) {
-            std::vector<TimestampType> events_timestamp(events_size, -1);
+            TimestampVector events_timestamp(events_size, -1);
             auto begin = ordered_events_list.begin();
             while (begin != ordered_events_list.end()) {
                 TimestampType timestamp = (*begin).first;
@@ -163,16 +163,13 @@ struct WindowFunnelState {
         // max level when search event chains.
         int8_t max_level = -1;
         // curr_event_level is used to record max level in search for a event chain,
-        // It will update max_level and reduce when encounter condition of deduplication or order mode.
+        // It will update max_level and reduce when encounter condition of deduplication or fixed mode.
         int8_t curr_event_level = -1;
-        // It used to index event chain, and monotonic increasing when encounter event_idx = 0.
-        int event_chiain_index = 0;
 
         /*
-         * first  of EventTimestamp's element is the timestamp of event.
-         * second of EventTimestamp's element is the event_chain_index, It used to eliminate last event chain in dudeplication and order mode.
+         * EventTimestamp's element is the timestamp of event.
          */
-        EventTimestampVector events_timestamp(events_size, std::pair(-1, -1));
+        TimestampVector events_timestamp(events_size, -1);
         auto begin = ordered_events_list.begin();
         switch (mode) {
         // mode: deduplication
@@ -189,27 +186,20 @@ struct WindowFunnelState {
                 event_idx -= 1;
                 // begin a new event chain.
                 if (event_idx == 0) {
-                    events_timestamp[0] = std::make_pair(timestamp, event_chiain_index++);
+                    events_timestamp[0] = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     // encounter condition of deduplication: an existing event occurs.
-                } else if (events_timestamp[event_idx].first >= 0) {
+                } else if (events_timestamp[event_idx] >= 0) {
                     if (curr_event_level > max_level) {
                         max_level = curr_event_level;
                     }
-                    DCHECK(events_timestamp[event_idx].second == events_timestamp[curr_event_level].second);
 
                     // Eliminate last event chain
-                    eliminate_last_event_chain(&curr_event_level, &events_timestamp,
-                                               events_timestamp[curr_event_level].second);
+                    eliminate_last_event_chains(&curr_event_level, &events_timestamp);
 
-                    if (event_idx == 1 && events_timestamp[event_idx - 1].first >= 0) {
-                        if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
-                            return events_size;
-                        }
-                    }
-                } else if (events_timestamp[event_idx - 1].first >= 0) {
+                } else if (events_timestamp[event_idx - 1] >= 0) {
                     if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
                         return events_size;
                     }
@@ -217,8 +207,8 @@ struct WindowFunnelState {
                 ++begin;
             }
         } break;
-        // mode: order
-        case ORDER: {
+        // mode: fixed
+        case FIXED: {
             bool first_event = false;
             while (begin != ordered_events_list.end()) {
                 TimestampType timestamp = (*begin).first;
@@ -231,23 +221,22 @@ struct WindowFunnelState {
 
                 event_idx -= 1;
                 if (event_idx == 0) {
-                    events_timestamp[0] = std::make_pair(timestamp, event_chiain_index++);
+                    events_timestamp[0] = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     first_event = true;
-                    // encounter condition of order: a leap event occurred.
-                } else if (first_event && events_timestamp[event_idx - 1].first < 0) {
+                    // encounter condition of fixed: a leap event occurred.
+                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
                     if (curr_event_level >= 0) {
                         if (curr_event_level > max_level) {
                             max_level = curr_event_level;
                         }
 
                         // Eliminate last event chain
-                        eliminate_last_event_chain(&curr_event_level, &events_timestamp,
-                                                   events_timestamp[curr_event_level].second);
+                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
                     }
-                } else if (events_timestamp[event_idx - 1].first >= 0) {
+                } else if (events_timestamp[event_idx - 1] >= 0) {
                     if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
                         return events_size;
                     }
@@ -255,8 +244,8 @@ struct WindowFunnelState {
                 ++begin;
             }
         } break;
-        // mode: deduplication | order
-        case DEDUPLICATION_ORDER: {
+        // mode: deduplication | fixed
+        case DEDUPLICATION_FIXED: {
             bool first_event = false;
             while (begin != ordered_events_list.end()) {
                 TimestampType timestamp = (*begin).first;
@@ -270,37 +259,29 @@ struct WindowFunnelState {
                 event_idx -= 1;
 
                 if (event_idx == 0) {
-                    events_timestamp[0] = std::make_pair(timestamp, event_chiain_index++);
+                    events_timestamp[0] = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     first_event = true;
-                } else if (events_timestamp[event_idx].first >= 0) {
+                } else if (events_timestamp[event_idx] >= 0) {
                     if (curr_event_level > max_level) {
                         max_level = curr_event_level;
                     }
-                    DCHECK(events_timestamp[event_idx].second == events_timestamp[curr_event_level].second);
 
                     // Eliminate last event chain
-                    eliminate_last_event_chain(&curr_event_level, &events_timestamp,
-                                               events_timestamp[curr_event_level].second);
+                    eliminate_last_event_chains(&curr_event_level, &events_timestamp);
 
-                    if (event_idx == 1 && events_timestamp[event_idx - 1].first >= 0) {
-                        if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
-                            return events_size;
-                        }
-                    }
-                } else if (first_event && events_timestamp[event_idx - 1].first < 0) {
+                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
                     if (curr_event_level >= 0) {
                         if (curr_event_level > max_level) {
                             max_level = curr_event_level;
                         }
 
                         // Eliminate last event chain
-                        eliminate_last_event_chain(&curr_event_level, &events_timestamp,
-                                                   events_timestamp[curr_event_level].second);
+                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
                     }
-                } else if (events_timestamp[event_idx - 1].first >= 0) {
+                } else if (events_timestamp[event_idx - 1] >= 0) {
                     if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
                         return events_size;
                     }
@@ -320,26 +301,20 @@ struct WindowFunnelState {
         }
     }
 
-    static void eliminate_last_event_chain(int8_t* curr_event_level, EventTimestampVector* events_timestamp,
-                                           const int event_chain_index) {
+    static void eliminate_last_event_chains(int8_t* curr_event_level, TimestampVector* events_timestamp) {
         for (; (*curr_event_level) >= 0; --(*curr_event_level)) {
-            if ((*events_timestamp)[(*curr_event_level)].second == event_chain_index) {
-                // reset events_timestamp with -1.
-                (*events_timestamp)[(*curr_event_level)].first = -1;
-            } else {
-                break;
-            }
+            (*events_timestamp)[(*curr_event_level)] = -1;
         }
     }
 
-    bool promote_to_next_level(EventTimestampVector* events_timestamp, const TimestampType& timestamp,
+    bool promote_to_next_level(TimestampVector* events_timestamp, const TimestampType& timestamp,
                                const int8_t event_idx, int8_t* curr_event_level) const {
-        auto first_timestamp = (*events_timestamp)[event_idx - 1].first;
+        auto first_timestamp = (*events_timestamp)[event_idx - 1];
         bool time_matched = (timestamp <= (first_timestamp + window_size));
 
         if (time_matched) {
             // use prev level event's event_chain_level to record with this event.
-            (*events_timestamp)[event_idx] = std::make_pair(first_timestamp, (*events_timestamp)[event_idx - 1].second);
+            (*events_timestamp)[event_idx] = first_timestamp;
 
             // update curr_event_level to bigger one.
             if (event_idx > (*curr_event_level)) {
@@ -354,7 +329,7 @@ struct WindowFunnelState {
         return false;
     }
 
-    // 1th bit for deduplication, 2th bit for order.
+    // 1th bit for deduplication, 2th bit for fixed.
     static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
