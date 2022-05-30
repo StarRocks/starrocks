@@ -8,17 +8,24 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -26,10 +33,16 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import org.antlr.v4.runtime.atn.LexerPushModeAction;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -41,21 +54,22 @@ public class ColumnFilterConverter {
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
-    public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
+    public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates, Table table) {
         Map<String, PartitionColumnFilter> result = Maps.newHashMap();
         for (ScalarOperator op : predicates) {
-            convertColumnFilter(op, result);
+            convertColumnFilter(op, result, table);
         }
 
         return result;
     }
 
-    public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result) {
+    public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
+                                           Table table) {
         if (predicate.getChildren().size() <= 0) {
             return;
         }
 
-        if (!checkColumnRefCanPartition(predicate.getChild(0))) {
+        if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
             return;
         }
 
@@ -66,7 +80,7 @@ public class ColumnFilterConverter {
         predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
-    private static boolean checkColumnRefCanPartition(ScalarOperator right) {
+    private static boolean checkColumnRefCanPartition(ScalarOperator right, Table table) {
         if (OperatorType.VARIABLE.equals(right.getOpType())) {
             return true;
         }
@@ -86,8 +100,50 @@ public class ColumnFilterConverter {
 
             return type.equals(columnType);
         }
+        if (right instanceof CallOperator) {
+            if (!(table instanceof OlapTable)) {
+                return false;
+            }
+            PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
+            // TODO: 5/26/22 partitionInfo instanceof ExprPartitionInfo
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                return false;
+            }
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Expr> exprList = getDummyExprList();
+
+            return checkContains(exprList, (CallOperator) right);
+        }
 
         return false;
+    }
+
+    private static List<Expr> getDummyExprList() {
+        List<Expr> exprList = new ArrayList<>();
+        FunctionCallExpr expr = new FunctionCallExpr("", new ArrayList<>());
+        exprList.add(expr);
+        return exprList;
+    }
+
+    private static boolean checkContains(List<Expr> exprList,
+                                         CallOperator callOperator) {
+        if (CollectionUtils.isEmpty(exprList) || exprList.size() != 1) {
+            return false;
+        }
+        Expr expr = exprList.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        return checkEquals(functionCallExpr, callOperator);
+    }
+
+    private static boolean checkEquals(FunctionCallExpr functionCallExpr,
+                                       CallOperator callOperator) {
+        ScalarOperator translate = SqlToScalarOperatorTranslator.translate(functionCallExpr,
+                new ExpressionMapping(null, Collections.emptyList()));
+
+        return functionCallExpr.equals(translate);
     }
 
     private static class ColumnFilterVisitor

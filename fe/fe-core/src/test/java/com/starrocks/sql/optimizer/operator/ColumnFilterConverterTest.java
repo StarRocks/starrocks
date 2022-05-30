@@ -51,7 +51,7 @@ public class ColumnFilterConverterTest {
 
         List<ScalarOperator> list = Lists.newArrayList(root1, root2, root3, root4, root5, root6);
 
-        Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+        Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list, null);
 
         assertEquals(3, result.size());
 
@@ -79,7 +79,7 @@ public class ColumnFilterConverterTest {
             IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false,
                     new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
-            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list,null);
             assertEquals(result.size(), 0);
         }
         {
@@ -87,7 +87,7 @@ public class ColumnFilterConverterTest {
             IsNullPredicateOperator isNullPredicate =
                     new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
-            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+            Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list,null);
             assertEquals(result.size(), 1);
             PartitionColumnFilter filter = result.get("c0");
             assertEquals(filter.lowerBound, new NullLiteral());
