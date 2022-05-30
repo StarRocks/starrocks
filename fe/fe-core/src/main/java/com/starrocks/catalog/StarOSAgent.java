@@ -161,13 +161,10 @@ public class StarOSAgent {
                     LOG.warn(e2);
                     return;
                 }
-
-                workerToId.put(workerIpPort, workerId);
-                workerToBackend.put(workerId, backendId);
                 LOG.info("worker {} already added in starMgr", workerId);
             }
-            return;
         }
+
         workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);
         LOG.info("add worker {} succ, backendId is {}", workerId, backendId);
