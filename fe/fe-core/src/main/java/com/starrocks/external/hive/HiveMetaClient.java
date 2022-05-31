@@ -75,6 +75,8 @@ public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
+    public static final String DLF_HIVE_METASTORE = "dlf";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -120,8 +122,13 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                    HiveMetaStoreThriftClient.class.getName());
+            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                        HiveMetaStoreThriftClient.class.getName());
+            } else {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                        DLFProxyMetaStoreClient.class.getName());
+            }
         }
 
         @Override

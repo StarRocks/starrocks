@@ -366,6 +366,10 @@ public class LocalMetastore implements ConnectorMetadata {
         idToCluster.put(cluster.getId(), cluster);
     }
 
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return idToDb;
+    }
+
     public void replayCreateDb(Database db) {
         tryLock(true);
         try {

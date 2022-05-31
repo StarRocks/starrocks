@@ -35,14 +35,14 @@ struct DataSegment {
 
     // there is two compares in the method,
     // the first is:
-    //     compare every row in every DataSegment of data_segments with number_of_rows_to_sort - 1 row of this DataSegment,
+    //     compare every row in every DataSegment of data_segments with rows_to_sort - 1 row of this DataSegment,
     //     obtain every row compare result in compare_results_array, if < 0, use it to set IN at filter_array.
     // the second is:
     //     compare every row in compare_results_array that less than 0, use it to compare with first row of this DataSegment,
     //     as the first step, we set BEFORE_LAST_RESULT at filter_array.
     //
     // Actually, we Count the results in the first compare for the second compare.
-    Status get_filter_array(std::vector<DataSegment>& data_segments, size_t number_of_rows_to_sort,
+    Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
                             std::vector<std::vector<uint8_t>>& filter_array, const std::vector<int>& sort_order_flags,
                             const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num);
 
@@ -123,9 +123,6 @@ public:
 
     virtual int64_t mem_usage() const = 0;
 
-    // For test only
-    void set_compare_strategy(CompareStrategy cmp) { _compare_strategy = cmp; }
-
 protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
@@ -147,8 +144,6 @@ protected:
     RuntimeProfile::Counter* _output_timer = nullptr;
 
     std::atomic<bool> _is_sink_complete = false;
-
-    CompareStrategy _compare_strategy = Default;
 };
 
 } // namespace starrocks::vectorized

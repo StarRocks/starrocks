@@ -16,6 +16,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -193,7 +194,8 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                CheckPartitionFunction checkPartitionFunction = PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                CheckPartitionFunction checkPartitionFunction =
+                        PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support");
@@ -333,7 +335,7 @@ public class MaterializedViewAnalyzer {
             }
             FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
             String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equals("date_trunc")) {
+            if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {

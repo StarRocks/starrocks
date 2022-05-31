@@ -7,60 +7,61 @@
 namespace starrocks::vectorized {
 
 // NOTE: No short-circuit.
-void ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
-    evaluate(chunk, selection, 0, chunk->num_rows());
+Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
+    return evaluate(chunk, selection, 0, chunk->num_rows());
 }
 
-void ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection) const {
-    evaluate_and(chunk, selection, 0, chunk->num_rows());
+Status ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection) const {
+    return evaluate_and(chunk, selection, 0, chunk->num_rows());
 }
 
-void ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection) const {
-    evaluate_or(chunk, selection, 0, chunk->num_rows());
+Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection) const {
+    return evaluate_or(chunk, selection, 0, chunk->num_rows());
 }
 
-void ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     DCHECK_LE(to, chunk->num_rows());
     if (!_vec_preds.empty()) {
         const ColumnPredicate* pred = _vec_preds[0];
         const Column* col = chunk->get_column_by_id(pred->column_id()).get();
-        pred->evaluate(col, selection, from, to);
+        RETURN_IF_ERROR(pred->evaluate(col, selection, from, to));
         for (size_t i = 1; i < _vec_preds.size(); i++) {
             pred = _vec_preds[i];
             col = chunk->get_column_by_id(pred->column_id()).get();
-            pred->evaluate_and(col, selection, from, to);
+            RETURN_IF_ERROR(pred->evaluate_and(col, selection, from, to));
         }
     }
-    _evaluate_non_vec(chunk, selection, from, to);
+    return _evaluate_non_vec(chunk, selection, from, to);
 }
 
-void ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     DCHECK_LE(to, chunk->num_rows());
     std::unique_ptr<uint8_t[]> buff(new uint8_t[chunk->num_rows()]);
-    evaluate(chunk, buff.get(), from, to);
+    RETURN_IF_ERROR(evaluate(chunk, buff.get(), from, to));
     const uint8_t* p = buff.get();
     for (uint16_t i = from; i < to; i++) {
         DCHECK((bool)(selection[i] | p[i]) == (selection[i] || p[i]));
         selection[i] |= p[i];
     }
+    return Status::OK();
 }
 
-void ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
+Status ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     DCHECK_LE(to, chunk->num_rows());
-    _evaluate_and(chunk, selection, from, to);
+    return _evaluate_and(chunk, selection, from, to);
 }
 
-inline void ConjunctivePredicates::_evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from,
-                                                 uint16_t to) const {
+inline Status ConjunctivePredicates::_evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from,
+                                                   uint16_t to) const {
     for (auto pred : _vec_preds) {
         const Column* col = chunk->get_column_by_id(pred->column_id()).get();
-        pred->evaluate_and(col, selection, from, to);
+        RETURN_IF_ERROR(pred->evaluate_and(col, selection, from, to));
     }
-    _evaluate_non_vec(chunk, selection, from, to);
+    return _evaluate_non_vec(chunk, selection, from, to);
 }
 
-inline void ConjunctivePredicates::_evaluate_non_vec(const Chunk* chunk, uint8_t* selection, uint16_t from,
-                                                     uint16_t to) const {
+inline Status ConjunctivePredicates::_evaluate_non_vec(const Chunk* chunk, uint8_t* selection, uint16_t from,
+                                                       uint16_t to) const {
     if (!_non_vec_preds.empty()) {
         _selected_idx.resize(to - from);
         uint16_t selected_size = 0;
@@ -81,7 +82,7 @@ inline void ConjunctivePredicates::_evaluate_non_vec(const Chunk* chunk, uint8_t
         for (size_t i = 0; selected_size > 0 && i < _non_vec_preds.size(); ++i) {
             const ColumnPredicate* pred = _non_vec_preds[i];
             const ColumnPtr& c = chunk->get_column_by_id(pred->column_id());
-            selected_size = pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size);
+            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size));
         }
 
         memset(&selection[from], 0, to - from);
@@ -89,6 +90,7 @@ inline void ConjunctivePredicates::_evaluate_non_vec(const Chunk* chunk, uint8_t
             selection[_selected_idx[i]] = 1;
         }
     }
+    return Status::OK();
 }
 
 std::string ConjunctivePredicates::debug_string() const {

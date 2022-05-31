@@ -124,10 +124,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             (com.google.common.base.Predicate<Expr>) arg -> {
                 if (arg instanceof FunctionCallExpr) {
                     String fnName = ((FunctionCallExpr) arg).getFnName().getFunction();
-                    return (fnName.equalsIgnoreCase("sum")
-                            || fnName.equalsIgnoreCase("max")
-                            || fnName.equalsIgnoreCase("min")
-                            || fnName.equalsIgnoreCase("avg")
+                    return (fnName.equalsIgnoreCase(FunctionSet.SUM)
+                            || fnName.equalsIgnoreCase(FunctionSet.MAX)
+                            || fnName.equalsIgnoreCase(FunctionSet.MIN)
+                            || fnName.equalsIgnoreCase(FunctionSet.AVG)
                             || fnName.equalsIgnoreCase(FunctionSet.COUNT));
                 } else {
                     return false;
@@ -881,10 +881,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
-    public String toJDBCSQL() {
+    public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
-
     /**
      * Return a column label for the expression
      */

@@ -188,6 +188,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
+    public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -354,7 +355,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
     private int chunkSize = 4096;
 
-    public static final int PIPELINE_BATCH_SIZE = 16384;
+    public static final int PIPELINE_BATCH_SIZE = 4096;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
     private boolean disableStreamPreaggregations = false;
@@ -433,6 +434,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
+
+    @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE, flag = VariableMgr.INVISIBLE)
+    private int cboMaxReorderNode = 50;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_DP_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableDPJoinReorder = true;
@@ -788,6 +792,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void enableGreedyJoinReorder() {
         this.cboEnableGreedyJoinReorder = true;
+    }
+
+    public int getCboMaxReorderNode() {
+        return cboMaxReorderNode;
     }
 
     public long getTransactionVisibleWaitTimeout() {

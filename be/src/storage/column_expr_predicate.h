@@ -37,9 +37,9 @@ public:
 
     ~ColumnExprPredicate() override;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_bloom_filter() const override { return false; }
@@ -79,9 +79,9 @@ class ColumnTruePredicate : public ColumnPredicate {
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(type_info, column_id) {}
     ~ColumnTruePredicate() override = default;
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
     bool support_bloom_filter() const override { return false; }
     PredicateType type() const override { return PredicateType::kTrue; }

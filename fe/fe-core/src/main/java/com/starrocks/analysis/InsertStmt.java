@@ -32,6 +32,7 @@ import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -740,7 +741,7 @@ public class InsertStmt extends DmlStmt {
             }
         } else if (expr instanceof FunctionCallExpr) {
             final FunctionCallExpr functionExpr = (FunctionCallExpr) expr;
-            if (!functionExpr.getFnName().getFunction().equalsIgnoreCase("hll_hash") &&
+            if (!functionExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
                     !functionExpr.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
                 throw new AnalysisException(hllMismatchLog);
             }

@@ -209,7 +209,7 @@ public class TransactionState implements Writable {
     private TransactionStatus preStatus = null;
 
     private long callbackId = -1;
-    private long timeoutMs = Config.stream_load_default_timeout_second;
+    private long timeoutMs = Config.stream_load_default_timeout_second * 1000;
 
     // optional
     private TxnCommitAttachment txnCommitAttachment;
@@ -427,8 +427,8 @@ public class TransactionState implements Writable {
     }
 
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
-            TxnStateChangeCallback callback,
-            String txnStatusChangeReason)
+                                    TxnStateChangeCallback callback,
+                                    String txnStatusChangeReason)
             throws UserException {
         // after status changed
         if (callback != null) {

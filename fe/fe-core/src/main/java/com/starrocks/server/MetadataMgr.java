@@ -61,6 +61,7 @@ public class MetadataMgr {
     }
 
     // get metadata by catalog name
+
     private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
