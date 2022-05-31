@@ -472,6 +472,10 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
 
     JsonPath stored_path;
     for (int row = 0; row < num_rows; ++row) {
+        if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         JsonValue* json_value = json_viewer.value(row);
         auto path_value = path_viewer.value(row);
 
@@ -502,7 +506,7 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
 
     JsonPath stored_path;
     for (int row = 0; row < num_rows; row++) {
-        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr || path_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
