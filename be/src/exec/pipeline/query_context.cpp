@@ -32,15 +32,12 @@ QueryContext::~QueryContext() {
     }
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
-    // in the mid of QueryContext destruction, so use its parent MemTracker.
-    if (_mem_tracker) {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
-        if (_exec_env != nullptr) {
-            if (_is_runtime_filter_coordinator) {
-                _exec_env->runtime_filter_worker()->close_query(_query_id);
-            }
-            _exec_env->runtime_filter_cache()->remove(_query_id);
+    // in the mid of QueryContext destruction, so use process-level memory tracker
+    if (_exec_env != nullptr) {
+        if (_is_runtime_filter_coordinator) {
+            _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
+        _exec_env->runtime_filter_cache()->remove(_query_id);
     }
 }
 
