@@ -36,4 +36,13 @@ public class RefreshTableStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitRefreshTableStatement(this, context);
     }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("REFRESH EXTERNAL TABLE ");
+        sb.append(tableName.toSql()).append(" ");
+        sb.append("PARTITION(").append(String.join("", partitionNames)).append(")");
+        return sb.toString();
+    }
 }

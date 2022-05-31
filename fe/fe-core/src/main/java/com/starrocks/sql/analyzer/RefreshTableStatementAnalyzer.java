@@ -6,7 +6,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -28,15 +27,6 @@ public class RefreshTableStatementAnalyzer {
             MetaUtils.normalizationTableName(context, tableName);
             if (tableName == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
-            }
-
-            if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), tableName.getCatalog(),
-                    tableName.getDb(), tableName.getTbl(), PrivPredicate.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                        "REFRESH EXTERNAL TABLE",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        tableName.getTbl());
             }
             return null;
         }

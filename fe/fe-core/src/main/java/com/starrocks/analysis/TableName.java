@@ -179,6 +179,9 @@ public class TableName implements Writable {
 
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
+        if (catalog != null) {
+            stringBuilder.append("`").append(catalog).append("`.");
+        }
         if (db != null) {
             stringBuilder.append("`").append(db).append("`.");
         }
