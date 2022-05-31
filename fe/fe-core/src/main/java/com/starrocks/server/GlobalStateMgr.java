@@ -167,6 +167,7 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
+import com.starrocks.load.LockManager;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
@@ -402,6 +403,7 @@ public class GlobalStateMgr {
     private ConnectorMgr connectorMgr;
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
+    private LockManager lockManager;
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
@@ -561,6 +563,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.lockManager = new LockManager();
     }
 
     public static void destroyCheckpoint() {
@@ -725,6 +728,10 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
+    }
+
+    public LockManager getLockManager() {
+        return lockManager;
     }
 
     // Use tryLock to avoid potential dead lock

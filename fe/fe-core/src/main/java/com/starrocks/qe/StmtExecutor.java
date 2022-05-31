@@ -1147,6 +1147,7 @@ public class StmtExecutor {
             }
         }
 
+        /*
         if (targetTable instanceof OlapTable) {
             List<Long> targetPartitionIds = null;
             if (stmt instanceof InsertStmt) {
@@ -1158,6 +1159,7 @@ public class StmtExecutor {
                 throw new DdlException("there is running insert overwrite job");
             }
         }
+         */
 
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {

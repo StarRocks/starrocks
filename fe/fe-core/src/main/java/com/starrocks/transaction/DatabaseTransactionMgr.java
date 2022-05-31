@@ -297,6 +297,23 @@ public class DatabaseTransactionMgr {
 
             checkRunningTxnExceedLimit(sourceType);
 
+            // insert overwrite的时候需要避免lock
+            List<Long> lockedTables = Lists.newArrayList();
+            boolean allLocked = true;
+            for (long tableId : tableIdList) {
+                if (GlobalStateMgr.getCurrentState().getLockManager().tryReadLockTable(tableId)) {
+                    lockedTables.add(tableId);
+                } else {
+                    allLocked = false;
+                }
+            }
+            if (!allLocked) {
+                for (long tableId : lockedTables) {
+                    GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tableId);
+                }
+                throw new RuntimeException("begin transaction failed because there is concurrent insert overwrite");
+            }
+
             long tid = idGenerator.getNextTransactionId();
             LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
@@ -565,7 +582,7 @@ public class DatabaseTransactionMgr {
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        updateCatalogAfterCommitted(transactionState, db);
+        updateCatalogAfterCommitted(transactionState, db, false);
         LOG.info("transaction:[{}] successfully committed", transactionState);
     }
 
@@ -1080,6 +1097,10 @@ public class DatabaseTransactionMgr {
         } finally {
             writeUnlock();
             transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
+            List<Long> tableIds = transactionState.getTableIdList();
+            for (long tableId : tableIds) {
+                GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tableId);
+            }
         }
 
         // send clear txn task to BE to clear the transactions on BE.
@@ -1337,7 +1358,16 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    private void updateCatalogAfterCommitted(TransactionState transactionState, Database db) {
+    private void updateCatalogAfterCommitted(TransactionState transactionState, Database db, boolean isReplay) {
+        if (isReplay) {
+            // should acquire read lock again
+            for (long tableId : transactionState.getTableIdList()) {
+                if (!GlobalStateMgr.getCurrentState().getLockManager().tryReadLockTable(tableId)) {
+                    // impossible case. just add a log for an accidence.
+                    LOG.warn("add read lock for table:{} failed", tableId);
+                }
+            }
+        }
         Set<Long> errorReplicaIds = transactionState.getErrorReplicas();
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
@@ -1365,6 +1395,10 @@ public class DatabaseTransactionMgr {
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
+        List<Long> tableIds = transactionState.getTableIdList();
+        for (long tableId : tableIds) {
+            GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tableId);
+        }
         Set<Long> errorReplicaIds = transactionState.getErrorReplicas();
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
@@ -1517,7 +1551,7 @@ public class DatabaseTransactionMgr {
             Database db = globalStateMgr.getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 LOG.info("replay a committed transaction {}", transactionState);
-                updateCatalogAfterCommitted(transactionState, db);
+                updateCatalogAfterCommitted(transactionState, db, true);
             } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
                 LOG.info("replay a visible transaction {}", transactionState);
                 updateCatalogAfterVisible(transactionState, db);
