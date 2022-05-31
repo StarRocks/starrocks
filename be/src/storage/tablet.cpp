@@ -449,6 +449,10 @@ void Tablet::delete_expired_stale_rowset() {
             }
         }
         delete_rowset_time = timer.elapsed_time() / MICROS_PER_SEC;
+
+#ifndef BE_TEST
+        save_meta();
+#endif
     }
 
     for (auto& rowset : stale_rowsets) {
@@ -459,10 +463,6 @@ void Tablet::delete_expired_stale_rowset() {
               << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_stale_rs_size
               << " sweep endtime " << expired_stale_sweep_endtime << " delete_rowset_time=" << delete_rowset_time
               << " total_time=" << timer.elapsed_time() / MICROS_PER_SEC;
-
-#ifndef BE_TEST
-    save_meta();
-#endif
 }
 
 Status Tablet::capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const {
