@@ -734,6 +734,28 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testWindowFunnel() throws Exception {
+       FeConstants.runningUnitTest = true;
+       String sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 0, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       String plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 0, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 1, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 1, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 2, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 2, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+
+       FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testLocalAggregateWithMultiStage() throws Exception {
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
