@@ -69,6 +69,7 @@ public class PushTask extends AgentTask {
     private TBrokerScanRange tBrokerScanRange;
     private TDescriptorTable tDescriptorTable;
     private boolean useVectorized;
+    private String timezone;
 
     public PushTask(TResourceInfo resourceInfo, long backendId, long dbId, long tableId, long partitionId,
                     long indexId, long tabletId, long replicaId, int schemaHash, long version, long versionHash,
@@ -98,13 +99,14 @@ public class PushTask extends AgentTask {
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
-                    TDescriptorTable tDescriptorTable, boolean useVectorized) {
+                    TDescriptorTable tDescriptorTable, boolean useVectorized, String timezone) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, 0, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
         this.useVectorized = useVectorized;
+        this.timezone = timezone;
     }
 
     public TPushReq toThrift() {
@@ -112,6 +114,7 @@ public class PushTask extends AgentTask {
         if (taskType == TTaskType.REALTIME_PUSH) {
             request.setPartition_id(partitionId);
             request.setTransaction_id(transactionId);
+            request.setTimezone(timezone);
         }
         request.setIs_schema_changing(isSchemaChanging);
         switch (pushType) {
