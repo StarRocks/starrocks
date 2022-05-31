@@ -260,19 +260,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitRefreshTableStatement(StarRocksParser.RefreshTableStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        List<String> partitionNames = null;
-        if (context.string() != null) {
-            partitionNames = context.string().stream()
-                    .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        }
-    
-        return new RefreshTableStmt(targetTableName, partitionNames);
-    }
-
-    @Override
     public ParseNode visitCreateIndexStatement(StarRocksParser.CreateIndexStatementContext context) {
         String indexName = ((Identifier) visit(context.identifier())).getValue();
         List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
