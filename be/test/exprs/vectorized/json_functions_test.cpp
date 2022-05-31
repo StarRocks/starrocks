@@ -392,7 +392,11 @@ TEST_P(JsonQueryTestFixture, json_query) {
     JsonValue json;
     ASSERT_TRUE(JsonValue::parse(param_json, &json).ok());
     ints->append(&json);
-    builder.append(param_path);
+    if (param_path == "NULL") {
+        builder.append_null();
+    } else {
+        builder.append(param_path);
+    }
 
     Columns columns{ints, builder.build(true)};
 
@@ -425,6 +429,7 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
                 // clang-format off
                 // empty
+                std::make_tuple(R"( {"k1":1} )", "NULL", R"(NULL)"),
                 std::make_tuple(R"( {"k1":1} )", "$", R"( {"k1": 1} )"),
                 std::make_tuple(R"( {"k1":1} )", "", R"( {"k1": 1} )"),
 
@@ -501,7 +506,11 @@ TEST_P(JsonExistTestFixture, json_exists) {
     auto json = JsonValue::parse(param_json);
     ASSERT_TRUE(json.ok());
     ints->append(&*json);
-    builder.append(param_result);
+    if (param_result == "NULL") {
+        builder.append_null();
+    } else {
+        builder.append(param_result);
+    }
 
     Columns columns{ints, builder.build(true)};
 
@@ -552,6 +561,7 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
                                            std::make_tuple(R"({ "k1": {}})", "", true),
+                                           std::make_tuple(R"( { "k1": 1} )", "NULL", false),
 
                                            // error case
                                            std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
