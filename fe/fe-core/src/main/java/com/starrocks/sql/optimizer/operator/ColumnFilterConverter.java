@@ -15,7 +15,10 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -120,8 +123,17 @@ public class ColumnFilterConverter {
 
     private static List<Expr> getDummyExprList() {
         List<Expr> exprList = new ArrayList<>();
-        FunctionCallExpr expr = new FunctionCallExpr("", new ArrayList<>());
-        exprList.add(expr);
+
+        List<Expr> params = new ArrayList<>();
+        StringLiteral stringLiteral = new StringLiteral("month");
+        params.add(stringLiteral);
+        TableName tableName = new TableName("zdtestdb", "zdtestTable");
+        SlotRef slotRefDate = new SlotRef(tableName, "date_col");
+        slotRefDate.setType(Type.DATE);
+        params.add(slotRefDate);
+        FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                params);
+        exprList.add(zdtestCallExpr);
         return exprList;
     }
 
@@ -140,11 +152,23 @@ public class ColumnFilterConverter {
 
     private static boolean checkEquals(FunctionCallExpr functionCallExpr,
                                        CallOperator callOperator) {
-        ScalarOperator translate = SqlToScalarOperatorTranslator.translate(functionCallExpr,
-                new ExpressionMapping(null, Collections.emptyList()));
+//        ScalarOperator translate = SqlToScalarOperatorTranslator.translate(functionCallExpr,
+//                new ExpressionMapping(null, Collections.emptyList()));
+        String fnName = functionCallExpr.getFnName().getFunction();
+        if (!fnName.equals(callOperator.getFnName())) {
+            return false;
+        }
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            checkDateTruncEquals(functionCallExpr,callOperator);
+        }
 
-        return functionCallExpr.equals(translate);
+        return false;
     }
+
+    private static boolean checkDateTruncEquals(FunctionCallExpr functionCallExpr, CallOperator callOperator) {
+        return false;
+    }
+
 
     private static class ColumnFilterVisitor
             extends ScalarOperatorVisitor<ScalarOperator, Map<String, PartitionColumnFilter>> {
