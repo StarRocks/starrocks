@@ -5,7 +5,7 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/txnlog.h"
+#include "storage/lake/txn_log.h"
 
 namespace starrocks::lake {
 
@@ -29,16 +29,17 @@ Status Tablet::delete_metadata() {
     return Status::NotSupported("Tablet::delete_metadata");
 }
 
-Status Tablet::put_txnlog(const TxnLog& log) {
-    return _mgr->put_txnlog(_group, _id, log);
+Status Tablet::put_txn_log(const TxnLog& log) {
+    // TODO: Check log.tablet_id() == _id
+    return _mgr->put_txn_log(_group, log);
 }
 
-StatusOr<TxnLog> Tablet::get_txnlog(int64_t txn_id) {
-    return _mgr->get_txnlog(_group, _id, txn_id);
+StatusOr<TxnLog> Tablet::get_txn_log(int64_t txn_id) {
+    return _mgr->get_txn_log(_group, _id, txn_id);
 }
 
-Status Tablet::delete_txnlog(int64_t txn_id) {
-    return _mgr->delete_txnlog(_group, _id, txn_id);
+Status Tablet::delete_txn_log(int64_t txn_id) {
+    return _mgr->delete_txn_log(_group, _id, txn_id);
 }
 
 } // namespace starrocks::lake

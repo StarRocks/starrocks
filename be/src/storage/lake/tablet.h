@@ -32,11 +32,11 @@ public:
 
     Status delete_metadata();
 
-    Status put_txnlog(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    StatusOr<TxnLog> get_txnlog(int64_t txn_id);
+    StatusOr<TxnLog> get_txn_log(int64_t txn_id);
 
-    Status delete_txnlog(int64_t txn_id);
+    Status delete_txn_log(int64_t txn_id);
 
 private:
     TabletManager* _mgr;

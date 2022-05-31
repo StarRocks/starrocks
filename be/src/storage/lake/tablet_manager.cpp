@@ -5,7 +5,7 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/txnlog.h"
+#include "storage/lake/txn_log.h"
 #include "util/lru_cache.h"
 
 namespace starrocks::lake {
@@ -60,36 +60,35 @@ StatusOr<MetadataIterator> TabletManager::list_tablet_metadata(const std::string
     return Status::NotSupported("TabletManager::list_tablet_metadata");
 }
 
-StatusOr<TxnLog> TabletManager::get_txnlog(const std::string& group, int64_t tablet_id, int64_t txn_id) {
+StatusOr<TxnLog> TabletManager::get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id) {
     (void)group;
     (void)tablet_id;
     (void)txn_id;
-    return Status::NotSupported("TabletManager::get_txnlog");
+    return Status::NotSupported("TabletManager::get_txn_log");
 }
 
-Status TabletManager::put_txnlog(const std::string& group, int64_t tablet_id, const TxnLog& log) {
+Status TabletManager::put_txn_log(const std::string& group, const TxnLog& log) {
     (void)group;
-    (void)tablet_id;
     (void)log;
-    return Status::NotSupported("TabletManager::put_txnlog");
+    return Status::NotSupported("TabletManager::put_txn_log");
 }
 
-Status TabletManager::delete_txnlog(const std::string& group, int64_t tablet_id, int64_t txn_id) {
+Status TabletManager::delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id) {
     (void)group;
     (void)tablet_id;
     (void)txn_id;
-    return Status::NotSupported("TabletManager::delete_txnlog");
+    return Status::NotSupported("TabletManager::delete_txn_log");
 }
 
-StatusOr<MetadataIterator> TabletManager::list_txnlog(const std::string& group) {
+StatusOr<MetadataIterator> TabletManager::list_txn_log(const std::string& group) {
     (void)group;
-    return Status::NotSupported("TabletManager::list_txnlog");
+    return Status::NotSupported("TabletManager::list_txn_log");
 }
 
-StatusOr<MetadataIterator> TabletManager::list_txnlog(const std::string& group, int64_t tablet_id) {
+StatusOr<MetadataIterator> TabletManager::list_txn_log(const std::string& group, int64_t tablet_id) {
     (void)group;
     (void)tablet_id;
-    return Status::NotSupported("TabletManager::list_txnlog");
+    return Status::NotSupported("TabletManager::list_txn_log");
 }
 
 } // namespace starrocks::lake
