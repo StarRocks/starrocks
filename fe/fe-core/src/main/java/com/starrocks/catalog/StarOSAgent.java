@@ -35,7 +35,6 @@ public class StarOSAgent {
     private Map<Long, Long> workerToBackend;
 
     public StarOSAgent() {
-        client = new StarClient();
         serviceId = -1;
         // check if Config.starmanager_address == FE address
         if (Config.integrate_staros) {
@@ -45,6 +44,7 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
+        client = new StarClient();
         client.connectServer(Config.starmgr_address);
 
         workerToId = Maps.newHashMap();
