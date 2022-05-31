@@ -3006,7 +3006,29 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        if (stmt.getDbTblName() != null) {
+            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        }
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
+        }
+        Table table = db.getTable(stmt.getMvName());
+        if (table != null && table instanceof MaterializedView) {
+            db.writeLock();
+            HashMap<Long, AgentBatchTask> batchTaskMap;
+            try {
+                batchTaskMap = unprotectDropTable(db, table.getId(), true, false);
+                DropInfo info = new DropInfo(db.getId(), table.getId(), -1L, true);
+                editLog.logDropTable(info);
+            } finally {
+                db.writeUnlock();
+            }
+            sendDropTabletTasks(batchTaskMap);
+            LOG.info("finished dropping materialized view: {} from db: {}", stmt.getMvName(), stmt.getDbName());
+        } else {
+            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        }
     }
 
     /*
