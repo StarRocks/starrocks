@@ -207,9 +207,6 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
-                        return CostEstimate.infinite();
-                    }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
@@ -217,6 +214,11 @@ public class CostModel {
                                     GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size(),
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
+                    if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
+                        return CostEstimate.of(result.getCpuCost() * Constants.BroadcastJoinMemExceedPenalty,
+                                result.getMemoryCost() * Constants.BroadcastJoinMemExceedPenalty,
+                                result.getNetworkCost() * Constants.BroadcastJoinMemExceedPenalty);
+                    }
                     break;
                 case SHUFFLE:
                 case GATHER:
