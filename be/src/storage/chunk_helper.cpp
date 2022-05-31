@@ -177,63 +177,6 @@ Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t ch
     return new Chunk(std::move(columns), std::make_shared<vectorized::Schema>(schema));
 }
 
-size_t ChunkHelper::approximate_sizeof_type(FieldType type) {
-    switch (type) {
-    case OLAP_FIELD_TYPE_HLL:
-        return sizeof(HyperLogLog);
-    case OLAP_FIELD_TYPE_JSON:
-        return sizeof(JsonValue);
-    case OLAP_FIELD_TYPE_OBJECT:
-        return sizeof(BitmapValue);
-    case OLAP_FIELD_TYPE_PERCENTILE:
-        return sizeof(PercentileValue);
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return sizeof(Slice);
-    case OLAP_FIELD_TYPE_BOOL:
-        return sizeof(uint8_t);
-    case OLAP_FIELD_TYPE_TINYINT:
-        return sizeof(int8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return sizeof(int16_t);
-    case OLAP_FIELD_TYPE_DECIMAL32:
-    case OLAP_FIELD_TYPE_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        return sizeof(uint32_t);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-    case OLAP_FIELD_TYPE_BIGINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        return sizeof(uint64_t);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return sizeof(int128_t);
-    case OLAP_FIELD_TYPE_FLOAT:
-        return sizeof(float);
-    case OLAP_FIELD_TYPE_DOUBLE:
-        return sizeof(double);
-    case OLAP_FIELD_TYPE_DATE:
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return sizeof(DateValue);
-    case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return sizeof(TimestampValue);
-    case OLAP_FIELD_TYPE_DECIMAL:
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return sizeof(DecimalV2Value);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        return 4;
-    }
-    return 4;
-}
-
 std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema& schema) {
     std::vector<size_t> char_field_indexes;
     for (size_t i = 0; i < schema.num_fields(); ++i) {
