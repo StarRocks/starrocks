@@ -514,7 +514,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                                 0, id, TPushType.LOAD_V2,
                                                 TPriority.NORMAL, transactionId, taskSignature,
                                                 tBrokerScanRange, params.tDescriptorTable,
-                                                params.useVectorized);
+                                                params.useVectorized, timezone);
                                         if (AgentTaskQueue.addTask(pushTask)) {
                                             batchTask.addTask(pushTask);
                                             if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
