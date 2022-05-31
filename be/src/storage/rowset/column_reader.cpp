@@ -63,6 +63,10 @@ ColumnReader::ColumnReader(const private_type&, const Segment* segment)
 
 ColumnReader::~ColumnReader() {
     int64_t size = sizeof(ColumnReader);
+    if (_segment_zone_map != nullptr) {
+        size += _segment_zone_map->SpaceUsedLong();
+        _segment_zone_map.reset(nullptr);
+    }
     if (_ordinal_index_meta != nullptr) {
         size += _ordinal_index_meta->SpaceUsedLong();
         _ordinal_index_meta.reset(nullptr);
@@ -105,7 +109,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
-    if (meta->has_all_dict_encoded() && meta->all_dict_encoded()) _flags |= kAllDictEncodedMask;
+    if (meta->all_dict_encoded()) _flags |= kAllDictEncodedMask;
 
     if (_column_type == OLAP_FIELD_TYPE_JSON && meta->has_json_meta()) {
         // TODO(mofei) store format_version in ColumnReader
