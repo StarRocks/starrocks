@@ -18,14 +18,18 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.Utils.getDatetimeFromLong;
-
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
+
+    private static final int DAYS_FROM_0_TO_1970 = 719528;
+    private static final int BC_EPOCH_JULIAN = 1721060;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -121,7 +125,7 @@ public class ExpressionStatisticCalculator {
                     min = min.castTo(cast.getType());
                 }
             } catch (Exception e) {
-                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min.toString() +
+                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min +
                         ", to type: " + cast.getType());
                 return childStatistic;
             }
@@ -156,121 +160,347 @@ public class ExpressionStatisticCalculator {
         }
 
         private ColumnStatistic nullaryExpressionCalculate(CallOperator callOperator) {
+            double minValue;
+            double maxValue;
+            double distinctValue = rowCount;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.COUNT:
-                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
+                    minValue = 0;
+                    maxValue = inputStatistics.getOutputRowCount();
+                    break;
+                case FunctionSet.RAND:
+                case FunctionSet.RANDOM:
+                    minValue = 0;
+                    maxValue = 1;
+                    break;
+                case FunctionSet.E:
+                    minValue = Math.E;
+                    maxValue = Math.E;
+                    distinctValue = 1;
+                    break;
+                case FunctionSet.PI:
+                    minValue = Math.PI;
+                    maxValue = Math.PI;
+                    distinctValue = 1;
+                    break;
+                case FunctionSet.CURDATE:
+                    minValue = getJulianDate(LocalDate.now());
+                    maxValue = minValue;
+                    distinctValue = 1;
+                    break;
+                case FunctionSet.CURTIME:
+                case FunctionSet.CURRENT_TIME: {
+                    LocalDateTime now = LocalDateTime.now();
+                    minValue = now.getHour() * 3600 + now.getMinute() * 60 + now.getSecond();
+                    maxValue = minValue;
+                    distinctValue = 1;
+                    break;
+                }
+                case FunctionSet.NOW:
+                case FunctionSet.CURRENT_TIMESTAMP:
+                case FunctionSet.UNIX_TIMESTAMP:
+                    minValue = LocalDateTime.now().atZone(ZoneId.systemDefault()).toEpochSecond();
+                    maxValue = minValue;
+                    distinctValue = 1;
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
+            return new ColumnStatistic(minValue, maxValue, 0, callOperator.getType().getTypeSize(), distinctValue);
         }
 
         private ColumnStatistic unaryExpressionCalculate(CallOperator callOperator, ColumnStatistic columnStatistic) {
-            double aggFunDistinctValue = Math.max(1.0, Math.min(rowCount, columnStatistic.getDistinctValuesCount()));
+            double minValue = columnStatistic.getMinValue();
+            double maxValue = columnStatistic.getMaxValue();
+            double distinctValue = Math.min(rowCount, columnStatistic.getDistinctValuesCount());
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.SIGN:
+                    minValue = -1;
+                    maxValue = 1;
+                    distinctValue = 3;
+                    break;
+                case FunctionSet.GREATEST:
+                case FunctionSet.LEAST:
                 case FunctionSet.MAX:
                 case FunctionSet.MIN:
                 case FunctionSet.ANY_VALUE:
                 case FunctionSet.AVG:
-                    double maxValue = columnStatistic.getMaxValue();
-                    double minValue = columnStatistic.getMinValue();
-                    return new ColumnStatistic(minValue, maxValue, 0, columnStatistic.getAverageRowSize(),
-                            aggFunDistinctValue);
+                    maxValue = columnStatistic.getMaxValue();
+                    minValue = columnStatistic.getMinValue();
+                    break;
                 case FunctionSet.SUM:
-                    double sumFunMinValue = columnStatistic.getMinValue() > 0 ? columnStatistic.getMinValue() :
-                            columnStatistic.getMinValue() * rowCount / aggFunDistinctValue;
-                    double sumFunMaxValue = columnStatistic.getMaxValue() < 0 ? columnStatistic.getMaxValue() :
-                            columnStatistic.getMaxValue() * rowCount / aggFunDistinctValue;
-                    sumFunMaxValue = Math.max(sumFunMaxValue, sumFunMinValue);
-                    return new ColumnStatistic(sumFunMinValue, sumFunMaxValue, 0,
-                            columnStatistic.getAverageRowSize(), aggFunDistinctValue);
+                    minValue = columnStatistic.getMinValue() > 0 ? columnStatistic.getMinValue() :
+                            columnStatistic.getMinValue() * rowCount / distinctValue;
+                    maxValue = columnStatistic.getMaxValue() < 0 ? columnStatistic.getMaxValue() :
+                            columnStatistic.getMaxValue() * rowCount / distinctValue;
+                    break;
+                case FunctionSet.COUNT:
+                    minValue = 0;
+                    maxValue = inputStatistics.getOutputRowCount();
+                    distinctValue = rowCount;
+                    break;
+                case FunctionSet.MULTI_DISTINCT_COUNT:
+                    minValue = 0;
+                    maxValue = columnStatistic.getDistinctValuesCount();
+                    distinctValue = rowCount;
+                    break;
+                case FunctionSet.ASCII:
+                    minValue = 0;
+                    maxValue = 127;
+                    distinctValue = 128;
+                    break;
                 case FunctionSet.YEAR:
-                    int minYearValue = 1700;
-                    int maxYearValue = 2100;
+                    minValue = 1700;
+                    maxValue = 2100;
                     try {
-                        minYearValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
-                        maxYearValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
+                        minValue = Utils.getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
+                        maxValue = Utils.getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
                     } catch (DateTimeException e) {
                         LOG.debug("get date type column statistics min/max failed. " + e);
                     }
-                    return new ColumnStatistic(minYearValue, maxYearValue, 0,
-                            callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), (maxYearValue - minYearValue + 1)));
+                    distinctValue =
+                            Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1));
+                    break;
+                case FunctionSet.QUARTER:
+                    minValue = 1;
+                    maxValue = 4;
+                    distinctValue = 4;
+                    break;
                 case FunctionSet.MONTH:
-                    return new ColumnStatistic(1, 12, 0,
-                            callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), 12));
+                    minValue = 1;
+                    maxValue = 12;
+                    distinctValue = 12;
+                    break;
+                case FunctionSet.WEEKOFYEAR:
+                    minValue = 1;
+                    maxValue = 54;
+                    distinctValue = 54;
+                    break;
                 case FunctionSet.DAY:
-                    return new ColumnStatistic(1, 31, 0,
-                            callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), 31));
+                case FunctionSet.DAYOFMONTH:
+                    minValue = 1;
+                    maxValue = 31;
+                    distinctValue = 31;
+                    break;
+                case FunctionSet.DAYOFWEEK:
+                    minValue = 1;
+                    maxValue = 7;
+                    distinctValue = 7;
+                    break;
+                case FunctionSet.DAYOFYEAR:
+                    minValue = 1;
+                    maxValue = 366;
+                    distinctValue = 366;
+                    break;
                 case FunctionSet.HOUR:
-                    return new ColumnStatistic(0, 23, 0,
-                            callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), 24));
+                    minValue = 0;
+                    maxValue = 23;
+                    distinctValue = 24;
+                    break;
                 case FunctionSet.MINUTE:
                 case FunctionSet.SECOND:
-                    return new ColumnStatistic(0, 59, 0,
-                            callOperator.getType().getTypeSize(),
-                            Math.min(columnStatistic.getDistinctValuesCount(), 60));
-                case FunctionSet.COUNT:
-                    return new ColumnStatistic(0, inputStatistics.getOutputRowCount(), 0,
-                            callOperator.getType().getTypeSize(), rowCount);
-                case FunctionSet.MULTI_DISTINCT_COUNT:
-                    // use child column averageRowSize instead call operator type size
-                    return new ColumnStatistic(0, columnStatistic.getDistinctValuesCount(), 0,
-                            columnStatistic.getAverageRowSize(), rowCount);
+                    minValue = 0;
+                    maxValue = 59;
+                    distinctValue = 60;
+                    break;
+                case FunctionSet.TO_DATE:
+                    minValue = getJulianDate(Utils.getDatetimeFromLong((long) minValue).toLocalDate());
+                    maxValue = getJulianDate(Utils.getDatetimeFromLong((long) maxValue).toLocalDate());
+                    break;
+                case FunctionSet.TO_DAYS:
+                    minValue = minValue - BC_EPOCH_JULIAN;
+                    maxValue = maxValue - BC_EPOCH_JULIAN;
+                    break;
+                case FunctionSet.FROM_DAYS:
+                    minValue = minValue + BC_EPOCH_JULIAN;
+                    maxValue = maxValue + BC_EPOCH_JULIAN;
+                    break;
+                case FunctionSet.TIMESTAMP:
+                    break;
+                case FunctionSet.ABS:
+                    double absMinValue;
+                    double absMaxValue = Math.max(Math.abs(minValue), Math.abs(maxValue));
+                    if (minValue < 0 && maxValue < 0 || minValue >= 0 && maxValue >= 0) {
+                        absMinValue = Math.min(Math.abs(minValue), Math.abs(maxValue));
+                    } else {
+                        absMinValue = 0;
+                    }
+                    minValue = absMinValue;
+                    maxValue = absMaxValue;
+                    distinctValue = maxValue - minValue + 1;
+                    break;
+                case FunctionSet.ACOS:
+                case FunctionSet.ASIN:
+                case FunctionSet.ATAN:
+                case FunctionSet.ATAN2:
+                    minValue = 0;
+                    maxValue = Math.PI;
+                    break;
+                case FunctionSet.SIN:
+                case FunctionSet.COS:
+                    minValue = -1;
+                    maxValue = 1;
+                    break;
+                case FunctionSet.SQRT:
+                    minValue = 0;
+                    if (maxValue < 0) {
+                        return ColumnStatistic.unknown();
+                    }
+                    maxValue = Math.sqrt(maxValue);
+                    break;
+                case FunctionSet.SQUARE:
+                    double squareMinValue;
+                    double squareMaxValue = Math.max(minValue * minValue, maxValue * maxValue);
+                    if (minValue < 0 && maxValue < 0 || minValue >= 0 && maxValue >= 0) {
+                        squareMinValue = Math.min(minValue * minValue, maxValue * maxValue);
+                    } else {
+                        squareMinValue = 0;
+                    }
+                    minValue = squareMinValue;
+                    maxValue = squareMaxValue;
+                    break;
+                case FunctionSet.RADIANS:
+                    // π = 180°, so the ratio is 57.3
+                    minValue = minValue / 57.3;
+                    maxValue = maxValue / 57.3;
+                    break;
+                case FunctionSet.RAND:
+                case FunctionSet.RANDOM:
+                    minValue = 0;
+                    maxValue = 1;
+                    break;
+                case FunctionSet.NEGATIVE:
+                    double negativeMinValue = -maxValue;
+                    double negativeMaxValue = -minValue;
+                    minValue = negativeMinValue;
+                    maxValue = negativeMaxValue;
+                    break;
+                case FunctionSet.POSITIVE:
+                case FunctionSet.FLOOR:
+                case FunctionSet.DFLOOR:
+                case FunctionSet.CEIL:
+                case FunctionSet.CEILING:
+                case FunctionSet.ROUND:
+                case FunctionSet.DROUND:
+                case FunctionSet.TRUNCATE:
+                    // Just use the input's statistics as output's statistics
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
+
+            final double averageRowSize;
+            if (callOperator.getType().isIntegerType() || callOperator.getType().isFloatingPointType()
+                    || callOperator.getType().isDateType()) {
+                averageRowSize = callOperator.getType().getTypeSize();
+            } else {
+                averageRowSize = columnStatistic.getAverageRowSize();
+            }
+            return new ColumnStatistic(minValue, maxValue, columnStatistic.getNullsFraction(), averageRowSize,
+                    distinctValue);
         }
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
                                                           ColumnStatistic right) {
-            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
+            final double minValue;
+            final double maxValue;
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
+            double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
+            double averageRowSize = callOperator.getType().getTypeSize();
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
-                    return new ColumnStatistic(left.getMinValue() + right.getMinValue(),
-                            left.getMaxValue() + right.getMaxValue(), nullsFraction,
-                            callOperator.getType().getTypeSize(),
-                            distinctValues);
+                case FunctionSet.DATE_ADD:
+                    minValue = left.getMinValue() + right.getMinValue();
+                    maxValue = left.getMaxValue() + right.getMaxValue();
+                    break;
                 case FunctionSet.SUBTRACT:
-                    return new ColumnStatistic(left.getMinValue() - right.getMaxValue(),
-                            left.getMaxValue() - right.getMinValue(), nullsFraction,
-                            callOperator.getType().getTypeSize(),
-                            distinctValues);
+                case FunctionSet.TIMEDIFF:
+                case FunctionSet.DATE_SUB:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    break;
+                case FunctionSet.DATEDIFF:
+                    minValue = Utils.getDatetimeFromLong((long) left.getMinValue()).toLocalDate().toEpochDay() -
+                            Utils.getDatetimeFromLong((long) right.getMaxValue()).toLocalDate().toEpochDay();
+                    maxValue = Utils.getDatetimeFromLong((long) left.getMaxValue()).toLocalDate().toEpochDay() -
+                            Utils.getDatetimeFromLong((long) right.getMinValue()).toLocalDate().toEpochDay();
+                    break;
+                case FunctionSet.YEARS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 365));
+                    break;
+                case FunctionSet.MONTHS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 31));
+                    break;
+                case FunctionSet.WEEKS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 7));
+                    break;
+                case FunctionSet.DAYS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24));
+                    break;
+                case FunctionSet.HOURS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600));
+                    break;
+                case FunctionSet.MINUTES_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 60));
+                    break;
+                case FunctionSet.SECONDS_DIFF:
+                    minValue = left.getMinValue() - right.getMaxValue();
+                    maxValue = left.getMaxValue() - right.getMinValue();
+                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 1));
+                    break;
                 case FunctionSet.MULTIPLY:
-                    double multiplyMinValue = Math.min(Math.min(
+                    minValue = Math.min(Math.min(
                             Math.min(left.getMinValue() * right.getMinValue(),
                                     left.getMinValue() * right.getMaxValue()),
                             left.getMaxValue() * right.getMinValue()), left.getMaxValue() * right.getMaxValue());
-                    double multiplyMaxValue = Math.max(Math.max(
+                    maxValue = Math.max(Math.max(
                             Math.max(left.getMinValue() * right.getMinValue(),
                                     left.getMinValue() * right.getMaxValue()),
                             left.getMaxValue() * right.getMinValue()), left.getMaxValue() * right.getMaxValue());
-                    return new ColumnStatistic(multiplyMinValue, multiplyMaxValue, nullsFraction,
-                            callOperator.getType().getTypeSize(), distinctValues);
+                    break;
                 case FunctionSet.DIVIDE:
-                    double divideMinValue = Math.min(Math.min(
-                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                    minValue = Math.min(Math.min(
+                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
-                    double divideMaxValue = Math.max(Math.max(
-                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                    maxValue = Math.max(Math.max(
+                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
-                    return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
-                            callOperator.getType().getTypeSize(),
-                            distinctValues);
-                // use child column statistics for now
-                case FunctionSet.SUBSTRING:
-                    return left;
+                    break;
+                case FunctionSet.MOD:
+                case FunctionSet.FMOD:
+                case FunctionSet.PMOD:
+                    minValue = -Math.max(Math.abs(right.getMinValue()), Math.abs(right.getMaxValue()));
+                    maxValue = -minValue;
+                    break;
+                case FunctionSet.IFNULL:
+                    minValue = Math.min(left.getMinValue(), right.getMinValue());
+                    maxValue = Math.max(left.getMaxValue(), right.getMaxValue());
+                    break;
+                case FunctionSet.NULLIF:
+                    minValue = left.getMinValue();
+                    maxValue = left.getMaxValue();
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
+
+            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
@@ -291,6 +521,34 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
+        }
+
+        private double distinctOfInterval(double min, double max, double interval) {
+            return ((max - min) / interval) + 2;
+        }
+
+        private int getJulianDate(LocalDate date) {
+            int year = date.getYear();
+            int month = date.getMonthValue();
+            int day = date.getDayOfMonth();
+
+            int century;
+            int julian;
+
+            if (month > 2) {
+                month += 1;
+                year += 4800;
+            } else {
+                month += 13;
+                year += 4799;
+            }
+
+            century = year / 100;
+            julian = year * 365 - 32167;
+            julian += year / 4 - century + century / 4;
+            julian += 7834 * month / 256 + day;
+
+            return julian;
         }
     }
 }
