@@ -131,6 +131,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.statistic.AnalyzeJob;
@@ -442,19 +443,6 @@ public class ShowExecutor {
         ProcNodeInterface procNode = showProcStmt.getNode();
 
         List<List<String>> finalRows = procNode.fetchResult().getRows();
-        // if this is superuser, hide ip and host info form backends info proc
-        if (procNode instanceof BackendsProcDir) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                    PrivPredicate.OPERATOR)) {
-                // hide host info
-                for (List<String> row : finalRows) {
-                    row.remove(BackendsProcDir.HOSTNAME_INDEX);
-                }
-
-                // mod meta data
-                metaData.removeColumn(BackendsProcDir.HOSTNAME_INDEX);
-            }
-        }
 
         resultSet = new ShowResultSet(metaData, finalRows);
     }
@@ -503,7 +491,6 @@ public class ShowExecutor {
         } else {
             catalogName = showDbStmt.getCatalogName();
         }
-        boolean isInternalCatalog = CatalogMgr.isInternalCatalog(catalogName);
         dbNames = metadataMgr.listDbNames(catalogName);
 
         PatternMatcher matcher = null;
@@ -518,10 +505,9 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (isInternalCatalog) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
+                    fullName, PrivPredicate.SHOW)) {
+                continue;
             }
             dbNameSet.add(db);
         }
@@ -557,9 +543,8 @@ public class ShowExecutor {
                             continue;
                         }
                         // check tbl privs
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                db.getFullName(), tbl.getName(),
-                                PrivPredicate.SHOW)) {
+                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                         tableMap.put(tbl.getName(), tbl.getMysqlType());
@@ -1318,11 +1303,6 @@ public class ShowExecutor {
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
         List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos(showStmt.getClusterName());
-
-        for (List<String> row : backendInfos) {
-            row.remove(BackendsProcDir.HOSTNAME_INDEX);
-        }
-
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 
@@ -1330,11 +1310,6 @@ public class ShowExecutor {
         final ShowFrontendsStmt showStmt = (ShowFrontendsStmt) stmt;
         List<List<String>> infos = Lists.newArrayList();
         FrontendsProcNode.getFrontendsInfo(GlobalStateMgr.getCurrentState(), infos);
-
-        for (List<String> row : infos) {
-            row.remove(FrontendsProcNode.HOSTNAME_INDEX);
-        }
-
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 

@@ -130,7 +130,8 @@ public class Optimizer {
 
         // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        if (!sessionVariable.isDisableJoinReorder()) {
+        if (!sessionVariable.isDisableJoinReorder()
+                && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();

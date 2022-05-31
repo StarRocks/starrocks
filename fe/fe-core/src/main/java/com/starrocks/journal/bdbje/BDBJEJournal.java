@@ -315,9 +315,11 @@ public class BDBJEJournal implements Journal {
                 nextJournalId.set(getMaxJournalId() + 1);
                 return;
             } catch (InsufficientLogException insufficientLogEx) {
-                // Copy the missing log files from a member of the replication group who owns the files
-                LOG.warn("catch insufficient log exception. will recover and try again.", insufficientLogEx);
-                bdbEnvironment.refreshAndSetup(insufficientLogEx);
+                LOG.warn("catch insufficient log exception. please restart", insufficientLogEx);
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                bdbEnvironment.refreshLog(insufficientLogEx);
+                System.exit(-1);
             } catch (Throwable t) {
                 LOG.warn("catch exception, retried: {} ", i, t);
             }

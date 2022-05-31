@@ -163,7 +163,7 @@ public:
               _rf_probe_collector(std::move(rf_probe_collector)) {}
 
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
-        if ((_count.fetch_sub(1) & 0xffff'ffffull) == _num_operators_generated) {
+        if ((_count.fetch_sub(1) & PREPARE_COUNTER_MASK) == _num_operators_generated) {
             RETURN_IF_ERROR(_rf_probe_collector.prepare(state, row_desc, p));
             RETURN_IF_ERROR(_rf_probe_collector.open(state));
         }
@@ -172,7 +172,7 @@ public:
 
     void close(RuntimeState* state) {
         static constexpr size_t k = 1ull << 32;
-        if (_count.fetch_sub(k) == k) {
+        if ((_count.fetch_sub(k) & CLOSE_COUNTER_MASK) == k) {
             _rf_probe_collector.close(state);
         }
     }
@@ -181,6 +181,9 @@ public:
     const RuntimeFilterProbeCollector* get_rf_probe_collector() const { return &_rf_probe_collector; }
 
 private:
+    static constexpr size_t PREPARE_COUNTER_MASK = 0xffff'ffffull;
+    static constexpr size_t CLOSE_COUNTER_MASK = 0xffff'ffff'0000'0000ull;
+
     // a refcount, low 32 bit used count the close invocation times, and the high 32 bit used to count the
     // prepare invocation times.
     std::atomic<size_t> _count;

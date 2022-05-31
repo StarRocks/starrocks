@@ -31,6 +31,7 @@ import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
@@ -42,6 +43,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Receiver side of a 1:n data stream. Logically, an ExchangeNode consumes the data
@@ -95,7 +97,8 @@ public class ExchangeNode extends PlanNode {
         if (inputNode.getFragment().isPartitioned()) {
             if (inputNode instanceof SortNode) {
                 SortNode sortNode = (SortNode) inputNode;
-                if (CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
+                if (Objects.equals(TopNType.ROW_NUMBER, sortNode.getTopNType()) &&
+                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
                     limit = inputNode.limit;
                 } else {
                     unsetLimit();

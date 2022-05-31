@@ -638,6 +638,7 @@ void TabletUpdates::_check_for_apply() {
 }
 
 void TabletUpdates::do_apply() {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {
@@ -1028,8 +1029,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
                 return Status::InternalError(msg);
             } else {
                 input_rowsets[i] = itr->second;
-                input_rowsets_size = input_rowsets[i]->data_disk_size();
-                input_row_num = input_rowsets[i]->num_rows();
+                input_rowsets_size += input_rowsets[i]->data_disk_size();
+                input_row_num += input_rowsets[i]->num_rows();
             }
         }
     }
