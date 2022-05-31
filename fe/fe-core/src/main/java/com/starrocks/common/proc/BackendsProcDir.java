@@ -35,7 +35,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -50,14 +49,12 @@ public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("Cluster").add("IP").add("HostName").add("HeartbeatPort")
+            .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
             .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
             .add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
             .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
             .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
             .add("DataUsedPct").build();
-
-    public static final int HOSTNAME_INDEX = 3;
 
     private SystemInfoService clusterInfoService;
 
@@ -122,7 +119,6 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
             if (Strings.isNullOrEmpty(clusterName)) {
-                backendInfo.add(FrontendOptions.getHostnameByIp(backend.getHost()));
                 backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
                 backendInfo.add(String.valueOf(backend.getBePort()));
                 backendInfo.add(String.valueOf(backend.getHttpPort()));
