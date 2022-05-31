@@ -455,6 +455,12 @@ CONF_mInt64(write_buffer_size, "104857600");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
+// If we enable_sync_memtable_write_transfer, then memtable write will become sync
+// when flush count >= `load_process_async_memtable_write_flush_queue_count_limit`
+// or execution_queue_count >= `load_process_async_memtable_write_execution_queue_count_limit`
+CONF_Bool(enable_sync_memtable_write_transfer, "false");
+CONF_Int32(load_process_async_memtable_write_flush_queue_count_limit, "8");
+CONF_Int32(load_process_async_memtable_write_execution_queue_count_limit, "48");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB

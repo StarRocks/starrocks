@@ -170,7 +170,15 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         // and decreased in the destructor of WriteCallback.
         auto cb = new WriteCallback(context.get());
 
-        delta_writer->write(req, cb);
+        if (config::enable_sync_memtable_write_transfer &&
+            (StarRocksMetrics::instance()->memtable_flush_queue_count.value() >=
+                     config::load_process_async_memtable_write_flush_queue_count_limit ||
+             StarRocksMetrics::instance()->memtable_execution_queue_count.value() >=
+                     config::load_process_async_memtable_write_execution_queue_count_limit)) {
+            delta_writer->sync_write(req, cb);
+        } else {
+            delta_writer->write(req, cb);
+        }
     }
 
     // _channel_row_idx_start_points no longer used, release it to free memory.

@@ -147,6 +147,8 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(memtable_execution_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_queue_count, MetricUnit::NOUNIT);
 
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_failed, MetricUnit::REQUESTS);

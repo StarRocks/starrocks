@@ -144,6 +144,11 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     _metrics.register_metric("stream_load", MetricLabels().add("type", "receive_bytes"), &stream_receive_bytes_total);
     _metrics.register_metric("stream_load", MetricLabels().add("type", "load_rows"), &stream_load_rows_total);
+
+    _metrics.register_metric("memtable", MetricLabels().add("type", "execution_queue_count"),
+                             &memtable_execution_queue_count);
+    _metrics.register_metric("memtable", MetricLabels().add("type", "flush_queue_count"), &memtable_flush_queue_count);
+
     _metrics.register_metric("load_rows", &load_rows_total);
     _metrics.register_metric("load_bytes", &load_bytes_total);
 

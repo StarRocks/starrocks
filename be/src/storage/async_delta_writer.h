@@ -11,6 +11,7 @@ DIAGNOSTIC_POP
 #include <google/protobuf/service.h>
 
 #include "storage/delta_writer.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
 
@@ -43,6 +44,8 @@ public:
     // [thread-safe and wait-free]
     void write(const AsyncDeltaWriterRequest& req, AsyncDeltaWriterCallback* cb);
 
+    void sync_write(const AsyncDeltaWriterRequest& req, AsyncDeltaWriterCallback* cb);
+
     // [thread-safe and wait-free]
     void commit(AsyncDeltaWriterCallback* cb);
 
@@ -63,6 +66,8 @@ private:
         AsyncDeltaWriterCallback* write_cb;
         uint32_t indexes_size = 0;
         bool commit_after_write = false;
+        bool sync_write_task = false;
+        std::atomic<bool>* sync_write_finish_flag;
     };
 
     Status _init();

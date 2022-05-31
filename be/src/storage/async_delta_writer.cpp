@@ -23,10 +23,23 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         return 0;
     }
     auto writer = static_cast<DeltaWriter*>(meta);
+    bool sync_write_task = false;
+    std::atomic<bool>* sync_finish_flag;
     for (; iter; ++iter) {
+        sync_write_task = iter->sync_write_task;
+        if (sync_write_task) {
+            sync_finish_flag = iter->sync_write_finish_flag;
+            ++iter;
+            if (!iter) {
+                // no more write task, just set finish flag to be true and return
+                sync_finish_flag->store(true, std::memory_order_release);
+                return 0;
+            }
+        }
         Status st;
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
+            StarRocksMetrics::instance()->memtable_execution_queue_count.increment(-1);
         }
         if (st.ok() && iter->commit_after_write) {
             if (st = writer->close(); !st.ok()) {
@@ -43,6 +56,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
             iter->write_cb->run(st, &info);
         } else {
             iter->write_cb->run(st, nullptr);
+        }
+        if (sync_write_task) {
+            // already finish one write task, set the finish flag to be true
+            sync_finish_flag->store(true, std::memory_order_release);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
     }
@@ -83,10 +100,46 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     task.indexes_size = req.indexes_size;
     task.write_cb = cb;
     task.commit_after_write = req.commit_after_write;
+    task.sync_write_task = false;
+    task.sync_write_finish_flag = nullptr;
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+    }
+    StarRocksMetrics::instance()->memtable_execution_queue_count.increment(1);
+}
+
+void AsyncDeltaWriter::sync_write(const AsyncDeltaWriterRequest& req, AsyncDeltaWriterCallback* cb) {
+    DCHECK(cb != nullptr);
+    Task task;
+    task.chunk = req.chunk;
+    task.indexes = req.indexes;
+    task.indexes_size = req.indexes_size;
+    task.write_cb = cb;
+    task.commit_after_write = req.commit_after_write;
+    task.sync_write_task = false;
+    task.sync_write_finish_flag = nullptr;
+    int r = bthread::execution_queue_execute(_queue_id, task);
+    if (r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+        return;
+    }
+    StarRocksMetrics::instance()->memtable_execution_queue_count.increment(1);
+
+    Task sync_task;
+    task.sync_write_task = true;
+    std::unique_ptr<std::atomic<bool>> finish_flag = std::make_unique<std::atomic<bool>>(false);
+    task.sync_write_finish_flag = finish_flag.get();
+    r = bthread::execution_queue_execute(_queue_id, task, &bthread::TASK_OPTIONS_URGENT);
+    if (r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
+        return;
+    }
+
+    while (!finish_flag->load(std::memory_order_acquire)) {
+        SleepFor(MonoDelta::FromMilliseconds(100));
     }
 }
 
@@ -97,6 +150,8 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     task.indexes = nullptr;
     task.indexes_size = 0;
     task.write_cb = cb;
+    task.sync_write_task = false;
+    task.sync_write_finish_flag = nullptr;
     task.commit_after_write = true;
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {

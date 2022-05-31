@@ -25,6 +25,7 @@
 
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -41,6 +42,7 @@ public:
         _flush_token->_stats.cur_flush_count++;
         _flush_token->_flush_memtable(_memtable.get());
         _flush_token->_stats.cur_flush_count--;
+        StarRocksMetrics::instance()->memtable_flush_queue_count.increment(-1);
         _memtable.reset();
     }
 
@@ -60,6 +62,7 @@ Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
+    StarRocksMetrics::instance()->memtable_flush_queue_count.increment(1);
     return _flush_token->submit(std::move(task));
 }
 
