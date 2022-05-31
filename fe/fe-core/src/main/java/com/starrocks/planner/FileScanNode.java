@@ -41,6 +41,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -328,7 +329,7 @@ public class FileScanNode extends LoadScanNode {
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase("hll_hash") &&
+                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH) &&
                         !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use hll_hash function, like "
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx) or " +

@@ -242,7 +242,7 @@ public final class AggregateInfo extends AggregateInfoBase {
         }
 
         ArrayList<Expr> expr0Children = Lists.newArrayList();
-        if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase("group_concat")) {
+        if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             // Ignore separator parameter, otherwise the same would have to be present for all
             // other distinct aggregates as well.
             // TODO: Deal with constant exprs more generally, instead of special-casing
@@ -256,7 +256,7 @@ public final class AggregateInfo extends AggregateInfoBase {
         boolean hasMultiDistinct = false;
         for (int i = 1; i < distinctAggExprs.size(); ++i) {
             ArrayList<Expr> exprIChildren = Lists.newArrayList();
-            if (distinctAggExprs.get(i).getFnName().getFunction().equalsIgnoreCase("group_concat")) {
+            if (distinctAggExprs.get(i).getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
                 exprIChildren.add(distinctAggExprs.get(i).getChild(0).ignoreImplicitCast());
             } else {
                 for (Expr expr : distinctAggExprs.get(i).getChildren()) {
@@ -321,7 +321,7 @@ public final class AggregateInfo extends AggregateInfoBase {
         // ignore top-level implicit casts in the comparison, we might have inserted
         // those during analysis
         ArrayList<Expr> expr0Children = Lists.newArrayList();
-        if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase("group_concat")) {
+        if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
             // Ignore separator parameter, otherwise the same would have to be present for all
             // other distinct aggregates as well.
             // TODO: Deal with constant exprs more generally, instead of special-casing
@@ -587,7 +587,7 @@ public final class AggregateInfo extends AggregateInfoBase {
                     Preconditions.checkNotNull(ifExpr);
                     ifExpr.analyzeNoThrow(analyzer);
                     aggExpr = new FunctionCallExpr(FunctionSet.COUNT, Lists.newArrayList(ifExpr));
-                } else if (inputExpr.getFnName().getFunction().equals("group_concat")) {
+                } else if (inputExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
                     // Syntax: GROUP_CONCAT([DISTINCT] expression [, separator])
                     ArrayList<Expr> exprList = Lists.newArrayList();
                     // Add "expression" parameter. Need to get it from the inputDesc's slots so the
@@ -657,7 +657,7 @@ public final class AggregateInfo extends AggregateInfoBase {
             numDistinctParams = distinctAggExprs.get(0).getChildren().size();
             // If we are counting distinct params of group_concat, we cannot include the custom
             // separator since it is not a distinct param.
-            if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase("group_concat")
+            if (distinctAggExprs.get(0).getFnName().getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)
                     && numDistinctParams == 2) {
                 --numDistinctParams;
             }
@@ -744,7 +744,7 @@ public final class AggregateInfo extends AggregateInfoBase {
      */
     public void updateTypeOfAggregateExprs() {
         for (FunctionCallExpr functionCallExpr : aggregateExprs_) {
-            if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase("sum")) {
+            if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.SUM)) {
                 continue;
             }
             List<SlotRef> slots = new ArrayList<>();

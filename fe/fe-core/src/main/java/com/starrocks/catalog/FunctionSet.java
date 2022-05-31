@@ -55,12 +55,23 @@ public class FunctionSet {
     public static final String SUM = "sum";
     public static final String SUM_DISTINCT = "sum_distinct";
     public static final String AVG = "avg";
+    public static final String STD = "std";
+    public static final String STDDEV = "stddev";
+    public static final String STDDEV_SAMP = "stddev_samp";
+    public static final String STDDEV_POP = "stddev_pop";
+    public static final String STDDEV_VAL = "stddev_val";
+    public static final String VARIANCE = "variance";
+    public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String VAR_SAMP = "var_samp";
+    public static final String VARIANCE_POP = "variance_pop";
+    public static final String VAR_POP = "var_pop";
     public static final String MONEY_FORMAT = "money_format";
     public static final String STR_TO_DATE = "str_to_date";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String NDV = "ndv";
+    public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
@@ -79,6 +90,17 @@ public class FunctionSet {
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAYS_OVERLAP = "arrays_overlap";
     public static final String WINDOW_FUNNEL = "window_funnel";
+    public static final String DISTINCT_PC = "distinct_pc";
+    public static final String DISTINCT_PCSA = "distinct_pcsa";
+
+    // Unary functions:
+    public static final String ABS = "abs";
+    public static final String POSITIVE = "positive";
+    public static final String NEGATIVE = "negative";
+
+    // Bitmap functions:
+    public static final String BITMAP_HASH = "bitmap_hash";
+    public static final String BITMAP_DICT = "bitmap_dict";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -100,13 +122,24 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
     public static final String IF_NULL = "ifnull";
+    public static final String NULL_IF = "nullif";
+    public static final String COALESCE = "coalesce";
     public static final String MD5_SUM = "md5sum";
+    public static final String HEX = "hex";
+    public static final String TRUNCATE = "truncate";
+    public static final String ROUND = "round";
+    public static final String DROUND = "dround";
+    public static final String RAND = "rand";
+    public static final String RANDOM = "random";
 
     // Arithmetic functions:
     public static final String ADD = "add";
     public static final String SUBTRACT = "subtract";
     public static final String MULTIPLY = "multiply";
     public static final String DIVIDE = "divide";
+    public static final String LEAST = "least";
+    public static final String GREATEST = "greatest";
+    public static final String MOD = "mod";
 
     // date functions
     public static final String YEAR = "year";
@@ -131,24 +164,58 @@ public class FunctionSet {
     public static final String NOW = "now";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String TIMESTAMPADD = "timestampadd";
     public static final String DATE_TRUNC = "date_trunc";
     public static final String DATE_FLOOR = "date_floor";
+    public static final String STRFTIME = "strftime";
+    public static final String TIME_FORMAT = "time_format";
+    public static final String DATE_FORMAT = "date_format";
+    public static final String ALIGNMENT_TIMESTAMP = "alignment_timestamp";
+    public static final String DEFAULT_VALUE = "default_value";
+    public static final String REPLACE_VALUE = "replace_value";
+    public static final String SUBSTITUTE = "substitute";
+    public static final String FROM_UNIXTIME = "from_unixtime";
 
     // string functions
+    public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
+    public static final String CONCAT = "concat";
+    public static final String CONCAT_WS = "concat_ws";
+    public static final String LEFT = "left";
+    public static final String LIKE = "like";
+    public static final String LOWER = "lower";
+    public static final String LPAD = "lpad";
+    public static final String LTRIM = "ltrim";
+    public static final String REGEXP_EXTRACT = "regexp_extract";
+    public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REPEAT = "repeat";
+    public static final String REVERSE = "reverse";
+    public static final String RIGHT = "right";
+    public static final String RPAD = "rpad";
+    public static final String RTRIM = "rtrim";
+    public static final String SPLIT_PART = "split_part";
+    public static final String SUBSTR = "substr";
     public static final String SUBSTRING = "substring";
     public static final String STARTS_WITH = "starts_with";
+    public static final String TRIM = "trim";
+    public static final String UPPER = "upper";
 
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
-    public static final String GEO_FUNCTION_PREFIX = "st_";
+
     // JSON functions
     public static final String JSON_QUERY = "json_query";
     public static final String PARSE_JSON = "parse_json";
+    public static final String JSON_ARRAY = "json_array";
+    public static final String JSON_OBJECT = "json_object";
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     // Array functions
     public static final String ARRAY_DIFFERENCE = "array_difference";
+
+    // Util functions
+    public static final String UUID = "uuid";
+    public static final String SLEEP = "sleep";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
@@ -191,35 +258,16 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions = ImmutableSet.of("if",
-            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "bitmap_hash", "percentile_hash", "hll_hash",
-            "json_array", "json_object");
+    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
+            ImmutableSet.of(IF, CONCAT_WS, IF_NULL, NULL_IF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
-    public final ImmutableSet<String> couldApplyDictOptimizationFunctions = ImmutableSet.of(
-            "append_trailing_char_if_absent",
-            "concat",
-            "concat_ws",
-            "hex",
-            "left",
-            "like",
-            "lower",
-            "lpad",
-            "ltrim",
-            "regexp_extract",
-            "regexp_replace",
-            "repeat",
-            "reverse",
-            "right",
-            "rpad",
-            "rtrim",
-            "split_part",
-            "substr",
-            "substring",
-            "trim",
-            "upper",
-            "if");
+    public final ImmutableSet<String> couldApplyDictOptimizationFunctions =
+            ImmutableSet.of(APPEND_TRAILING_CHAR_IF_ABSENT, CONCAT, CONCAT_WS, HEX, LEFT, LIKE, LOWER, LPAD, LTRIM,
+                    REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR, SUBSTRING,
+                    TRIM, UPPER, IF);
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
             ImmutableSet.<String>builder()
@@ -243,17 +291,17 @@ public class FunctionSet {
 
     public static final Set<String> decimalRoundFunctions =
             ImmutableSet.<String>builder()
-                    .add("truncate")
-                    .add("round")
-                    .add("dround")
+                    .add(TRUNCATE)
+                    .add(ROUND)
+                    .add(DROUND)
                     .build();
 
     public static final Set<String> nonDeterministicFunctions =
             ImmutableSet.<String>builder()
-                    .add("rand")
-                    .add("random")
-                    .add("uuid")
-                    .add("sleep")
+                    .add(RAND)
+                    .add(RANDOM)
+                    .add(UUID)
+                    .add(SLEEP)
                     .build();
 
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
@@ -282,17 +330,17 @@ public class FunctionSet {
         final String functionName = desc.getFunctionName().getFunction();
         final Type[] descArgTypes = desc.getArgs();
         final Type[] candicateArgTypes = candicate.getArgs();
-        if (functionName.equalsIgnoreCase("hex")
-                || functionName.equalsIgnoreCase("lead")
-                || functionName.equalsIgnoreCase("lag")) {
+        if (functionName.equalsIgnoreCase(HEX)
+                || functionName.equalsIgnoreCase(LEAD)
+                || functionName.equalsIgnoreCase(LAG)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
             final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
             // Bitmap, HLL, PERCENTILE type don't allow cast
             if (descArgType.isOnlyMetricType()) {
                 return false;
             }
-            if (functionName.equalsIgnoreCase("lead") ||
-                    functionName.equalsIgnoreCase("lag")) {
+            if (functionName.equalsIgnoreCase(LEAD) ||
+                    functionName.equalsIgnoreCase(LAG)) {
                 // lead and lag function respect first arg type
                 return descArgType.isNull() || descArgType.matchesType(candicateArgType);
             } else {
@@ -304,10 +352,10 @@ public class FunctionSet {
         // ifnull, nullif(DATE, DATETIME) should return datetime, not bigint
         // if(boolean, DATE, DATETIME) should return datetime
         int arg_index = 0;
-        if (functionName.equalsIgnoreCase("ifnull") ||
-                functionName.equalsIgnoreCase("nullif") ||
-                functionName.equalsIgnoreCase("if")) {
-            if (functionName.equalsIgnoreCase("if")) {
+        if (functionName.equalsIgnoreCase(IF_NULL) ||
+                functionName.equalsIgnoreCase(NULL_IF) ||
+                functionName.equalsIgnoreCase(IF)) {
+            if (functionName.equalsIgnoreCase(IF)) {
                 arg_index = 1;
             }
             boolean descIsAllDateType = true;
@@ -506,26 +554,26 @@ public class FunctionSet {
                         false, true, true));
             }
             // Min
-            addBuiltin(AggregateFunction.createBuiltin("min",
+            addBuiltin(AggregateFunction.createBuiltin(MIN,
                     Lists.newArrayList(t), t, t, true, true, false));
 
             // Max
-            addBuiltin(AggregateFunction.createBuiltin("max",
+            addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
 
             // NDV
             // ndv return string
-            addBuiltin(AggregateFunction.createBuiltin("ndv",
+            addBuiltin(AggregateFunction.createBuiltin(NDV,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
 
             // ANY_VALUE
-            addBuiltin(AggregateFunction.createBuiltin("any_value",
+            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
                     Lists.newArrayList(t), t, t, true, false, false));
 
             //APPROX_COUNT_DISTINCT
             //alias of ndv, compute approx count distinct use HyperLogLog
-            addBuiltin(AggregateFunction.createBuiltin("approx_count_distinct",
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
 
@@ -540,38 +588,38 @@ public class FunctionSet {
                     true, false, true));
 
             if (STDDEV_ARG_TYPE.contains(t)) {
-                addBuiltin(AggregateFunction.createBuiltin("stddev",
+                addBuiltin(AggregateFunction.createBuiltin(STDDEV,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("stddev_samp",
+                addBuiltin(AggregateFunction.createBuiltin(STDDEV_SAMP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("stddev_pop",
+                addBuiltin(AggregateFunction.createBuiltin(STDDEV_POP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("std",
+                addBuiltin(AggregateFunction.createBuiltin(STD,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("variance",
+                addBuiltin(AggregateFunction.createBuiltin(VARIANCE,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("variance_samp",
+                addBuiltin(AggregateFunction.createBuiltin(VARIANCE_SAMP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("var_samp",
+                addBuiltin(AggregateFunction.createBuiltin(VAR_SAMP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("variance_pop",
+                addBuiltin(AggregateFunction.createBuiltin(VARIANCE_POP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
-                addBuiltin(AggregateFunction.createBuiltin("var_pop",
+                addBuiltin(AggregateFunction.createBuiltin(VAR_POP,
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
             }
         }
 
         // Sum
-        String[] sumNames = {"sum", "sum_distinct"};
+        String[] sumNames = {SUM, SUM_DISTINCT};
         for (String name : sumNames) {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.DOUBLE, false, true, false));
@@ -600,17 +648,17 @@ public class FunctionSet {
         }
 
         // HLL_UNION_AGG
-        addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",
+        addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
                 Lists.newArrayList(Type.HLL), Type.BIGINT, Type.HLL,
                 true, true, true));
 
         // HLL_UNION
-        addBuiltin(AggregateFunction.createBuiltin("hll_union",
+        addBuiltin(AggregateFunction.createBuiltin(HLL_UNION,
                 Lists.newArrayList(Type.HLL), Type.HLL, Type.HLL,
                 true, false, true));
 
         // HLL_RAW_AGG is alias of HLL_UNION
-        addBuiltin(AggregateFunction.createBuiltin("hll_raw_agg",
+        addBuiltin(AggregateFunction.createBuiltin(HLL_RAW_AGG,
                 Lists.newArrayList(Type.HLL), Type.HLL, Type.HLL,
                 true, false, true));
 
@@ -630,14 +678,14 @@ public class FunctionSet {
                 true, false, true));
 
         //PercentileApprox
-        addBuiltin(AggregateFunction.createBuiltin("percentile_approx",
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin("percentile_approx",
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, false, false));
 
-        addBuiltin(AggregateFunction.createBuiltin("percentile_union",
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,
                 Lists.newArrayList(Type.PERCENTILE), Type.PERCENTILE, Type.PERCENTILE,
                 false, false, false));
 
@@ -646,44 +694,44 @@ public class FunctionSet {
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.BOOLEAN), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.TINYINT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.SMALLINT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.INT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL128, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.BIGINT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL128, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.VARCHAR,
                 false, true, false));
         // Avg(Timestamp)
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DATE), Type.DATE, Type.VARCHAR,
                 false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin("avg",
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DATETIME), Type.DATETIME, Type.DATETIME,
                 false, true, false));
 
@@ -732,11 +780,11 @@ public class FunctionSet {
                 false, false, false));
 
         // Group_concat(string)
-        addBuiltin(AggregateFunction.createBuiltin("group_concat",
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
         // Group_concat(string, string)
-        addBuiltin(AggregateFunction.createBuiltin("group_concat",
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
 
@@ -750,14 +798,14 @@ public class FunctionSet {
 
         // analytic functions
         // Rank
-        addBuiltin(AggregateFunction.createAnalyticBuiltin("rank",
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), Type.BIGINT, Type.VARCHAR));
         // Dense rank
-        addBuiltin(AggregateFunction.createAnalyticBuiltin("dense_rank",
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(DENSE_RANK,
                 Collections.emptyList(), Type.BIGINT, Type.VARCHAR));
-        addBuiltin(AggregateFunction.createAnalyticBuiltin("row_number",
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(ROW_NUMBER,
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
-        addBuiltin(AggregateFunction.createAnalyticBuiltin("ntile",
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
 
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
@@ -777,29 +825,29 @@ public class FunctionSet {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "first_value", Lists.newArrayList(t), t, t));
+                    FIRST_VALUE, Lists.newArrayList(t), t, t));
             // Implements FIRST_VALUE for some windows that require rewrites during planning.
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "first_value_rewrite", Lists.newArrayList(t, Type.BIGINT), t, t));
+                    FIRST_VALUE_REWRITE, Lists.newArrayList(t, Type.BIGINT), t, t));
 
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "last_value", Lists.newArrayList(t), t, t));
+                    LAST_VALUE, Lists.newArrayList(t), t, t));
 
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lag", Lists.newArrayList(t, Type.BIGINT, t), t, t));
+                    LAG, Lists.newArrayList(t, Type.BIGINT, t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lead", Lists.newArrayList(t, Type.BIGINT, t), t, t));
+                    LEAD, Lists.newArrayList(t, Type.BIGINT, t), t, t));
 
             // lead() and lag() the default offset and the default value should be
             // rewritten to call the overrides that take all parameters.
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lag", Lists.newArrayList(t), t, t));
+                    LAG, Lists.newArrayList(t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lag", Lists.newArrayList(t, Type.BIGINT), t, t));
+                    LAG, Lists.newArrayList(t, Type.BIGINT), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lead", Lists.newArrayList(t), t, t));
+                    LEAD, Lists.newArrayList(t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
-                    "lead", Lists.newArrayList(t, Type.BIGINT), t, t));
+                    LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
         }
 
     }
