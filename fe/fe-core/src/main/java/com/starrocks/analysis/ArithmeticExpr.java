@@ -498,7 +498,7 @@ public class ArithmeticExpr extends Expr {
         if (op == Operator.DIVIDE || op == Operator.INT_DIVIDE || op == Operator.MOD) {
             return true;
         }
-        return hasNullableChild();
+        return children.stream().anyMatch(e -> e.isNullable() || e.getType().isDecimalV3());
     }
 
     /**
