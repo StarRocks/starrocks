@@ -854,7 +854,7 @@ public class FunctionCallExpr extends Expr {
         }
         // check children nullable
         if (nullableSameWithChildrenFunctions.contains(fnName.getFunction())) {
-            return children.stream().anyMatch(Expr::isNullable);
+            return children.stream().anyMatch(e -> e.isNullable() || e.getType().isDecimalV3());
         }
         return true;
     }
