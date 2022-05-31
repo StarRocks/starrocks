@@ -130,6 +130,10 @@ public class MappingPhase implements SearchPhase {
 
     private void resolveDocValuesFields(SearchContext searchContext, JSONObject fieldObject, String colName) {
         String fieldType = fieldObject.optString("type");
+        // skip `nested` or object type
+        if ("nested".equals(fieldType) || fieldObject.has("properties")) {
+            return;
+        }
         String docValueField = null;
         if (EsTable.DEFAULT_DOCVALUE_DISABLED_FIELDS.contains(fieldType)) {
             JSONObject fieldsObject = fieldObject.optJSONObject("fields");
