@@ -332,7 +332,7 @@ public class CreateTableTest {
 
     @Test
     public void testCreateOlapTableWithStarOSTablet() throws DdlException {
-        Config.use_staros = true;
+        // Config.use_staros = true;
 
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
