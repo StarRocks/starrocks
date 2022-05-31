@@ -53,7 +53,7 @@ StarRocks can be easily deployed, maintained, and scaled out due to its simple a
 ## Architecture Overview
 
  <p align="center">
-    <img src="https://camo.githubusercontent.com/b53355f4cb764125160d949b37626b2afcde57fcfda09a45fc1eebc77604a465/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f313430302f312a466a6b38753661333966766567565f71325f5a5279772e706e67">
+    <img src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
    </a>
 </p>
 
