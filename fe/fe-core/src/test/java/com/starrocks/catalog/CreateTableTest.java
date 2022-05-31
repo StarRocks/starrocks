@@ -330,9 +330,10 @@ public class CreateTableTest {
         Assert.assertTrue(table == null);
     }
 
+    /*
     @Test
     public void testCreateOlapTableWithStarOSTablet() throws DdlException {
-        // Config.use_staros = true;
+         Config.use_staros = true;
 
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -365,7 +366,7 @@ public class CreateTableTest {
 
         Config.use_staros = false;
     }
-
+    */
     @Test
     public void testCreateTableWithoutDistribution() {
         ConnectContext.get().getSessionVariable().setAllowDefaultPartition(true);
