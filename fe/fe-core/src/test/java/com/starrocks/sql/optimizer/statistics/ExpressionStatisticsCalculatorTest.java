@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -57,7 +58,7 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testUnaryFunctionCall() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.INT, "id", true);
-        CallOperator callOperator = new CallOperator("max", Type.INT, Lists.newArrayList(columnRefOperator));
+        CallOperator callOperator = new CallOperator(FunctionSet.MAX, Type.INT, Lists.newArrayList(columnRefOperator));
 
         Statistics.Builder builder = Statistics.builder();
         double min = 0.0;
@@ -72,12 +73,12 @@ public class ExpressionStatisticsCalculatorTest {
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), min, 0.001);
         // test min function
-        callOperator = new CallOperator("min", Type.INT, Lists.newArrayList(columnRefOperator));
+        callOperator = new CallOperator(FunctionSet.MIN, Type.INT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), min, 0.001);
         // test count function
-        callOperator = new CallOperator("count", Type.INT, Lists.newArrayList(columnRefOperator));
+        callOperator = new CallOperator(FunctionSet.COUNT, Type.INT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics, 10);
         Assert.assertEquals(columnStatistic.getMaxValue(), statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), 0.0, 0.001);
@@ -94,22 +95,22 @@ public class ExpressionStatisticsCalculatorTest {
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
 
-        CallOperator callOperator = new CallOperator("add", Type.BIGINT, Lists.newArrayList(left, right));
+        CallOperator callOperator = new CallOperator(FunctionSet.ADD, Type.BIGINT, Lists.newArrayList(left, right));
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(300, columnStatistic.getMaxValue(), 0.001);
 
-        callOperator = new CallOperator("subtract", Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.SUBTRACT, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
 
-        callOperator = new CallOperator("multiply", Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-20000, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(20000, columnStatistic.getMaxValue(), 0.001);
 
-        callOperator = new CallOperator("divide", Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-1, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
@@ -119,12 +120,12 @@ public class ExpressionStatisticsCalculatorTest {
         rightStatistic = new ColumnStatistic(-2, 0, 0, 0, 1);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
-        callOperator = new CallOperator("multiply", Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
 
-        callOperator = new CallOperator("divide", Type.BIGINT, Lists.newArrayList(left, right));
+        callOperator = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(50, columnStatistic.getMaxValue(), 0.001);

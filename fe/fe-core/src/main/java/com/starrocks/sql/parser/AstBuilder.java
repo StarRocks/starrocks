@@ -105,6 +105,7 @@ import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -1728,15 +1729,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String functionName;
         if (context.aggregationFunction().COUNT() != null) {
-            functionName = "count";
+            functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
-            functionName = "avg";
+            functionName = FunctionSet.AVG;
         } else if (context.aggregationFunction().SUM() != null) {
-            functionName = "sum";
+            functionName = FunctionSet.SUM;
         } else if (context.aggregationFunction().MIN() != null) {
-            functionName = "min";
+            functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().MAX() != null) {
-            functionName = "max";
+            functionName = FunctionSet.MAX;
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
@@ -1760,7 +1761,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
-            "row_number", "rank", "dense_rank", "ntile", "lead", "lag", "first_value", "last_value");
+            FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
+            FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {

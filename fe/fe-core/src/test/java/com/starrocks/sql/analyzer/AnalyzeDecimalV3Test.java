@@ -6,6 +6,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -244,8 +245,8 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(type, expectReturnType);
             Assert.assertEquals(argType, expectArgType);
             System.out.printf("%s: %s\n", fn.functionName(), serdeType);
-            if (fn.functionName().equalsIgnoreCase("sum") ||
-                    fn.functionName().equalsIgnoreCase("sum_distinct")) {
+            if (fn.functionName().equalsIgnoreCase(FunctionSet.SUM) ||
+                    fn.functionName().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)) {
                 Assert.assertEquals(serdeType, null);
             } else {
                 Assert.assertEquals(serdeType, Type.VARCHAR);
