@@ -2,10 +2,15 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Table;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -24,7 +29,22 @@ public class RefreshTableStmtTest {
     }
 
     @Test
-    public void testRefreshTableParserAndAnalyzer() {
+    public void testRefreshTableParserAndAnalyzer(@Mocked GlobalStateMgr globalStateMgr,
+                                                  @Mocked MetadataMgr metadataMgr,
+                                                  @Mocked Table table) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+
+                metadataMgr.getTable(anyString, anyString, anyString);
+                result = table;
+            }
+        };
         String sql_1 = "REFRESH EXTERNAL TABLE db1.table1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertTrue(stmt instanceof RefreshTableStmt);
