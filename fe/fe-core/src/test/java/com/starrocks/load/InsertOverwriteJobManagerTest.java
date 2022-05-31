@@ -8,6 +8,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -67,6 +68,12 @@ public class InsertOverwriteJobManagerTest {
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
 
+        InsertOverwriteJob job2 = insertOverwriteJobManager.getInsertOverwriteJob(1100L);
+        Assert.assertEquals(1100L, job2.getJobId());
+        Assert.assertEquals(100L, job2.getTargetDbId());
+        Assert.assertEquals(110L, job2.getTargetTableId());
+        Assert.assertEquals(targetPartitionIds, job2.getOriginalTargetPartitionIds());
+
         insertOverwriteJobManager.deregisterOverwriteJob(1100L);
         Assert.assertEquals(0, insertOverwriteJobManager.getJobNum());
 
@@ -112,6 +119,20 @@ public class InsertOverwriteJobManagerTest {
         insertOverwriteJobManager.cancelRunningJobs();
         Thread.sleep(5000);
         Assert.assertEquals(0, insertOverwriteJobManager.getRunningJobSize());
+
+        insertOverwriteJobManager.replayCreateInsertOverwrite(jobInfo);
+        Assert.assertEquals(1, insertOverwriteJobManager.getRunningJobSize());
+        List<String> sourcePartitionNames = Lists.newArrayList("p1");
+        List<String> newPartitionNames = Lists.newArrayList("p1_1100L");
+        InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(1100L,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
+                sourcePartitionNames, newPartitionNames);
+        insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo);
+
+        InsertOverwriteStateChangeInfo stateChangeInfo2 = new InsertOverwriteStateChangeInfo(1100L,
+                InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_SUCCESS,
+                sourcePartitionNames, newPartitionNames);
+        insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo2);
     }
 
     @Test

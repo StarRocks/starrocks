@@ -1052,7 +1052,6 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         try {
             InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-            // pass context into
             manager.submitJob(context, this, insertOverwriteJob);
         } catch (Exception e) {
             LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);

@@ -91,4 +91,19 @@ public class InsertOverwriteJobRunnerTest {
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
         executor.handleInsertOverwrite(insertStmt);
     }
+
+    @Test
+    public void testInsertOverwrite() throws Exception {
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
+        Table table = database.getTable("t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId());
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob,
+                connectContext, executor, database, olapTable);
+        Assert.assertFalse(runner.isFinished());
+    }
 }
