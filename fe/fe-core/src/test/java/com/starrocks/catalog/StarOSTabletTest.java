@@ -65,8 +65,8 @@ public class StarOSTabletTest {
         file.delete();
     }
 
-    @Test
     /*
+    @Test
     public void testGetBackend(@Mocked SystemInfoService systemInfoService) {
         Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 1L;
