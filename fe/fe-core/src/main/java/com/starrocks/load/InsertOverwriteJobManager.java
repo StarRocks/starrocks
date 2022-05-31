@@ -172,16 +172,17 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     }
 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobInfo jobInfo) {
-        try {
-            InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
-                    jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
-            if (runningJobs == null) {
-                runningJobs = Lists.newArrayList();
-            }
-            runningJobs.add(insertOverwriteJob);
-        } catch (Exception e) {
-            LOG.warn("replay insert overwrite job failed. jobId:{}", jobInfo.getJobId(), e);
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
+                jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
+        boolean registered = registerOverwriteJob(insertOverwriteJob);
+        if (!registered) {
+            LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
+            return;
         }
+        if (runningJobs == null) {
+            runningJobs = Lists.newArrayList();
+        }
+        runningJobs.add(insertOverwriteJob);
     }
 
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
@@ -214,8 +215,12 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                     if (runningJobs != null) {
                         for (InsertOverwriteJob job : runningJobs) {
                             LOG.info("start to cancel unfinished insert overwrite job:{}", job.getJobId());
-                            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-                            runner.cancel();
+                            try {
+                                InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+                                runner.cancel();
+                            } finally {
+                                deregisterOverwriteJob(job.getJobId());
+                            }
                         }
                         runningJobs.clear();
                     }
