@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -200,6 +201,7 @@ public class StatementPlanner {
                 || statement instanceof QueryStatement
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
+                || statement instanceof RefreshTableStmt
                 || statement instanceof ShowAnalyzeStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt

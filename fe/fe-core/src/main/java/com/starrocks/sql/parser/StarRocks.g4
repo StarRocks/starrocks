@@ -24,6 +24,7 @@ statement
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
+    | refreshTableStatement                                                                 #refreshTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -124,6 +125,10 @@ showColumnStatement
 
 showTableStatusStatement
     : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+refreshTableStatement
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
