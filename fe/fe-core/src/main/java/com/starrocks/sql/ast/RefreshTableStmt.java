@@ -7,6 +7,12 @@ import com.starrocks.analysis.TableName;
 
 import java.util.List;
 
+/**
+ * This command used to refresh connector table of external catalog.
+ * For example:
+ * 'REFRESH EXTERNAL TABLE catalog1.db1.table1'
+ * This sql will refresh table1 of db1 in catalog1.
+ */
 public class RefreshTableStmt extends DdlStmt {
     private TableName tableName;
     private List<String> partitionNames;
@@ -35,14 +41,5 @@ public class RefreshTableStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitRefreshTableStatement(this, context);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("REFRESH EXTERNAL TABLE ");
-        sb.append(tableName.toSql()).append(" ");
-        sb.append("PARTITION(").append(String.join("", partitionNames)).append(")");
-        return sb.toString();
     }
 }
