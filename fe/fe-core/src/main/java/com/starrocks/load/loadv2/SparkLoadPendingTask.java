@@ -36,6 +36,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
@@ -537,7 +538,7 @@ public class SparkLoadPendingTask extends LoadTask {
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
         String functionName = fn.getFnName().getFunction();
-        if (!functionName.equalsIgnoreCase("hll_hash")
+        if (!functionName.equalsIgnoreCase(FunctionSet.HLL_HASH)
                 && !functionName.equalsIgnoreCase("hll_empty")) {
             throw new LoadException(msg);
         }
@@ -555,9 +556,9 @@ public class SparkLoadPendingTask extends LoadTask {
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
         String functionName = fn.getFnName().getFunction();
-        if (!functionName.equalsIgnoreCase("to_bitmap")
-                && !functionName.equalsIgnoreCase("bitmap_hash")
-                && !functionName.equalsIgnoreCase("bitmap_dict")) {
+        if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)) {
             throw new LoadException(msg);
         }
 
