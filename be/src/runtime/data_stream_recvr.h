@@ -164,7 +164,6 @@ private:
     // there is one SenderQueue for each sender. Otherwise, row batches from all senders
     // are placed in the same SenderQueue. The SenderQueue instances are owned by the
     // receiver and placed in _sender_queue_pool.
-    // std::vector<SenderQueue*> _sender_queues;
     std::vector<SenderQueue*> _sender_queues;
 
     // vectorized::SortedChunksMerger merges chunks from different senders.
