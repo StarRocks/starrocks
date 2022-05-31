@@ -12,8 +12,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -31,10 +33,12 @@ public class JDBCScanNode extends ScanNode {
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
     private String tableName;
+    private JDBCTable table;
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
         super(id, desc, "SCAN JDBC");
         tableName = "`" + tbl.getJdbcTable() + "`";
+        table = tbl;
     }
 
     @Override
@@ -103,9 +107,13 @@ public class JDBCScanNode extends ScanNode {
 
             sMap.put(slotRef, tmpRef);
         }
+        JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                .getResource(table.getResourceName());
+        String jdbcURI = resource.getProperty(JDBCResource.URI);
+        boolean isMySQL = jdbcURI.startsWith("jdbc:mysql");
         ArrayList<Expr> mysqlConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : mysqlConjuncts) {
-            filters.add(p.toJDBCSQL());
+            filters.add(p.toJDBCSQL(isMySQL));
         }
     }
 
