@@ -17,11 +17,10 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -36,18 +35,15 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import org.antlr.v4.runtime.atn.LexerPushModeAction;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Convert column predicate to partition column filter
@@ -56,6 +52,10 @@ public class ColumnFilterConverter {
     private static final Logger LOG = LogManager.getLogger(ColumnFilterConverter.class);
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
+
+    public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
+        return convertColumnFilter(predicates, null);
+    }
 
     public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates, Table table) {
         Map<String, PartitionColumnFilter> result = Maps.newHashMap();
@@ -103,42 +103,25 @@ public class ColumnFilterConverter {
 
             return type.equals(columnType);
         }
+
         if (right instanceof CallOperator) {
             if (!(table instanceof OlapTable)) {
                 return false;
             }
             PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
-            // TODO: 5/26/22 partitionInfo instanceof ExprPartitionInfo
-            if (!(partitionInfo instanceof RangePartitionInfo)) {
+            if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
                 return false;
             }
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            List<Expr> exprList = getDummyExprList();
-
-            return checkContains(exprList, (CallOperator) right);
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(), (CallOperator) right);
         }
 
         return false;
     }
 
-    private static List<Expr> getDummyExprList() {
-        List<Expr> exprList = new ArrayList<>();
-
-        List<Expr> params = new ArrayList<>();
-        StringLiteral stringLiteral = new StringLiteral("month");
-        params.add(stringLiteral);
-        TableName tableName = new TableName("zdtestdb", "zdtestTable");
-        SlotRef slotRefDate = new SlotRef(tableName, "date_col");
-        slotRefDate.setType(Type.DATE);
-        params.add(slotRefDate);
-        FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                params);
-        exprList.add(zdtestCallExpr);
-        return exprList;
-    }
-
-    private static boolean checkContains(List<Expr> exprList,
+    private static boolean checkPartitionExprsContainsOperator(List<Expr> exprList,
                                          CallOperator callOperator) {
+        // now expr can only support date_trunc,exprList.size() != 1 will remove in the future
         if (CollectionUtils.isEmpty(exprList) || exprList.size() != 1) {
             return false;
         }
@@ -147,28 +130,58 @@ public class ColumnFilterConverter {
             return false;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        return checkEquals(functionCallExpr, callOperator);
+        return checkPartitionExprEqualsOperator(functionCallExpr, callOperator);
     }
 
-    private static boolean checkEquals(FunctionCallExpr functionCallExpr,
+    private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
                                        CallOperator callOperator) {
-//        ScalarOperator translate = SqlToScalarOperatorTranslator.translate(functionCallExpr,
-//                new ExpressionMapping(null, Collections.emptyList()));
         String fnName = functionCallExpr.getFnName().getFunction();
-        if (!fnName.equals(callOperator.getFnName())) {
+        if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
         }
-        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
-            checkDateTruncEquals(functionCallExpr,callOperator);
+        if (Objects.equals(fnName, FunctionSet.DATE_TRUNC)) {
+            return checkDateTruncEquals(functionCallExpr, callOperator);
         }
 
         return false;
     }
 
     private static boolean checkDateTruncEquals(FunctionCallExpr functionCallExpr, CallOperator callOperator) {
-        return false;
+        if (callOperator.getChildren().size() != 2 || functionCallExpr.getChildren().size() != 2) {
+            return false;
+        }
+        if (!(functionCallExpr.getChild(0) instanceof StringLiteral &&
+                functionCallExpr.getChild(1) instanceof SlotRef)) {
+            return false;
+        }
+        if (!(callOperator.getChild(0) instanceof ConstantOperator &&
+                callOperator.getChild(1) instanceof ColumnRefOperator)) {
+            return false;
+        }
+
+        Map<String, Integer> timeMap = getTimeMap();
+        String exprTimeArg = ((StringLiteral) (functionCallExpr.getChild(0))).getStringValue();
+        String callTimeArg = callOperator.getChild(0).toString();
+        String exprColumnNameArg = ((SlotRef) (functionCallExpr.getChild(1))).getColumnName();
+        String callColumnNameArg = ((ColumnRefOperator) (callOperator.getChild(1))).getName();
+
+        return Objects.equals(exprColumnNameArg, callColumnNameArg) &&
+                (Objects.equals(exprTimeArg, callTimeArg) ||
+                        timeMap.getOrDefault(exprTimeArg, 0) > timeMap.getOrDefault(callTimeArg, 0));
     }
 
+    private static Map<String, Integer> getTimeMap() {
+        // "week" can not exist in timeMap due "month" not sure contains week
+        Map<String, Integer> timeMap = new HashMap<>();
+        timeMap.put("second", 1);
+        timeMap.put("minute", 2);
+        timeMap.put("hour", 3);
+        timeMap.put("day", 4);
+        timeMap.put("month", 5);
+        timeMap.put("quarter", 6);
+        timeMap.put("year", 7);
+        return timeMap;
+    }
 
     private static class ColumnFilterVisitor
             extends ScalarOperatorVisitor<ScalarOperator, Map<String, PartitionColumnFilter>> {
