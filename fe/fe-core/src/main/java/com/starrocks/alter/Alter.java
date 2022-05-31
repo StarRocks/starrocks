@@ -244,8 +244,7 @@ public class Alter {
 
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
-        final MaterializedView.MvRefreshScheme oldRefreshScheme = materializedView.getRefreshScheme();
-        final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
         final String refreshType = refreshSchemeDesc.getType().name();
 
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -254,20 +253,15 @@ public class Alter {
 
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
-            final MaterializedView.AsyncRefreshContext asyncRefreshContext = new MaterializedView.AsyncRefreshContext();
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             asyncRefreshContext.setStep(asyncRefreshSchemeDesc.getStep());
             asyncRefreshContext.setTimeUnit(asyncRefreshSchemeDesc.getTimeUnit());
-            newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
         }
 
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
-        newMvRefreshScheme.setType(newRefreshType);
-        newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
-        materializedView.setRefreshScheme(newMvRefreshScheme);
-        final ChangeMaterializedViewRefreshSchemeLog log =
-                new ChangeMaterializedViewRefreshSchemeLog(materializedView, newMvRefreshScheme);
+        refreshScheme.setType(newRefreshType);
+        final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         editLog.logMvChangeRefreshScheme(log);
     }
@@ -281,6 +275,7 @@ public class Alter {
             throw new DdlException("Materialized view [" + newMvName + "] is already used");
         }
         materializedView.setName(newMvName);
+        db.dropTable(oldMvName);
         db.createTable(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(materializedView, oldMvName, newMvName);
@@ -292,11 +287,11 @@ public class Alter {
         long dbId = log.getDbId();
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
-
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
         try {
             MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+            db.dropTable(oldMaterializedView.getName());
             oldMaterializedView.setName(newMaterializedViewName);
             db.createTable(oldMaterializedView);
             LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
