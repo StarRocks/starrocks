@@ -21,8 +21,11 @@
 
 #include "storage/rowset/ordinal_page_index.h"
 
+#include <bthread/sys_futex.h>
+
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
@@ -60,14 +63,42 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
     return Status::OK();
 }
 
-Status OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB* index_meta,
-                                ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
-    if (index_meta->root_page().is_root_data_page()) {
+StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+    while (true) {
+        auto state = _state.load(std::memory_order_acquire);
+        if (state == 2) {
+            return false;
+        }
+        if (state == 0 && _state.compare_exchange_weak(state, 1, std::memory_order_release)) {
+            auto st = do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory);
+            if (st.ok()) {
+                _state.store(2, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, INT_MAX);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return true;
+            } else {
+                _state.store(0, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, 1);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return st;
+            }
+        }
+        if (state == 1) {
+            int r = bthread::futex_wait_private(&_state, state, nullptr);
+            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+        }
+    }
+}
+
+Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                                   ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+    if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
         _ordinals.push_back(0);
         _ordinals.push_back(num_values);
-        _pages.emplace_back(index_meta->root_page().root_page());
+        _pages.emplace_back(meta.root_page().root_page());
         return Status::OK();
     }
     // need to read index page
@@ -75,7 +106,7 @@ Status OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, con
 
     PageReadOptions opts;
     opts.read_file = read_file.get();
-    opts.page_pointer = PagePointer(index_meta->root_page().root_page());
+    opts.page_pointer = PagePointer(meta.root_page().root_page());
     opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
     OlapReaderStatistics tmp_stats;
     opts.stats = &tmp_stats;

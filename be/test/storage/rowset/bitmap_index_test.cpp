@@ -52,11 +52,9 @@ protected:
     void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
         *reader = new BitmapIndexReader();
-        auto st = (*reader)->load(_fs.get(), file_name, &meta.bitmap_index(), true, false);
-        ASSERT_TRUE(st.ok());
-
-        st = (*reader)->new_iterator(iter);
-        ASSERT_TRUE(st.ok());
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), file_name, meta.bitmap_index(), true, false));
+        ASSERT_TRUE(r);
+        ASSERT_OK((*reader)->new_iterator(iter));
     }
 
     template <FieldType type>

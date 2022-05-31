@@ -46,14 +46,24 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() = default;
+    BitmapIndexReader() : _state(0), _has_null(false) {}
 
-    Status load(FileSystem* fs, const std::string& file_name, const BitmapIndexPB* bitmap_index_meta,
-                bool use_page_cache, bool kept_in_memory);
+    // Load index data into memory.
+    //
+    // Multiple callers may call this method concurrently, but only the first one
+    // can load the data, the others will wait until the first one finished loading
+    // data.
+    //
+    // Return true if the index data was successfully loaded by the caller, false if
+    // the data was loaded by another caller.
+    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                        bool kept_in_memory);
 
     // create a new column iterator. Client should delete returned iterator
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     Status new_iterator(BitmapIndexIterator** iterator);
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
 
     const TypeInfoPtr& type_info() { return _typeinfo; }
@@ -69,13 +79,22 @@ public:
         return size;
     }
 
+    bool loaded() const { return _state.load(std::memory_order_acquire) == 2; }
+
 private:
     friend class BitmapIndexIterator;
 
+    Status do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                   bool kept_in_memory);
+
+    // 0: data has not been loaded
+    // 1: loading in process
+    // 2: data has been load in memory
+    std::atomic<int> _state;
     TypeInfoPtr _typeinfo;
-    bool _has_null = false;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
+    bool _has_null;
 };
 
 class BitmapIndexIterator {

@@ -63,25 +63,37 @@ public:
 
 class ZoneMapIndexReader {
 public:
-    ZoneMapIndexReader() = default;
+    ZoneMapIndexReader() : _state(0) {}
 
-    // load all page zone maps into memory
-    Status load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB* index_meta, bool use_page_cache,
-                bool kept_in_memory);
+    // load all page zone maps into memory.
+    //
+    // Multiple callers may call this method concurrently, but only the first one
+    // can load the data, the others will wait until the first one finished loading
+    // data.
+    //
+    // Return true if the index data was successfully loaded by the caller, false if
+    // the data was loaded by another caller.
+    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
+                        bool kept_in_memory);
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     const std::vector<ZoneMapPB>& page_zone_maps() const { return _page_zone_maps; }
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     int32_t num_pages() const { return _page_zone_maps.size(); }
 
-    size_t mem_usage() const {
-        size_t size = sizeof(ZoneMapIndexReader);
-        for (const auto& zone_map : _page_zone_maps) {
-            size += zone_map.SpaceUsedLong();
-        }
-        return size;
-    }
+    size_t mem_usage() const;
+
+    bool loaded() const { return _state.load(std::memory_order_acquire) == 2; }
 
 private:
+    Status do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
+                   bool kept_in_memory);
+
+    // 0: data has not been loaded
+    // 1: loading in process
+    // 2: data has been load in memory
+    std::atomic<int> _state;
     std::vector<ZoneMapPB> _page_zone_maps;
 };
 
