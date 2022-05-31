@@ -37,6 +37,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
 #include "util/compression/block_compression.h"
@@ -897,8 +898,13 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
     for (int i = 0; i < num_queues; ++i) {
-        SenderQueue* queue =
-                _sender_queue_pool.add(new SenderQueue(this, num_sender_per_queue, _degree_of_parallelism));
+        SenderQueue* queue = nullptr;
+        if (_is_pipeline) {
+            queue = _sender_queue_pool.add(
+                    new PipelineSenderQueue(this, num_sender_per_queue, _is_merging ? 1 : _degree_of_parallelism));
+        } else {
+            queue = _sender_queue_pool.add(new NonPipelineSenderQueue(this, num_sender_per_queue));
+        }
         _sender_queues.push_back(queue);
     }
 
@@ -945,7 +951,7 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
         DCHECK(_is_pipeline);
         return _sender_queues[use_sender_id]->add_chunks_and_keep_order(request, done);
     } else {
-        return _sender_queues[use_sender_id]->add_chunks(request, done, _is_pipeline);
+        return _sender_queues[use_sender_id]->add_chunks(request, done);
     }
 }
 
@@ -991,23 +997,29 @@ Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
     vectorized::Chunk* tmp_chunk = nullptr;
-    Status status = _sender_queues[0]->get_chunk_for_pipeline(&tmp_chunk, driver_sequence);
+    Status status = _sender_queues[0]->get_chunk(&tmp_chunk, driver_sequence);
     chunk->reset(tmp_chunk);
     return status;
 }
 
 void DataStreamRecvr::short_circuit_for_pipeline(const int32_t driver_sequence) {
-    return _sender_queues[0]->short_circuit_for_pipeline(driver_sequence);
+    DCHECK(_is_pipeline);
+    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    return sender_queue->short_circuit(driver_sequence);
 }
 
 bool DataStreamRecvr::has_output_for_pipeline(const int32_t driver_sequence) const {
     DCHECK(!_is_merging);
-    return _sender_queues[0]->has_output_for_pipeline(driver_sequence);
+    DCHECK(_is_pipeline);
+    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    return sender_queue->has_output(driver_sequence);
 }
 
 bool DataStreamRecvr::is_finished() const {
     DCHECK(!_is_merging);
-    return _sender_queues[0]->is_finished();
+    DCHECK(_is_pipeline);
+    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    return sender_queue->is_finished();
 }
 
 } // namespace starrocks
