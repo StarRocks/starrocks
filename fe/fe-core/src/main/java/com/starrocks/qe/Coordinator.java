@@ -1270,9 +1270,7 @@ public class Coordinator {
 
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragment.getFragmentId(), parallelExecInstanceNum, params);
-                if (hasColocate) {
-                    computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
-                }
+                computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -1340,10 +1338,13 @@ public class Coordinator {
         }
     }
 
+    static final int BUCKET_ABSENT = 2147483647;
     public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
         Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
+        // absence of buckets.
         for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
-            bucketSeq2InstanceOrdinal[bucketSeq] = -1;
+            bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
         }
         for (int i = 0; i < params.instanceExecParams.size(); ++i) {
             FInstanceExecParam instance = params.instanceExecParams.get(i);
@@ -2085,23 +2086,23 @@ public class Coordinator {
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
-        public boolean bucketSeqToInstanceForColocateRuntimeFilterIsSet = false;
+        public boolean bucketSeqToInstanceForFilterIsSet = false;
 
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
         }
 
-        void setBucketSeqToInstanceForColocateRuntimeFilters() {
-            if (bucketSeqToInstanceForColocateRuntimeFilterIsSet) {
+        void setBucketSeqToInstanceForRuntimeFilters() {
+            if (bucketSeqToInstanceForFilterIsSet) {
                 return;
             }
-            bucketSeqToInstanceForColocateRuntimeFilterIsSet = true;
+            bucketSeqToInstanceForFilterIsSet = true;
             List<Integer> seqToInstance = fragmentIdToSeqToInstanceMap.get(fragment.getFragmentId());
             if (seqToInstance == null || seqToInstance.isEmpty()) {
                 return;
             }
             for (RuntimeFilterDescription rf : fragment.getBuildRuntimeFilters().values()) {
-                if (!rf.isColocate()) {
+                if (!rf.isColocateOrBucketShuffle()) {
                     continue;
                 }
                 rf.setBucketSeqToInstance(seqToInstance);
@@ -2125,7 +2126,7 @@ public class Coordinator {
                 workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
                         ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
             }
-            setBucketSeqToInstanceForColocateRuntimeFilters();
+            setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
