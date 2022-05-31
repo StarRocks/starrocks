@@ -79,8 +79,8 @@ class ZoneMapIndexWriter;
 
 class ColumnWriter {
 public:
-    static Status create(const ColumnWriterOptions& opts, const TabletColumn* column, WritableFile* _wfile,
-                         std::unique_ptr<ColumnWriter>* writer);
+    static StatusOr<std::unique_ptr<ColumnWriter>> create(const ColumnWriterOptions& opts, const TabletColumn* column,
+                                                          WritableFile* wfile);
 
     explicit ColumnWriter(std::unique_ptr<Field> field, bool is_nullable)
             : _field(std::move(field)), _is_nullable(is_nullable) {}

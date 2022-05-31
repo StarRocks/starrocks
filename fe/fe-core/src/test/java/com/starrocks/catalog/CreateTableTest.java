@@ -268,12 +268,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_unique_key MODIFY COLUMN k2 JSON"));
         // Add column in unique key
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
@@ -289,12 +285,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ");"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
     }
 
     private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {

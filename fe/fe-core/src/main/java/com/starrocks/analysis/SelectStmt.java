@@ -1235,11 +1235,11 @@ public class SelectStmt extends QueryStmt {
                 final List<Expr> countInputExpr = Lists.newArrayList(inputExpr.getChild(0).clone(null));
                 replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT,
                         new FunctionParams(inputExpr.isDistinct(), countInputExpr));
-            } else if (functionName.equalsIgnoreCase("SUM")) {
+            } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                 final List<Expr> sumInputExprs = Lists.newArrayList(inputExpr.getChild(0).clone(null));
                 replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM,
                         new FunctionParams(inputExpr.isDistinct(), sumInputExprs));
-            } else if (functionName.equalsIgnoreCase("AVG")) {
+            } else if (functionName.equalsIgnoreCase(FunctionSet.AVG)) {
                 final List<Expr> sumInputExprs = Lists.newArrayList(inputExpr.getChild(0).clone(null));
                 final List<Expr> countInputExpr = Lists.newArrayList(inputExpr.getChild(0).clone(null));
                 final FunctionCallExpr sumExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM,
@@ -1302,7 +1302,7 @@ public class SelectStmt extends QueryStmt {
             // Replace COUNT(ALL) with zeroifnull(COUNT(ALL))
             ArrayList<Expr> zeroIfNullParam = Lists.newArrayList(countAllAgg.clone(), new IntLiteral(0, Type.BIGINT));
             FunctionCallExpr zeroIfNull =
-                    new FunctionCallExpr("ifnull", zeroIfNullParam);
+                    new FunctionCallExpr(FunctionSet.IF_NULL, zeroIfNullParam);
             zeroIfNull.analyze(analyzer);
             scalarCountAllMap.put(countAllAgg, zeroIfNull);
         }
