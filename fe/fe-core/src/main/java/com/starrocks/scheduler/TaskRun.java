@@ -134,7 +134,7 @@ public class TaskRun {
         }
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
-        status.setExpireTime(System.currentTimeMillis() + Config.default_task_run_ttl * 1000L);
+        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         this.status = status;
         return status;
     }

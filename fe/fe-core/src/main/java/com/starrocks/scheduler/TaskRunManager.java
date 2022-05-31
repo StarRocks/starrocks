@@ -42,9 +42,9 @@ public class TaskRunManager {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
         }
 
-        if (pendingTaskRunMap.keySet().size() > Config.pending_task_run_num_limit) {
-            LOG.warn("pending TaskRun exceeds pending_task_run_num_limit:{}, reject the submit.",
-                    Config.pending_task_run_num_limit);
+        if (pendingTaskRunMap.keySet().size() > Config.task_runs_queue_length) {
+            LOG.warn("pending TaskRun exceeds task_runs_queue_length:{}, reject the submit.",
+                    Config.task_runs_queue_length);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
 
@@ -93,7 +93,7 @@ public class TaskRunManager {
                 if (taskRunQueue.size() == 0) {
                     pendingIterator.remove();
                 } else {
-                    if (currentRunning >= Config.running_task_run_num_limit) {
+                    if (currentRunning >= Config.task_runs_concurrency) {
                         break;
                     }
                     TaskRun pendingTaskRun = taskRunQueue.poll();

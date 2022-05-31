@@ -24,7 +24,7 @@ public class TaskBuilder {
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setProperties(submitTaskStmt.getProperties());
-        task.setExpireTime(System.currentTimeMillis() + Config.default_task_ttl * 1000L);
+        task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         return task;
     }
 
