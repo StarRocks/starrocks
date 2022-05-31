@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "column/array_column.h"
+#include "column/column_viewer.h"
 #include "exprs/base64.h"
 #include "types/bitmap_value.h"
 #include "util/phmap/phmap.h"
@@ -1734,14 +1735,23 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
         auto column = BitmapFunctions::bitmap_max(ctx, columns);
 
-        ASSERT_TRUE(column->is_numeric());
+        ASSERT_FALSE(column->is_numeric());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(0, p->get_data()[1]);
-        ASSERT_EQ(4, p->get_data()[2]);
-        ASSERT_EQ(4123102120, p->get_data()[3]);
+        auto max_value0 = viewer.value(0)->max();
+        ASSERT_TRUE(max_value0.has_value());
+        ASSERT_EQ(0, max_value0.value());
+
+        ASSERT_TRUE(column->is_null(1));
+
+        auto max_value2 = viewer.value(2)->max();
+        ASSERT_TRUE(max_value2.has_value());
+        ASSERT_EQ(4, max_value2.value());
+
+        auto max_value3 = viewer.value(3)->max();
+        ASSERT_TRUE(max_value3.has_value());
+        ASSERT_EQ(4123102120, max_value3.value());
     }
 
     {
@@ -1766,12 +1776,18 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
         ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
+        auto max_value0 = viewer.value(0)->max();
+        ASSERT_TRUE(max_value0.has_value());
+        ASSERT_EQ(0, max_value0.value());
+
         ASSERT_TRUE(v->is_null(1));
         ASSERT_TRUE(v->is_null(2));
-        ASSERT_EQ(4123102120, p->get_data()[3]);
+
+        auto max_value3 = viewer.value(3)->max();
+        ASSERT_TRUE(max_value3.has_value());
+        ASSERT_EQ(4123102120, max_value3.value());
     }
 }
 
@@ -1810,14 +1826,23 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
         auto column = BitmapFunctions::bitmap_min(ctx, columns);
 
-        ASSERT_TRUE(column->is_numeric());
+        ASSERT_FALSE(column->is_numeric());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(-1, p->get_data()[1]);
-        ASSERT_EQ(1, p->get_data()[2]);
-        ASSERT_EQ(23074, p->get_data()[3]);
+        auto min_value0 = viewer.value(0)->min();
+        ASSERT_TRUE(min_value0.has_value());
+        ASSERT_EQ(0, min_value0.value());
+
+        ASSERT_TRUE(column->is_null(1));
+
+        auto min_value2 = viewer.value(2)->min();
+        ASSERT_TRUE(min_value2.has_value());
+        ASSERT_EQ(1, min_value2.value());
+
+        auto min_value3 = viewer.value(3)->min();
+        ASSERT_TRUE(min_value3.has_value());
+        ASSERT_EQ(23074, min_value3.value());
     }
 
     {
@@ -1842,9 +1867,9 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
         ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+        auto p = ColumnHelper::cast_to<TYPE_LARGEINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
 
-        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_EQ(NULL, p->get_data()[0]);
         ASSERT_TRUE(v->is_null(1));
         ASSERT_TRUE(v->is_null(2));
         ASSERT_EQ(23074, p->get_data()[3]);

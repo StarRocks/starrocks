@@ -117,14 +117,14 @@ public:
     /**
      * @param:
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_BIGINT
+     * @return TYPE_LARGEINT
      */
     DEFINE_VECTORIZED_FN(bitmap_max);
 
     /**
      * @param:
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_BIGINT
+     * @return TYPE_LARGEINT
      */
     DEFINE_VECTORIZED_FN(bitmap_min);
 
