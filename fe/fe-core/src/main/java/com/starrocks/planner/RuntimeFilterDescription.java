@@ -144,8 +144,9 @@ public class RuntimeFilterDescription {
         joinMode = mode;
     }
 
-    public boolean isColocate() {
-        return joinMode.equals(HashJoinNode.DistributionMode.COLOCATE);
+    public boolean isColocateOrBucketShuffle() {
+        return joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
+                joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
     public int getBuildPlanNodeId() {
@@ -255,8 +256,7 @@ public class RuntimeFilterDescription {
         if (broadcastGRFDestinations != null && !broadcastGRFDestinations.isEmpty()) {
             t.setBroadcast_grf_destinations(broadcastGRFDestinations);
         }
-
-        if (isColocate() && bucketSeqToInstance!=null && !bucketSeqToInstance.isEmpty()) {
+        if (isColocateOrBucketShuffle() && bucketSeqToInstance!=null && !bucketSeqToInstance.isEmpty()) {
             t.setBucketseq_to_instance(bucketSeqToInstance);
         }
         assert (joinMode != HashJoinNode.DistributionMode.NONE);
