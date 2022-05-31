@@ -152,8 +152,8 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>starrocks-bdb-je</artifactId>
+            <groupId>com.sleepycat</groupId>
+            <artifactId>je</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
