@@ -28,6 +28,19 @@ public class RefreshTableStmtTest {
         String sql_1 = "REFRESH EXTERNAL TABLE db1.table1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertTrue(stmt instanceof RefreshTableStmt);
+        sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertTrue(stmt instanceof RefreshTableStmt);
+        sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1.test";
+        AnalyzeTestUtil.analyzeFail(sql_1);
+        sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"p1\", \"p2\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertTrue(stmt instanceof RefreshTableStmt);
+        Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
+        Assert.assertEquals(((RefreshTableStmt) stmt).getTableName(), "table1");
+        sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"k1=0\\/k2=1\", \"k1=1\\/k2=2\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
     }
 
 }
