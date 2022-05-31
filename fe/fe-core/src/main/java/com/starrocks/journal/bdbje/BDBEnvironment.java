@@ -227,21 +227,19 @@ public class BDBEnvironment {
         }
     }
 
-    private void refreshLog(InsufficientLogException insufficientLogEx) {
-        NetworkRestore restore = new NetworkRestore();
-        NetworkRestoreConfig config = new NetworkRestoreConfig();
-        config.setRetainLogFiles(false); // delete obsolete log files.
-        // Use the members returned by insufficientLogEx.getLogProviders()
-        // to select the desired subset of members and pass the resulting
-        // list as the argument to config.setLogProviders(), if the
-        // default selection of providers is not suitable.
-        restore.execute(insufficientLogEx, config);
-    }
-
-    public void refreshAndSetup(InsufficientLogException insufficientLogEx) {
-        refreshLog(insufficientLogEx);
-        close();
-        setup();
+    public void refreshLog(InsufficientLogException insufficientLogEx) {
+        try {
+            NetworkRestore restore = new NetworkRestore();
+            NetworkRestoreConfig config = new NetworkRestoreConfig();
+            config.setRetainLogFiles(false); // delete obsolete log files.
+            // Use the members returned by insufficientLogEx.getLogProviders()
+            // to select the desired subset of members and pass the resulting
+            // list as the argument to config.setLogProviders(), if the
+            // default selection of providers is not suitable.
+            restore.execute(insufficientLogEx, config);
+        } catch (Throwable t) {
+            LOG.warn("refresh log failed", t);
+        }
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
@@ -372,14 +370,15 @@ public class BDBEnvironment {
                 names = replicatedEnvironment.getDatabaseNames();
                 break;
             } catch (InsufficientLogException e) {
-                LOG.warn("catch insufficient log exception. refresh and setup again.", e);
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                LOG.warn("catch insufficient log exception. please restart.", e);
                 refreshLog(e);
-                close();
-                setup();
+                System.exit(-1);
             } catch (RollbackException exception) {
-                LOG.warn("rollback exception, setup again", exception);
-                close();
-                setup();
+                // for RollbackException we should exit the process because we may have read dirty data.
+                LOG.warn("catch rollback exception, please restart", exception);
+                System.exit(-1);
             } catch (EnvironmentFailureException e) {
                 tried++;
                 if (tried == RETRY_TIME) {
