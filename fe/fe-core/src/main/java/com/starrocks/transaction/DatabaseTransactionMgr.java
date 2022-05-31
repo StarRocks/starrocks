@@ -28,13 +28,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LakeTablet;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -491,7 +491,7 @@ public class DatabaseTransactionMgr {
                         Set<Long> commitBackends = tabletToBackends.get(tabletId);
 
                         if (useStarOS) {
-                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
                             totalInvolvedBackends.add(backendId);
                             if (!commitBackends.contains(backendId)) {
                                 throw new TransactionCommitFailedException(

@@ -99,7 +99,7 @@ public class OlapTableTest {
     }
 
     @Test
-    public void testTableWithStarOSTablet() throws IOException {
+    public void testTableWithLakeTablet() throws IOException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentStateJournalVersion() {
@@ -122,8 +122,8 @@ public class OlapTableTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
-        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+        Tablet tablet1 = new LakeTablet(tablet1Id, 0L);
+        Tablet tablet2 = new LakeTablet(tablet2Id, 1L);
 
         // Partition info and distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
@@ -173,9 +173,9 @@ public class OlapTableTest {
         Assert.assertTrue(newIndex.isUseStarOS());
         long expectedShardId = 0L;
         for (Tablet tablet : newIndex.getTablets()) {
-            Assert.assertTrue(tablet instanceof StarOSTablet);
-            StarOSTablet starOSTablet = (StarOSTablet) tablet;
-            Assert.assertEquals(expectedShardId++, starOSTablet.getShardId());
+            Assert.assertTrue(tablet instanceof LakeTablet);
+            LakeTablet lakeTablet = (LakeTablet) tablet;
+            Assert.assertEquals(expectedShardId++, lakeTablet.getShardId());
         }
     }
 }

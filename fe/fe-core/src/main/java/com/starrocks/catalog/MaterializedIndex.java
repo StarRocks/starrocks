@@ -274,7 +274,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         for (int i = 0; i < tabletCount; ++i) {
             Tablet tablet = null;
             if (useStarOS) {
-                tablet = StarOSTablet.read(in);
+                tablet = LakeTablet.read(in);
             } else {
                 tablet = LocalTablet.read(in);
             }

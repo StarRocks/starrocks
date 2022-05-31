@@ -39,8 +39,8 @@ public class TabletStatMgrTest {
         columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
-        // Tablet1 is StarOSTablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
+        // Tablet1 is LakeTablet
+        Tablet tablet1 = new LakeTablet(tablet1Id, 0L);
 
         // Tablet2 is LocalTablet
         TabletMeta tabletMeta2 = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);

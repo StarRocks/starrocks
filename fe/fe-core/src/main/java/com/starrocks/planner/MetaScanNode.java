@@ -4,12 +4,12 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.LakeTablet;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -78,7 +78,7 @@ public class MetaScanNode extends ScanNode {
                     if (LOG.isDebugEnabled()) {
                         if (useStarOS) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
-                                    ((StarOSTablet) tablet).getShardId(),
+                                    ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
                         } else {
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {

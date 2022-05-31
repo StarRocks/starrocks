@@ -211,8 +211,8 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAddTabletToInvertedIndexWithStarOSTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                             @Mocked Database db) {
+    public void testAddTabletToInvertedIndexWithLakeTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                                           @Mocked Database db) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -228,8 +228,8 @@ public class CatalogRecycleBinTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
-        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+        Tablet tablet1 = new LakeTablet(tablet1Id, 0L);
+        Tablet tablet2 = new LakeTablet(tablet2Id, 1L);
 
         // Partition info and distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));

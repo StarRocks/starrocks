@@ -38,6 +38,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LakeTablet;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -47,7 +48,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -307,7 +307,7 @@ public class OlapScanNode extends ScanNode {
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     if (useStarOS) {
-                        LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((StarOSTablet) tablet).getShardId(),
+                        LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
                         for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
