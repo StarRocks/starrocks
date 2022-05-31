@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <thread>
 
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
@@ -221,6 +222,48 @@ TEST_F(BitmapIndexTest, test_null) {
         delete reader;
         delete iter;
     }
+    delete[] val;
+}
+
+TEST_F(BitmapIndexTest, test_concurrent_load) {
+    size_t num_uint8_rows = 1024;
+    int64_t* val = new int64_t[num_uint8_rows];
+    for (int i = 0; i < num_uint8_rows; ++i) {
+        val[i] = i;
+    }
+
+    std::string file_name = kTestDir + "/null";
+    ColumnIndexMetaPB meta;
+    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
+
+    auto reader = std::make_unique<BitmapIndexReader>();
+    std::atomic<int> count{0};
+    std::atomic<int> loads{0};
+    constexpr int kNumThreads = 5;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kNumThreads; i++) {
+        threads.emplace_back([&]() {
+            count.fetch_add(1);
+            while (count.load() < count) {
+                ;
+            }
+            ASSIGN_OR_ABORT(auto first_load, reader->load(_fs.get(), file_name, meta.bitmap_index(), false, false));
+            loads.fetch_add(first_load);
+        });
+    }
+    for (auto&& t : threads) {
+        t.join();
+    }
+    ASSERT_EQ(1, loads.load());
+
+    BitmapIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(&iter));
+
+    Roaring bitmap;
+    iter->read_null_bitmap(&bitmap);
+    ASSERT_EQ(30, bitmap.cardinality());
+
+    delete iter;
     delete[] val;
 }
 
