@@ -366,7 +366,7 @@ public class DeleteHandler implements Writable {
                                 deleteJob.checkAndUpdateQuorum();
                                 Thread.sleep(1000);
                                 nowQuorumTimeMs = System.currentTimeMillis();
-                                LOG.debug("wait for quorum finished delete job: {}, txn id: {}", deleteJob.getId(),
+                                LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", deleteJob.getId(),
                                         transactionId);
                             }
                         } catch (MetaNotFoundException e) {
@@ -904,6 +904,12 @@ public class DeleteHandler implements Writable {
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
         updateTableDeleteInfo(globalStateMgr, dbId, deleteInfo.getTableId());
+
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.info("discard expired delete info {}", deleteInfo);
+            return;
+        }
+
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -912,6 +918,7 @@ public class DeleteHandler implements Writable {
         } finally {
             lock.writeLock().unlock();
         }
+
     }
 
     public void replayMultiDelete(MultiDeleteInfo deleteInfo, GlobalStateMgr globalStateMgr) {
@@ -919,9 +926,16 @@ public class DeleteHandler implements Writable {
         if (deleteInfo == null) {
             return;
         }
+
         long dbId = deleteInfo.getDbId();
         LOG.info("replay delete, dbId {}", dbId);
         updateTableDeleteInfo(globalStateMgr, dbId, deleteInfo.getTableId());
+
+        if (isDeleteInfoExpired(deleteInfo, System.currentTimeMillis())) {
+            LOG.info("discard expired delete info {}", deleteInfo);
+            return;
+        }
+
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
         lock.writeLock().lock();
@@ -974,22 +988,29 @@ public class DeleteHandler implements Writable {
         return checksum;
     }
 
+    private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
+        return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
+    }
+
+    private boolean isDeleteInfoExpired(MultiDeleteInfo deleteInfo, long currentTimeMs) {
+        return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
+    }
+
     public void removeOldDeleteInfo() {
         long currentTimeMs = System.currentTimeMillis();
         Iterator<Entry<Long, List<MultiDeleteInfo>>> logIterator = dbToDeleteInfos.entrySet().iterator();
         while (logIterator.hasNext()) {
+
             List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
             lock.writeLock().lock();
             try {
                 deleteInfos.sort((o1, o2) -> Long.signum(o1.getCreateTimeMs() - o2.getCreateTimeMs()));
-                int labelKeepMaxSecond = Config.label_keep_max_second;
                 int numJobsToRemove = deleteInfos.size() - Config.label_keep_max_num;
 
                 Iterator<MultiDeleteInfo> iterator = deleteInfos.iterator();
                 while (iterator.hasNext()) {
                     MultiDeleteInfo deleteInfo = iterator.next();
-                    if ((currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > labelKeepMaxSecond ||
-                            numJobsToRemove > 0) {
+                    if (isDeleteInfoExpired(deleteInfo, currentTimeMs) || numJobsToRemove > 0) {
                         iterator.remove();
                         --numJobsToRemove;
                     }

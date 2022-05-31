@@ -27,6 +27,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -323,6 +324,10 @@ public class AccessTestUtil {
         Analyzer analyzer = new Analyzer(fetchAdminCatalog(), new ConnectContext(null));
         new Expectations(analyzer) {
             {
+                analyzer.getDefaultCatalog();
+                minTimes = 0;
+                result = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
                 analyzer.getDefaultDb();
                 minTimes = 0;
                 result = withCluster ? prefix + "testDb" : "testDb";

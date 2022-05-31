@@ -227,8 +227,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                PrimitiveType type = convertColumnType(fieldSchema.getType());
-                if (type != column.getType().getPrimitiveType()) {
+                Type type = convertColumnType(fieldSchema.getType());
+                if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
                 }
@@ -243,14 +243,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         nameToColumn.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            PrimitiveType srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertColumnType(fieldSchema.getType());
             Column srColumn = preNameToColumn.get(entry.getKey());
             Column column;
             if (srColumn != null) {
                 column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
                         srColumn.getAggregationType(), srColumn.isAllowNull(), null, srColumn.getComment());
             } else {
-                column = new Column(fieldSchema.getName(), ScalarType.createType(srType), true);
+                column = new Column(fieldSchema.getName(), srType, true);
             }
             fullSchema.add(column);
             nameToColumn.put(column.getName(), column);

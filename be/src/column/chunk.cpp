@@ -8,6 +8,7 @@
 #include "gen_cpp/data.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
+#include "simd/simd.h"
 #include "util/coding.h"
 
 namespace starrocks::vectorized {
@@ -244,7 +245,10 @@ void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32
     }
 }
 
-size_t Chunk::filter(const Buffer<uint8_t>& selection) {
+size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
+    if (!force && SIMD::count_zero(selection) == 0) {
+        return num_rows();
+    }
     for (auto& column : _columns) {
         column->filter(selection);
     }

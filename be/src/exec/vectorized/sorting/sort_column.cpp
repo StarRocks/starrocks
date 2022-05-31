@@ -345,13 +345,14 @@ private:
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
-Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_asc_order, bool is_null_first,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const bool is_asc_order,
+                           const bool is_null_first, SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
+                           bool build_tie) {
     ColumnSorter column_sorter(cancel, is_asc_order, is_null_first, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
                             const std::vector<int>& null_firsts, Permutation* permutation) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -375,7 +376,7 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
     return Status::OK();
 }
 
-Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
                                    const std::vector<int>& null_firsts, SmallPermutation* small_perm) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -407,9 +408,9 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
     return Status::OK();
 }
 
-Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
-                             bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             bool build_tie, size_t limit, size_t* limited) {
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+                             const bool is_asc_order, const bool is_null_first, Permutation& permutation, Tie& tie,
+                             std::pair<int, int> range, const bool build_tie, const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
     VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie,
@@ -423,7 +424,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
 
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            size_t limit) {
+                            const size_t limit, const bool is_limit_by_rank) {
     if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
@@ -453,7 +454,22 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     }
 
     if (limit < perm.size()) {
-        perm.resize(limit);
+        if (is_limit_by_rank) {
+            // Given that
+            // * number array `[1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5]`
+            // * rank array `[1, 1, 1, 1, 1, 1, 1, 8, 8, 10, 11, 12]`
+            // * tie array `[1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1]`
+            //
+            // Suppose we need to find rank-5, the 5-th of number array is `1`, so we need to consider the trailing equal values,
+            // but how to find the end of the trailing equal values? Use the tie structure, we can find the first non-equal value by `SIMD::find_zero(tie, limit)`.
+            // In this case, the first non-equals value is 2, index is 7, so we can get the limied array through truncating by 7
+            int first_non_equal_pos = SIMD::find_zero(tie, limit);
+            if (first_non_equal_pos < perm.size()) {
+                perm.resize(first_non_equal_pos);
+            }
+        } else {
+            perm.resize(limit);
+        }
     }
 
     return Status::OK();

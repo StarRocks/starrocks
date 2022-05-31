@@ -62,8 +62,6 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
-    eval_runtime_bloom_filters(_cur_chunk.get());
-    DCHECK_CHUNK(_cur_chunk);
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }

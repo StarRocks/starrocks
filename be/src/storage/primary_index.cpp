@@ -862,6 +862,9 @@ void PrimaryIndex::unload() {
     if (_pkey_to_rssid_rowid) {
         _pkey_to_rssid_rowid.reset();
     }
+    if (_persistent_index) {
+        _persistent_index.reset();
+    }
     _status = Status::OK();
     _loaded = false;
 }
@@ -924,6 +927,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
+        DCHECK(_persistent_index == nullptr);
         _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
         return _persistent_index->load_from_tablet(tablet);
     }

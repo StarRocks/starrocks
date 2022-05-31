@@ -22,11 +22,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
 
-    ReadWriteLock metaLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock metaLock = new ReentrantReadWriteLock();
     private final LocalMetastore localMetastore;
     private final Map<String, ConnectorMetadata> connectorMetadatas = new HashMap<>();
 
     public MetadataMgr(LocalMetastore localMetastore) {
+        Preconditions.checkNotNull(localMetastore, "localMetastore is null");
         this.localMetastore = localMetastore;
     }
 
@@ -60,6 +61,7 @@ public class MetadataMgr {
     }
 
     // get metadata by catalog name
+
     private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);

@@ -15,6 +15,7 @@
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
@@ -407,6 +408,7 @@ Status HashJoinNode::close(RuntimeState* state) {
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     size_t num_right_partitions;
@@ -418,8 +420,13 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
 
         num_left_partitions = context->degree_of_parallelism();
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
-                                                                              num_left_partitions);
+        bool force_local_passthrough = false;
+        if (auto* scan_op = dynamic_cast<ScanOperatorFactory*>(lhs_operators[0].get())) {
+            const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_op);
+            force_local_passthrough = morsel_queue->need_rebalance();
+        }
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
+                runtime_state(), lhs_operators, num_left_partitions, force_local_passthrough);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple

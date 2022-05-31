@@ -85,10 +85,12 @@ inline void BitWriter::PutAligned(T val, int num_bytes) {
     memcpy(ptr, &val, num_bytes);
 }
 
-inline void BitWriter::PutVlqInt(int32_t v) {
+inline void BitWriter::PutVlqInt(uint32_t v) {
+    [[maybe_unused]] int num_bytes = 0;
     while ((v & 0xFFFFFF80) != 0L) {
         PutAligned<uint8_t>((v & 0x7F) | 0x80, 1);
         v >>= 7;
+        DCHECK_LE(++num_bytes, MAX_VLQ_BYTE_LEN);
     }
     PutAligned<uint8_t>(v & 0x7F, 1);
 }
@@ -190,10 +192,10 @@ inline bool BitReader::GetAligned(int num_bytes, T* v) {
     return true;
 }
 
-inline bool BitReader::GetVlqInt(int32_t* v) {
+inline bool BitReader::GetVlqInt(uint32_t* v) {
     *v = 0;
     int shift = 0;
-    int num_bytes = 0;
+    [[maybe_unused]] int num_bytes = 0;
     uint8_t byte = 0;
     do {
         if (!GetAligned<uint8_t>(1, &byte)) return false;

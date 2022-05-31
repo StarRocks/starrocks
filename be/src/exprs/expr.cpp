@@ -50,6 +50,7 @@
 #include "exprs/vectorized/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 
@@ -144,10 +145,11 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
+        case TYPE_JSON:
             break;
 
         default:
-            DCHECK(false) << "Invalid type.";
+            DCHECK(false) << "Invalid type." << _type.type;
         }
     }
 }

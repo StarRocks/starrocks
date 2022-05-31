@@ -279,7 +279,6 @@ set(EXEC_FILES
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
         )
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

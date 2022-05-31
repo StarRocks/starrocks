@@ -161,7 +161,7 @@ public class BDBJEJournal implements Journal {
                 } catch (DatabaseException e) {
                     LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
                     try {
-                        this.wait(5 * 1000);
+                        Thread.sleep(5 * 1000);
                     } catch (InterruptedException e1) {
                         e1.printStackTrace();
                     }
@@ -276,7 +276,6 @@ public class BDBJEJournal implements Journal {
         }
 
         // Open a new journal database or get last existing one as current journal database
-        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
         List<Long> dbNames = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
@@ -286,11 +285,12 @@ public class BDBJEJournal implements Journal {
                 }
 
                 dbNames = bdbEnvironment.getDatabaseNames();
-
                 if (dbNames == null) {
                     LOG.error("fail to get dbNames while open bdbje journal. will exit");
                     System.exit(-1);
                 }
+
+                String dbName = null;
                 if (dbNames.size() == 0) {
                     /*
                      *  This is the very first time to open. Usually, we will open a new database named "1".
@@ -298,26 +298,37 @@ public class BDBJEJournal implements Journal {
                      *  here we should open database with name image max journal id + 1.
                      *  (default Catalog.getCurrentCatalog().getReplayedJournalId() is 0)
                      */
-                    String dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
                     LOG.info("the very first time to open bdb, dbname is {}", dbName);
-                    currentJournalDB = bdbEnvironment.openDatabase(dbName);
                 } else {
                     // get last database as current journal database
-                    currentJournalDB = bdbEnvironment.openDatabase(dbNames.get(dbNames.size() - 1).toString());
+                    dbName = dbNames.get(dbNames.size() - 1).toString();
+                }
+
+                currentJournalDB = bdbEnvironment.openDatabase(dbName);
+                if (currentJournalDB == null) {
+                    LOG.warn("fail to open database {}. retried {} times", dbName, i);
+                    continue;
                 }
 
                 // set next journal id
                 nextJournalId.set(getMaxJournalId() + 1);
-
-                break;
+                return;
             } catch (InsufficientLogException insufficientLogEx) {
-                // Copy the missing log files from a member of the replication group who owns the files
-                LOG.warn("catch insufficient log exception. will recover and try again.", insufficientLogEx);
-                bdbEnvironment.refreshAndSetup(insufficientLogEx);
+                LOG.warn("catch insufficient log exception. please restart", insufficientLogEx);
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                bdbEnvironment.refreshLog(insufficientLogEx);
+                System.exit(-1);
             } catch (Throwable t) {
                 LOG.warn("catch exception, retried: {} ", i, t);
             }
         }
+
+        // TODO: covert all System.exit() in BDBJE to a proper exception
+        //       This is really horribly ugly.
+        LOG.error("Fail to open() after {} times!", RETRY_TIME);
+        System.exit(-1);
     }
 
     @Override

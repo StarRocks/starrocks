@@ -9,6 +9,7 @@
 #include "exprs/expr.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "storage/chunk_helper.h"
+#include "util/slice.h"
 
 namespace starrocks {
 namespace connector {
@@ -32,14 +33,15 @@ DataSourcePtr JDBCDataSourceProvider::create_data_source(const TScanRange& scan_
 
 // ================================
 
-static std::string get_jdbc_sql(const std::string& table, const std::vector<std::string>& columns,
+static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, const std::vector<std::string>& columns,
                                 const std::vector<std::string>& filters, int64_t limit) {
+    std::string object_identifier = jdbc_url.starts_with("jdbc:mysql") ? "`" : "";
     std::ostringstream oss;
     oss << "SELECT";
     for (size_t i = 0; i < columns.size(); i++) {
-        oss << (i == 0 ? "" : ",") << " " << columns[i];
+        oss << (i == 0 ? "" : ",") << " " << object_identifier << columns[i] << object_identifier;
     }
-    oss << " FROM " << table;
+    oss << " FROM " << object_identifier << table << object_identifier;
     if (!filters.empty()) {
         oss << " WHERE ";
         for (size_t i = 0; i < filters.size(); i++) {
@@ -115,7 +117,8 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();
     scan_ctx.user = jdbc_table->jdbc_user();
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
-    scan_ctx.sql = get_jdbc_sql(jdbc_table->jdbc_table(), jdbc_scan_node.columns, jdbc_scan_node.filters, _read_limit);
+    scan_ctx.sql = get_jdbc_sql(scan_ctx.jdbc_url, jdbc_table->jdbc_table(), jdbc_scan_node.columns,
+                                jdbc_scan_node.filters, _read_limit);
     _scanner = _pool->add(new vectorized::JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
 
     RETURN_IF_ERROR(_scanner->open(state));

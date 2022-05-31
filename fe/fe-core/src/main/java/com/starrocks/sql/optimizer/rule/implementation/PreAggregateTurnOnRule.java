@@ -51,9 +51,9 @@ public class PreAggregateTurnOnRule {
 
     private static class PreAggregateVisitor extends OptExpressionVisitor<Void, PreAggregationContext> {
         private static final List<String> AGGREGATE_ONLY_KEY = ImmutableList.<String>builder()
-                .add("NDV")
+                .add(FunctionSet.NDV)
                 .add(FunctionSet.MULTI_DISTINCT_COUNT)
-                .add("APPROX_COUNT_DISTINCT")
+                .add(FunctionSet.APPROX_COUNT_DISTINCT)
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
@@ -257,8 +257,9 @@ public class PreAggregateTurnOnRule {
                     Column column = refColumnMap.get(ref);
                     // key column
                     if (column.isKey()) {
-                        if (!"MAX|MIN".contains(call.getFnName().toUpperCase()) &&
-                                !AGGREGATE_ONLY_KEY.contains(call.getFnName().toUpperCase())) {
+                        if (!FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
+                                !FunctionSet.MIN.equalsIgnoreCase(call.getFnName()) &&
+                                !AGGREGATE_ONLY_KEY.contains(call.getFnName().toLowerCase())) {
                             scan.setTurnOffReason("The key column don't support aggregate function: "
                                     + call.getFnName().toUpperCase());
                             return true;
@@ -267,9 +268,10 @@ public class PreAggregateTurnOnRule {
                     }
 
                     // value column
-                    if ("HLL_UNION_AGG|HLL_RAW_AGG".contains(call.getFnName().toUpperCase())) {
+                    if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(call.getFnName()) ||
+                            FunctionSet.HLL_RAW_AGG.equalsIgnoreCase(call.getFnName())) {
                         // skip
-                    } else if (AGGREGATE_ONLY_KEY.contains(call.getFnName().toUpperCase())) {
+                    } else if (AGGREGATE_ONLY_KEY.contains(call.getFnName().toLowerCase())) {
                         scan.setTurnOffReason(
                                 "Aggregation function " + call.getFnName().toUpperCase() + " just work on key column");
                         return true;

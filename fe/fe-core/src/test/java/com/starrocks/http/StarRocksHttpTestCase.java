@@ -263,6 +263,87 @@ abstract public class StarRocksHttpTestCase {
         }
     }
 
+    private static GlobalStateMgr newDelegateGlobalStateMgr() {
+        try {
+            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+            Auth auth = new Auth();
+            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+            Database db = new Database(testDbId, "default_cluster:testDb");
+            OlapTable table = newTable(TABLE_NAME);
+            db.createTable(table);
+            OlapTable table1 = newTable(TABLE_NAME + 1);
+            db.createTable(table1);
+            EsTable esTable = newEsTable("es_table");
+            db.createTable(esTable);
+            new Expectations(globalStateMgr) {
+                {
+                    globalStateMgr.getAuth();
+                    minTimes = 0;
+                    result = auth;
+
+                    globalStateMgr.getDb(db.getId());
+                    minTimes = 0;
+                    result = db;
+
+                    globalStateMgr.getDb("default_cluster:" + DB_NAME);
+                    minTimes = 0;
+                    result = db;
+
+                    globalStateMgr.isMaster();
+                    minTimes = 0;
+                    result = true;
+
+                    globalStateMgr.getDb("default_cluster:emptyDb");
+                    minTimes = 0;
+                    result = null;
+
+                    globalStateMgr.getDb(anyString);
+                    minTimes = 0;
+                    result = new Database();
+
+                    globalStateMgr.getDbNames();
+                    minTimes = 0;
+                    result = Lists.newArrayList("default_cluster:testDb");
+
+                    globalStateMgr.getLoadInstance();
+                    minTimes = 0;
+                    result = new Load();
+
+                    globalStateMgr.getEditLog();
+                    minTimes = 0;
+                    result = editLog;
+
+                    globalStateMgr.getClusterDbNames("default_cluster");
+                    minTimes = 0;
+                    result = Lists.newArrayList("default_cluster:testDb");
+
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
+                    minTimes = 0;
+
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                    minTimes = 0;
+
+                    globalStateMgr.initDefaultCluster();
+                    minTimes = 0;
+
+                    globalStateMgr.getMetadataMgr().getDb("default", "default_cluster:testDb");
+                    minTimes = 0;
+                    result = db;
+
+                    globalStateMgr.getMetadataMgr().getTable("default", "default_cluster:testDb", "testTbl");
+                    minTimes = 0;
+                    result = table;
+                }
+            };
+
+            return globalStateMgr;
+        } catch (DdlException e) {
+            return null;
+        } catch (AnalysisException e) {
+            return null;
+        }
+    }
+
     private static void assignBackends() {
         Backend backend1 = new Backend(testBackendId1, "node-1", 9308);
         backend1.setBePort(9300);
@@ -306,6 +387,40 @@ abstract public class StarRocksHttpTestCase {
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
+        SystemInfoService systemInfoService = new SystemInfoService();
+        TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SchemaChangeHandler getSchemaChangeHandler() {
+                return new SchemaChangeHandler();
+            }
+
+            @Mock
+            MaterializedViewHandler getRollupHandler() {
+                return new MaterializedViewHandler();
+            }
+
+            @Mock
+            GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return systemInfoService;
+            }
+
+            @Mock
+            TabletInvertedIndex getCurrentInvertedIndex() {
+                return tabletInvertedIndex;
+            }
+        };
+        assignBackends();
+        doSetUp();
+    }
+
+    public void setUpWithCatalog() {
+        GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         new MockUp<GlobalStateMgr>() {

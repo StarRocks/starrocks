@@ -226,9 +226,6 @@ set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
 
-add_library(minizip STATIC IMPORTED)
-set_target_properties(minizip PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libminizip.a)
-
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
@@ -467,6 +464,8 @@ set(STARROCKS_LINK_LIBS
     Rowset
     Runtime
     Service
+    ServiceBE
+    ServiceCN
     Udf
     Util
     StarRocksGen
@@ -534,7 +533,6 @@ set(STARROCKS_DEPENDENCIES
     brotlidec
     brotlienc
     zstd
-    minizip
     arrow
     parquet
     orc
@@ -694,7 +692,9 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(FILES
     ${BASE_DIR}/../bin/common.sh
     ${BASE_DIR}/../bin/start_be.sh
+    ${BASE_DIR}/../bin/start_cn.sh
     ${BASE_DIR}/../bin/stop_be.sh
+    ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
@@ -704,6 +704,7 @@ install(FILES
 
 install(FILES
     ${BASE_DIR}/../conf/be.conf
+    ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     DESTINATION ${OUTPUT_DIR}/conf)
 

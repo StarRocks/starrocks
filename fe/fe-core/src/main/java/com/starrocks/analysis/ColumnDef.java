@@ -25,12 +25,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
-import org.apache.spark.annotation.Private;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -110,10 +110,10 @@ public class ColumnDef {
     public ColumnDef(String name, TypeDef typeDef) {
         this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET, "");
     }
-    
+
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
-            this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
@@ -122,7 +122,7 @@ public class ColumnDef {
         this.typeDef = typeDef;
         if (charsetName == null) {
             this.charsetName = DEFAULT_CHARSET;
-        }else{
+        } else {
             this.charsetName = charsetName;
         }
         this.isKey = isKey;
@@ -176,7 +176,6 @@ public class ColumnDef {
         return charsetName;
     }
 
-
     public boolean isKey() {
         return isKey;
     }
@@ -206,10 +205,11 @@ public class ColumnDef {
                 if (!targetType.isAssignedStrLenInColDefinition()) {
                     targetType.setLength(1);
                 }
-            }else{
+            } else {
                 // if character setting is not for varchar type, Display unsupported information to the user
-                if (!DEFAULT_CHARSET.equalsIgnoreCase(charsetName)){
-                    throw new AnalysisException("character setting is only supported for type varchar in column definition");
+                if (!DEFAULT_CHARSET.equalsIgnoreCase(charsetName)) {
+                    throw new AnalysisException(
+                            "character setting is only supported for type varchar in column definition");
                 }
             }
         }
@@ -221,7 +221,7 @@ public class ColumnDef {
         }
 
         // be is not supported yet,so Display unsupported information to the user
-        if (!charsetName.equals(DEFAULT_CHARSET)){
+        if (!charsetName.equals(DEFAULT_CHARSET)) {
             throw new AnalysisException("charset name " + charsetName + " is not supported yet in column definition");
         }
 
@@ -348,13 +348,13 @@ public class ColumnDef {
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (!"now".equalsIgnoreCase(functionName)) {
+            if (!FunctionSet.NOW.equalsIgnoreCase(functionName)) {
                 throw new AnalysisException(
                         String.format("Default expr for function %s is not supported", functionName));
             }
 
             // default function current_timestamp currently only support DATETIME type.
-            if ("now".equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
+            if (FunctionSet.NOW.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
                 throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
             }
         } else if (defaultExpr instanceof NullLiteral) {

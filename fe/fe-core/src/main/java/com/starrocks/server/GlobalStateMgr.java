@@ -30,8 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.sleepycat.je.rep.NetworkRestore;
-import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
@@ -161,6 +159,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -573,6 +572,11 @@ public class GlobalStateMgr {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    @VisibleForTesting
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return localMetastore.getIdToDb();
     }
 
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
@@ -1128,11 +1132,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.loadSmallFiles(dis, checksum);
             checksum = pluginMgr.loadPlugins(dis, checksum);
             checksum = loadDeleteHandler(dis, checksum);
-
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = taskManager.loadTasks(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1356,11 +1363,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.saveSmallFiles(dos, checksum);
             checksum = pluginMgr.savePlugins(dos, checksum);
             checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1485,13 +1495,10 @@ public class GlobalStateMgr {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
                 } catch (InsufficientLogException insufficientLogEx) {
-                    // Copy the missing log files from a member of the
-                    // replication group who owns the files
-                    LOG.error("catch insufficient log exception. please restart.", insufficientLogEx);
-                    NetworkRestore restore = new NetworkRestore();
-                    NetworkRestoreConfig config = new NetworkRestoreConfig();
-                    config.setRetainLogFiles(false);
-                    restore.execute(insufficientLogEx, config);
+                    // for InsufficientLogException we should refresh the log and
+                    // then exit the process because we may have read dirty data.
+                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
+                    ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal.", e);
@@ -3104,6 +3111,16 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            taskManager.removeOldTaskInfo();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old task failed", t);
+        }
+        try {
+            taskManager.removeOldTaskRunHistory();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old run history failed", t);
         }
     }
 }

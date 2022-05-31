@@ -71,6 +71,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -91,6 +92,11 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.persist.DropTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -505,6 +511,26 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_TASK:
+                data = Task.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASKS:
+                data = DropTasksLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_CREATE_TASK_RUN:
+                data = TaskRunStatus.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_UPDATE_TASK_RUN:
+                data = TaskRunStatusChange.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASK_RUNS:
+                data = DropTaskRunsLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
@@ -586,6 +612,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                 data = ModifyTableColumnOperationLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_GRANT_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REVOKE_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
                 isRead = true;
                 break;
             }

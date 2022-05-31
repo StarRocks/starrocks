@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -35,16 +34,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.Constants;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public class CostModel {
     public static double calculateCost(GroupExpression expression) {
@@ -181,81 +174,9 @@ public class CostModel {
             }
             // only one stage agg node has not rewrite distinct function here
             return node.getType().isGlobal() && !node.isSplit() &&
-                    (aggOperator.getFnName().equalsIgnoreCase("COUNT") ||
-                            aggOperator.getFnName().equalsIgnoreCase("SUM")) &&
+                    (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
+                            aggOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) &&
                     aggOperator.isDistinct();
-        }
-
-        // some agg function has extra cost, we need compute here
-        // eg. MULTI_DISTINCT_COUNT function needs compute extra memory cost
-        public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
-                                                   Statistics inputStatistics) {
-            CostEstimate costEstimate = CostEstimate.zero();
-            List<ColumnStatistic> groupByColumnStat =
-                    node.getGroupBys().stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
-
-            // If the statistics with inaccurate row count or have Unknown column statistics，
-            // it don't need to compute the extra cost.
-            if (statistics.isTableRowCountMayInaccurate() ||
-                    groupByColumnStat.stream().anyMatch(ColumnStatistic::isUnknown)) {
-                return costEstimate;
-            }
-
-            // Use the number of aggregated rows as buckets, does not equal statistics.getOutputRowCount(),
-            // Because limit is computed in statistics.getOutputRowCount().
-            double buckets = StatisticsCalculator.computeGroupByStatistics(node.getGroupBys(), inputStatistics,
-                    Maps.newHashMap());
-            // If the Local aggregate node enable streaming mode, this aggregation could not compute the extra
-            // costs when the cardinality GE (child output rows count) * STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT.
-            // We estimate this aggregate node use streaming mode, so there is no extra overhead of multi
-            // distinct functions.
-            String streamingPreAggregationMode =
-                    ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-            if (node.getType().isLocal() && (streamingPreAggregationMode.equals("auto") ||
-                    streamingPreAggregationMode.equals("force_streaming"))) {
-                if (buckets >= inputStatistics.getOutputRowCount() *
-                        StatisticsEstimateCoefficient.STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT) {
-                    return CostEstimate.zero();
-                }
-            }
-
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
-                CallOperator aggregation = entry.getValue();
-                if (isDistinctAggFun(aggregation, node)) {
-                    Preconditions.checkState(aggregation.getChildren().size() >= 1);
-                    ColumnStatistic distinctColumnStats;
-                    // only compute column extra costs
-                    if (!(aggregation.getChild(0).isColumnRef())) {
-                        continue;
-                    }
-
-                    ColumnRefOperator distinctColumn = (ColumnRefOperator) aggregation.getChild(0);
-                    distinctColumnStats = inputStatistics.getColumnStatistic(distinctColumn);
-
-                    double rowSize = distinctColumnStats.getAverageRowSize();
-                    // In second phase of aggregation, do not compute extra row size costs
-                    if (distinctColumn.getType().isStringType() && !(node.getType().isGlobal() && node.isSplit())) {
-                        rowSize = rowSize + 16;
-                    }
-
-                    double hashSetSize;
-                    if (distinctColumnStats.isUnknown()) {
-                        hashSetSize = rowSize * inputStatistics.getOutputRowCount() / statistics.getOutputRowCount();
-                    } else {
-                        // we need to estimate the distinct values in each bucket because of do not know the
-                        // correlation between the Group BY column and the DISTINCT column.
-                        // There are estimated to (DistinctValuesCount / buckets * 2) entries distinct values in each bucket
-                        // except when bucket number equals 1.
-                        double distinctValuesPerBucket = buckets == 1 ? distinctColumnStats.getDistinctValuesCount() :
-                                distinctColumnStats.getDistinctValuesCount() / buckets * 2;
-                        // 40 bytes is the state cost of hashset
-                        hashSetSize = rowSize * distinctValuesPerBucket + 40;
-                    }
-                    costEstimate = CostEstimate
-                            .addCost(costEstimate, CostEstimate.ofMemory(statistics.getOutputRowCount() * hashSetSize));
-                }
-            }
-            return costEstimate;
         }
 
         @Override
@@ -266,10 +187,7 @@ public class CostModel {
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
-            return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
-                    otherExtraCost);
+            return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(), 0);
         }
 
         @Override

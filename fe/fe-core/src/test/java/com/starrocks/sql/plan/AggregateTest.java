@@ -363,12 +363,15 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select L_LINENUMBER, date_trunc(\"day\",L_SHIPDATE) as day ,count(distinct L_ORDERKEY) from " +
                 "lineitem group by L_LINENUMBER, day";
         String plan = getFragmentPlan(sql);
-        // check use two stage aggregate
+        // check use three stage aggregate
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(1: L_ORDERKEY)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(19: count)");
+                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
+        assertContains(plan, "4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
+        assertContains(plan, "5:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  group by: 4: L_LINENUMBER, 18: date_trunc");
         FeConstants.runningUnitTest = false;
     }
 
@@ -731,6 +734,28 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testWindowFunnel() throws Exception {
+       FeConstants.runningUnitTest = true;
+       String sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 0, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       String plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 0, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 1, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 1, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 2, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 2, 18: expr)");
+
+       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+       plan = getFragmentPlan(sql);
+       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+
+       FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testLocalAggregateWithMultiStage() throws Exception {
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
@@ -1089,15 +1114,15 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
-                "  |  group by: 1: v1"));
+                        "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                        "  |  group by: 1: v1"));
 
         sql = "select lead(v2) over(partition by v1 order by v3) from t0 group by v1";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: any_value(2: v2), any_value(3: v3)\n" +
-                "  |  group by: 1: v1"));
+                        "  |  output: any_value(2: v2), any_value(3: v3)\n" +
+                        "  |  group by: 1: v1"));
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
@@ -1205,6 +1230,35 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testAggregateDuplicatedExprs() throws Exception {
+        String plan = getFragmentPlan("SELECT " +
+                "sum(arrays_overlap(v3, [1])) as q1, " +
+                "sum(arrays_overlap(v3, [1])) as q2, " +
+                "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: arrays_overlap)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : arrays_overlap(3: v3, CAST(ARRAY<tinyint(4)>[1] AS ARRAY<BIGINT>))\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testOuterJoinSatisfyAgg() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select distinct t0.v1  from t0 full outer join[shuffle] t1 on t0.v1 = t1.v4;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 }

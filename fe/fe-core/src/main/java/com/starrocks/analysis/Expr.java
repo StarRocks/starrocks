@@ -124,10 +124,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             (com.google.common.base.Predicate<Expr>) arg -> {
                 if (arg instanceof FunctionCallExpr) {
                     String fnName = ((FunctionCallExpr) arg).getFnName().getFunction();
-                    return (fnName.equalsIgnoreCase("sum")
-                            || fnName.equalsIgnoreCase("max")
-                            || fnName.equalsIgnoreCase("min")
-                            || fnName.equalsIgnoreCase("avg")
+                    return (fnName.equalsIgnoreCase(FunctionSet.SUM)
+                            || fnName.equalsIgnoreCase(FunctionSet.MAX)
+                            || fnName.equalsIgnoreCase(FunctionSet.MIN)
+                            || fnName.equalsIgnoreCase(FunctionSet.AVG)
                             || fnName.equalsIgnoreCase(FunctionSet.COUNT));
                 } else {
                     return false;
@@ -881,10 +881,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
-    public String toJDBCSQL() {
+    public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
-
     /**
      * Return a column label for the expression
      */
@@ -1031,7 +1030,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public int hashCode() {
         // in group by clause, group by list need to remove duplicate exprs, the expr may be not not analyzed, the id
-        // may be null
+        // may be null.
+        // NOTE that all the types of the related member variables must implement hashCode() and equals().
         if (id == null) {
             int result = 31 * Objects.hashCode(type) + Objects.hashCode(opcode);
             for (Expr child : children) {
