@@ -46,7 +46,7 @@ class BloomFilterIndexReader {
 
 public:
     BloomFilterIndexReader()
-            : _state(0),
+            : _state(kUnloaded),
               _typeinfo(),
               _algorithm(BLOCK_BLOOM_FILTER),
               _hash_strategy(HASH_MURMUR3_X64_64),
@@ -75,16 +75,19 @@ public:
         return size;
     }
 
-    bool loaded() const { return _state.load(std::memory_order_acquire) == 2; }
+    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
 
 private:
+    enum State : int {
+        kUnloaded = 0, // data has not been loaded into memory
+        kLoading = 1,  // loading in process
+        kLoaded = 2,   // data was successfully loaded in memory
+    };
+
     Status do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
                    bool kept_in_memory);
 
-    // 0: data has not been loaded
-    // 1: loading in process
-    // 2: data has been load in memory
-    std::atomic<int> _state;
+    std::atomic<State> _state;
     TypeInfoPtr _typeinfo;
     BloomFilterAlgorithmPB _algorithm;
     HashStrategyPB _hash_strategy;
