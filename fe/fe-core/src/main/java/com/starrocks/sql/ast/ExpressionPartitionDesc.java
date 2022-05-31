@@ -7,12 +7,19 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.common.DdlException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 public class ExpressionPartitionDesc extends PartitionDesc {
 
-    //must be type of SlotRef or FunctionCallRef
+    // must be type of SlotRef or FunctionCallRef
     private Expr expr;
 
     public ExpressionPartitionDesc(Expr expr) {
@@ -44,4 +51,12 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     public boolean isFunction() {
         return expr instanceof FunctionCallExpr;
     }
+
+    @Override
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+            throws DdlException {
+        // we will support other PartitionInto in the future
+        return new ExpressionRangePartitionInfo(Arrays.asList(expr));
+    }
+
 }
