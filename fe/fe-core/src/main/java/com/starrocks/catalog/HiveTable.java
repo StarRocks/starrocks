@@ -40,6 +40,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,7 +58,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -108,11 +108,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     private HiveMetaStoreTableInfo hmsTableInfo;
 
-    // use to write edit log
+    // use to write edit ModifyTableColumnOperationLog log
     private String srFullDbName;
+
+    private final HiveRepository hiveRepository;
 
     public HiveTable() {
         super(TableType.HIVE);
+        this.hiveRepository = GlobalStateMgr.getServingState().getHiveRepository();
     }
 
     public HiveTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
@@ -122,6 +125,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public HiveTable(long id, String name, List<Column> schema, Map<String, String> properties,
                      org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
         super(id, name, TableType.HIVE, schema);
+        this.hiveRepository = GlobalStateMgr.getCurrentState().getHiveRepository();
         validate(properties, hiveTable);
         initHmsTableInfo();
     }
@@ -132,10 +136,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public String getResourceName() {
         return resourceName;
-    }
-
-    public String getSrFullDbName() {
-        return srFullDbName;
     }
 
     public void setSrFullDbName(String srFullDbName) {
@@ -149,6 +149,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getTableName() {
         return hiveTableName;
+    }
+
+    public HiveMetaStoreTableInfo getHmsTableInfo() {
+        return hmsTableInfo;
     }
 
     @Override
@@ -187,10 +191,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
     }
 
-    public HiveMetaStoreTableInfo getHmsTableInfo() {
-        return hmsTableInfo;
-    }
-
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
         return HiveMetaStoreTableUtils.getPartitionKeys(hmsTableInfo);
     }
@@ -212,7 +212,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public void refreshExternalTableSchema(org.apache.hadoop.hive.metastore.api.Table table) throws DdlException {
         Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
-        refreshSchemaCache(table.getSd().getCols(), new HashMap<>(nameToColumn), updatedTableSchemas);
+        refreshSchemaCache(table.getSd().getCols(), updatedTableSchemas);
         modifyTableSchema(srFullDbName, getName());
     }
 
@@ -220,52 +220,41 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
         org.apache.hadoop.hive.metastore.api.Table table;
         try {
-            table = GlobalStateMgr.getCurrentState().getHiveRepository()
-                    .getTable(resourceName, this.hiveDbName, this.hiveTableName);
-        } catch (DdlException e) {
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
-            LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it",
-                    resourceName, hiveDbName, hiveTableName);
-            throw e;
-        }
+            table = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
+            Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
+            boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
 
-        Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
-        Map<String, Column> preNameToColumn = nameToColumn;
-        boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
-        if (!needRefreshColumn) {
-            refreshTableCache(nameToColumn);
-        } else {
-            try {
+            if (!needRefreshColumn) {
+                refreshTableCache(nameToColumn);
+            } else {
                 if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
-                    refreshSchemaCache(table.getSd().getCols(), preNameToColumn, updatedTableSchemas);
+                    refreshSchemaCache(table.getSd().getCols(), updatedTableSchemas);
                     refreshTableCache(nameToColumn);
                     modifyTableSchema(dbName, tableName);
                 } else {
-                    GlobalStateMgr.getCurrentState().getHiveRepository()
-                            .refreshConnectorTable(resourceName, hiveDbName, hiveTableName);
+                    hiveRepository.refreshConnectorTable(resourceName, hiveDbName, hiveTableName);
                 }
                 this.hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDbName, hiveTableName,
                         partColumnNames, dataColumnNames, nameToColumn, type);
-            } catch (Exception e) {
-                GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
-                LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it",
-                        resourceName, hiveDbName, hiveTableName);
-                throw new DdlException(e.getMessage());
             }
+        } catch (Exception e) {
+            hiveRepository.clearCache(hmsTableInfo);
+            LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it",
+                    resourceName, hiveDbName, hiveTableName);
+            throw new DdlException(e.getMessage());
         }
     }
 
     private void refreshTableCache(Map<String, Column> nameToColumn) throws DdlException {
         HiveMetaStoreTableInfo hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDbName, hiveTableName,
                 partColumnNames, new ArrayList<>(nameToColumn.keySet()), nameToColumn, TableType.HIVE);
-        GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
+        hiveRepository.refreshTableCache(hmsTableInfo);
     }
 
-    public boolean isRefreshColumn(Map<String, Column> preNameToColumn,
-                                   Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
-        boolean needRefreshColumn = updatedTableSchemas.size() != preNameToColumn.size();
+    public boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
+        boolean needRefreshColumn = updatedTableSchemas.size() != nameToColumn.size();
         if (!needRefreshColumn) {
-            for (Column column : preNameToColumn.values()) {
+            for (Column column : nameToColumn.values()) {
                 FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
                 if (fieldSchema == null) {
                     needRefreshColumn = true;
@@ -281,21 +270,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return needRefreshColumn;
     }
 
-    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, Map<String, Column> preNameToColumn,
-                                    Map<String, FieldSchema> allHiveColumns) throws DdlException {
+    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, Map<String, FieldSchema> allHiveColumns)
+            throws DdlException {
         fullSchema.clear();
         nameToColumn.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
             Type srType = convertColumnType(fieldSchema.getType());
-            Column srColumn = preNameToColumn.get(entry.getKey());
-            Column column;
-            if (srColumn != null) {
-                column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
-                        srColumn.getAggregationType(), srColumn.isAllowNull(), null, srColumn.getComment());
-            } else {
-                column = new Column(fieldSchema.getName(), srType, true);
-            }
+            Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
             nameToColumn.put(column.getName(), column);
         }
@@ -307,24 +289,22 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshPartCache(List<String> partNames) throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository()
-                .refreshPartitionCache(hmsTableInfo, partNames);
-    }
-
-    @Override
-    public void refreshTableColumnStats() throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository()
-                .refreshTableColumnStats(hmsTableInfo);
-    }
-
-    @Override
     public void modifyTableSchema(String dbName, String tableName) {
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             return;
         }
         ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+    }
+
+    @Override
+    public void refreshPartCache(List<String> partNames) throws DdlException {
+        hiveRepository.refreshPartitionCache(hmsTableInfo, partNames);
+    }
+
+    @Override
+    public void refreshTableColumnStats() throws DdlException {
+        hiveRepository.refreshTableColumnStats(hmsTableInfo);
     }
 
     /**
@@ -383,8 +363,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         // 2. check column type mapping
         // 3. check hive partition column exists in table column list
         if (hiveTable == null) {
-            hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
-                    .getTable(resourceName, this.hiveDbName, this.hiveTableName);
+            hiveTable = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
         }
         String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
@@ -629,7 +608,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop() {
         if (this.resourceName != null) {
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
+            hiveRepository.clearCache(hmsTableInfo);
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);
         }
     }
