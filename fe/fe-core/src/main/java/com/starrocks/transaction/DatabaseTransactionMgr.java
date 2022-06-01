@@ -34,11 +34,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -491,7 +491,7 @@ public class DatabaseTransactionMgr {
                         Set<Long> commitBackends = tabletToBackends.get(tabletId);
 
                         if (useStarOS) {
-                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
                             totalInvolvedBackends.add(backendId);
                             if (!commitBackends.contains(backendId)) {
                                 throw new TransactionCommitFailedException(
