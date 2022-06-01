@@ -699,6 +699,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int alter_table_timeout_second = 86400; // 1day
+
+    /**
+     * The alter handler max worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_threads = 4;
+
+    /**
+     * The alter handler max queue size for worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_queue_size = 4096;
+
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
