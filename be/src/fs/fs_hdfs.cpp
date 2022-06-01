@@ -3,12 +3,14 @@
 #include "fs/fs_hdfs.h"
 
 #include <fmt/format.h>
-#include <hdfs/hdfs.h>
+// #include <hdfs/hdfs.h>
 
 #include <atomic>
 
-#include "runtime/hdfs/hdfs_fs_cache.h"
+#include "runtime/exec_env.h"
+// #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
+#include "util/brpc_stub_cache.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -18,10 +20,95 @@ namespace starrocks {
 // TODO: move this class to directory 'be/srcio/'
 // class for remote read hdfs file
 // Now this is not thread-safe.
+// class HdfsInputStream : public io::SeekableInputStream {
+// public:
+//     HdfsInputStream(hdfsFS fs, hdfsFile file, const std::string& file_name)
+//             : _fs(fs), _file(file), _file_name(file_name), _offset(0), _file_size(0) {}
+
+//     ~HdfsInputStream() override;
+
+//     StatusOr<int64_t> read(void* data, int64_t size) override;
+//     StatusOr<int64_t> get_size() override;
+//     StatusOr<int64_t> position() override { return _offset; }
+//     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
+//     Status seek(int64_t offset) override;
+
+// private:
+//     hdfsFS _fs;
+//     hdfsFile _file;
+//     std::string _file_name;
+//     int64_t _offset;
+//     int64_t _file_size;
+// };
+
+// HdfsInputStream::~HdfsInputStream() {
+//     auto ret = call_hdfs_scan_function_in_pthread([this]() {
+//         int r = hdfsCloseFile(this->_fs, this->_file);
+//         if (r == 0) {
+//             return Status::OK();
+//         } else {
+//             return Status::IOError("");
+//         }
+//     });
+//     Status st = ret->get_future().get();
+//     PLOG_IF(ERROR, !st.ok()) << "close " << _file_name << " failed";
+// }
+
+// StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
+//     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
+//         size = std::numeric_limits<tSize>::max();
+//     }
+//     tSize r = hdfsPread(_fs, _file, _offset, data, static_cast<tSize>(size));
+//     if (r == -1) {
+//         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
+//     }
+//     _offset += r;
+//     return r;
+// }
+
+// Status HdfsInputStream::seek(int64_t offset) {
+//     if (offset < 0) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
+//     _offset = offset;
+//     return Status::OK();
+// }
+
+// StatusOr<int64_t> HdfsInputStream::get_size() {
+//     if (_file_size == 0) {
+//         auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
+//         if (UNLIKELY(info == nullptr)) {
+//             return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
+//         }
+//         _file_size = info->mSize;
+//         hdfsFreeFileInfo(info, 1);
+//     }
+//     return _file_size;
+// }
+
+// StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
+//     struct hdfsReadStatistics* hdfs_statistics = nullptr;
+//     auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
+//     if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+//     auto statistics = std::make_unique<io::NumericStatistics>();
+//     statistics->reserve(4);
+//     statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
+//     statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
+//     statistics->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
+//     statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
+//     hdfsFileFreeReadStatistics(hdfs_statistics);
+//     return std::move(statistics);
+// }
+
+// ==================================  HdfsInputStream  ==========================================
+
+// TODO: move this class to directory 'be/srcio/'
+// class for remote read hdfs file
+// Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(hdfsFS fs, hdfsFile file, const std::string& file_name)
-            : _fs(fs), _file(file), _file_name(file_name), _offset(0), _file_size(0) {}
+    HdfsInputStream(doris::PBackendService_Stub* stub, const std::string& session_id, const std::string& path)
+            : _stub(stub), _session_id(session_id), _file_name(path), _offset(0), _file_size(0) {
+        request.set_session_id(session_id);
+    }
 
     ~HdfsInputStream() override;
 
@@ -32,36 +119,35 @@ public:
     Status seek(int64_t offset) override;
 
 private:
-    hdfsFS _fs;
-    hdfsFile _file;
+    doris::PBackendService_Stub* _stub;
+    std::string _session_id;
     std::string _file_name;
     int64_t _offset;
     int64_t _file_size;
+    HdfsRequest request;
+    HdfsResponse response;
+    brpc::Controller cntl;
 };
 
 HdfsInputStream::~HdfsInputStream() {
-    auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        int r = hdfsCloseFile(this->_fs, this->_file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError("");
-        }
-    });
-    Status st = ret->get_future().get();
-    PLOG_IF(ERROR, !st.ok()) << "close " << _file_name << " failed";
+    cntl.Reset();
+    _stub->HdfsClose(&cntl, &request, &response, nullptr);
+    brpc::Join(cntl.call_id());
+    PLOG_IF(ERROR, cntl.Failed()) << "close " << _file_name << " failed, reason = " << cntl.ErrorText();
 }
 
 StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
-    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
-        size = std::numeric_limits<tSize>::max();
+    request.set_offset(_offset);
+    request.set_size(size);
+    cntl.Reset();
+    _stub->HdfsRead(&cntl, &request, &response, nullptr);
+    brpc::Join(cntl.call_id());
+    if (cntl.Failed()) {
+        return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, cntl.ErrorText()));
     }
-    tSize r = hdfsPread(_fs, _file, _offset, data, static_cast<tSize>(size));
-    if (r == -1) {
-        return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
-    }
-    _offset += r;
-    return r;
+    _offset += size;
+    memcpy(data, response.data().data(), size);
+    return size;
 }
 
 Status HdfsInputStream::seek(int64_t offset) {
@@ -72,27 +158,32 @@ Status HdfsInputStream::seek(int64_t offset) {
 
 StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
-        auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
-        if (UNLIKELY(info == nullptr)) {
-            return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
+        cntl.Reset();
+        _stub->HdfsGetSize(&cntl, &request, &response, nullptr);
+        brpc::Join(cntl.call_id());
+        if (cntl.Failed()) {
+            return Status::InternalError(
+                    fmt::format("hdfsGetPathInfo failed, file={}, reason={}", _file_name, cntl.ErrorText()));
         }
-        _file_size = info->mSize;
-        hdfsFreeFileInfo(info, 1);
+        _file_size = response.size();
     }
     return _file_size;
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
-    struct hdfsReadStatistics* hdfs_statistics = nullptr;
-    auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
-    if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+    cntl.Reset();
+    _stub->HdfsGetStats(&cntl, &request, &response, nullptr);
+    brpc::Join(cntl.call_id());
+    if (cntl.Failed()) {
+        return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", cntl.ErrorText()));
+    }
+    auto& stats = response.stats();
     auto statistics = std::make_unique<io::NumericStatistics>();
-    statistics->reserve(4);
-    statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
-    statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
-    statistics->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
-    statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
-    hdfsFileFreeReadStatistics(hdfs_statistics);
+    statistics->reserve(3);
+    statistics->append("TotalBytesRead", stats.total_bytes_read());
+    statistics->append("TotalLocalBytesRead", stats.total_local_bytes_read());
+    statistics->append("TotalShortCircuitBytesRead", stats.total_short_circuit_bytes_read());
+    // statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
     return std::move(statistics);
 }
 
@@ -191,18 +282,37 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                    const std::string& path) {
-    std::string namenode;
-    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    HdfsFsHandle handle;
-    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path");
+    // std::string namenode;
+    // RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    // HdfsFsHandle handle;
+    // RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle));
+    // if (handle.type != HdfsFsHandle::Type::HDFS) {
+    //     return Status::InvalidArgument("invalid hdfs path");
+    // }
+    // hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, 0, 0, 0);
+    // if (file == nullptr) {
+    //     return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+    // }
+    // auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
+    // return std::make_unique<RandomAccessFile>(std::move(stream), path);
+
+    doris::PBackendService_Stub* stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub("127.0.0.1", 50051, true);
+
+    HdfsRequest request;
+    HdfsResponse response;
+    request.set_path(path);
+
+    brpc::Controller cntl;
+    cntl.Reset();
+    stub->HdfsOpen(&cntl, &request, &response, nullptr);
+    brpc::Join(cntl.call_id());
+
+    if (cntl.Failed()) {
+        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}, text={}", path, cntl.ErrorText()));
     }
-    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, 0, 0, 0);
-    if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
-    }
-    auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
+
+    const std::string& session_id = response.session_id();
+    auto stream = std::make_shared<HdfsInputStream>(stub, session_id, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 

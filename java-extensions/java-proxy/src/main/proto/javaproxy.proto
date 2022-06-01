@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+option java_multiple_files = true;
+option java_package = "com.starrocks.javaproxy";
+option java_outer_classname = "JavaProxyProto";
+
+package doris;
+
+message HdfsRequest {
+  optional string path = 1;
+  optional string session_id = 2;
+  optional int32 offset = 3;
+  optional int32 size = 4;
+}
+
+message HdfsStats {
+  optional int64 total_bytes_read = 1;
+  optional int64 total_local_bytes_read = 2 ;
+  optional int64 total_short_circuit_bytes_read = 3;
+}
+
+message HdfsResponse {
+  optional string session_id = 1;
+  optional bytes data = 2;
+  optional int64 size = 3;
+  optional HdfsStats stats = 4;
+}
+
+service PBackendService {
+
+  rpc HdfsOpen (HdfsRequest) returns (HdfsResponse) {}
+  rpc HdfsClose (HdfsRequest) returns (HdfsResponse) {}
+  rpc HdfsRead (HdfsRequest) returns (HdfsResponse) {}
+  rpc HdfsGetSize (HdfsRequest) returns (HdfsResponse) {}
+  rpc HdfsGetStats (HdfsRequest) returns (HdfsResponse) {}
+}

@@ -122,8 +122,10 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
+BE_OPTS="--h2_client_connection_window_size=67108864"
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
+    nohup ${STARROCKS_HOME}/lib/starrocks_be $BE_OPTS "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
 else
-    ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
+    ${STARROCKS_HOME}/lib/starrocks_be $BE_OPTS "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
 fi

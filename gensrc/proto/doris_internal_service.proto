@@ -45,4 +45,10 @@ service PBackendService {
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc transmit_runtime_filter(starrocks.PTransmitRuntimeFilterParams) returns (starrocks.PTransmitRuntimeFilterResult);
+
+rpc HdfsOpen (starrocks.HdfsRequest) returns (starrocks.HdfsResponse) {}
+  rpc HdfsClose (starrocks.HdfsRequest) returns (starrocks.HdfsResponse) {}
+  rpc HdfsRead (starrocks.HdfsRequest) returns (starrocks.HdfsResponse) {}
+  rpc HdfsGetSize (starrocks.HdfsRequest) returns (starrocks.HdfsResponse) {}
+  rpc HdfsGetStats (starrocks.HdfsRequest) returns (starrocks.HdfsResponse) {}
 };

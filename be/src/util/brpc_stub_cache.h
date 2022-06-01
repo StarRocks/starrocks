@@ -49,7 +49,7 @@ public:
         }
     }
 
-    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint, bool http_v2 = false) {
         std::lock_guard<SpinLock> l(_lock);
         auto stub_ptr = _stub_map.seek(endpoint);
         if (stub_ptr != nullptr) {
@@ -58,6 +58,10 @@ public:
         // new one stub and insert into map
         brpc::ChannelOptions options;
         options.connect_timeout_ms = 3000;
+        if (http_v2) {
+            options.timeout_ms = 10000;
+            options.protocol = "h2:grpc";
+        }
         // Explicitly set the max_retry
         // TODO(meegoo): The retry strategy can be customized in the future
         options.max_retry = 3;
@@ -70,22 +74,22 @@ public:
         return stub;
     }
 
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) {
+    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr, bool http_v2 = false) {
         butil::EndPoint endpoint;
         if (str2endpoint(taddr.hostname.c_str(), taddr.port, &endpoint)) {
             LOG(WARNING) << "unknown endpoint, hostname=" << taddr.hostname;
             return nullptr;
         }
-        return get_stub(endpoint);
+        return get_stub(endpoint, http_v2);
     }
 
-    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
+    doris::PBackendService_Stub* get_stub(const std::string& host, int port, bool http_v2 = false) {
         butil::EndPoint endpoint;
         if (str2endpoint(host.c_str(), port, &endpoint)) {
             LOG(WARNING) << "unknown endpoint, hostname=" << host;
             return nullptr;
         }
-        return get_stub(endpoint);
+        return get_stub(endpoint, http_v2);
     }
 
 private:
