@@ -136,6 +136,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 public class MasterImpl {
@@ -278,6 +279,13 @@ public class MasterImpl {
                 default:
                     break;
             }
+        } catch (RejectedExecutionException e) {
+            tStatus.setStatus_code(TStatusCode.TOO_MANY_TASKS);
+            String errMsg = "task queue full";
+            List<String> errorMsgs = new ArrayList<String>();
+            LOG.warn(errMsg, e);
+            errorMsgs.add(errMsg);
+            tStatus.setError_msgs(errorMsgs);
         } catch (Exception e) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             String errMsg = "finish agent task error.";
@@ -912,6 +920,7 @@ public class MasterImpl {
 
     private void finishAlterTask(AgentTask task) {
         AlterReplicaTask alterTask = (AlterReplicaTask) task;
+<<<<<<< HEAD
         try {
             if (alterTask.getJobType() == JobType.ROLLUP) {
                 Catalog.getCurrentCatalog().getRollupHandler().handleFinishAlterTask(alterTask);
@@ -921,6 +930,12 @@ public class MasterImpl {
             alterTask.setFinished(true);
         } catch (MetaNotFoundException e) {
             LOG.warn("failed to handle finish alter task: {}, {}", task.getSignature(), e.getMessage());
+=======
+        if (alterTask.getJobType() == JobType.ROLLUP) {
+            GlobalStateMgr.getCurrentState().getRollupHandler().handleFinishAlterTask(alterTask);
+        } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
+            GlobalStateMgr.getCurrentState().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
+>>>>>>> 2f76fe2ad ([Enhancement] Support Alter finish task process queued (#6259))
         }
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
     }
