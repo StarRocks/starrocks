@@ -1591,13 +1591,12 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        if (!backendExecStates.containsKey(params.backend_num)) {
+        BackendExecState execState = backendExecStates.get(params.backend_num);
+        if (execState == null) {
             LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
-                    backendExecStates.keySet().toString());
+                    backendExecStates.keySet());
             return;
         }
-
-        BackendExecState execState = backendExecStates.get(params.backend_num);
         lock();
         try {
             if (!execState.updateProfile(params)) {
