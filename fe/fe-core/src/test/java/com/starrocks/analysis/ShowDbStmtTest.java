@@ -22,11 +22,29 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ShowDbStmtTest {
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+    }
+
     @Test
     public void testNormal() throws UserException, AnalysisException {
         final Analyzer analyzer = AccessTestUtil.fetchBlockAnalyzer();
@@ -43,5 +61,12 @@ public class ShowDbStmtTest {
         Assert.assertEquals("SHOW DATABASES LIKE 'abc'", stmt.toString());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+    }
+
+    @Test
+    public void testShowSchemas() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String showSQL = "show schemas";
+        ShowDbStmt showDbStmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
     }
 }
