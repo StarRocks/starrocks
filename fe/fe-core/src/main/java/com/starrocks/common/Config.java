@@ -1259,6 +1259,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect = true;
 
+    @ConfField(mutable = true)
+    public static boolean enable_collect_full_statistics = false;
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:

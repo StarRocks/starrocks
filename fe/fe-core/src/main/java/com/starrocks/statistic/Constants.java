@@ -5,9 +5,14 @@ package com.starrocks.statistic;
 import com.starrocks.system.SystemInfoService;
 
 public class Constants {
+    public static final int STATISTIC_DATA_VERSION = 1;
+    public static final int STATISTIC_DICT_VERSION = 101;
+
     public static final String StatisticsDBName =
             SystemInfoService.DEFAULT_CLUSTER + ":" + "_statistics_";
     public static final String StatisticsTableName = "table_statistic_v1";
+
+    public static final String FullStatisticsTableName = "column_statistics";
 
     public static final String INFORMATION_SCHEMA = SystemInfoService.DEFAULT_CLUSTER + ":information_schema";
 
@@ -15,7 +20,7 @@ public class Constants {
 
     public enum AnalyzeType {
         SAMPLE,
-        FULL,
+        FULL
     }
 
     public enum ScheduleType {

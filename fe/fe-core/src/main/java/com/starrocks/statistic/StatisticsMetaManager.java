@@ -21,6 +21,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
@@ -41,6 +42,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     static {
         ScalarType columnNameType = ScalarType.createVarcharType(65530);
         ScalarType tableNameType = ScalarType.createVarcharType(65530);
+        ScalarType partitionNameType = ScalarType.createVarcharType(65530);
         ScalarType dbNameType = ScalarType.createVarcharType(65530);
         ScalarType maxType = ScalarType.createVarcharType(65530);
         ScalarType minType = ScalarType.createVarcharType(65530);
@@ -49,6 +51,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         // otherwise it will be set length to 1 at analyze
         columnNameType.setAssignedStrLenInColDefinition();
         tableNameType.setAssignedStrLenInColDefinition();
+        partitionNameType.setAssignedStrLenInColDefinition();
         dbNameType.setAssignedStrLenInColDefinition();
         maxType.setAssignedStrLenInColDefinition();
         minType.setAssignedStrLenInColDefinition();
@@ -67,9 +70,28 @@ public class StatisticsMetaManager extends MasterDaemon {
                 new ColumnDef("min", new TypeDef(minType)),
                 new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
+
+        FULL_STATISTICS_COLUMNS = ImmutableList.of(
+                new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("db_name", new TypeDef(dbNameType)),
+                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("table_name", new TypeDef(tableNameType)),
+                new ColumnDef("partition_name", new TypeDef(partitionNameType)),
+                new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
+                new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("max", new TypeDef(maxType)),
+                new ColumnDef("min", new TypeDef(minType)),
+                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+        );
     }
 
     private static final List<ColumnDef> COLUMNS;
+
+    private static final List<ColumnDef> FULL_STATISTICS_COLUMNS;
 
     // If all replicas are lost more than 3 times in a row, rebuild the statistics table
     private int lossTableCount = 0;
@@ -102,7 +124,13 @@ public class StatisticsMetaManager extends MasterDaemon {
         return db.getTable(Constants.StatisticsTableName) != null;
     }
 
-    private boolean checkReplicateNormal() {
+    private boolean checkFullStatisticsTableExist() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
+        Preconditions.checkState(db != null);
+        return db.getTable(Constants.FullStatisticsTableName) != null;
+    }
+
+    private boolean checkReplicateNormal(String tableName) {
         int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
         // maybe cluster just shutdown, ignore
@@ -113,7 +141,7 @@ public class StatisticsMetaManager extends MasterDaemon {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
         Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
 
         boolean check = true;
@@ -137,6 +165,10 @@ public class StatisticsMetaManager extends MasterDaemon {
 
     private static final List<String> keyColumnNames = ImmutableList.of(
             "table_id", "column_name", "db_id"
+    );
+
+    private static final List<String> fullStatisticsKeyColumns = ImmutableList.of(
+            "partition_id", "column_name"
     );
 
     private boolean createTable() {
@@ -173,6 +205,40 @@ public class StatisticsMetaManager extends MasterDaemon {
         return checkTableExist();
     }
 
+    private boolean createFullStatisticsTable() {
+        LOG.info("create statistics table v2 start");
+        TableName tableName = new TableName(Constants.StatisticsDBName,
+                Constants.FullStatisticsTableName);
+        Map<String, String> properties = Maps.newHashMap();
+        int defaultReplicationNum = Math.min(3,
+                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+        CreateTableStmt stmt = new CreateTableStmt(false, false,
+                tableName, FULL_STATISTICS_COLUMNS, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, fullStatisticsKeyColumns),
+                null,
+                new HashDistributionDesc(10, fullStatisticsKeyColumns),
+                properties,
+                null,
+                "");
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
+                StatisticUtils.buildConnectContext());
+        try {
+            stmt.analyze(analyzer);
+        } catch (UserException e) {
+            LOG.warn("Failed to create table when analyze " + e.getMessage());
+            return false;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().createTable(stmt);
+        } catch (DdlException e) {
+            LOG.warn("Failed to create table" + e.getMessage());
+            return false;
+        }
+        LOG.info("create statistics table done");
+        return checkFullStatisticsTableExist();
+    }
+
     private boolean dropTable() {
         LOG.info("drop statistics table start");
         TableName tableName = new TableName(Constants.StatisticsDBName, Constants.StatisticsTableName);
@@ -186,6 +252,21 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
         LOG.info("drop statistics table done");
         return !checkTableExist();
+    }
+
+    private boolean dropFullStatisticsTable() {
+        LOG.info("drop statistics table start");
+        TableName tableName = new TableName(Constants.StatisticsDBName, Constants.FullStatisticsTableName);
+        DropTableStmt stmt = new DropTableStmt(true, tableName, true);
+
+        try {
+            GlobalStateMgr.getCurrentState().dropTable(stmt);
+        } catch (DdlException e) {
+            LOG.warn("Failed to drop table" + e.getMessage());
+            return false;
+        }
+        LOG.info("drop statistics table done");
+        return !checkFullStatisticsTableExist();
     }
 
     private void trySleep(long millis) {
@@ -207,7 +288,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             trySleep(10000);
         }
 
-        while (checkTableExist() && !checkReplicateNormal()) {
+        while (checkTableExist() && !checkReplicateNormal(Constants.StatisticsTableName)) {
             if (dropTable()) {
                 break;
             }
@@ -219,6 +300,22 @@ public class StatisticsMetaManager extends MasterDaemon {
                 break;
             }
             trySleep(10000);
+        }
+
+        if (Config.enable_collect_full_statistics) {
+            while (checkFullStatisticsTableExist() && !checkReplicateNormal(Constants.FullStatisticsTableName)) {
+                if (dropFullStatisticsTable()) {
+                    break;
+                }
+                trySleep(10000);
+            }
+
+            while (!checkFullStatisticsTableExist()) {
+                if (createFullStatisticsTable()) {
+                    break;
+                }
+                trySleep(10000);
+            }
         }
     }
 }

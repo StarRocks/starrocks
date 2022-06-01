@@ -13,12 +13,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
@@ -58,17 +58,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
+import static com.starrocks.statistic.Constants.STATISTIC_DATA_VERSION;
+import static com.starrocks.statistic.Constants.STATISTIC_DICT_VERSION;
+
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
-
-    private static final int STATISTIC_DATA_VERSION = 1;
-    private static final int STATISTIC_DICT_VERSION = 101;
-
-    private static final String QUERY_STATISTIC_TEMPLATE =
-            "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
-                    + " row_count, data_size, distinct_count, null_count, max, min"
-                    + " FROM " + Constants.StatisticsTableName
-                    + " WHERE 1 = 1";
 
     private static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + Constants.StatisticsTableName;
 
@@ -110,13 +105,18 @@ public class StatisticExecutor {
     }
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
-        String sql = buildQuerySQL(dbId, tableId, columnNames);
+        String sql;
+        if (Config.enable_collect_full_statistics) {
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
+        } else {
+            sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
+        }
         Map<String, Database> dbs = Maps.newHashMap();
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = parseSQL(sql, context);
+            parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             if (parsedStmt instanceof QueryStatement) {
                 dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
             }
@@ -161,7 +161,7 @@ public class StatisticExecutor {
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = parseSQL(sql, context);
+            parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             if (parsedStmt instanceof QueryStatement) {
                 dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
             }
@@ -214,35 +214,37 @@ public class StatisticExecutor {
     }
 
     public void fullCollectStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
-        collectStatisticSync(dbId, tableId, columnNames, false, 0);
+        for (List<String> list : Lists.partition(columnNames, splitColumnsByRows(dbId, tableId, 0, false))) {
+            String sql = buildFullInsertSQL(dbId, tableId, list);
+            collectStatisticSync(sql);
+        }
+    }
+
+    public void fullCollectStatisticSyncV2(Long dbId, Long tableId, Long partitionId, List<String> columnNames) throws Exception {
+        for (List<String> list : Lists.partition(columnNames, splitColumnsByRows(dbId, tableId, 0, false))) {
+            String sql = StatisticSQLBuilder.buildCollectFullStatisticSQL(dbId, tableId, partitionId, list);
+            collectStatisticSync(sql);
+        }
     }
 
     public void sampleCollectStatisticSync(Long dbId, Long tableId, List<String> columnNames, long rows)
             throws Exception {
-        collectStatisticSync(dbId, tableId, columnNames, true, rows);
+        for (List<String> list : Lists.partition(columnNames, splitColumnsByRows(dbId, tableId, rows, true))) {
+            String sql = buildSampleInsertSQL(dbId, tableId, list, rows);
+            collectStatisticSync(sql);
+        }
     }
 
-    public void collectStatisticSync(Long dbId, Long tableId, List<String> columnNames, boolean isSample, long rows)
-            throws Exception {
-        // split column
-        for (List<String> list : Lists.partition(columnNames, splitColumnsByRows(dbId, tableId, rows, isSample))) {
-            String sql;
-            if (isSample) {
-                sql = buildSampleInsertSQL(dbId, tableId, list, rows);
-            } else {
-                sql = buildFullInsertSQL(dbId, tableId, list);
-            }
+    public void collectStatisticSync(String sql) throws Exception {
+        LOG.debug("Collect statistic SQL: {}", sql);
 
-            LOG.debug("Collect statistic SQL: {}", sql);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        executor.execute();
 
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            StatementBase parsedStmt = parseSQL(sql, context);
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            executor.execute();
-
-            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                throw new DdlException(context.getState().getErrorMessage());
-            }
+        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            throw new DdlException(context.getState().getErrorMessage());
         }
     }
 
@@ -254,7 +256,7 @@ public class StatisticExecutor {
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = parseSQL(sql.toString(), context);
+            parsedStmt = parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             executor.execute();
         } catch (Exception e) {
@@ -275,7 +277,7 @@ public class StatisticExecutor {
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = parseSQL(sql.toString(), context);
+            parsedStmt = parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
             if (parsedStmt instanceof QueryStatement) {
                 dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
             }
@@ -335,39 +337,6 @@ public class StatisticExecutor {
             }
         }
         return execPlan;
-    }
-
-    private String buildQuerySQL(Long dbId, Long tableId, List<String> columnNames) {
-        StringBuilder where = new StringBuilder(QUERY_STATISTIC_TEMPLATE);
-        if (null != dbId) {
-            where.append(" AND db_id = ").append(dbId);
-        }
-
-        if (null != tableId) {
-            where.append(" AND table_id = ").append(tableId);
-        }
-
-        if (null == columnNames || columnNames.isEmpty()) {
-            return where.toString();
-        }
-
-        where.append(" AND column_name");
-        if (columnNames.size() == 1) {
-            where.append(" = '").append(columnNames.get(0)).append("'");
-        } else {
-            where.append(" IN (");
-            where.append(columnNames.stream().map(s -> "'" + s + "'").collect(Collectors.joining(",")));
-            where.append(")");
-        }
-
-        return where.toString();
-    }
-
-    public static StatementBase parseSQL(String sql, ConnectContext context) {
-        StatementBase parsedStmt = com.starrocks.sql.parser.SqlParser.parse(sql,
-                context.getSessionVariable().getSqlMode()).get(0);
-        parsedStmt.setOrigStmt(new OriginStatement(sql, 0));
-        return parsedStmt;
     }
 
     private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan)
