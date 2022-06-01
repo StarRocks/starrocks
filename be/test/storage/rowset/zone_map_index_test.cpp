@@ -86,7 +86,8 @@ protected:
         }
 
         ZoneMapIndexReader column_zone_map;
-        ASSERT_OK(column_zone_map.load(_block_mgr, filename, &index_meta.zone_map_index(), true, false));
+        ASSIGN_OR_ABORT(auto r, column_zone_map.load(_block_mgr, filename, index_meta.zone_map_index(), true, false));
+        ASSERT_TRUE(r);
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
@@ -142,7 +143,8 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     }
 
     ZoneMapIndexReader column_zone_map;
-    ASSERT_OK(column_zone_map.load(_block_mgr, filename, &index_meta.zone_map_index(), true, false));
+    ASSIGN_OR_ABORT(auto r, column_zone_map.load(_block_mgr, filename, index_meta.zone_map_index(), true, false));
+    ASSERT_TRUE(r);
     ASSERT_EQ(3, column_zone_map.num_pages());
     const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
     ASSERT_EQ(3, zone_maps.size());
