@@ -224,7 +224,7 @@ public class Alter {
             // check materialized view state
             if (materializedView.getState() != OlapTableState.NORMAL) {
                 throw new DdlException("Materialized view [" + materializedView.getName() + "]'s state is not NORMAL. "
-                        + "Do not allow doing ALTER ops");
+                        + "Do not allow to do ALTER ops");
             }
 
             //rename materialized view
