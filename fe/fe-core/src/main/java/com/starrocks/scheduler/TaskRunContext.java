@@ -6,6 +6,7 @@ import com.starrocks.qe.ConnectContext;
 public class TaskRunContext {
     ConnectContext ctx;
     String definition;
+    String remoteIp;
 
 
     public ConnectContext getCtx() {
@@ -24,4 +25,11 @@ public class TaskRunContext {
         this.definition = definition;
     }
 
+    public String getRemoteIp() {
+        return remoteIp;
+    }
+
+    public void setRemoteIp(String remoteIp) {
+        this.remoteIp = remoteIp;
+    }
 }

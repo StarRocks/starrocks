@@ -4,6 +4,7 @@ package com.starrocks.scheduler;
 
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -95,6 +96,7 @@ public class TaskRun {
         }
         newCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(newCtx);
+        taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -132,6 +134,7 @@ public class TaskRun {
         }
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
+        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         this.status = status;
         return status;
     }

@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.statistic.Constants;
+import com.starrocks.scheduler.Constants;
 
 import java.io.DataInput;
 import java.io.DataOutput;
