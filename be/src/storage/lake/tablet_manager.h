@@ -3,6 +3,8 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
 
 namespace staros::starlet {
 class Starlet;
@@ -17,8 +19,6 @@ namespace starrocks::lake {
 
 class MetadataIterator;
 class Tablet;
-class TabletMetadata;
-class TxnLog;
 
 class TabletManager {
     friend class Tablet;
@@ -39,13 +39,15 @@ public:
 
 private:
     Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
-    StatusOr<TabletMetadata> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
+    Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
     Status delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
     StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group);
     StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group, int64_t tablet_id);
 
-    StatusOr<TxnLog> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     Status put_txn_log(const std::string& group, const TxnLog& log);
+    Status put_txn_log(const std::string& group, TxnLogPtr log);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     StatusOr<MetadataIterator> list_txn_log(const std::string& group);
     StatusOr<MetadataIterator> list_txn_log(const std::string& group, int64_t tablet_id);
