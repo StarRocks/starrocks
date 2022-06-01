@@ -121,6 +121,23 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
+
+        if (sink_operator()->is_finished()) {
+            finish_operators(runtime_state);
+            set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
+            return _state;
+        }
+        for (int i = int(num_operators) - 2; i > _first_unfinished; --i) {
+            if (_operators[i]->is_finished()) {
+                new_first_unfinished = i;
+                break;
+            }
+        }
+        for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
+            RETURN_IF_ERROR(return_status = _mark_operator_finished(_operators[i], runtime_state));
+        }
+        _first_unfinished = new_first_unfinished;
+
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
