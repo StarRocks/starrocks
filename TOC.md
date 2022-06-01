@@ -232,9 +232,6 @@
       + [concat_ws](/sql-reference/sql-functions/string-functions/concat_ws.md)
       + [ends_with](/sql-reference/sql-functions/string-functions/ends_with.md)
       + [find_in_set](/sql-reference/sql-functions/string-functions/find_in_set.md)
-      + [get_json_double](/sql-reference/sql-functions/string-functions/get_json_double.md)
-      + [get_json_int](/sql-reference/sql-functions/string-functions/get_json_int.md)
-      + [get_json_string](/sql-reference/sql-functions/string-functions/get_json_string.md)
       + [group_concat](/sql-reference/sql-functions/string-functions/group_concat.md)
       + [instr](/sql-reference/sql-functions/string-functions/instr.md)
       + [lcase](/sql-reference/sql-functions/string-functions/lcase.md)
@@ -257,6 +254,10 @@
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
+    + JSON函数
+      + [get_json_double](/sql-reference/sql-functions/json-functions/get_json_double.md)
+      + [get_json_int](/sql-reference/sql-functions/json-functions/get_json_int.md)
+      + [get_json_string](/sql-reference/sql-functions/json-functions/get_json_string.md)
     + 聚合函数
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
