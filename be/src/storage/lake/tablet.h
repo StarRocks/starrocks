@@ -2,17 +2,18 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "common/statusor.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
 
 namespace starrocks::lake {
 
 class MetadataIterator;
 class TabletManager;
 class TabletReader;
-class TxnLog;
 
 class Tablet {
 public:
@@ -24,7 +25,9 @@ public:
 
     Status put_metadata(const TabletMetadata& metadata);
 
-    StatusOr<TabletMetadata> get_metadata(int64_t version);
+    Status put_metadata(TabletMetadataPtr metadata);
+
+    StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
     StatusOr<MetadataIterator> list_metadata();
 
@@ -34,7 +37,9 @@ public:
 
     Status put_txn_log(const TxnLog& log);
 
-    StatusOr<TxnLog> get_txn_log(int64_t txn_id);
+    Status put_txn_log(TxnLogPtr log);
+
+    StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     Status delete_txn_log(int64_t txn_id);
 
