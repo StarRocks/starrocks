@@ -10,7 +10,8 @@ body:
   attributes:
     label: Describe the Content
     description: |
-      Provide details of the content to add, such as feature description, procedure, code, image, term, etc. You can also directly contribute the new content to StarRocks DOCS. See [How to contribute documentation](https://github.com/StarRocks/docs.zh-cn#%E5%A6%82%E4%BD%95%E8%B4%A1%E7%8C%AE%E6%96%87%E6%A1%A3).
+      Provide details of the content to add, such as feature description, procedure, code, image, term, etc.
+      You can also directly contribute the new content to StarRocks DOCS. See [How to contribute documentation](https://github.com/StarRocks/docs.zh-cn#%E5%A6%82%E4%BD%95%E8%B4%A1%E7%8C%AE%E6%96%87%E6%A1%A3).
   validations:
     required: true
 - type: textarea
