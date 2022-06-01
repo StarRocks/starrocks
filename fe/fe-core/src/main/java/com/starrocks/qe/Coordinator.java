@@ -490,7 +490,7 @@ public class Coordinator {
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                // shuffle partitions'ordinals in DataStreamSink. backendIds of Fragment instances that
+                // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
                 // contains shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
@@ -1338,6 +1338,7 @@ public class Coordinator {
     }
 
     static final int BUCKET_ABSENT = 2147483647;
+
     public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
         Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
@@ -1590,9 +1591,9 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        if (params.backend_num >= backendExecStates.size()) {
-            LOG.warn("unknown backend number: {}, expected less than: {}",
-                    params.backend_num, backendExecStates.size());
+        if (!backendExecStates.containsKey(params.backend_num)) {
+            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
+                    backendExecStates.keySet().toString());
             return;
         }
 
@@ -2076,7 +2077,6 @@ public class Coordinator {
             return this.rpcParams.params.getFragment_instance_id();
         }
     }
-
 
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,
