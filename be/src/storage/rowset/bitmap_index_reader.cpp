@@ -21,6 +21,8 @@
 
 #include "storage/rowset/bitmap_index_reader.h"
 
+#include <bthread/sys_futex.h>
+
 #include <memory>
 
 #include "storage/types.h"
@@ -28,15 +30,42 @@
 
 namespace starrocks {
 
-Status BitmapIndexReader::load(fs::BlockManager* block_mgr, const std::string& file_name,
-                               const BitmapIndexPB* bitmap_index_meta, bool use_page_cache, bool kept_in_memory) {
-    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-    const IndexedColumnMetaPB& dict_meta = bitmap_index_meta->dict_column();
-    const IndexedColumnMetaPB& bitmap_meta = bitmap_index_meta->bitmap_column();
-    _has_null = bitmap_index_meta->has_null();
+StatusOr<bool> BitmapIndexReader::load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta,
+                                       bool use_page_cache, bool kept_in_memory) {
+    while (true) {
+        auto curr_state = _state.load(std::memory_order_acquire);
+        if (curr_state == kLoaded) {
+            return false;
+        }
+        if (curr_state == kUnloaded && _state.compare_exchange_weak(curr_state, kLoading, std::memory_order_release)) {
+            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+            if (st.ok()) {
+                _state.store(kLoaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, INT_MAX);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return true;
+            } else {
+                _state.store(kUnloaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, 1);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return st;
+            }
+        }
+        if (curr_state == kLoading) {
+            int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
+            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+        }
+    }
+}
 
-    _dict_column_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, dict_meta);
-    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, bitmap_meta);
+Status BitmapIndexReader::do_load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta,
+                                  bool use_page_cache, bool kept_in_memory) {
+    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    const IndexedColumnMetaPB& dict_meta = meta.dict_column();
+    const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
+    _has_null = meta.has_null();
+    _dict_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, dict_meta);
+    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, bitmap_meta);
     RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
     RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();

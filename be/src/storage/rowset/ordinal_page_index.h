@@ -65,33 +65,60 @@ class OrdinalPageIndexIterator;
 
 class OrdinalIndexReader {
 public:
-    OrdinalIndexReader() = default;
+    OrdinalIndexReader() : _state(kUnloaded), _num_pages(0) {}
 
-    // load and parse the index page into memory
-    Status load(fs::BlockManager* block_mgr, const std::string& filename, const OrdinalIndexPB* index_meta,
-                ordinal_t num_values, bool use_page_cache, bool kept_in_memory);
+    // Multiple callers may call this method concurrently, but only the first one
+    // can load the data, the others will wait until the first one finished loading
+    // data.
+    //
+    // Return true if the index data was successfully loaded by the caller, false if
+    // the data was loaded by another caller.
+    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory);
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
-    inline OrdinalPageIndexIterator begin();
-    inline OrdinalPageIndexIterator end();
+
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
+    OrdinalPageIndexIterator begin();
+
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
+    OrdinalPageIndexIterator end();
+
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     ordinal_t get_first_ordinal(int page_index) const { return _ordinals[page_index]; }
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     ordinal_t get_last_ordinal(int page_index) const { return get_first_ordinal(page_index + 1) - 1; }
 
     // for test
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     int32_t num_data_pages() const { return _num_pages; }
 
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     size_t num_rows() const { return _ordinals.back() - _ordinals.front(); }
 
     size_t mem_usage() const {
         return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
     }
 
+    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
+
 private:
     friend OrdinalPageIndexIterator;
 
+    enum State : int {
+        kUnloaded = 0, // data has not been loaded into memory
+        kLoading = 1,  // loading in process
+        kLoaded = 2,   // data was successfully loaded in memory
+    };
+
+    Status do_load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
+                   bool use_page_cache, bool kept_in_memory);
+
+    std::atomic<State> _state;
     // valid after load
-    int _num_pages = 0;
+    int _num_pages;
     // _ordinals[i] = first ordinal of the i-th data page,
     std::vector<ordinal_t> _ordinals;
     // _pages[i] = page pointer to the i-th data page
@@ -118,11 +145,11 @@ private:
     int32_t _cur_idx{-1};
 };
 
-OrdinalPageIndexIterator OrdinalIndexReader::begin() {
+inline OrdinalPageIndexIterator OrdinalIndexReader::begin() {
     return OrdinalPageIndexIterator(this);
 }
 
-OrdinalPageIndexIterator OrdinalIndexReader::end() {
+inline OrdinalPageIndexIterator OrdinalIndexReader::end() {
     return OrdinalPageIndexIterator(this, _num_pages);
 }
 
