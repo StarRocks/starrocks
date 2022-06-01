@@ -24,7 +24,7 @@
 #include <map>
 #include <memory>
 
-#include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/column_block.h"
@@ -48,12 +48,24 @@ class BloomFilterIndexReader {
     friend class BloomFilterIndexIterator;
 
 public:
-    BloomFilterIndexReader() = default;
+    BloomFilterIndexReader()
+            : _state(kUnloaded),
+              _typeinfo(),
+              _algorithm(BLOCK_BLOOM_FILTER),
+              _hash_strategy(HASH_MURMUR3_X64_64),
+              _bloom_filter_reader() {}
 
-    Status load(fs::BlockManager* block_mgr, const std::string& file_name,
-                const BloomFilterIndexPB* bloom_filter_index_meta, bool use_page_cache, bool kept_in_memory);
+    // Multiple callers may call this method concurrently, but only the first one
+    // can load the data, the others will wait until the first one finished loading
+    // data.
+    //
+    // Return true if the index data was successfully loaded by the caller, false if
+    // the data was loaded by another caller.
+    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                        bool use_page_cache, bool kept_in_memory);
 
     // create a new column iterator.
+    // REQUIRES: the index data has been successfully `load()`ed into memory.
     Status new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator);
 
     const TypeInfoPtr& type_info() const { return _typeinfo; }
@@ -66,10 +78,22 @@ public:
         return size;
     }
 
+    bool loaded() const { return _state.load(std::memory_order_acquire) == kLoaded; }
+
 private:
+    enum State : int {
+        kUnloaded = 0, // data has not been loaded into memory
+        kLoading = 1,  // loading in process
+        kLoaded = 2,   // data was successfully loaded in memory
+    };
+
+    Status do_load(fs::BlockManager* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                   bool use_page_cache, bool kept_in_memory);
+
+    std::atomic<State> _state;
     TypeInfoPtr _typeinfo;
-    BloomFilterAlgorithmPB _algorithm = BLOCK_BLOOM_FILTER;
-    HashStrategyPB _hash_strategy = HASH_MURMUR3_X64_64;
+    BloomFilterAlgorithmPB _algorithm;
+    HashStrategyPB _hash_strategy;
     std::unique_ptr<IndexedColumnReader> _bloom_filter_reader;
 };
 
