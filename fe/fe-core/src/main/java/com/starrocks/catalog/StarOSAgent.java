@@ -6,8 +6,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -20,11 +23,22 @@ import java.util.stream.Collectors;
  * 2. Maintenance of StarOS worker to StarRocks backend map.
  */
 public class StarOSAgent {
+    private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
+
     private StarClient client;
-    // private Map<Long, Long> workerIdToBeId;
+    private long serviceId;
 
     public StarOSAgent() {
         client = new StarClient();
+        serviceId = -1;
+        // check if Config.starmanager_address == FE address
+        if (Config.integrate_staros) {
+            String[] starMgrAddr = Config.starmgr_address.split(":");
+            if (!starMgrAddr[0].equals("127.0.0.1")) {
+                LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
+                System.exit(-1);
+            }
+        }
     }
 
     public List<Long> createShards(int numShards) {
@@ -47,6 +61,22 @@ public class StarOSAgent {
         }
         return backendIds;
     }
+
+    public void registerAndBootstrapService(String serviceName) {
+        if (serviceId == -1) {
+            client.registerService("starrocks");
+            serviceId = client.bootstrapService("starrocks", serviceName);
+        }
+        LOG.info("serviceId from starClient is {} ", serviceId);
+    }
+
+    public void getServiceId(String serviceName) {
+        if (serviceId != -1) {
+            return;
+        }
+        serviceId = client.getServiceInfo(serviceName);
+    }
+
 
     // Mock StarClient
     private class StarClient {
@@ -86,6 +116,24 @@ public class StarOSAgent {
 
         public synchronized Worker getWorker(long id) {
             return idToWorker.get(id);
+        }
+
+        // register service
+        public synchronized void registerService(String serviceTemplateName) {
+            LOG.info("service {} registered.", serviceTemplateName);
+        }
+
+        // bootstrap service
+        public synchronized long bootstrapService(String serviceTemplateName, String serviceName) {
+            long serviceId = 1;
+            LOG.info("service {} bootstrapped.", serviceName);
+            return serviceId;
+        }
+
+        public long getServiceInfo(String serviceName) {
+            long serviceId = 1;
+            // get serviceId by client
+            return serviceId;
         }
     }
 

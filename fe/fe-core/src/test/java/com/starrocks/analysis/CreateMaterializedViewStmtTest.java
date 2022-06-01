@@ -142,9 +142,9 @@ public class CreateMaterializedViewStmtTest {
     @Test
     public void testAggregateWithFunctionColumnInSelectClause(@Injectable ArithmeticExpr arithmeticExpr,
                                                               @Injectable SelectStmt selectStmt) throws UserException {
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", Lists.newArrayList(arithmeticExpr));
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, Lists.newArrayList(arithmeticExpr));
         functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectList selectList = new SelectList();
         SelectListItem selectListItem = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem);
@@ -330,9 +330,9 @@ public class CreateMaterializedViewStmtTest {
         SlotRef slotRef2 = new SlotRef(tableName, "v1");
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         List<Expr> fnChildren = Lists.newArrayList(slotRef2);
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fnChildren);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, fnChildren);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
         OrderByElement orderByElement1 = new OrderByElement(functionCallExpr, false, false);
@@ -380,9 +380,9 @@ public class CreateMaterializedViewStmtTest {
         SelectListItem selectListItem1 = new SelectListItem(slotRef1, null);
         selectList.addItem(selectListItem1);
         List<Expr> fnChildren = Lists.newArrayList(slotRef1);
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fnChildren);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, fnChildren);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
 
@@ -417,14 +417,15 @@ public class CreateMaterializedViewStmtTest {
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         List<Expr> fn1Children = Lists.newArrayList(slotRef2);
-        FunctionCallExpr functionCallExpr1 = new FunctionCallExpr("sum", fn1Children);
+        FunctionCallExpr functionCallExpr1 = new FunctionCallExpr(FunctionSet.SUM, fn1Children);
         functionCallExpr1.setFn(Expr.getBuiltinFunction(
-                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr1, null);
         selectList.addItem(selectListItem2);
-        FunctionCallExpr functionCallExpr2 = new FunctionCallExpr("max", fn1Children);
+        FunctionCallExpr functionCallExpr2 = new FunctionCallExpr(FunctionSet.MAX, fn1Children);
         functionCallExpr2.setFn(
-                Expr.getBuiltinFunction("max", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                Expr.getBuiltinFunction(FunctionSet.MAX, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem3 = new SelectListItem(functionCallExpr2, null);
         selectList.addItem(selectListItem3);
 
@@ -470,9 +471,9 @@ public class CreateMaterializedViewStmtTest {
         SlotRef functionChild0 = new SlotRef(tableName, "v1");
         Deencapsulation.setField(functionChild0, "desc", slotDescriptor);
         List<Expr> fn1Children = Lists.newArrayList(functionChild0);
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fn1Children);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, fn1Children);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
-                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
+                FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem3 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem3);
         OrderByElement orderByElement1 = new OrderByElement(slotRef1, false, false);
@@ -526,7 +527,7 @@ public class CreateMaterializedViewStmtTest {
         SlotRef slotRef = new SlotRef(new TableName("db", "table"), "a");
         List<Expr> params = Lists.newArrayList();
         params.add(slotRef);
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("min", params);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.MIN, params);
         Deencapsulation.setField(slotRef, "desc", slotDescriptor1);
         new Expectations() {
             {
@@ -543,7 +544,7 @@ public class CreateMaterializedViewStmtTest {
         SlotRef slotRef2 = new SlotRef(new TableName("db", "table"), "a");
         List<Expr> params2 = Lists.newArrayList();
         params2.add(slotRef2);
-        FunctionCallExpr functionCallExpr2 = new FunctionCallExpr("min", params2);
+        FunctionCallExpr functionCallExpr2 = new FunctionCallExpr(FunctionSet.MIN, params2);
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor2);
         new Expectations() {
             {
@@ -561,7 +562,7 @@ public class CreateMaterializedViewStmtTest {
         SlotRef slotRef3 = new SlotRef(new TableName("db", "table"), "a");
         List<Expr> params3 = Lists.newArrayList();
         params3.add(slotRef3);
-        FunctionCallExpr functionCallExpr3 = new FunctionCallExpr("min", params3);
+        FunctionCallExpr functionCallExpr3 = new FunctionCallExpr(FunctionSet.MIN, params3);
         Deencapsulation.setField(slotRef3, "desc", slotDescriptor3);
         new Expectations() {
             {

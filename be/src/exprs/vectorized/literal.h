@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
@@ -10,6 +11,7 @@ namespace vectorized {
 class VectorizedLiteral final : public Expr {
 public:
     VectorizedLiteral(const TExprNode& node);
+    VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& type);
 
     ~VectorizedLiteral() override;
 

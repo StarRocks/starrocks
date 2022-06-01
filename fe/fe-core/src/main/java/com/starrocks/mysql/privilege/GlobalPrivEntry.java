@@ -21,10 +21,10 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,19 +48,17 @@ public class GlobalPrivEntry extends PrivEntry {
     protected GlobalPrivEntry() {
     }
 
-    protected GlobalPrivEntry(PatternMatcher hostPattern, String origHost,
-                              PatternMatcher userPattern, String origUser, boolean isDomain,
-                              Password password, PrivBitSet privSet) {
-        super(hostPattern, origHost, userPattern, origUser, isDomain, privSet);
+    protected GlobalPrivEntry(String origHost, String origUser, boolean isDomain, PrivBitSet privSet, Password password) {
+        super(origHost, origUser, isDomain, privSet);
         this.password = password;
     }
 
     public static GlobalPrivEntry create(String host, String user, boolean isDomain, Password password,
                                          PrivBitSet privs)
             throws AnalysisException {
-        PatternMatcher hostPattern = PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
-        PatternMatcher userPattern = PatternMatcher.createMysqlPattern(user, CaseSensibility.USER.getCaseSensibility());
-        return new GlobalPrivEntry(hostPattern, host, userPattern, user, isDomain, password, privs);
+        GlobalPrivEntry globalPrivEntry = new GlobalPrivEntry(host, user, isDomain, privs, password);
+        globalPrivEntry.analyse();
+        return globalPrivEntry;
     }
 
     public Password getPassword() {
@@ -171,5 +169,13 @@ public class GlobalPrivEntry extends PrivEntry {
             in.readFully(pdBytes);
             this.password = new Password(pdBytes);
         }
+    }
+
+    @Override
+    public String toGrantSQL() {
+        if (privSet.isEmpty()) {
+            return null;
+        }
+        return new GrantStmt(getUserIdent(), new TablePattern("*", "*"), privSet).toSql();
     }
 }

@@ -5,6 +5,7 @@
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
 #include "storage/storage_engine.h"
@@ -29,6 +30,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
           _mem_table(nullptr),
+          _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _with_rollback_log(true) {}
@@ -46,6 +48,7 @@ DeltaWriter::~DeltaWriter() {
         break;
     }
     _mem_table.reset();
+    _mem_table_sink.reset();
     _rowset_writer.reset();
     _cur_rowset.reset();
 }
@@ -183,7 +186,7 @@ Status DeltaWriter::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-
+    _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
     _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
@@ -248,7 +251,7 @@ Status DeltaWriter::_flush_memtable() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _mem_table_sink.get(),
                                             _mem_tracker);
 }
 
@@ -306,7 +309,7 @@ Status DeltaWriter::commit() {
         return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
                                                  _opt.tablet_id, _state_name(state)));
     }
-    LOG(INFO) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 

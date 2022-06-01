@@ -11,8 +11,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
+#include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
 #include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
@@ -25,12 +25,12 @@ static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-                   RowsetWriter* rowset_writer, MemTracker* mem_tracker)
+                   MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _tablet_schema(tablet_schema),
           _slot_descs(slot_descs),
           _keys_type(tablet_schema->keys_type()),
-          _rowset_writer(rowset_writer),
+          _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
     _vectorized_schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
@@ -51,14 +51,14 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(std::move(schema)),
           _tablet_schema(nullptr),
           _slot_descs(nullptr),
           _keys_type(schema.keys_type()),
-          _rowset_writer(rowset_writer),
+          _sink(sink),
           _aggregator(nullptr),
           _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
@@ -219,13 +219,18 @@ Status MemTable::flush() {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
+    std::string msg;
+    if (_result_chunk->reach_capacity_limit(&msg)) {
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
+    }
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         } else {
-            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);

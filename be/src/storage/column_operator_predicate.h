@@ -17,7 +17,7 @@ public:
     ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
             : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}
 
-    void evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
+    Status evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
         // get raw column
         const ColumnType* lowcard_column;
         if (column->is_nullable()) {
@@ -38,9 +38,10 @@ public:
                 sel[i] = !null_data[i] && _predicate_operator.eval_at(lowcard_column, i);
             }
         }
+        return Status::OK();
     }
 
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
         // get raw column
         const ColumnType* lowcard_column;
         if (column->is_nullable()) {
@@ -61,9 +62,10 @@ public:
                 sel[i] = (sel[i] && !null_data[i] && _predicate_operator.eval_at(lowcard_column, i));
             }
         }
+        return Status::OK();
     }
 
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
         // get raw column
         const ColumnType* lowcard_column;
         if (column->is_nullable()) {
@@ -84,9 +86,10 @@ public:
                 sel[i] = (sel[i] || (!null_data[i] && _predicate_operator.eval_at(lowcard_column, i)));
             }
         }
+        return Status::OK();
     }
 
-    uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
         // Get BinaryColumn
         const ColumnType* lowcard_column;
         if (column->is_nullable()) {

@@ -322,7 +322,7 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
         int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
         if (wg_growth_cpu_use_cost > _big_query_cpu_second_limit) {
             _bigquery_count++;
-            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {] but limit is {}",
+            return Status::Cancelled(fmt::format("exceed big query cpu limit: current is {} but limit is {}",
                                                  wg_growth_cpu_use_cost, _big_query_cpu_second_limit));
         }
     }
@@ -470,13 +470,8 @@ bool WorkGroupManager::get_owners_of_scan_worker(int worker_id, WorkGroupPtr run
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, 1,
-                                                  0.5, 10, WorkGroupType::WG_DEFAULT);
-    // TODO(by satanson): wg1 and wg2 is just used for test
-    auto wg1 = std::make_shared<WorkGroup>("wg1", 1, WorkGroup::DEFAULT_VERSION, 2, 0.5, 10, WorkGroupType::WG_NORMAL);
-    auto wg2 = std::make_shared<WorkGroup>("wg2", 2, WorkGroup::DEFAULT_VERSION, 4, 0.5, 10, WorkGroupType::WG_NORMAL);
+                                                  1.0, 0, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
-    WorkGroupManager::instance()->add_workgroup(wg1);
-    WorkGroupManager::instance()->add_workgroup(wg2);
 }
 
 WorkerOwnerManager::WorkerOwnerManager(int num_total_workers) : _num_total_workers(num_total_workers) {

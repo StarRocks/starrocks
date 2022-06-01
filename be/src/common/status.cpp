@@ -7,7 +7,7 @@
 #include <fmt/format.h>
 
 #include "gen_cpp/Status_types.h"  // for TStatus
-#include "gen_cpp/status.pb.h"     // for PStatus
+#include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
 
 namespace starrocks {
@@ -70,7 +70,7 @@ Status::Status(const TStatus& s) : _state(nullptr) {
     }
 }
 
-Status::Status(const PStatus& s) : _state(nullptr) {
+Status::Status(const StatusPB& s) : _state(nullptr) {
     TStatusCode::type code = (TStatusCode::type)s.status_code();
     if (code != TStatusCode::OK) {
         if (s.error_msgs_size() == 0) {
@@ -95,7 +95,7 @@ void Status::to_thrift(TStatus* s) const {
     }
 }
 
-void Status::to_protobuf(PStatus* s) const {
+void Status::to_protobuf(StatusPB* s) const {
     s->clear_error_msgs();
     if (_state == nullptr) {
         s->set_status_code((int)TStatusCode::OK);

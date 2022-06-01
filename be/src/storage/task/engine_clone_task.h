@@ -43,6 +43,8 @@ public:
     Status execute() override;
 
 private:
+    Status _do_clone_primary_tablet(Tablet* tablet);
+
     Status _do_clone(Tablet* tablet);
 
     Status _finish_clone(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,
@@ -53,7 +55,8 @@ private:
     Status _clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta);
 
     Status _clone_copy(DataDir& data_dir, const string& local_data_path, vector<string>* error_msgs,
-                       const vector<Version>* missing_versions);
+                       const vector<Version>* missing_versions,
+                       const std::vector<int64_t>* missing_version_ranges = nullptr);
 
     void _set_tablet_info(Status status, bool is_new_tablet);
 
@@ -61,7 +64,8 @@ private:
     Status _download_files(DataDir* data_dir, const std::string& remote_url_prefix, const std::string& local_path);
 
     Status _make_snapshot(const std::string& ip, int port, TTableId tablet_id, TSchemaHash schema_hash, int timeout_s,
-                          const std::vector<Version>* missed_versions, std::string* snapshot_path,
+                          const std::vector<Version>* missed_versions,
+                          const std::vector<int64_t>* missing_version_ranges, std::string* snapshot_path,
                           int32_t* snapshot_version);
 
     Status _release_snapshot(const std::string& ip, int port, const std::string& snapshot_path);

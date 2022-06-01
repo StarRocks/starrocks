@@ -130,6 +130,50 @@ public class LoadManagerTest {
         Assert.assertEquals(0, newLoadJobs.size());
     }
 
+    @Test
+    public void testDeserializationWithJobRemoved(@Mocked MetaContext metaContext,
+                                                @Mocked GlobalStateMgr globalStateMgr,
+                                                @Injectable Database database,
+                                                @Injectable Table table) throws Exception {
+        new Expectations() {
+            {
+                globalStateMgr.getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                database.getTable(anyLong);
+                minTimes = 0;
+                result = table;
+                table.getName();
+                minTimes = 0;
+                result = "tablename";
+                GlobalStateMgr.getCurrentStateJournalVersion();
+                minTimes = 0;
+                result = FeMetaVersion.VERSION_CURRENT;
+            }
+        };
+
+        Config.label_keep_max_second = 10;
+
+        // 1. serialize 1 job to file
+        loadManager = new LoadManager(new LoadJobScheduler());
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        Deencapsulation.invoke(loadManager, "addLoadJob", job1);
+        File file = serializeToFile(loadManager);
+
+        // 2. read it directly, expect 1 job
+        LoadManager newLoadManager = deserializeFromFile(file);
+        Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
+        Assert.assertEquals(1, newLoadJobs.size());
+
+        // 3. set max keep second to 1, then read it again
+        // the job expired, expect read 0 job
+        Config.label_keep_max_second = 1;
+        Thread.sleep(2000);
+        newLoadManager = deserializeFromFile(file);
+        newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
+        Assert.assertEquals(0, newLoadJobs.size());
+    }
+
     private File serializeToFile(LoadManager loadManager) throws Exception {
         File file = new File("./loadManagerTest");
         file.createNewFile();

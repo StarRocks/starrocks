@@ -61,7 +61,7 @@ public class CTEContext {
 
     private boolean enableCTE;
 
-    private List<Integer> forceCTEList;
+    private final List<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
 

@@ -21,6 +21,8 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -42,11 +44,16 @@ public class DbPrivEntry extends PrivEntry {
     protected DbPrivEntry() {
     }
 
-    protected DbPrivEntry(PatternMatcher hostPattern, String origHost, PatternMatcher dbPattern, String origDb,
-                          PatternMatcher userPattern, String user, boolean isDomain, PrivBitSet privSet) {
-        super(hostPattern, origHost, userPattern, user, isDomain, privSet);
-        this.dbPattern = dbPattern;
+    protected DbPrivEntry(String origHost, String user, boolean isDomain, PrivBitSet privSet, String origDb) {
+        super(origHost, user, isDomain, privSet);
         this.origDb = origDb;
+    }
+
+    @Override
+    protected void analyse() throws AnalysisException {
+        super.analyse();
+
+        this.dbPattern = createDbPatternMatcher(this.origDb);
         if (origDb.equals(ANY_DB)) {
             isAnyDb = true;
         }
@@ -54,17 +61,13 @@ public class DbPrivEntry extends PrivEntry {
 
     public static DbPrivEntry create(String host, String db, String user, boolean isDomain, PrivBitSet privs)
             throws AnalysisException {
-        PatternMatcher hostPattern = PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
-
-        PatternMatcher dbPattern = createDbPatternMatcher(db);
-
-        PatternMatcher userPattern = PatternMatcher.createMysqlPattern(user, CaseSensibility.USER.getCaseSensibility());
-
-        if (privs.containsNodePriv() || privs.containsResourcePriv()) {
-            throw new AnalysisException("Db privilege can not contains global or resource privileges: " + privs);
+        if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+            throw new AnalysisException(
+                    "Db privilege can not contains global or resource or impersonate privileges: " + privs);
         }
-
-        return new DbPrivEntry(hostPattern, host, dbPattern, db, userPattern, user, isDomain, privs);
+        DbPrivEntry dbPrivEntry = new DbPrivEntry(host, user, isDomain, privs, db);
+        dbPrivEntry.analyse();
+        return dbPrivEntry;
     }
 
     private static PatternMatcher createDbPatternMatcher(String db) throws AnalysisException {
@@ -148,14 +151,12 @@ public class DbPrivEntry extends PrivEntry {
     @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-
         origDb = Text.readString(in);
-        try {
-            dbPattern = createDbPatternMatcher(origDb);
-        } catch (AnalysisException e) {
-            throw new IOException(e);
-        }
-        isAnyDb = origDb.equals(ANY_DB);
+    }
+
+    @Override
+    public String toGrantSQL() {
+        return new GrantStmt(getUserIdent(), new TablePattern(origDb, "*"), privSet).toSql();
     }
 
 }

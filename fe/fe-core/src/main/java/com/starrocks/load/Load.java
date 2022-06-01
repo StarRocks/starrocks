@@ -21,6 +21,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -48,6 +49,7 @@ import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -56,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
@@ -66,6 +69,9 @@ import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -634,7 +640,7 @@ public class Load {
             FunctionCallExpr funcExpr = (FunctionCallExpr) originExpr;
             String funcName = funcExpr.getFnName().getFunction();
 
-            if (funcName.equalsIgnoreCase("replace_value")) {
+            if (funcName.equalsIgnoreCase(FunctionSet.REPLACE_VALUE)) {
                 List<Expr> exprs = Lists.newArrayList();
                 SlotRef slotRef = new SlotRef(null, columnName);
                 // We will convert this to IF(`col` != child0, `col`, child1),
@@ -700,28 +706,28 @@ public class Load {
                 LOG.debug("replace_value expr: {}", exprs);
                 FunctionCallExpr newFn = new FunctionCallExpr("if", exprs);
                 return newFn;
-            } else if (funcName.equalsIgnoreCase("strftime")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
                 // FROM_UNIXTIME(val)
-                FunctionName fromUnixName = new FunctionName("FROM_UNIXTIME");
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));
 
                 return fromUnixFunc;
-            } else if (funcName.equalsIgnoreCase("time_format")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.TIME_FORMAT)) {
                 // DATE_FORMAT(STR_TO_DATE(dt_str, dt_fmt))
-                FunctionName strToDateName = new FunctionName("STR_TO_DATE");
+                FunctionName strToDateName = new FunctionName(FunctionSet.STR_TO_DATE);
                 List<Expr> strToDateExprs = Lists.newArrayList(funcExpr.getChild(2), funcExpr.getChild(1));
                 FunctionCallExpr strToDateFuncExpr = new FunctionCallExpr(
                         strToDateName, new FunctionParams(false, strToDateExprs));
 
-                FunctionName dateFormatName = new FunctionName("DATE_FORMAT");
+                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(strToDateFuncExpr, funcExpr.getChild(0));
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
                         dateFormatName, new FunctionParams(false, dateFormatArgs));
 
                 return dateFormatFunc;
-            } else if (funcName.equalsIgnoreCase("alignment_timestamp")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.ALIGNMENT_TIMESTAMP)) {
                 /*
                  * change to:
                  * UNIX_TIMESTAMP(DATE_FORMAT(FROM_UNIXTIME(ts), "%Y-01-01 00:00:00"));
@@ -729,7 +735,7 @@ public class Load {
                  */
 
                 // FROM_UNIXTIME
-                FunctionName fromUnixName = new FunctionName("FROM_UNIXTIME");
+                FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));
                 FunctionCallExpr fromUnixFunc = new FunctionCallExpr(
                         fromUnixName, new FunctionParams(false, fromUnixArgs));
@@ -748,26 +754,26 @@ public class Load {
                 } else {
                     throw new UserException("Unknown precision(" + precision.getStringValue() + ")");
                 }
-                FunctionName dateFormatName = new FunctionName("DATE_FORMAT");
+                FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(fromUnixFunc, format);
                 FunctionCallExpr dateFormatFunc = new FunctionCallExpr(
                         dateFormatName, new FunctionParams(false, dateFormatArgs));
 
                 // UNIX_TIMESTAMP
-                FunctionName unixTimeName = new FunctionName("UNIX_TIMESTAMP");
+                FunctionName unixTimeName = new FunctionName(FunctionSet.UNIX_TIMESTAMP);
                 List<Expr> unixTimeArgs = Lists.newArrayList();
                 unixTimeArgs.add(dateFormatFunc);
                 FunctionCallExpr unixTimeFunc = new FunctionCallExpr(
                         unixTimeName, new FunctionParams(false, unixTimeArgs));
 
                 return unixTimeFunc;
-            } else if (funcName.equalsIgnoreCase("default_value")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.DEFAULT_VALUE)) {
                 return funcExpr.getChild(0);
-            } else if (funcName.equalsIgnoreCase("now")) {
-                FunctionName nowFunctionName = new FunctionName("NOW");
+            } else if (funcName.equalsIgnoreCase(FunctionSet.NOW)) {
+                FunctionName nowFunctionName = new FunctionName(FunctionSet.NOW);
                 FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, new FunctionParams(null));
                 return newFunc;
-            } else if (funcName.equalsIgnoreCase("substitute")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
             }
         }
@@ -878,6 +884,60 @@ public class Load {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
+        // load jobs
+        int jobSize = dis.readInt();
+        long newChecksum = checksum ^ jobSize;
+        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
+
+        // delete jobs
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
+            jobSize = dis.readInt();
+            newChecksum ^= jobSize;
+            Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
+        }
+
+        // load error hub info
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_24) {
+            LoadErrorHub.Param param = new LoadErrorHub.Param();
+            param.readFields(dis);
+            setLoadErrorHubInfo(param);
+        }
+
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
+            // 4. load delete jobs
+            int deleteJobSize = dis.readInt();
+            newChecksum ^= deleteJobSize;
+            Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
+        }
+
+        LOG.info("finished replay loadJob from image");
+        return newChecksum;
+    }
+
+    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
+        // 1. save load.dbToLoadJob
+        int jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 2. save delete jobs
+        jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 3. load error hub info
+        LoadErrorHub.Param param = getLoadErrorHubInfo();
+        param.write(dos);
+
+        // 4. save delete load job info
+        int deleteJobSize = 0;
+        checksum ^= deleteJobSize;
+        dos.writeInt(deleteJobSize);
+
+        return checksum;
     }
 
 }

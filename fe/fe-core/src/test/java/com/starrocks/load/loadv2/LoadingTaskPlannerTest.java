@@ -37,6 +37,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -217,7 +218,7 @@ public class LoadingTaskPlannerTest {
         columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
-        Function f1 = new Function(new FunctionName("substr"), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
                 Type.VARCHAR, true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
@@ -348,7 +349,7 @@ public class LoadingTaskPlannerTest {
         columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
 
-        Function f1 = new Function(new FunctionName("substr"), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
                 Type.VARCHAR, true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);

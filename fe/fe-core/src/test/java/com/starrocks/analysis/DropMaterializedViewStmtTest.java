@@ -108,6 +108,11 @@ public class DropMaterializedViewStmtTest {
             String getClusterName() {
                 return "testCluster";
             }
+
+            @Mock
+            String getDefaultCatalog() {
+                return "default";
+            }
         };
     }
 

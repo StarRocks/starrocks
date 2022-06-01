@@ -219,6 +219,15 @@ public class SlotRef extends Expr {
         }
     }
 
+    @Override
+    public String toJDBCSQL(boolean isMySQL) {
+        if (col != null) {
+            return isMySQL ? "`" + col + "`" : col;
+        } else {
+            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+        }
+    }
+
     public TableName getTableName() {
         Preconditions.checkState(isAnalyzed);
         Preconditions.checkNotNull(desc);

@@ -49,10 +49,10 @@ DIAGNOSTIC_POP
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_define.h"
 #include "util/errno.h"
-#include "util/file_utils.h"
 #include "util/string_parser.hpp"
 
 using std::string;
@@ -106,7 +106,7 @@ Status move_to_trash(const std::filesystem::path& file_path) {
     // 2. create target dir, or the rename() function will fail.
     if (auto st = FileSystem::Default()->create_dir(new_file_dir); !st.ok()) {
         // May be because the parent directory does not exist, try create directories recursively.
-        RETURN_IF_ERROR(FileUtils::create_dir(new_file_dir));
+        RETURN_IF_ERROR(fs::create_directories(new_file_dir));
     }
 
     // 3. remove file to trash
@@ -162,7 +162,7 @@ Status read_write_test_file(const string& test_file_path) {
 }
 
 bool check_datapath_rw(const string& path) {
-    if (!FileUtils::check_exist(path)) return false;
+    if (!fs::path_exist(path)) return false;
     string file_path = path + "/.read_write_test_file";
     try {
         Status res = read_write_test_file(file_path);

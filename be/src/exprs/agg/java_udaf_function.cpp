@@ -73,6 +73,11 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
+    auto& state_clazz = JVMFunctionHelper::getInstance().function_state_clazz();
+    ASSIGN_OR_RETURN(auto instance, state_clazz.newInstance());
+    ASSIGN_OR_RETURN(auto get_func, analyzer->get_method_object(state_clazz.clazz(), "get"));
+    ASSIGN_OR_RETURN(auto add_func, analyzer->get_method_object(state_clazz.clazz(), "add"));
+    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), std::move(get_func), std::move(add_func));
     udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();

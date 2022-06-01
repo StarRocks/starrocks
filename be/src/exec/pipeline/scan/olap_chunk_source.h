@@ -35,7 +35,7 @@ public:
     OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
                     OlapScanContext* scan_ctx);
 
-    ~OlapChunkSource() override = default;
+    ~OlapChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
@@ -54,9 +54,7 @@ public:
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
 
-    // Return last bytes of Scan or Exchange Data, then reset it
     int64_t last_spent_cpu_time_ns() override;
-    int64_t last_scan_rows_num() override;
 
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
@@ -66,7 +64,7 @@ private:
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
 
     Status _get_tablet(const TInternalScanRange* scan_range);
-    Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
@@ -98,15 +96,17 @@ private:
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
 
+    // For release memory.
+    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
+    std::vector<PredicatePtr> _predicate_free_pool;
+
+    // NOTE: _reader may reference the _predicate_free_pool, it should be released before the _predicate_free_pool
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
     const std::vector<std::string>* _unused_output_columns = nullptr;
     std::unordered_set<uint32_t> _unused_output_column_ids;
-    // For release memory.
-    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
-    std::vector<PredicatePtr> _predicate_free_pool;
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
@@ -115,11 +115,10 @@ private:
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
+    int64_t _last_spent_cpu_time_ns = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
-
-    int64_t _last_spent_cpu_time_ns = 0;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;

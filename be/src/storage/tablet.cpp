@@ -465,6 +465,10 @@ void Tablet::delete_expired_stale_rowset() {
             }
         }
         delete_rowset_time = timer.elapsed_time() / MICROS_PER_SEC;
+
+#ifndef BE_TEST
+        save_meta();
+#endif
     }
 
     for (auto& rowset : stale_rowsets) {
@@ -475,10 +479,6 @@ void Tablet::delete_expired_stale_rowset() {
               << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_stale_rs_size
               << " sweep endtime " << expired_stale_sweep_endtime << " delete_rowset_time=" << delete_rowset_time
               << " total_time=" << timer.elapsed_time() / MICROS_PER_SEC;
-
-#ifndef BE_TEST
-    save_meta();
-#endif
 }
 
 Status Tablet::capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const {
@@ -989,9 +989,9 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            LOG(INFO) << "remove rowset id from meta store because it is already persistent with "
-                         "tablet meta"
-                      << ", rowset_id=" << rs_meta->rowset_id();
+            VLOG(1) << "remove rowset id from meta store because it is already persistent with "
+                       "tablet meta"
+                    << ", rowset_id=" << rs_meta->rowset_id();
         }
         rs_meta->set_remove_from_rowset_meta();
     }
@@ -1004,9 +1004,8 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            LOG(INFO) << "remove rowset id from meta store because it is already persistent with "
-                         "tablet meta"
-                      << ", rowset_id=" << rs_meta->rowset_id();
+            VLOG(1) << "remove rowset id from meta store because it is already persistent with tablet meta"
+                    << ", rowset_id=" << rs_meta->rowset_id();
         }
         rs_meta->set_remove_from_rowset_meta();
     }

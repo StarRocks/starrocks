@@ -23,6 +23,7 @@
 
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
@@ -31,7 +32,6 @@
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -83,11 +83,9 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        auto st = (*reader)->load(_fs.get(), fname, &meta.bloom_filter_index(), true, false);
-        ASSERT_TRUE(st.ok());
-
-        st = (*reader)->new_iterator(iter);
-        ASSERT_TRUE(st.ok());
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), fname, meta.bloom_filter_index(), true, false));
+        ASSERT_TRUE(r);
+        ASSERT_OK((*reader)->new_iterator(iter));
     }
 
     template <FieldType Type>

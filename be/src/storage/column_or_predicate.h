@@ -24,11 +24,11 @@ public:
         _child.insert(_child.end(), begin, end);
     }
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
 
-    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
 
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
 
     bool filter(const BloomFilter& bf) const override { return true; }
 
@@ -48,7 +48,7 @@ public:
                       ObjectPool* obj_pool) const override;
 
 private:
-    void _evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status _evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const;
 
     // TODO: reorder child predicates based on their cost.
     std::vector<const ColumnPredicate*> _child;

@@ -25,8 +25,8 @@
 
 #include "common/closure_guard.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/tablets_channel.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
@@ -51,7 +51,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         std::lock_guard<std::mutex> l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
-            scoped_refptr<TabletsChannel> channel(new TabletsChannel(this, key, _mem_tracker.get()));
+            scoped_refptr<TabletsChannel> channel(new LocalTabletsChannel(this, key, _mem_tracker.get()));
             if (st = channel->open(request); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }

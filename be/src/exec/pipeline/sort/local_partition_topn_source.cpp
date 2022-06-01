@@ -19,7 +19,7 @@ bool LocalPartitionTopnSourceOperator::is_finished() const {
 }
 
 StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(RuntimeState* state) {
-    return _partition_topn_ctx->pull_one_chunk_from_sorters();
+    return _partition_topn_ctx->pull_one_chunk();
 }
 
 LocalPartitionTopnSourceOperatorFactory::LocalPartitionTopnSourceOperatorFactory(

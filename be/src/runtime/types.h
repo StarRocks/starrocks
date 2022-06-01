@@ -270,6 +270,13 @@ struct TypeDescriptor {
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
+    // Could this type be used at join on conjuncts
+    bool support_join() const;
+    // Could this type be used at order by clause
+    bool support_orderby() const;
+    // Could this type be used at group by clause
+    bool support_groupby() const;
+
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
     bool is_huge_type() const { return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL; }

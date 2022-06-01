@@ -25,6 +25,7 @@ public class SubqueryUtils {
     // when the correlation predicate meets these requirements:
     // 1. All predicate is Binary.EQ
     // 2. Only a child contains outer table's column
+    // @todo: only check contains, not all
     public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate,
                                              List<ColumnRefOperator> correlationColumnRefs) {
         for (ScalarOperator predicate : correlationPredicate) {
@@ -59,8 +60,8 @@ public class SubqueryUtils {
     public static Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> rewritePredicateAndExtractColumnRefs(
             List<ScalarOperator> correlationPredicate, List<ColumnRefOperator> correlationColumnRefs,
             OptimizerContext context) {
-        List<ScalarOperator> newPredicate = Lists.newArrayList();
-        Map<ColumnRefOperator, ScalarOperator> groupRefs = Maps.newHashMap();
+        List<ScalarOperator> newPredicates = Lists.newArrayList();
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefs = Maps.newHashMap();
 
         for (ScalarOperator predicate : correlationPredicate) {
             BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
@@ -70,34 +71,41 @@ public class SubqueryUtils {
 
             if (Utils.containAnyColumnRefs(correlationColumnRefs, left)) {
                 if (right.isColumnRef()) {
-                    newPredicate.add(bpo);
-                    groupRefs.put((ColumnRefOperator) right, right);
+                    newPredicates.add(bpo);
+                    newColumnRefs.put((ColumnRefOperator) right, right);
                 } else {
                     ColumnRefOperator ref =
                             context.getColumnRefFactory().create(right, right.getType(), right.isNullable());
-                    newPredicate.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, left, ref));
-                    groupRefs.put(ref, right);
+                    newPredicates.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, left, ref));
+                    newColumnRefs.put(ref, right);
                 }
             } else {
                 if (left.isColumnRef()) {
-                    newPredicate.add(bpo);
-                    groupRefs.put((ColumnRefOperator) left, left);
+                    newPredicates.add(bpo);
+                    newColumnRefs.put((ColumnRefOperator) left, left);
                 } else {
                     ColumnRefOperator ref =
                             context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
-                    newPredicate.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ref, right));
-                    groupRefs.put(ref, left);
+                    newPredicates.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ref, right));
+                    newColumnRefs.put(ref, left);
                 }
             }
         }
 
-        return new Pair<>(newPredicate, groupRefs);
+        return new Pair<>(newPredicates, newColumnRefs);
     }
 
     public static CallOperator createCountRowsOperator() {
         Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
                 Function.CompareMode.IS_IDENTICAL);
-        return new CallOperator("count", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)), count,
+        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
+                count,
                 false);
+    }
+
+    public static CallOperator createCountRowsOperator(ScalarOperator column) {
+        Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
+                Function.CompareMode.IS_IDENTICAL);
+        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
     }
 }

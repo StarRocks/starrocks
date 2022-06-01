@@ -15,6 +15,7 @@
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
@@ -56,11 +57,17 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     const std::vector<TEqJoinCondition>& eq_join_conjuncts = tnode.hash_join_node.eq_join_conjuncts;
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
-        ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &ctx));
-        _probe_expr_ctxs.push_back(ctx);
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &ctx));
-        _build_expr_ctxs.push_back(ctx);
+        ExprContext* left = nullptr;
+        ExprContext* right = nullptr;
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left));
+        _probe_expr_ctxs.push_back(left);
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
+        _build_expr_ctxs.push_back(right);
+        if (!left->root()->type().support_join() || !right->root()->type().support_join()) {
+            return Status::NotSupported(fmt::format("join on type {}={} is not supported",
+                                                    left->root()->type().debug_string(),
+                                                    right->root()->type().debug_string()));
+        }
 
         if (eq_join_conjunct.__isset.opcode && eq_join_conjunct.opcode == TExprOpcode::EQ_FOR_NULL) {
             _is_null_safes.emplace_back(true);
@@ -401,6 +408,7 @@ Status HashJoinNode::close(RuntimeState* state) {
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     size_t num_right_partitions;
@@ -412,8 +420,13 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
 
         num_left_partitions = context->degree_of_parallelism();
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
-                                                                              num_left_partitions);
+        bool force_local_passthrough = false;
+        if (auto* scan_op = dynamic_cast<ScanOperatorFactory*>(lhs_operators[0].get())) {
+            const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_op);
+            force_local_passthrough = morsel_queue->need_rebalance();
+        }
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
+                runtime_state(), lhs_operators, num_left_partitions, force_local_passthrough);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple

@@ -28,11 +28,11 @@
 
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "fs/fs_util.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
-#include "util/file_utils.h"
 #include "util/md5.h"
 
 int main(int argc, char* argv[]);
@@ -135,7 +135,7 @@ TEST_F(UserFunctionCacheTest, test_function_type) {
 TEST_F(UserFunctionCacheTest, download_normal) {
     UserFunctionCache cache;
     std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/download";
-    FileUtils::remove_all(lib_dir);
+    fs::remove_all(lib_dir);
     auto st = cache.init(lib_dir);
     ASSERT_TRUE(st.ok());
 

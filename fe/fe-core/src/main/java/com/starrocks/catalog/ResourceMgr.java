@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -101,11 +102,29 @@ public class ResourceMgr implements Writable {
         }
     }
 
+    /**
+     * Replay create or alter resource log
+     * When we replay alter resource log
+     * <p>1. Overwrite the resource </p>
+     * <p>2. Clear cache in memory </p>
+     */
     public void replayCreateResource(Resource resource) {
-        nameToResource.put(resource.getName(), resource);
+        this.writeLock();
+        try {
+            nameToResource.put(resource.getName(), resource);
+        } finally {
+            this.writeUnLock();
+        }
+
+        if (resource instanceof HiveResource || resource instanceof HudiResource) {
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+        }
+        LOG.info("replay create/alter resource log success. resource name: {}", resource.getName());
     }
 
     public void dropResource(DropResourceStmt stmt) throws DdlException {
+        Resource droppedResource;
+
         this.writeLock();
         try {
             String name = stmt.getResourceName();
@@ -114,7 +133,7 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Resource(" + name + ") does not exist");
             }
 
-            onDropResource(resource);
+            droppedResource = resource;
 
             // log drop
             GlobalStateMgr.getCurrentState().getEditLog().logDropResource(new DropResourceOperationLog(name));
@@ -122,6 +141,10 @@ public class ResourceMgr implements Writable {
         } finally {
             this.writeUnLock();
         }
+
+        // Do not invoke HiveRepository::clearCache inside `Resource.rwLock`. Otherwise, it might cause deadlock.
+        // Because HiveRepository::getClient will hold `Resource.rwLock` inside `HiveRepository::xxxLock`
+        onDropResource(droppedResource);
     }
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
@@ -154,10 +177,8 @@ public class ResourceMgr implements Writable {
     }
 
     /**
-     * alter resource statement only support external hive now .
+     * alter resource statement only support external hive/hudi now .
      *
-     * @param stmt
-     * @throws DdlException
      */
     public void alterResource(AlterResourceStmt stmt) throws DdlException {
         this.writeLock();
@@ -179,11 +200,15 @@ public class ResourceMgr implements Writable {
             } else {
                 throw new DdlException("Alter resource statement only support external hive/hudi now");
             }
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
         } finally {
             this.writeUnLock();
         }
+
+        // Do not invoke HiveRepository::clearCache inside `Resource.rwLock`. Otherwise, it might cause deadlock.
+        // Because HiveRepository::getClient will hold `Resource.rwLock` inside `HiveRepository::xxxLock`
+        GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(stmt.getResourceName());
     }
 
     public int getResourceNum() {
@@ -238,5 +263,10 @@ public class ResourceMgr implements Writable {
             }
             return result;
         }
+    }
+
+    public long saveResources(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
     }
 }

@@ -2,8 +2,15 @@
 
 #include "exec/vectorized/cross_join_node.h"
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "common/statusor.h"
 #include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/crossjoin/cross_join_left_operator.h"
 #include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
@@ -11,6 +18,8 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
+#include "exprs/vectorized/literal.h"
+#include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -23,6 +32,13 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
+
+    for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
+        auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
+        RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+        _build_runtime_filters.emplace_back(rf_desc);
+    }
+    DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());
     return Status::OK();
 }
 
@@ -310,7 +326,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
 
         // need row_count to fill in chunk.
         size_t row_count = 0;
-        if (chunk) {
+        if (*chunk) {
             row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
         }
 
@@ -397,7 +413,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
-        ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
         // we get result chunk.
         break;
@@ -509,6 +525,20 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     return Status::OK();
 }
 
+StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
+        ObjectPool* pool, const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, Chunk* chunk,
+        const std::vector<ExprContext*>& ctxs) {
+    std::list<ExprContext*> filters;
+
+    for (int i = 0; i < rf_descs.size(); ++i) {
+        DCHECK_LT(rf_descs[i]->build_expr_order(), ctxs.size());
+        ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_as_runtime_filter(
+                                            pool, ctxs[rf_descs[i]->build_expr_order()], chunk));
+        filters.push_back(expr);
+    }
+    return filters;
+}
+
 void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     ChunkPtr new_chunk = std::make_shared<Chunk>();
 
@@ -549,11 +579,22 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // step 0: construct pipeline end with cross join right operator.
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
+    // define a runtime filter holder
+    context->fragment_context()->runtime_filter_hub()->add_holder(_id);
+
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // communication with CrossJoinLeft through shared_datas.
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
-    auto cross_join_context = std::make_shared<CrossJoinContext>(right_source->degree_of_parallelism());
+
+    CrossJoinContextParams context_params;
+    context_params.num_right_sinkers = right_source->degree_of_parallelism();
+    context_params.plan_node_id = _id;
+    context_params.filters = conjunct_ctxs();
+    context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
+    context_params.rf_descs = std::move(_build_runtime_filters);
+
+    auto cross_join_context = std::make_shared<CrossJoinContext>(std::move(context_params));
 
     // cross_join_right as sink operator
     auto right_factory =

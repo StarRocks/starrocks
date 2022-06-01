@@ -211,6 +211,14 @@ public class CreateTableTest {
                         + "(k1 int, k2 json)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.json_tbl4 \n" +
+                "(k1 int(40), j json, j1 json, j2 json)\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.json_tbl5 \n" +
+                "(k1 int(40), j json, j1 json, j2 json)\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
@@ -234,18 +242,6 @@ public class CreateTableTest {
                         "duplicate key(k1)\n" +
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
-                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "JSON type could only be used in DUPLICATE KEY table",
-                () -> createTable("create table test.json_tbl0\n" +
-                        "(k1 int(40), j json, j1 json, j2 json)\n" +
-                        "unique key(k1)\n" +
-                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "JSON type could only be used in DUPLICATE KEY table",
-                () -> createTable("create table test.json_tbl0\n" +
-                        "(k1 int(40), j json, j1 json, j2 json)\n" +
-                        "primary key(k1)\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
     }
 
@@ -285,12 +281,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_unique_key MODIFY COLUMN k2 JSON"));
         // Add column in unique key
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
@@ -306,12 +298,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ");"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
     }
 
     private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {

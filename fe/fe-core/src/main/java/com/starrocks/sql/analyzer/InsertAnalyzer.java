@@ -100,14 +100,6 @@ public class InsertAnalyzer {
                 }
                 targetColumns.add(column);
             }
-
-            // object column must in mentionedColumns
-            for (Column col : table.getBaseSchema()) {
-                if (col.getType().isOnlyMetricType() && !mentionedColumns.contains(col.getName())) {
-                    throw new SemanticException(
-                            col.getType() + " type column " + col.getName() + " must in insert into columns");
-                }
-            }
         }
 
         for (Column column : table.getBaseSchema()) {
