@@ -12,6 +12,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fmt/format.h"
 
 namespace starrocks {
 
@@ -37,7 +38,7 @@ StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId id) {
     std::lock_guard l(_mtx);
     auto it = _shards.find(id);
     if (it == _shards.end()) {
-        return Status::NotFound("");
+        return Status::NotFound(fmt::format("failed to get shardinfo {}", id));
     }
     return it->second;
 }

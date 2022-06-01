@@ -134,10 +134,10 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
               -DUSE_STAROS=${USE_STAROS} \
-              -Dprotobuf_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib64/cmake/protobuf \
-              -Dabsl_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib64/cmake/absl \
-              -DgRPC_DIR=${STAROS_DIR}/starlet/third_party/grpc_install/lib/cmake/grpc \
-              -Dstarlet_DIR=${STAROS_DIR}/starlet/starlet_install/lib64/cmake ../
+              -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
+              -Dabsl_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/absl \
+              -DgRPC_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib/cmake/grpc \
+              -Dstarlet_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/cmake ../
 else
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\

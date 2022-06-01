@@ -725,7 +725,7 @@ CONF_String(jaeger_endpoint, "");
 
 #ifdef USE_STAROS
 CONF_String(starmgr_addr, "");
-CONF_Int32(starlet_port, "12345");
+CONF_Int32(starlet_port, "9070");
 #endif
 
 } // namespace config

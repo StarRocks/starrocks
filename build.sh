@@ -182,19 +182,6 @@ else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
-if [ "${USE_STAROS}" == "ON"  -a ! -f "${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/libstarlet.a" ]; then
-    echo "start to build starlet"
-    if [ -f "${STARROCKS_THIRDPARTY}/build-thirdparty.sh"  ]; then
-        sh -x ${STARROCKS_THIRDPARTY}/build-thirdparty.sh --build-starlet
-    else
-        sh -x ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh --build-starlet
-    fi
-    if [ $? != 0 ] ; then
-        echo "failed to build starlet"
-        exit 1
-    fi
-fi
-
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
     CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}

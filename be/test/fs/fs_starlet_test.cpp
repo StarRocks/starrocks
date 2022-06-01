@@ -31,9 +31,9 @@ public:
 
     std::string StarletPath(std::string_view path) {
         if (path.front() == '/') {
-            return fmt::format("staros://s3://{}.s3.{}.{}{}", kBucket, kRegion, kDomain, path);
+            return fmt::format("staros_s3://{}.s3.{}.{}{}", kBucket, kRegion, kDomain, path);
         } else {
-            return fmt::format("staros://s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
+            return fmt::format("staros_s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
         }
     }
 
@@ -77,7 +77,7 @@ TEST_F(StarletFileSystemTest, test_write_and_read) {
 }
 
 TEST_F(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros://http://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_http://"));
     bool created = false;
 
     //
@@ -199,7 +199,7 @@ TEST_F(StarletFileSystemTest, test_directory) {
 }
 
 TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros://s3://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -241,7 +241,7 @@ TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
 }
 
 TEST_F(StarletFileSystemTest, test_delete_nonexist_file) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros://s3://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 

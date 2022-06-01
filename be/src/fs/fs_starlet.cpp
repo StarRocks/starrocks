@@ -32,23 +32,12 @@ static Status to_status(absl::Status absl_status) {
     }
 }
 
-static const char* const kStarletPrefix = "staros://";
-std::shared_ptr<staros::starlet::S3URI> parse_starlet_path(const std::string& path) {
-    auto uri = std::make_shared<staros::starlet::S3URI>();
+static const char* const kStarletPrefix = "staros_";
+std::string parse_starlet_path(const std::string& path) {
     if (HasPrefixString(path, kStarletPrefix)) {
-        uri->parse(path.substr(strlen(kStarletPrefix)));
+        return path.substr(strlen(kStarletPrefix));
     } else {
-        uri->parse(path);
-    }
-    return uri;
-};
-
-std::string format_starlet_path(std::shared_ptr<staros::starlet::S3URI> uri) {
-    //    https://bucket-name.s3.Region.amazonaws.com/key-name
-    if (uri->key().front() == '/') {
-        return fmt::format("{}://{}.{}{}", uri->scheme(), uri->bucket(), uri->endpoint(), uri->key());
-    } else {
-        return fmt::format("{}://{}.{}/{}", uri->scheme(), uri->bucket(), uri->endpoint(), uri->key());
+        return path;
     }
 };
 
@@ -100,14 +89,18 @@ public:
     StarletOutputStream(StarletOutputStream&&) = delete;
     void operator=(StarletOutputStream&&) = delete;
     Status skip(int64_t count) override { return to_status(_ptr->skip(count)); }
-    StatusOr<Buffer> get_direct_buffer() override { return Status::NotSupported("Not supported"); }
+    StatusOr<Buffer> get_direct_buffer() override {
+        return Status::NotSupported("StarletOutputStream::get_direct_buffer");
+    }
     StatusOr<Position> get_direct_buffer_and_advance(int64_t size) override {
-        return Status::NotSupported("Not supported");
+        return Status::NotSupported("StarletOutputStream::get_direct_buffer_and_advance");
     }
 
     Status write(const void* data, int64_t size) override { return to_status(_ptr->write(data, size)); }
     bool allows_aliasing() const override { return false; }
-    Status write_aliased(const void* data, int64_t size) override { return Status::NotSupported("Not supported"); }
+    Status write_aliased(const void* data, int64_t size) override {
+        return Status::NotSupported("StarletOutputStream::write_aliased");
+    }
     Status close() override { return to_status(_ptr->close()); }
 
 private:
@@ -132,9 +125,12 @@ public:
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
-        auto uri = parse_starlet_path(path);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(path);
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", path));
+        }
         auto st = object_store->new_object(format_str);
         if (!st.ok()) {
             return to_status(st.status());
@@ -145,9 +141,12 @@ public:
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        auto uri = parse_starlet_path(path);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(path);
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", path));
+        }
         auto st = object_store->new_object(format_str);
         if (!st.ok()) {
             return to_status(st.status());
@@ -166,9 +165,12 @@ public:
         if (!path.empty() && path.back() == '/') {
             return Status::NotSupported(fmt::format("Starlet: cannot create file with name ended with '/': {}", path));
         }
-        auto uri = parse_starlet_path(path);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(path);
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", path));
+        }
         auto st = object_store->new_object(format_str);
         if (!st.ok()) {
             return to_status(st.status());
@@ -179,47 +181,45 @@ public:
     }
 
     Status delete_file(const std::string& path) override {
-        auto uri = parse_starlet_path(path);
-        if (uri->key().empty()) {
-            return Status::InvalidArgument(fmt::format("root object can not be deleted", path));
-        }
-        if (uri->key().back() == '/') {
-            return Status::InvalidArgument(fmt::format("object {} with slash not name a file", path));
-        }
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(path);
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", path));
+        }
         auto st = object_store->delete_object(format_str);
         return to_status(st);
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        auto uri = parse_starlet_path(dir);
-        auto format_str = format_starlet_path(uri);
-
-        if (!uri->key().empty() && uri->key().back() != '/') {
+        auto format_str = parse_starlet_path(dir);
+        if (format_str.back() != '/') {
             format_str.push_back('/');
         }
 
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", dir));
+        }
         auto st = object_store->iterate_objects(format_str, cb);
         return to_status(st);
     }
 
     Status create_dir(const std::string& dirname) override {
-        auto uri = parse_starlet_path(dirname);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(dirname);
         auto st = is_directory(format_str);
         if (st.ok() && st.value()) {
             return Status::AlreadyExist(dirname);
         }
-        if (uri->key().empty() || uri->key() == "/") {
-            return Status::AlreadyExist(fmt::format("root directory already exist"));
-        }
-
-        if (uri->key().back() != '/') {
+        if (format_str.back() != '/') {
             format_str.push_back('/');
         }
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", dirname));
+        }
         auto res = object_store->create_empty_object(format_str);
         return to_status(res);
     }
@@ -238,14 +238,14 @@ public:
     Status create_dir_recursive(const std::string& dirname) override { return create_dir_if_missing(dirname, nullptr); }
 
     Status delete_dir(const std::string& dirname) override {
-        auto uri = parse_starlet_path(dirname);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(dirname);
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
-        bool dir_empty = false;
-        if (uri->key().empty() || uri->key() == "/") {
-            return Status::NotSupported("Cannot delete root directory of StarletFS");
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", dirname));
         }
-        if (uri->key().back() != '/') {
+        bool dir_empty = true;
+        if (format_str.back() != '/') {
             format_str.push_back('/');
         }
         auto cb = [&dir_empty](std::string_view file) {
@@ -264,14 +264,14 @@ public:
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        auto uri = parse_starlet_path(dirname);
-        auto format_str = format_starlet_path(uri);
+        auto format_str = parse_starlet_path(dirname);
 
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
-        if (uri->key().empty() || uri->key() == "/") {
-            return Status::NotSupported("Cannot delete root directory of StarletFS");
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", dirname));
         }
-        if (uri->key().back() != '/') {
+        if (format_str.back() != '/') {
             format_str.push_back('/');
         }
         auto st = object_store->delete_objects(format_str);
@@ -280,14 +280,14 @@ public:
 
     // in starlet filesystem dir is an object with suffix '/' ;
     StatusOr<bool> is_directory(const std::string& path) override {
-        auto uri = parse_starlet_path(path);
-        auto format_str = format_starlet_path(uri);
-        // root directory
-        if (uri->key().empty() || uri->key() == "/") {
-            return true;
-        }
+        auto format_str = parse_starlet_path(path);
+        bool dir_empty = true;
 
+        DCHECK(g_starlet != nullptr);
         staros::starlet::ObjectStorePtr object_store = g_starlet->get_store(format_str);
+        if (object_store == nullptr) {
+            return Status::InternalError(fmt::format("Failed to get store from starlet path {}", path));
+        }
         auto st = object_store->object_exist(format_str);
         if (!st.ok()) {
             return to_status(st.status());
@@ -301,6 +301,18 @@ public:
             return to_status(st.status());
         }
         if (*st) {
+            return true;
+        }
+
+        auto cb = [&dir_empty](std::string_view file) {
+            dir_empty = false;
+            return true;
+        };
+        auto res = object_store->iterate_objects(format_str, cb);
+        if (!res.ok()) {
+            return to_status(res);
+        }
+        if (!dir_empty) {
             return true;
         }
         return Status::NotFound(path);
@@ -322,30 +334,32 @@ public:
                          .available = std::numeric_limits<int64_t>::max()};
     }
 
-    Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
+    Status path_exists(const std::string& path) override {
+        return Status::NotSupported("StarletFileSystem::path_exists");
+    }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
-        return Status::NotSupported("S3FileSystem::get_children");
+        return Status::NotSupported("StarletFileSystem::get_children");
     }
 
     Status canonicalize(const std::string& path, std::string* file) override {
-        return Status::NotSupported("S3FileSystem::canonicalize");
+        return Status::NotSupported("StarletFileSystem::canonicalize");
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("S3FileSystem::get_file_size");
+        return Status::NotSupported("StarletFileSystem::get_file_size");
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
-        return Status::NotSupported("S3FileSystem::get_file_modified_time");
+        return Status::NotSupported("StarletFileSystem::get_file_modified_time");
     }
 
     Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("S3FileSystem::rename_file");
+        return Status::NotSupported("StarletFileSystem::rename_file");
     }
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
-        return Status::NotSupported("S3FileSystem::link_file");
+        return Status::NotSupported("StarletFileSystem::link_file");
     }
 };
 
