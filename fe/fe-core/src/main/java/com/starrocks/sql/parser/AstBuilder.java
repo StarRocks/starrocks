@@ -2276,7 +2276,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
             }
             long intervalVal = 0;
-
             TimestampArithmeticExpr.TimeUnit timeUnit = null;
             if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
@@ -2284,6 +2283,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr expr = intervalLiteral.getValue();
                 if (expr instanceof IntLiteral) {
                     intervalVal = ((IntLiteral) expr).getLongValue();
+                    if (intervalVal < 0) {
+                        throw new IllegalArgumentException("Unsupported negative interval value: " + expr);
+                    }
                 } else {
                     throw new IllegalArgumentException("Unsupported interval expr: " + expr);
                 }

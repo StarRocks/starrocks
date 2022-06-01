@@ -289,6 +289,7 @@ public class MaterializedViewAnalyzer {
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     LocalDateTime startTime = async.getStartTime();
+                    final long step = async.getStep();
                     TimestampArithmeticExpr.TimeUnit timeUnit = async.getTimeUnit();
                     if (startTime != null && timeUnit == null) {
                         throw new SemanticException("please input interval clause");
@@ -304,6 +305,9 @@ public class MaterializedViewAnalyzer {
                         if (!async.getSupportedTimeUnitType().contains(timeUnit)) {
                             throw new IllegalArgumentException("Unsupported time unit");
                         }
+                    }
+                    if (step < 0) {
+                        throw new IllegalArgumentException("Unsupported negative step value");
                     }
                 }
             } else {
