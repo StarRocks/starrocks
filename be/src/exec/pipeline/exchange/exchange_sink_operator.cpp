@@ -608,7 +608,7 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chu
         chunk->set_data_size(chunk->data().size());
         attachment.append(chunk->data());
         chunk->clear_data();
-        // If the request is too big, free the memory in advance to avoid OOM
+        // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
             chunk->mutable_data()->shrink_to_fit();
         }
