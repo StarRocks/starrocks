@@ -83,27 +83,26 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     for (size_t i = 0; i < itrs.size(); i++) {
-        auto itr = itrs[i].get();
-        if (itr == nullptr) {
-            continue;
-        }
         auto& dest = _upserts[i];
         auto col = pk_column->clone();
-        auto num_rows = beta_rowset->segments()[i]->num_rows();
-        col->reserve(num_rows);
-        while (true) {
-            chunk->reset();
-            auto st = itr->get_next(chunk);
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+        auto itr = itrs[i].get();
+        if (itr != nullptr) {
+            auto num_rows = beta_rowset->segments()[i]->num_rows();
+            col->reserve(num_rows);
+            while (true) {
+                chunk->reset();
+                auto st = itr->get_next(chunk);
+                if (st.is_end_of_file()) {
+                    break;
+                } else if (!st.ok()) {
+                    return st;
+                } else {
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                }
             }
+            itr->close();
+            CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
         }
-        itr->close();
-        CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
         dest = std::move(col);
     }
     for (const auto& upsert : upserts()) {
