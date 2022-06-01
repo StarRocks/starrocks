@@ -59,6 +59,8 @@ public:
     FragmentContext* fragment_context() { return _fragment_context; }
 
 private:
+    static constexpr int kLocalExchangeBufferChunks = 8;
+
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
     uint32_t _next_pipeline_id = 0;
