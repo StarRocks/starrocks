@@ -807,6 +807,65 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
     }
 }
 
+TEST_F(AggregateTest, test_window_funnel) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME)),
+             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
+              AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_ARRAY))};
+
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("window_funnel", TYPE_DATETIME, TYPE_INT, false);
+    ColumnBuilder<TYPE_BOOLEAN> builder(config::vector_chunk_size);
+    // Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN
+    builder.append(true);
+    builder.append(true);
+    builder.append(true);
+    builder.append(true);
+    builder.append(true);
+    builder.append(true);
+    auto data_col = builder.build(false);
+
+    auto offsets = UInt32Column::create();
+    offsets->append(2); // [true, true]
+    offsets->append(4); // [true, true]
+    offsets->append(6); // [true, true]
+    auto column4 = ArrayColumn::create(data_col, offsets);  // array_column, 4th column
+
+    auto column1 = Int64Column::create();   // first column, but there use const.
+    column1->append(1800);
+    // column1->append(1800);
+
+    auto column2 = TimestampColumn::create();
+    column2->append(TimestampValue::create(2022, 6, 10, 12, 30, 30));  // 2nd column.
+
+    auto const_column1 = ColumnHelper::create_const_column<TYPE_BIGINT>(1800, 1);
+    auto column3 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+    Columns const_columns;
+    const_columns.emplace_back(const_column1);    // first column
+    const_columns.emplace_back(column3);
+    const_columns.emplace_back(column3);         // 3rd const column
+    local_ctx->impl()->set_constant_columns(const_columns);
+
+    std::vector<const Column*> raw_column;  // to column list.
+    raw_column.resize(4);
+    raw_column[0] = column1.get();
+    raw_column[1] = column2.get();
+    raw_column[2] = column3.get();
+    raw_column[3] = column4.get();
+
+    using ResultColumn = typename ColumnTraits<int32_t>::ColumnType;
+    auto result_column = ResultColumn::create();
+    auto state = ManagedAggrState::create(ctx, func);
+    func->update(local_ctx.get(), raw_column.data(), state->state(), 0);
+    func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+    // args: (1800, timestamp, 0, [true, true])
+    // only have one row, but condition is all true, so result is 2.
+    ASSERT_EQ(2, result_column->get_data()[0]);
+}
+
 TEST_F(AggregateTest, test_dict_merge) {
     const AggregateFunction* func = get_aggregate_function("dict_merge", TYPE_ARRAY, TYPE_VARCHAR, false);
     ColumnBuilder<TYPE_VARCHAR> builder(config::vector_chunk_size);
