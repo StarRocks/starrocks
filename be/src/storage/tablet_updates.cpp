@@ -615,15 +615,15 @@ private:
     TabletSharedPtr _tablet;
 };
 
-void TabletUpdates::_check_for_apply() {
+Status TabletUpdates::_check_for_apply() {
     // assuming _lock is already hold
     if (_apply_stopped) {
-        return;
+        return Status::Cancelled("apply stopped");
     }
     _apply_running_lock.lock();
     if (_apply_running || _apply_version_idx + 1 == _edit_version_infos.size()) {
         _apply_running_lock.unlock();
-        return;
+        return Status::Cancelled("apply running or no more edit_version task");
     }
     _apply_running = true;
     _apply_running_lock.unlock();
@@ -634,7 +634,9 @@ void TabletUpdates::_check_for_apply() {
         std::string msg = Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
         LOG(ERROR) << msg;
         _set_error(msg);
+        return Status::InternalError("apply task submit error");
     }
+    return Status::OK();
 }
 
 void TabletUpdates::do_apply() {
@@ -1183,7 +1185,10 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
               << " #pending:" << _pending_commits.size()
               << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(1) << "update compaction commit " << _debug_string(false, true);
-    _check_for_apply();
+    st = _check_for_apply();
+    if (!st.ok()) {
+        return st;
+    }
     *commit_version = edit_version_info_ptr->version;
     return Status::OK();
 }

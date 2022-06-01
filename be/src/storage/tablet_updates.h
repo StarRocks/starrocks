@@ -256,7 +256,7 @@ private:
 
     // check if needs submit an async apply task
     // assuming _lock is already hold
-    void _check_for_apply();
+    Status _check_for_apply();
 
     void _sync_apply_version_idx(const EditVersion& v);
 
