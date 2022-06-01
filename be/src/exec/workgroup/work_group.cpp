@@ -470,7 +470,7 @@ bool WorkGroupManager::get_owners_of_scan_worker(int worker_id, WorkGroupPtr run
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, 1,
-                                                  0.5, 10, WorkGroupType::WG_DEFAULT);
+                                                  1.0, 0, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
 }
 
