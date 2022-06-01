@@ -1,6 +1,6 @@
 # Routine Load
 
-本文主要介绍Routine Load的使用方式和常见问题。
+例行导入（Routine Load）功能，支持提交一个常驻的导入任务，通过不断的从指定的数据源读取数据，将数据导入到 StarRocks 中。 目前仅支持通过无认证或者 SSL 认证方式，从 Kakfa 导入文本格式（CSV）的数据。 本文主要介绍 Routine Load 的使用方式和常见问题。
 
 ## 支持的数据格式
 
@@ -14,9 +14,10 @@
 以从一个本地 Kafka 集群导入 CSV 数据为例：
 
 ~~~sql
-CREATE ROUTINE LOAD load_test.routine_load_wikipedia ON routine_wiki_edit
+CREATE ROUTINE LOAD load_test.routine_wiki_edit_1589191587 ON routine_wiki_edit
 COLUMNS TERMINATED BY ",",
 COLUMNS (event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled, delta, added, deleted)
+WHERE event_time > "2022-01-01 00:00:00",
 PROPERTIES
 (
   "desired_concurrent_number" = "3",
@@ -32,34 +33,30 @@ FROM KAFKA
 
 **参数说明：**
 
-* **job_name**：必填。导入作业的名称，前缀可以携带导入数据库名称，常见命名方式为时间戳+表名。
-  单个 database 内，任务名称不可重复。
-* **table_name**：必填。导入的目标表的名称。
-* **COLUMN TERMINATED 子句**：选填。指定源数据文件中的列分隔符，分隔符默认为：\t。
+* **job_name**：必填。导入作业的名称，本示例为`routine_wiki_edit_1589191587`。导入作业的常见命名方式为表名+时间戳。在相同数据库内，导入作业的名称不可重复。
+  > 您可以在**job_name**前指定导入数据库名称。例如`load_test.routine_wiki_edit_1589191587`。
+* **table_name**：必填。导入的目标表的名称。本示例为`routine_wiki_edit`。
+* **COLUMN TERMINATED BY 子句**：选填。指定源数据文件中的列分隔符，分隔符默认为：\t。
 * **COLUMN 子句** ：选填。用于指定源数据中列和表中列的映射关系。
-
   * 映射列：如目标表有三列 col1, col2, col3 ，源数据有 4 列，其中第 1、2、4 列分别对应 col2, col1, col3，则书写如下：COLUMNS (col2, col1, temp, col3), ，其中 temp 列为不存在的一列，用于跳过源数据中的第三列。
   * 衍生列：除了直接读取源数据的列内容之外，StarRocks 还提供对数据列的加工操作。假设目标表后加入了第四列 col4 ，其结果由 col1 + col2 产生，则可以书写如下：COLUMNS (col2, col1, temp, col3, col4 = col1 + col2),。
+* **WHERE 子句**：过滤条件，只有满足过滤条件的数据才会导入StarRocks中。过滤条件中所指定的列可以是映射列或衍生列。例如，如果仅需要导入 col1 大于 100 并且 col2 等于 1000 的数据，则需要传入`WHERE col1 > 100 and col2 = 1000`。
 * **PROPERTIES 子句**：选填。用于指定导入作业的通用参数。
+  * **desired_concurrent_number**：导入并发度，指定一个导入作业最多会被分成多少个子任务执行。必须大于 0，默认为 3。子任务最终的个数，由多个参数决定。当前 routine load 并发取决于以下参数：
 
-* **desired_concurrent_number**：导入并发度，指定一个导入作业最多会被分成多少个子任务执行。必须大于 0，默认为 3。子任务最终的个数，由多个参数决定。当前 routine load 并发取决于以下参数：
+    ~~~plain text
+    min(min(partitionNum,min(desireTaskConcurrentNum,aliveBeNum)),max_routine_load_task_concurrent_num)
+    ~~~
 
-  ~~~plain text
-  min(min(partitionNum,min(desireTaskConcurrentNum,aliveBeNum)),max_routine_load_task_concurrent_num)
-  ~~~
+    * partitionNum：Kafka 分区数。
+    * desireTaskConcurrentNum： desired_concurrent_number 任务配置，参考当前参数释义。
+    * aliveBeNum：状态为 Alive 的 BE 节点个数。
+    * max_routine_load_task_concurrent_num：be.conf 配置项，默认为5，具体可参考 [参数配置](../administration/Configuration.md)。
 
-  * partitionNum：kafka 分区数
-  * desireTaskConcurrentNum： desired_concurrent_number 任务配置，参考当前参数释义
-  * aliveBeNum：状态为 Alive 的 be 节点个数
-  * max_routine_load_task_concurrent_num：be.conf 配置项，默认为5，具体可参考 [参数配置](../administration/Configuration.md)
-
-* **max_batch_interval**：每个子任务最大执行时间，单位是「秒」。范围为 5 到 60。默认为 10。**1.15 版本后**: 该参数是子任务的调度时间，即任务多久执行一次，任务的消费数据时间为 fe.conf 中的 routine_load_task_consume_second，默认为 3s，
-任务的执行超时时间为 fe.conf 中的 routine_load_task_timeout_second，默认为 15s。
-* **max_error_number**：采样窗口内，允许的最大错误行数。必须大于等于 0。默认是 0，即不允许有错误行。注意：被 where 条件过滤掉的行不算错误行。
-
-* **DATA_SOURCE**：指定数据源，请使用 KAFKA。
-* **data_source_properties**: 指定数据源相关的信息。
-
+  * **max_batch_interval**：每个子任务最大执行时间，单位是「秒」。范围为 5 到 60。默认为 10。**1.15 版本后**: 该参数是子任务的调度间隔，即任务多久执行一次，任务的消费数据时间为 fe.conf 中的 routine_load_task_consume_second，默认为 3s，
+  任务的执行超时时间为 fe.conf 中的 routine_load_task_timeout_second，默认为 15s。
+  * **max_error_number**：采样窗口内，允许的最大错误行数。必须大于等于 0。默认是 0，即不允许有错误行。注意：被 where 条件过滤掉的行不算错误行。
+* **FROM 子句**：指定数据源，以及数据源的相关信息。本示例中数据源为 KAFKA，数据源相关的信息包含如下两项。
   * **kafka_broker_list**：Kafka 的 broker 连接信息，格式为 ip: host。多个 broker 之间以逗号分隔。
   * **kafka_topic**：指定要订阅的 Kafka 的 topic。
 
@@ -95,7 +92,7 @@ MySQL [load_test] > SHOW ROUTINE LOAD\G;
 *************************** 1. row ***************************
 
                   Id: 14093
-                Name: routine_load_wikipedia
+                Name: routine_wiki_edit_1589191587
           CreateTime: 2020-05-16 16:00:48
            PauseTime: N/A
              EndTime: N/A
@@ -115,7 +112,7 @@ ReasonOfStateChanged:
 1 row in set (0.00 sec)
 ~~~
 
-可以看到示例中创建的名为 routine_load_wikipedia 的导入任务，其中重要的字段释义：
+可以看到示例中创建的名为 routine_wiki_edit_1589191587 的导入任务，其中重要的字段释义：
 
 * State：导入任务状态。RUNNING，表示该导入任务处于持续运行中。
 * Statistic 为进度信息，记录了从创建任务开始后的导入信息。
@@ -134,7 +131,7 @@ ReasonOfStateChanged:
 
 ~~~sql
 MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD WHERE Jobname="routine_load_wikipedia"\G;
+MySQL [load_test] > SHOW ROUTINE LOAD WHERE Jobname="routine_wiki_edit_1589191587"\G;
 *************************** 1. row ***************************
               TaskId: 645da10b-0a5c-4e90-84f0-03b33ec58b68
                TxnId: 2776810
@@ -150,11 +147,11 @@ DataSourceProperties: {"0":13634684}
 1 rows in set (0.00 sec)
 ~~~
 
-可以看到示例中创建的名为 routine_load_wikipedia 的导入子任务，其中重要的字段释义：
+可以看到示例中创建的名为 routine_wiki_edit_1589191587 的导入子任务，其中重要的字段释义：
 
 * TaskId：子任务 ID
 * TxnId：本次导入任务事物 ID
-* JobId：任务ID，例如例子中 routine_load_wikipedia 对应的 ID
+* JobId：任务ID，例如例子中 routine_wiki_edit_1589191587 对应的 ID
 * DataSourceProperties：已消费 Kafka 分区的OFFSET
 
 ### 暂停导入任务
@@ -170,12 +167,12 @@ PAUSE ROUTINE LOAD FOR [job_name];
 可以参考 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md)
 
 ~~~sql
-MySQL [load_test] > PAUSE ROUTINE LOAD FOR routine_load_wikipedia;
+MySQL [load_test] > PAUSE ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
 MySQL [load_test] > SHOW ROUTINE LOAD\G;
 *************************** 1. row ***************************
                   Id: 14093
-                Name: routine_load_wikipedia
+                Name: routine_wiki_edit_1589191587
           CreateTime: 2020-05-16 16:00:48
            PauseTime: 2020-05-16 16:03:39
              EndTime: N/A
@@ -210,12 +207,12 @@ RESUME ROUTINE LOAD FOR [job_name];
 可以参考 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
 
 ~~~sql
-MySQL [load_test] > RESUME ROUTINE LOAD FOR routine_load_wikipedia;
+MySQL [load_test] > RESUME ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
 MySQL [load_test] > SHOW ROUTINE LOAD\G;
 *************************** 1. row ***************************
                   Id: 14093
-                Name: routine_load_wikipedia
+                Name: routine_wiki_edit_1589191587
           CreateTime: 2020-05-16 16:00:48
            PauseTime: N/A
              EndTime: N/A
@@ -239,7 +236,7 @@ ReasonOfStateChanged:
 MySQL [load_test] > SHOW ROUTINE LOAD\G;
 *************************** 1. row ***************************
                   Id: 14093
-                Name: routine_load_wikipedia
+                Name: routine_wiki_edit_1589191587
           CreateTime: 2020-05-16 16:00:48
            PauseTime: N/A
              EndTime: N/A
@@ -295,12 +292,12 @@ STOP ROUTINE LOAD FOR [job_name];
 可以参考 [STOP ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
 
 ~~~sql
-MySQL [load_test] > STOP ROUTINE LOAD FOR routine_load_wikipedia;
+MySQL [load_test] > STOP ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
 MySQL [load_test] > SHOW ALL ROUTINE LOAD\G;
 *************************** 1. row ***************************
                   Id: 14093
-                Name: routine_load_wikipedia
+                Name: routine_wiki_edit_1589191587
           CreateTime: 2020-05-16 16:00:48
            PauseTime: N/A
              EndTime: 2020-05-16 16:08:25
