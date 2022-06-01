@@ -186,6 +186,18 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     *  for task set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+
+    /**
+     *  for task run set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+
+    /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
      */
@@ -726,12 +738,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int export_running_job_num_limit = 5;
     /**
-     * Limitation of the pending TaskRun.
-     * Default is 20.
-     * 0 is unlimited
+     * Limitation of the pending TaskRun queue length.
+     * Default is 500.
      */
     @ConfField(mutable = false)
-    public static int pending_task_run_num_limit = 20;
+    public static int task_runs_queue_length = 500;
+    /**
+     * Limitation of the running TaskRun.
+     * Default is 20.
+     */
+    @ConfField(mutable = false)
+    public static int task_runs_concurrency = 20;
     /**
      * Default timeout of export jobs.
      */
