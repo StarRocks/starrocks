@@ -180,7 +180,6 @@ Status DeltaWriter::_init() {
     }
 
     _tablet_schema = writer_context.tablet_schema;
-    _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _set_state(kWriting);
     return Status::OK();
@@ -188,6 +187,11 @@ Status DeltaWriter::_init() {
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // Delay the creation memtables until we write data.
+    // Because for the tablet which doesn't have any written data, we will not use their memtables.
+    if (_mem_table == nullptr) {
+        _reset_mem_table();
+    }
     auto state = _get_state();
     if (state != kWriting) {
         return Status::InternalError(
@@ -225,7 +229,10 @@ Status DeltaWriter::close() {
     case kClosed:
         return Status::OK();
     case kWriting:
-        auto st = _flush_memtable_async();
+        Status st = Status::OK();
+        if (_mem_table != nullptr) {
+            st = _flush_memtable_async();
+        }
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
