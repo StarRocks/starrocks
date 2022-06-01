@@ -37,11 +37,14 @@ public class AnalyzeManager implements Writable {
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
 
+    private final Map<Long, AnalyzeStatus> analyzeStatusMap;
+
     private static final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
+        analyzeStatusMap = Maps.newConcurrentMap();
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
@@ -131,6 +134,32 @@ public class AnalyzeManager implements Writable {
         analyzeJobMap.remove(job.getId());
     }
 
+    public void addAnalyzeStatus(AnalyzeJob job) {
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(job.getId(), job.getDbId(), job.getTableId(),
+                job.getType(),
+                job.getScheduleType(),
+                LocalDateTime.now());
+        analyzeStatusMap.put(job.getTableId(), analyzeStatus);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(analyzeStatus);
+    }
+
+    public void updateAnalyzeStatusWithLog(AnalyzeJob job) {
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(job.getId(), job.getDbId(), job.getTableId(),
+                job.getType(),
+                job.getScheduleType(),
+                LocalDateTime.now());
+        analyzeStatusMap.put(job.getTableId(), analyzeStatus);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(analyzeStatus);
+    }
+
+    public void replayAddAnalyzeStatus(AnalyzeStatus status) {
+        analyzeStatusMap.put(status.getTableId(), status);
+    }
+
+    public List<AnalyzeStatus> getAllAnalyzeStatus() {
+        return Lists.newLinkedList(analyzeStatusMap.values());
+    }
+
     public void readFields(DataInputStream dis) throws IOException {
         // read job
         String s = Text.readString(dis);
@@ -141,14 +170,20 @@ public class AnalyzeManager implements Writable {
                 replayAddAnalyzeJob(job);
             }
         }
+
+        if (null != data && null != data.status) {
+            for (AnalyzeStatus status : data.status) {
+                replayAddAnalyzeStatus(status);
+            }
+        }
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         // save history
-        List<AnalyzeJob> historyList = getAllAnalyzeJobList();
         SerializeData data = new SerializeData();
-        data.jobs = historyList;
+        data.jobs = getAllAnalyzeJobList();
+        data.status = getAllAnalyzeStatus();
 
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(out, s);
@@ -172,6 +207,9 @@ public class AnalyzeManager implements Writable {
     private static class SerializeData {
         @SerializedName("analyzeJobs")
         public List<AnalyzeJob> jobs;
+
+        @SerializedName("analyzeStatus")
+        public List<AnalyzeStatus> status;
     }
 
     // This task is used to expire cached statistics

@@ -803,6 +803,7 @@ public class StmtExecutor {
         }
 
         GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeStatus(job);
     }
 
     private void handleAddSqlBlackListStmt() {

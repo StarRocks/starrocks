@@ -71,6 +71,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
@@ -837,6 +838,11 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
+                case OperationType.OP_ADD_ANALYZE_STATUS: {
+                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
+                    break;
+                }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
@@ -1463,6 +1469,10 @@ public class EditLog {
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
+    }
+
+    public void logAddAnalyzeStatus(AnalyzeStatus status) {
+        logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
