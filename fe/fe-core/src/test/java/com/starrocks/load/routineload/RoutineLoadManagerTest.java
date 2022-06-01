@@ -846,6 +846,9 @@ public class RoutineLoadManagerTest {
         long saveChecksum = loadManager.saveRoutineLoadJobs(dos, checksum);
         dos.close();
 
+        // make sure it can not be clean
+        idToRoutineLoadJob.get(goodJob.getId()).endTimestamp = System.currentTimeMillis() + 100000L;
+
         // 6. clean expire
         loadManager.cleanOldRoutineLoadJobs();
         Assert.assertEquals(1, idToRoutineLoadJob.size());
