@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 #pragma once
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
@@ -115,6 +117,12 @@ private:
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkQueue>> _buffered_chunk_queues;
 };
 
+// PipelineSenderQueue will be called in the pipeline execution threads.
+// In order to avoid thread blocking caused by lock competition,
+// we try to use lock-free structures in the relevant interface as much as possible.
+// It should be noted that some atomic variables are updated at the same time under the protection of lock,
+// which may not be completely consistent when reading without lock, but will eventually be consistent.
+// This won't affect the correctness in our usage scenario.
 class DataStreamRecvr::PipelineSenderQueue : public DataStreamRecvr::SenderQueue {
 public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
@@ -155,28 +163,8 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
-
-        ChunkItem() {}
-        ChunkItem(int64_t bytes, int32_t seq, ChunkUniquePtr ptr, google::protobuf::Closure* cls)
-                : chunk_bytes(bytes), driver_sequence(seq), chunk_ptr(std::move(ptr)), closure(cls) {}
-
-        ChunkItem(ChunkItem&& rhs) {
-            chunk_bytes = rhs.chunk_bytes;
-            driver_sequence = rhs.driver_sequence;
-            chunk_ptr.swap(rhs.chunk_ptr);
-            closure = rhs.closure;
-            rhs.closure = nullptr;
-        }
-
-        ChunkItem& operator=(ChunkItem&& rhs) {
-            chunk_bytes = rhs.chunk_bytes;
-            driver_sequence = rhs.driver_sequence;
-            chunk_ptr.swap(rhs.chunk_ptr);
-            closure = rhs.closure;
-            rhs.closure = nullptr;
-            return *this;
-        }
     };
+
     class ChunkQueue {
     public:
         ChunkQueue() {}
@@ -215,6 +203,7 @@ private:
 
     private:
         moodycamel::ConcurrentQueue<ChunkItem> _chunks;
+        // ConcurrentQueue doesn't provide an interface to get accurate size, so we maintain it ourselves
         std::atomic<size_t> _size{0};
     };
 
@@ -224,7 +213,8 @@ private:
     typedef SpinLock Mutex;
     Mutex _lock;
 
-    // one queue per driver sequence
+    // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
+    // otherwise, we will only use the first item
     std::vector<ChunkQueue> _chunk_queues;
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;

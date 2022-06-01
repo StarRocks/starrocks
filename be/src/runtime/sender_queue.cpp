@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 #include "runtime/sender_queue.h"
 
 #include "column/chunk.h"
@@ -611,9 +613,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // 4. receive request_2 and get nothing
             // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
             // but not the request's driver_sequence
-            // ChunkItem item(static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
-            //                nullptr);
-            chunks.emplace_back(static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first), nullptr);
+            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), swap_chunks[i].second, std::move(swap_chunks[i].first),
+                           nullptr};
+            chunks.emplace_back(std::move(item));
             bytes += swap_bytes[i];
         }
         total_chunk_bytes += bytes;
@@ -625,7 +627,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            ChunkItem item(chunk_bytes, driver_sequence, std::move(chunk), nullptr);
+            ChunkItem item{chunk_bytes, driver_sequence, std::move(chunk), nullptr};
             chunks.emplace_back(std::move(item));
             total_chunk_bytes += chunk_bytes;
         }
