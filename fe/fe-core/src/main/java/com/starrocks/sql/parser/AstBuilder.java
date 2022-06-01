@@ -84,6 +84,7 @@ import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -259,6 +260,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowTableStmt(database, isVerbose, null);
         }
+    }
+
+    @Override
+    public ParseNode visitShowCreateTableStatement(StarRocksParser.ShowCreateTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        boolean isMaterializedView = context.MATERIALIZED() != null && context.VIEW() != null;
+        if (isMaterializedView) {
+            return new ShowCreateTableStmt(targetTableName, false, true);
+        }
+        boolean isView = context.VIEW() != null;
+        if (isView) {
+            return new ShowCreateTableStmt(targetTableName, true);
+        }
+        return new ShowCreateTableStmt(targetTableName);
     }
 
     @Override

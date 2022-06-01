@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -67,6 +68,15 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateTableStmt(ShowCreateTableStmt node, ConnectContext context) {
+            if (node.getTbl() == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
+            }
+            node.getTbl().normalization(context);
             return null;
         }
 

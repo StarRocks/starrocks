@@ -90,6 +90,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -666,12 +667,27 @@ public class ShowExecutor {
             }
 
             if (table instanceof View) {
+                if (showStmt.isMaterializedView()) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), "MATERIALIZED VIEW");
+                }
                 View view = (View) table;
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
                 resultSet = new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
+            } else if (table instanceof MaterializedView) {
+                if (showStmt.isView()) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), "VIEW");
+                }
+                rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
+                resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
             } else {
+                if (showStmt.isMaterializedView()) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), "MATERIALIZED VIEW");
+                }
                 if (showStmt.isView()) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "VIEW");

@@ -20,6 +20,7 @@ statement
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
@@ -116,6 +117,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
 
 showColumnStatement

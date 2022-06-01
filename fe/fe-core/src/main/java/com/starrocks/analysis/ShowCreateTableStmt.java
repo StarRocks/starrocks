@@ -24,12 +24,8 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW CREATE TABLE statement.
 public class ShowCreateTableStmt extends ShowStmt {
@@ -47,16 +43,34 @@ public class ShowCreateTableStmt extends ShowStmt {
                     .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
                     .build();
 
+    private static final ShowResultSetMetaData MATERIALIZED_VIEW_META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                    .build();
+
     private TableName tbl;
     private boolean isView;
+    private boolean isMaterializedView;
 
     public ShowCreateTableStmt(TableName tbl) {
-        this(tbl, false);
+        this(tbl, false, false);
     }
 
     public ShowCreateTableStmt(TableName tbl, boolean isView) {
         this.tbl = tbl;
         this.isView = isView;
+        this.isMaterializedView = false;
+    }
+
+    public ShowCreateTableStmt(TableName tbl, boolean isView, boolean isMaterializedView) {
+        this.tbl = tbl;
+        this.isView = isView;
+        this.isMaterializedView = isMaterializedView;
+    }
+
+    public TableName getTbl() {
+        return tbl;
     }
 
     public String getDb() {
@@ -71,29 +85,35 @@ public class ShowCreateTableStmt extends ShowStmt {
         return isView;
     }
 
+    public boolean isMaterializedView() {
+        return isMaterializedView;
+    }
+
     public static ShowResultSetMetaData getViewMetaData() {
         return VIEW_META_DATA;
     }
 
+    public static ShowResultSetMetaData getMaterializedViewMetaData() {
+        return MATERIALIZED_VIEW_META_DATA;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (tbl == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
-        }
-        tbl.analyze(analyzer);
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
-                PrivPredicate.SHOW)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW CREATE TABLE",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tbl.getTbl());
-        }
     }
 
     @Override
     public String toSql() {
-        return "SHOW CREATE TABLE " + tbl;
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW CREATE ");
+        if (isMaterializedView) {
+            sb.append("MATERIALIZED VIEW ");
+        } else if (isView) {
+            sb.append("VIEW ");
+        } else {
+            sb.append("TABLE ");
+        }
+        sb.append(tbl);
+        return sb.toString();
     }
 
     @Override
@@ -104,5 +124,10 @@ public class ShowCreateTableStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowCreateTableStmt(this, context);
     }
 }
