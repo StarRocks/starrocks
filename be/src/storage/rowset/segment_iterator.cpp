@@ -309,6 +309,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
           _context_switch_next_time(false) {}
 
 Status SegmentIterator::_init() {
+    LOG(WARNING) << "[TEST] Segment "
+                 << "[id=" << _segment->id() << "] "
+                 << "[file_name=" << _segment->file_name() << "] ";
+
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_primary_keys && _opts.version > 0) {
         TabletSegmentId tsid;
