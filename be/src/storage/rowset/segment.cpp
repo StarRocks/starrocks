@@ -257,6 +257,10 @@ Status Segment::load_index(MemTracker* mem_tracker) {
     });
 }
 
+bool Segment::has_loaded_index() const {
+    return _load_index_once.has_called();
+}
+
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
