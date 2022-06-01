@@ -28,9 +28,9 @@ public class HiveConnector implements Connector {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
+        onCreate();
     }
 
-    @Override
     public void validate() {
         this.resourceName = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
@@ -50,7 +50,7 @@ public class HiveConnector implements Connector {
         return metadata;
     }
 
-    @Override
+
     public void onCreate() {
         if (Config.enable_hms_events_incremental_sync) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
@@ -59,7 +59,7 @@ public class HiveConnector implements Connector {
     }
 
     @Override
-    public void onDrop() {
+    public void shutdown() {
         if (Config.enable_hms_events_incremental_sync) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .unregisterExternalCatalogResource(resourceName);
