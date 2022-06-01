@@ -13,7 +13,7 @@ Status Tablet::put_metadata(const TabletMetadata& metadata) {
 }
 
 Status Tablet::put_metadata(TabletMetadataPtr metadata) {
-    return _mgr->put_tablet_metadata(_group, metadata);
+    return _mgr->put_tablet_metadata(_group, std::move(metadata));
 }
 
 StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
@@ -39,7 +39,7 @@ Status Tablet::put_txn_log(const TxnLog& log) {
 
 Status Tablet::put_txn_log(TxnLogPtr log) {
     // TODO: Check log.tablet_id() == _id
-    return _mgr->put_txn_log(_group, log);
+    return _mgr->put_txn_log(_group, std::move(log));
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
