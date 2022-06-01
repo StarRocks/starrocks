@@ -97,10 +97,6 @@ public class ColumnFilterConverter {
                 return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
             }
 
-            if (type.isDateType() && columnType.isDateType()) {
-                return true;
-            }
-
             return type.equals(columnType);
         }
 
@@ -113,14 +109,15 @@ public class ColumnFilterConverter {
                 return false;
             }
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(), (CallOperator) right);
+            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(),
+                    (CallOperator) right);
         }
 
         return false;
     }
 
     private static boolean checkPartitionExprsContainsOperator(List<Expr> exprList,
-                                         CallOperator callOperator) {
+                                                               CallOperator callOperator) {
         // now expr can only support date_trunc,exprList.size() != 1 will remove in the future
         if (CollectionUtils.isEmpty(exprList) || exprList.size() != 1) {
             return false;
@@ -134,7 +131,7 @@ public class ColumnFilterConverter {
     }
 
     private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
-                                       CallOperator callOperator) {
+                                                            CallOperator callOperator) {
         String fnName = functionCallExpr.getFnName().getFunction();
         if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
