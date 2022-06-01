@@ -203,7 +203,7 @@ public:
         std::vector<uint32_t> hash_values;
     };
 
-    virtual Column::Filter& evaluate(Column* input_column, RunningContext* ctx) const = 0;
+    virtual size_t evaluate(Column* input_column, RunningContext* ctx) const = 0;
 
     size_t size() const { return _size; }
 
@@ -335,7 +335,7 @@ public:
         return _hash_partition_bf[bucket_idx].test_hash(hash);
     }
 
-    Column::Filter& evaluate(Column* input_column, RunningContext* ctx) const override {
+    size_t evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_hash_partition_number != 0) {
             return t_evaluate<true>(input_column, ctx);
         } else {
@@ -349,12 +349,11 @@ public:
     // so it has multiple `sime-block-filter` and `hash_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
     template <bool hash_partition = false>
-    Column::Filter& t_evaluate(Column* input_column, RunningContext* ctx) const {
+    size_t t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Column::Filter& _selection = ctx->selection;
         std::vector<uint32_t>& _hash_values = ctx->hash_values;
-        _selection.resize(size);
-
+        size_t true_count = 0;
         if constexpr (hash_partition) {
             DCHECK(_join_mode == TRuntimeFilterBuildJoinMode::BORADCAST ||
                    _join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
@@ -394,7 +393,8 @@ public:
                 }
             }
             for (int i = 0; i < size; i++) {
-                _selection[i] = sel;
+                _selection[i] &= sel;
+                true_count += sel;
             }
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
@@ -403,23 +403,30 @@ public:
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < size; ++i) {
                     if (null_data[i]) {
-                        _selection[i] = _has_null;
+                        _selection[i] &= _has_null;
+                        true_count += _has_null;
                     } else {
                         if constexpr (hash_partition) {
-                            _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-
+                            const auto hit = test_data_with_hash(input_data[i], _hash_values[i]);
+                            _selection[i] &= hit;
+                            true_count += hit;
                         } else {
-                            _selection[i] = test_data(input_data[i]);
+                            const auto hit = test_data(input_data[i]);
+                            _selection[i] &= hit;
+                            true_count += hit;
                         }
                     }
                 }
             } else {
                 for (int i = 0; i < size; ++i) {
                     if constexpr (hash_partition) {
-                        _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-
+                        const auto hit = test_data_with_hash(input_data[i], _hash_values[i]);
+                        _selection[i] &= hit;
+                        true_count += hit;
                     } else {
-                        _selection[i] = test_data(input_data[i]);
+                        const auto hit = test_data(input_data[i]);
+                        _selection[i] &= hit;
+                        true_count += hit;
                     }
                 }
             }
@@ -427,15 +434,18 @@ public:
             auto* input_data = down_cast<const ColumnType*>(input_column)->get_data().data();
             for (int i = 0; i < size; ++i) {
                 if constexpr (hash_partition) {
-                    _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-
+                    const auto hit = test_data_with_hash(input_data[i], _hash_values[i]);
+                    _selection[i] &= hit;
+                    true_count += hit;
                 } else {
-                    _selection[i] = test_data(input_data[i]);
+                    const auto hit = test_data(input_data[i]);
+                    _selection[i] &= hit;
+                    true_count += hit;
                 }
             }
         }
 
-        return _selection;
+        return true_count;
     }
 
     void merge(const JoinRuntimeFilter* rf) override {
