@@ -29,6 +29,7 @@
 #include "librdkafka/rdkafka.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/stream_load/stream_load_pipe.h"
+#include "simdjson.h"
 
 namespace starrocks {
 
@@ -50,7 +51,11 @@ public:
         return st;
     }
 
-    Status append_json(const char* data, size_t size, char row_delimiter) { return append_and_flush(data, size); }
+    Status append_json(const char* data, size_t size, char row_delimiter) {
+        auto buf = ByteBuffer::allocate(size + simdjson::SIMDJSON_PADDING);
+        buf->put_bytes(data, size);
+        return append(std::move(buf));
+    }
 };
 
 } // end namespace starrocks
