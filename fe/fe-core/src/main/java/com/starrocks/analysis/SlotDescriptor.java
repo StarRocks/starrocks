@@ -102,14 +102,6 @@ public class SlotDescriptor {
         this.isMultiRef = isMultiRef;
     }
 
-    public boolean getIsAgg() {
-        return isAgg;
-    }
-
-    public void setIsAgg(boolean agg) {
-        isAgg = agg;
-    }
-
     public int getNullIndicatorByte() {
         return nullIndicatorByte;
     }
@@ -236,10 +228,6 @@ public class SlotDescriptor {
 
     public void setLabel(String label) {
         label_ = label;
-    }
-
-    public void setSourceExprs(List<Expr> exprs) {
-        sourceExprs_ = exprs;
     }
 
     public void setSourceExpr(Expr expr) {

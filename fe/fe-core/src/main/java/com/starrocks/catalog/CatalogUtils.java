@@ -72,7 +72,7 @@ public class CatalogUtils {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (table == null || !(table instanceof OlapTable)) {
+            if (!(table instanceof OlapTable)) {
                 return;
             }
             OlapTable olapTable = (OlapTable) table;

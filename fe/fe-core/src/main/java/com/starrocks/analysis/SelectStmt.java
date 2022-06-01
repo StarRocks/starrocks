@@ -220,10 +220,6 @@ public class SelectStmt extends QueryStmt {
         return havingPred;
     }
 
-    public Expr getHavingClauseAfterAnaylzed() {
-        return havingClauseAfterAnaylzed;
-    }
-
     public List<TableRef> getTableRefs() {
         return fromClause_.getTableRefs();
     }
@@ -240,42 +236,17 @@ public class SelectStmt extends QueryStmt {
         return aggInfo;
     }
 
-    public GroupingInfo getGroupingInfo() {
-        return groupingInfo;
-    }
-
     public GroupByClause getGroupByClause() {
         return groupByClause;
-    }
-
-    public AnalyticInfo getAnalyticInfo() {
-        return analyticInfo;
     }
 
     public boolean hasAnalyticInfo() {
         return analyticInfo != null;
     }
 
-    public boolean hasHavingClause() {
-        return havingClause != null;
-    }
-
-    public Expr getHavingClause() {
-        return havingClause;
-    }
-
-    @Override
-    public SortInfo getSortInfo() {
-        return sortInfo;
-    }
-
     @Override
     public ArrayList<String> getColLabels() {
         return colLabels;
-    }
-
-    public ExprSubstitutionMap getBaseTblSmap() {
-        return baseTblSmap;
     }
 
     @Override
