@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
@@ -40,7 +41,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +52,18 @@ public class ColumnFilterConverter {
     private static final Logger LOG = LogManager.getLogger(ColumnFilterConverter.class);
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
+
+    // "week" can not exist in timeMap due "month" not sure contains week
+    private static final ImmutableMap<String, Integer> timeMap =
+            new ImmutableMap.Builder<String, Integer>()
+                    .put("second", 1)
+                    .put("minute", 2)
+                    .put("hour", 3)
+                    .put("day", 4)
+                    .put("month", 5)
+                    .put("quarter", 6)
+                    .put("year", 7)
+                    .build();
 
     public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
         return convertColumnFilter(predicates, null);
@@ -156,7 +168,6 @@ public class ColumnFilterConverter {
             return false;
         }
 
-        Map<String, Integer> timeMap = getTimeMap();
         String exprTimeArg = ((StringLiteral) (functionCallExpr.getChild(0))).getStringValue();
         String callTimeArg = callOperator.getChild(0).toString();
         String exprColumnNameArg = ((SlotRef) (functionCallExpr.getChild(1))).getColumnName();
@@ -164,20 +175,8 @@ public class ColumnFilterConverter {
 
         return Objects.equals(exprColumnNameArg, callColumnNameArg) &&
                 (Objects.equals(exprTimeArg, callTimeArg) ||
-                        timeMap.getOrDefault(exprTimeArg, 0) > timeMap.getOrDefault(callTimeArg, 0));
-    }
-
-    private static Map<String, Integer> getTimeMap() {
-        // "week" can not exist in timeMap due "month" not sure contains week
-        Map<String, Integer> timeMap = new HashMap<>();
-        timeMap.put("second", 1);
-        timeMap.put("minute", 2);
-        timeMap.put("hour", 3);
-        timeMap.put("day", 4);
-        timeMap.put("month", 5);
-        timeMap.put("quarter", 6);
-        timeMap.put("year", 7);
-        return timeMap;
+                        (timeMap.containsKey(exprTimeArg) && timeMap.containsKey(callTimeArg) &&
+                                timeMap.get(exprTimeArg) > timeMap.get(callTimeArg)));
     }
 
     private static class ColumnFilterVisitor
