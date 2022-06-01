@@ -22,6 +22,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -143,6 +144,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
