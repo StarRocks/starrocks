@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
@@ -156,10 +157,10 @@ public class TabletStatMgr extends MasterDaemon {
                         continue;
                     }
 
-                    Preconditions.checkState(tablet instanceof StarOSTablet);
-                    StarOSTablet starOSTablet = (StarOSTablet) tablet;
-                    starOSTablet.setDataSize(tabletStat.getData_size());
-                    starOSTablet.setRowCount(tabletStat.getRow_num());
+                    Preconditions.checkState(tablet instanceof LakeTablet);
+                    LakeTablet lakeTablet = (LakeTablet) tablet;
+                    lakeTablet.setDataSize(tabletStat.getData_size());
+                    lakeTablet.setRowCount(tabletStat.getRow_num());
                 } finally {
                     db.writeUnlock();
                 }
