@@ -73,9 +73,9 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.qe.SqlModeHelper;
@@ -166,7 +166,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<Tablet> tabletTypeAdapterFactory = RuntimeTypeAdapterFactory
             .of(Tablet.class, "clazz")
             .registerSubtype(LocalTablet.class, LocalTablet.class.getSimpleName(), true)
-            .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
+            .registerSubtype(LakeTablet.class, LakeTablet.class.getSimpleName());
 
     // runtime adapter for HeartbeatResponse
     private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor = RuntimeTypeAdapterFactory

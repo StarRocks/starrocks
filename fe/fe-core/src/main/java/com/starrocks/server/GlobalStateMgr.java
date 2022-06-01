@@ -70,7 +70,6 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
@@ -210,6 +209,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -2829,7 +2829,7 @@ public class GlobalStateMgr {
         return localMetastore.getMigrations();
     }
 
-    public void refreshExternalTable(RefreshExternalTableStmt stmt) throws DdlException {
+    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);

@@ -157,7 +157,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * after: with xx as (select t1.v2, t1.v3 from t1)
          *        select t0.v1,
          *             case
-         *                 when t1Rows = 0 or t1Rows is null then false // t1 empty table
+         *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false, will hit else
+         *                 when t1Rows = 0 then false
          *                 when t0.v2 is null then null
          *                 when t1d.v2 is not null then true
          *                 when v2Nulls < t1Rows then null

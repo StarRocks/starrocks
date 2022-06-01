@@ -99,7 +99,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
@@ -108,6 +107,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
@@ -1524,7 +1524,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Tablet tablet : index.getTablets()) {
             if (useStarOS) {
                 CreateReplicaTask task = new CreateReplicaTask(
-                        ((StarOSTablet) tablet).getPrimaryBackendId(),
+                        ((LakeTablet) tablet).getPrimaryBackendId(),
                         dbId,
                         table.getId(),
                         partition.getId(),
@@ -2295,7 +2295,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum);
             Preconditions.checkState(bucketNum == shardIds.size());
             for (long shardId : shardIds) {
-                Tablet tablet = new StarOSTablet(getNextId(), shardId);
+                Tablet tablet = new LakeTablet(getNextId(), shardId);
                 index.addTablet(tablet, tabletMeta);
                 tabletIdSet.add(tablet.getId());
             }
@@ -4101,7 +4101,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         if (partition.isUseStarOS()) {
-                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
                             AgentBatchTask batchTask = batchTaskMap.get(backendId);
                             if (batchTask == null) {

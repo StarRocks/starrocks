@@ -154,6 +154,10 @@ public abstract class AstVisitor<R, C> {
         return visitBaseViewStatement(statement, context);
     }
 
+    public R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
