@@ -56,4 +56,13 @@ public class MetaUtils {
             throw new SemanticException("Table name is null");
         }
     }
+
+    public static String getNoClusterDatabaseName(String databaseName) {
+        String nameWithoutCluster = ClusterNamespace.getNameFromFullName(databaseName);
+        if (nameWithoutCluster == null) {
+            return databaseName;
+        } else {
+            return nameWithoutCluster;
+        }
+    }
 }

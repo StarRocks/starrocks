@@ -35,10 +35,10 @@ public class StatisticSQLBuilder {
                     + " GROUP BY db_id, table_id, column_name";
 
     private static final String COLLECT_FULL_STATISTIC_TEMPLATE =
-            " SELECT $partitionId, '$columnName'," +
-                    " $dbId, '$dbName', $tableId, '$tableName', '$partitionName'," +
+            " SELECT $tableId, $partitionId, '$columnName'," +
+                    " '$dbName.$tableName', '$partitionName'," +
                     " COUNT(1), $dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
-                    + "FROM $tableName";
+                    + "FROM $dbName.$tableName partition $partitionName";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
@@ -73,17 +73,11 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames) {
+    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames) {
         VelocityContext context = new VelocityContext();
         context.put("updateTime", "now()");
-        context.put("dbId", dbId);
-        context.put("tableId", tableId);
 
         List<String> predicateList = Lists.newArrayList();
-        if (dbId != null) {
-            predicateList.add("db_id = " + dbId);
-        }
-
         if (tableId != null) {
             predicateList.add("table_id = " + tableId);
         }
@@ -113,8 +107,8 @@ public class StatisticSQLBuilder {
             context.put("tableId", tableId);
             context.put("partitionId", partitionId);
             context.put("columnName", name);
-            context.put("dbName", db.getFullName());
-            context.put("tableName", ClusterNamespace.getNameFromFullName(db.getFullName()) + "." + table.getName());
+            context.put("dbName", ClusterNamespace.getNameFromFullName(db.getFullName()));
+            context.put("tableName", table.getName());
             context.put("partitionName", partition.getName());
             context.put("dataSize", getDataSize(column, false));
 
@@ -124,7 +118,7 @@ public class StatisticSQLBuilder {
                 context.put("maxFunction", "''");
                 context.put("minFunction", "''");
             } else {
-                context.put("countDistinctFunction", "hll_union(hll_hash(`" + name + "`))");
+                context.put("countDistinctFunction", "IFNULL(hll_union(hll_hash(`" + name + "`)), hll_empty())");
                 context.put("countNullFunction", "COUNT(1) - COUNT(`" + name + "`)");
                 context.put("maxFunction", "IFNULL(MAX(`" + name + "`), '')");
                 context.put("minFunction", "IFNULL(MIN(`" + name + "`), '')");

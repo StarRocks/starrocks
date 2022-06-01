@@ -11,6 +11,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 public class AnalyzeStatus implements Writable {
     @SerializedName("id")
@@ -22,29 +24,100 @@ public class AnalyzeStatus implements Writable {
     @SerializedName("tableId")
     private long tableId;
 
+    @SerializedName("columns")
+    private List<String> columns;
+
     @SerializedName("type")
     private Constants.AnalyzeType type;
 
     @SerializedName("scheduleType")
     private Constants.ScheduleType scheduleType;
 
-    @SerializedName("workTime")
-    private LocalDateTime workTime;
+    @SerializedName("properties")
+    private Map<String, String> properties;
 
-    public AnalyzeStatus(long id, long dbId, long tableId,
+    @SerializedName("status")
+    private Constants.ScheduleStatus status;
+
+    @SerializedName("startTime")
+    private LocalDateTime startTime;
+
+    @SerializedName("endTime")
+    private LocalDateTime endTime;
+
+
+    @SerializedName("reason")
+    private String reason;
+
+    public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
                          Constants.AnalyzeType type,
                          Constants.ScheduleType scheduleType,
-                         LocalDateTime workTime) {
+                         Map<String, String> properties,
+                         LocalDateTime startTime) {
         this.id = id;
         this.dbId = dbId;
         this.tableId = tableId;
+        this.columns = columns;
         this.type = type;
         this.scheduleType = scheduleType;
-        this.workTime = workTime;
+        this.properties = properties;
+        this.startTime = startTime;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public long getTableId() {
+        return tableId;
+    }
+
+    public List<String> getColumns() {
+        return columns;
+    }
+
+    public Constants.AnalyzeType getType() {
+        return type;
+    }
+
+    public Constants.ScheduleType getScheduleType() {
+        return scheduleType;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+
+    public LocalDateTime getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
+
+    public void setStatus(Constants.ScheduleStatus status) {
+        this.status = status;
+    }
+
+    public Constants.ScheduleStatus getStatus() {
+        return status;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
     }
 
     @Override
@@ -56,25 +129,5 @@ public class AnalyzeStatus implements Writable {
     public static AnalyzeStatus read(DataInput in) throws IOException {
         String s = Text.readString(in);
         return GsonUtils.GSON.fromJson(s, AnalyzeStatus.class);
-    }
-
-    public long getDbId() {
-        return dbId;
-    }
-
-    public long getTableId() {
-        return tableId;
-    }
-
-    public Constants.AnalyzeType getType() {
-        return type;
-    }
-
-    public Constants.ScheduleType getScheduleType() {
-        return scheduleType;
-    }
-
-    public LocalDateTime getWorkTime() {
-        return workTime;
     }
 }

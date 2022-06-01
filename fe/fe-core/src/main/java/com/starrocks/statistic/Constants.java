@@ -33,6 +33,6 @@ public class Constants {
         RUNNING,
         // only use for ScheduleType.ONCE
         FINISH,
+        FAILED
     }
-
 }

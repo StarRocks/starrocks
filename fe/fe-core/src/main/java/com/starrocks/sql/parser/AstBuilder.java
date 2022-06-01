@@ -148,8 +148,9 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.ShowAnalyzeStatusStatement;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -785,9 +786,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         if (context.STATUS() != null) {
-            return new ShowAnalyzeStatusStatement();
+            return new ShowAnalyzeStatusStmt();
+        } else if (context.META() != null) {
+            return new ShowAnalyzeMetaStmt();
+        } else if (context.JOB() != null) {
+            return new ShowAnalyzeJobStmt();
         } else {
-            return new ShowAnalyzeStmt();
+            return new ShowAnalyzeJobStmt();
         }
     }
 

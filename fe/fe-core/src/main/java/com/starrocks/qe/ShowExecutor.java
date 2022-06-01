@@ -132,10 +132,12 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.ast.ShowAnalyzeStatusStatement;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
@@ -264,10 +266,12 @@ public class ShowExecutor {
             handleShowPlugins();
         } else if (stmt instanceof ShowSqlBlackListStmt) {
             handleShowSqlBlackListStmt();
-        } else if (stmt instanceof ShowAnalyzeStmt) {
-            handleShowAnalyze();
-        } else if (stmt instanceof ShowAnalyzeStatusStatement) {
+        } else if (stmt instanceof ShowAnalyzeJobStmt) {
+            handleShowAnalyzeJob();
+        } else if (stmt instanceof ShowAnalyzeStatusStmt) {
             handleShowAnalyzeStatus();
+        } else if (stmt instanceof ShowAnalyzeMetaStmt) {
+            handleShowAnalyzeMeta();
         } else if (stmt instanceof ShowWorkGroupStmt) {
             handleShowWorkGroup();
         } else if (stmt instanceof ShowUserStmt) {
@@ -1535,13 +1539,13 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleShowAnalyze() {
+    private void handleShowAnalyzeJob() {
         List<AnalyzeJob> jobs = ctx.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
             try {
-                rows.add(ShowAnalyzeStmt.showAnalyzeJobs(job));
+                rows.add(ShowAnalyzeJobStmt.showAnalyzeJobs(job));
             } catch (MetaNotFoundException e) {
                 // pass
             }
@@ -1550,12 +1554,27 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeStatus() {
-        List<AnalyzeStatus> statuses = ctx.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeStatus();
+        List<AnalyzeStatus> statuses = new ArrayList<>(ctx.getGlobalStateMgr().getAnalyzeManager()
+                .getAnalyzeStatusMap().values());
         List<List<String>> rows = Lists.newArrayList();
         statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
         for (AnalyzeStatus status : statuses) {
             try {
-                rows.add(ShowAnalyzeStatusStatement.showAnalyzeJobs(status));
+                rows.add(ShowAnalyzeStatusStmt.showAnalyzeStatus(status));
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowAnalyzeMeta() {
+        List<AnalyzeMeta> metas = new ArrayList<>(ctx.getGlobalStateMgr().getAnalyzeManager()
+                .getAnalyzeMetaMap().values());
+        List<List<String>> rows = Lists.newArrayList();
+        for (AnalyzeMeta meta : metas) {
+            try {
+                rows.add(ShowAnalyzeMetaStmt.showAnalyzeMeta(meta));
             } catch (MetaNotFoundException e) {
                 // pass
             }

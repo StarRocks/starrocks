@@ -7,8 +7,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -23,8 +21,6 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,12 +35,15 @@ public class AnalyzeManager implements Writable {
 
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
 
+    private final Map<Long, AnalyzeMeta> analyzeMetaMap;
+
     private static final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
+        analyzeMetaMap = Maps.newConcurrentMap();
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
@@ -107,14 +106,8 @@ public class AnalyzeManager implements Writable {
                 continue;
             }
 
-            long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
-                    .max(Long::compareTo).orElse(0L);
-
-            LocalDateTime updateTime =
-                    LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
-
             // keep show 1 day
-            if (updateTime.plusDays(1).isBefore(now)) {
+            if (job.getWorkTime().plusDays(1).isBefore(now)) {
                 expireList.add(job);
             }
         }
@@ -134,30 +127,33 @@ public class AnalyzeManager implements Writable {
         analyzeJobMap.remove(job.getId());
     }
 
-    public void addAnalyzeStatus(AnalyzeJob job) {
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(job.getId(), job.getDbId(), job.getTableId(),
-                job.getType(),
-                job.getScheduleType(),
-                LocalDateTime.now());
-        analyzeStatusMap.put(job.getTableId(), analyzeStatus);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(analyzeStatus);
-    }
-
-    public void updateAnalyzeStatusWithLog(AnalyzeJob job) {
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(job.getId(), job.getDbId(), job.getTableId(),
-                job.getType(),
-                job.getScheduleType(),
-                LocalDateTime.now());
-        analyzeStatusMap.put(job.getTableId(), analyzeStatus);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(analyzeStatus);
+    public void addAnalyzeStatus(AnalyzeStatus status) {
+        analyzeStatusMap.put(status.getId(), status);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getTableId(), status);
+        if (status.getStatus().equals(Constants.ScheduleStatus.RUNNING)) {
+            status.setStatus(Constants.ScheduleStatus.FAILED);
+        }
+        analyzeStatusMap.put(status.getId(), status);
     }
 
-    public List<AnalyzeStatus> getAllAnalyzeStatus() {
-        return Lists.newLinkedList(analyzeStatusMap.values());
+    public Map<Long, AnalyzeStatus> getAnalyzeStatusMap() {
+        return analyzeStatusMap;
+    }
+
+    public void addAnalyzeMeta(AnalyzeMeta analyzeMeta) {
+        analyzeMetaMap.put(analyzeMeta.getTableId(), analyzeMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeMeta(analyzeMeta);
+    }
+
+    public void replayAddAnalyzeMeta(AnalyzeMeta analyzeMeta) {
+        analyzeMetaMap.put(analyzeMeta.getTableId(), analyzeMeta);
+    }
+
+    public Map<Long, AnalyzeMeta> getAnalyzeMetaMap() {
+        return analyzeMetaMap;
     }
 
     public void readFields(DataInputStream dis) throws IOException {
@@ -176,6 +172,12 @@ public class AnalyzeManager implements Writable {
                 replayAddAnalyzeStatus(status);
             }
         }
+
+        if (null != data && null != data.meta) {
+            for (AnalyzeMeta meta : data.meta) {
+                replayAddAnalyzeMeta(meta);
+            }
+        }
     }
 
     @Override
@@ -183,7 +185,8 @@ public class AnalyzeManager implements Writable {
         // save history
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
-        data.status = getAllAnalyzeStatus();
+        data.status = new ArrayList<>(getAnalyzeStatusMap().values());
+        data.meta = new ArrayList<>(getAnalyzeMetaMap().values());
 
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(out, s);
@@ -210,6 +213,9 @@ public class AnalyzeManager implements Writable {
 
         @SerializedName("analyzeStatus")
         public List<AnalyzeStatus> status;
+
+        @SerializedName("analyzeMeta")
+        public List<AnalyzeMeta> meta;
     }
 
     // This task is used to expire cached statistics

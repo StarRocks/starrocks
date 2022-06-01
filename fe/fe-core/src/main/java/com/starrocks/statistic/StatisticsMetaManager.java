@@ -72,11 +72,9 @@ public class StatisticsMetaManager extends MasterDaemon {
         );
 
         FULL_STATISTICS_COLUMNS = ImmutableList.of(
+                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
-                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("db_name", new TypeDef(dbNameType)),
-                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
                 new ColumnDef("partition_name", new TypeDef(partitionNameType)),
                 new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
@@ -168,7 +166,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     );
 
     private static final List<String> fullStatisticsKeyColumns = ImmutableList.of(
-            "partition_id", "column_name"
+            "table_id", "partition_id", "column_name"
     );
 
     private boolean createTable() {

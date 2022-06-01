@@ -105,8 +105,10 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.TableCollectJob;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
@@ -764,46 +766,22 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAnalyzeStmt() throws Exception {
+    private void handleAnalyzeStmt() {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
         Database db = MetaUtils.getStarRocks(context, analyzeStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
 
-        AnalyzeJob job = new AnalyzeJob();
-        job.setDbId(db.getId());
-        job.setTableId(table.getId());
-        job.setColumns(analyzeStmt.getColumnNames());
-        job.setType(analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL);
-        job.setScheduleType(Constants.ScheduleType.ONCE);
-        job.setWorkTime(LocalDateTime.now());
-        job.setStatus(Constants.ScheduleStatus.FINISH);
-        job.setProperties(analyzeStmt.getProperties());
+        AnalyzeJob analyzeJob = new AnalyzeJob(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE,
+                analyzeStmt.getProperties(),
+                Constants.ScheduleStatus.RUNNING,
+                LocalDateTime.MIN);
 
-        try {
-            if (Config.enable_collect_full_statistics && job.getType().equals(Constants.AnalyzeType.FULL)) {
-                List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
-                for (Partition partition : partitions) {
-                    statisticExecutor.fullCollectStatisticSyncV2(db.getId(), table.getId(),
-                            partition.getId(), analyzeStmt.getColumnNames());
-                }
-            } else {
-                if (analyzeStmt.isSample()) {
-                    statisticExecutor.sampleCollectStatisticSync(db.getId(), table.getId(),
-                            analyzeStmt.getColumnNames(), job.getSampleCollectRows());
-                } else {
-                    statisticExecutor.fullCollectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames());
-                }
-            }
-
-            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
-        } catch (Exception e) {
-            job.setReason(e.getMessage());
-            throw e;
-        }
-
-        GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeJob(job);
-        GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeStatus(job);
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        TableCollectJob tableCollectJob = new TableCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
+        ((OlapTable) table).getPartitions().stream().map(Partition::getId).forEach(tableCollectJob::addPartitionId);
+        statisticExecutor.collectStatistics(tableCollectJob);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1209,6 +1187,11 @@ public class StmtExecutor {
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
                                 .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                        AnalyzeMeta analyzeMeta =
+                                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(targetTable.getId());
+                        if (analyzeMeta != null) {
+                            analyzeMeta.increase(loadedRows);
+                        }
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;

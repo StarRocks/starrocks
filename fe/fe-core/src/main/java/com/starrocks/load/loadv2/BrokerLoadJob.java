@@ -47,6 +47,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -305,6 +306,12 @@ public class BrokerLoadJob extends BulkLoadJob {
                 if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_ROWS)) {
                     entity.counterBrokerLoadRowsTotal
                             .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
+
+                    AnalyzeMeta analyzeMeta =
+                            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(kv.getKey());
+                    if (analyzeMeta != null) {
+                        analyzeMeta.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
+                    }
                 }
                 if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_FINISHED)) {
                     entity.counterBrokerLoadFinishedTotal

@@ -2,12 +2,25 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMeta;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -54,5 +67,58 @@ public class AnalyzeStmtTest {
         Assert.assertFalse(analyzeStmt.isSample());
         Assert.assertEquals(1, analyzeStmt.getProperties().size());
         Assert.assertEquals("30", analyzeStmt.getProperties().getOrDefault("expire_sec", "2"));
+    }
+
+    @Test
+    public void testShow() throws MetaNotFoundException {
+        String sql = "show analyze";
+        ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+
+        AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE, Maps.newHashMap(), Constants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
+                ShowAnalyzeJobStmt.showAnalyzeJobs(analyzeJob).toString());
+
+        sql = "show analyze job";
+        showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+
+        sql = "show analyze status";
+        ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
+
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
+        analyzeStatus.setReason("Test Failed");
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, Test Failed]",
+                ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        sql = "show analyze meta";
+        ShowAnalyzeMetaStmt showAnalyzeMetaStmt = (ShowAnalyzeMetaStmt) analyzeSuccess(sql);
+
+        AnalyzeMeta analyzeMeta = new AnalyzeMeta(10002, 10004, Constants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeMeta.setHealthy(0.5);
+        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, 50%]",
+                ShowAnalyzeMetaStmt.showAnalyzeMeta(analyzeMeta).toString());
+    }
+
+    @Test
+    public void testStatisticsSqlBuilder() {
+        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  max(max), min(min) " +
+                        "FROM column_statistics WHERE table_id = 10004 and column_name in ('v1', 'v2') GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10004L, Lists.newArrayList("v1", "v2")));
+        Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
+                        "data_size, distinct_count, null_count, max, min " +
+                        "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
+                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
+        Assert.assertEquals("INSERT INTO column_statistics  SELECT 10004, 10003, 'v1', 'test.t0', 't0', " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
+                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
+                        "UNION ALL  " +
+                        "SELECT 10004, 10003, 'v2', 'test.t0', 't0', COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v2`)), " +
+                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0 ",
+                StatisticSQLBuilder.buildCollectFullStatisticSQL(10002L, 10004L, 10003L, Lists.newArrayList("v1", "v2")));
     }
 }

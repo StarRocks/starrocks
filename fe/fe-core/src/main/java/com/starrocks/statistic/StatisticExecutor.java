@@ -52,6 +52,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -59,8 +60,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
-import static com.starrocks.statistic.Constants.STATISTIC_DATA_VERSION;
-import static com.starrocks.statistic.Constants.STATISTIC_DICT_VERSION;
 
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
@@ -107,7 +106,12 @@ public class StatisticExecutor {
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         if (Config.enable_collect_full_statistics) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
+            AnalyzeMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(tableId);
+            if (meta != null && meta.getType().equals(Constants.AnalyzeType.FULL)) {
+                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+            } else {
+                sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
+            }
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -151,7 +155,7 @@ public class StatisticExecutor {
         String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
         String tableName = db.getTable(tableId).getName();
 
-        String sql = "select cast(" + STATISTIC_DICT_VERSION + " as Int), " +
+        String sql = "select cast(" + Constants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + "`" + column +
                 "`) as _dict_merge_" + column +
@@ -197,7 +201,7 @@ public class StatisticExecutor {
             return statistics;
         }
 
-        if (version == STATISTIC_DATA_VERSION || version == STATISTIC_DICT_VERSION) {
+        if (version == Constants.STATISTIC_DATA_VERSION || version == Constants.STATISTIC_DICT_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -211,6 +215,70 @@ public class StatisticExecutor {
         }
 
         return statistics;
+    }
+
+    public void collectStatistics(TableCollectJob tcj) {
+        AnalyzeJob analyzeJob = tcj.getAnalyzeJob();
+        Database db = tcj.getDb();
+        Table table = tcj.getTable();
+        List<String> columns = tcj.getColumns();
+
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), analyzeJob.getColumns(),
+                analyzeJob.getType(),
+                analyzeJob.getScheduleType(),
+                analyzeJob.getProperties(),
+                LocalDateTime.now());
+        analyzeStatus.setStatus(Constants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        if (analyzeJob.getId() != -1) {
+            analyzeJob.setStatus(Constants.ScheduleStatus.RUNNING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(analyzeJob);
+        }
+
+        try {
+            LOG.info("Statistic collect work job: {}, type: {}, db: {}, table: {}",
+                    analyzeJob.getId(), analyzeJob.getType(), db.getFullName(), table.getName());
+
+            if (Constants.AnalyzeType.FULL == analyzeJob.getType()) {
+                if (Config.enable_collect_full_statistics) {
+                    for (Long partitionId : tcj.getPartitionIdList()) {
+                        fullCollectStatisticSyncV2(db.getId(), table.getId(), partitionId, columns);
+                    }
+                } else {
+                    fullCollectStatisticSync(db.getId(), table.getId(), columns);
+                }
+            } else if (Constants.AnalyzeType.SAMPLE == analyzeJob.getType()) {
+                sampleCollectStatisticSync(db.getId(), table.getId(), columns, analyzeJob.getSampleCollectRows());
+            }
+
+            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        } catch (Exception e) {
+            analyzeJob.setWorkTime(LocalDateTime.now());
+            analyzeJob.setReason(e.getMessage());
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+
+            analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
+            analyzeStatus.setEndTime(LocalDateTime.now());
+            analyzeStatus.setReason(e.getMessage());
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            return;
+        }
+
+        if (analyzeJob.getId() != -1) {
+            analyzeJob.setStatus(Constants.ScheduleStatus.PENDING);
+            analyzeJob.setWorkTime(LocalDateTime.now());
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+        }
+
+        analyzeStatus.setStatus(Constants.ScheduleStatus.FINISH);
+        analyzeStatus.setEndTime(LocalDateTime.now());
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeMeta(
+                new AnalyzeMeta(db.getId(), table.getId(), analyzeJob.getType(), analyzeStatus.getEndTime()));
     }
 
     public void fullCollectStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {

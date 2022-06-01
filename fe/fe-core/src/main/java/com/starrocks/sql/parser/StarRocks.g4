@@ -271,7 +271,7 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE STATUS?
+    : SHOW ANALYZE (JOB | STATUS | META)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -842,8 +842,9 @@ nonReserved
     | GLOBAL | GRANTS
     | HASH | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST

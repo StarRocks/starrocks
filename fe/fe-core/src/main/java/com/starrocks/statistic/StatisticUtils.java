@@ -111,8 +111,4 @@ public class StatisticUtils {
     public static boolean isEmptyTable(Table table) {
         return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
     }
-
-    public static boolean isEmptyPartition(Partition partition) {
-        return !partition.hasData();
-    }
 }

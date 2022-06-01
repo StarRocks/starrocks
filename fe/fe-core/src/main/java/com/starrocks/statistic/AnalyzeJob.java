@@ -3,8 +3,6 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -62,15 +60,17 @@ public class AnalyzeJob implements Writable {
     @SerializedName("reason")
     private String reason;
 
-    public AnalyzeJob() {
-        dbId = DEFAULT_ALL_ID;
-        tableId = DEFAULT_ALL_ID;
-        columns = Lists.newArrayList();
-        type = AnalyzeType.SAMPLE;
-        scheduleType = ScheduleType.ONCE;
-        properties = Maps.newHashMap();
-        status = ScheduleStatus.PENDING;
-        workTime = LocalDateTime.MIN;
+    public AnalyzeJob(long dbId, long tableId, List<String> columns, AnalyzeType type, ScheduleType scheduleType,
+                      Map<String, String> properties, ScheduleStatus status, LocalDateTime workTime) {
+        this.id = -1;
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.columns = columns;
+        this.type = type;
+        this.scheduleType = scheduleType;
+        this.properties = properties;
+        this.status = status;
+        this.workTime = workTime;
     }
 
     public long getId() {

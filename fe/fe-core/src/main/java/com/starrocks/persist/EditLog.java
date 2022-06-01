@@ -71,6 +71,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -843,6 +844,11 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
+                case OperationType.OP_ADD_ANALYZE_META: {
+                    AnalyzeMeta analyzeMeta = (AnalyzeMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeMeta(analyzeMeta);
+                    break;
+                }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
@@ -1473,6 +1479,10 @@ public class EditLog {
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
         logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
+    }
+
+    public void logAddAnalyzeMeta(AnalyzeMeta meta) {
+        logEdit(OperationType.OP_ADD_ANALYZE_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
