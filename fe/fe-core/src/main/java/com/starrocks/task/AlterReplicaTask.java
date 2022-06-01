@@ -21,13 +21,26 @@
 
 package com.starrocks.task;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTaskType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -38,7 +51,8 @@ import java.util.Map;
  * The new replica should be created before.
  * The new replica can be a rollup replica, or a shadow replica of schema change.
  */
-public class AlterReplicaTask extends AgentTask {
+public class AlterReplicaTask extends AgentTask implements Runnable {
+    private static final Logger LOG = LogManager.getLogger(AlterReplicaTask.class);
 
     private long baseTabletId;
     private long newReplicaId;
@@ -123,4 +137,96 @@ public class AlterReplicaTask extends AgentTask {
         }
         return req;
     }
+
+    /*
+     * Handle the finish report of alter task.
+     * If task is success, which means the history data before specified version has been transformed successfully.
+     * So here we should modify the replica's version.
+     * We assume that the specified version is X.
+     * Case 1:
+     *      After alter table process starts, there is no new load job being submitted. So the new replica
+     *      should be with version (1-0). So we just modify the replica's version to partition's visible version, which is X.
+     * Case 2:
+     *      After alter table process starts, there are some load job being processed.
+     * Case 2.1:
+     *      Only one new load job, and it failed on this replica. so the replica's last failed version should be X + 1
+     *      and version is still 1. We should modify the replica's version to (last failed version - 1)
+     * Case 2.2
+     *      There are new load jobs after alter task, and at least one of them is succeed on this replica.
+     *      So the replica's version should be larger than X. So we don't need to modify the replica version
+     *      because its already looks like normal.
+     */
+    public void handleFinishAlterTask() throws MetaNotFoundException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
+        if (db == null) {
+            throw new MetaNotFoundException("database " + getDbId() + " does not exist");
+        }
+
+        db.writeLock();
+        try {
+            OlapTable tbl = (OlapTable) db.getTable(getTableId());
+            if (tbl == null) {
+                throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
+            }
+            Partition partition = tbl.getPartition(getPartitionId());
+            if (partition == null) {
+                throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
+            }
+            MaterializedIndex index = partition.getIndex(getIndexId());
+            if (index == null) {
+                throw new MetaNotFoundException("index " + getIndexId() + " does not exist");
+            }
+            Tablet tablet = index.getTablet(getTabletId());
+            Preconditions.checkNotNull(tablet, getTabletId());
+            Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
+            if (replica == null) {
+                throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
+            }
+
+            LOG.info("before handle alter task tablet {}, replica: {}, task version: {}-{}",
+                    getSignature(), replica, getVersion());
+            boolean versionChanged = false;
+            if (replica.getVersion() > getVersion()) {
+                // Case 2.2, do nothing
+            } else {
+                if (replica.getLastFailedVersion() > getVersion()) {
+                    // Case 2.1
+                    replica.updateRowCount(getVersion(), replica.getDataSize(),
+                            replica.getRowCount());
+                    versionChanged = true;
+                } else {
+                    // Case 1
+                    Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
+                    replica.updateRowCount(getVersion(), replica.getDataSize(),
+                            replica.getRowCount());
+                    versionChanged = true;
+                }
+            }
+
+            if (versionChanged) {
+                ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
+                        getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
+                        replica.getId(), replica.getVersion(), -1,
+                        replica.getDataSize(), replica.getRowCount(),
+                        replica.getLastFailedVersion(),
+                        replica.getLastSuccessVersion());
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+            }
+
+            LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
+        } finally {
+            db.writeUnlock();
+        }
+        setFinished(true);
+    }
+
+    @Override
+    public void run() {
+        try {
+            handleFinishAlterTask();
+        } catch (MetaNotFoundException e) {
+            LOG.warn("failed to handle finish alter task: {}, {}", getSignature(), e.getMessage());
+        }
+    }
+
 }

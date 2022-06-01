@@ -21,27 +21,31 @@
 
 package com.starrocks.alter;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedIndex;
+=======
+>>>>>>> 2f76fe2ad ([Enhancement] Support Alter finish task process queued (#6259))
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
+<<<<<<< HEAD
 import com.starrocks.persist.ReplicaPersistInfo;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> 2f76fe2ad ([Enhancement] Support Alter finish task process queued (#6259))
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TTabletInfo;
@@ -55,6 +59,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class AlterHandler extends MasterDaemon {
@@ -78,6 +84,8 @@ public abstract class AlterHandler extends MasterDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
+    protected ThreadPoolExecutor executor;
+
     protected void lock() {
         lock.lock();
     }
@@ -88,6 +96,9 @@ public abstract class AlterHandler extends MasterDaemon {
 
     public AlterHandler(String name) {
         super(name, FeConstants.default_scheduler_interval_millisecond);
+        executor = ThreadPoolManager
+                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                        name + "_pool", true);
     }
 
     protected void addAlterJobV2(AlterJobV2 alterJob) {
@@ -399,6 +410,7 @@ public abstract class AlterHandler extends MasterDaemon {
         return jobNum;
     }
 
+<<<<<<< HEAD
     /*
      * Handle the finish report of alter task.
      * If task is success, which means the history data before specified version has been transformed successfully.
@@ -478,6 +490,10 @@ public abstract class AlterHandler extends MasterDaemon {
         } finally {
             db.writeUnlock();
         }
+=======
+    public void handleFinishAlterTask(AlterReplicaTask task) throws RejectedExecutionException {
+        executor.submit(task);
+>>>>>>> 2f76fe2ad ([Enhancement] Support Alter finish task process queued (#6259))
     }
 
     // replay the alter job v2
