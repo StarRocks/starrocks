@@ -1,8 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog;
+package com.starrocks.catalog.lake;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
