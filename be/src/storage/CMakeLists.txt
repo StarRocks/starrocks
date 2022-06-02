@@ -157,4 +157,5 @@ add_library(Storage STATIC
     cluster_id_mgr.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/general_tablet_writer.cpp
 )
