@@ -174,7 +174,7 @@ public class AlterJobV2Test {
         }
         // 5. check enable persistent index
         showCreateTableStmt =
-                (ShowCreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(showCreateTableStr, connectContext);
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
         showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
