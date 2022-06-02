@@ -69,6 +69,7 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
+
         // TODO edit log
     }
 

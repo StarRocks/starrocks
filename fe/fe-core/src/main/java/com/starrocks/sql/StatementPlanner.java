@@ -201,6 +201,7 @@ public class StatementPlanner {
                 || statement instanceof GrantImpersonateStmt
                 || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RefreshTableStmt
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof RefreshTableStmt
