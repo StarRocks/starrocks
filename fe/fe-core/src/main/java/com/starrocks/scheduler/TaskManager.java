@@ -105,11 +105,15 @@ public class TaskManager {
             Iterator<Long> pendingIter = taskRunManager.getPendingTaskRunMap().keySet().iterator();
             while (pendingIter.hasNext()) {
                 Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().get(pendingIter.next());
-                for (TaskRun taskRun : taskRuns) {
+                while (!taskRuns.isEmpty()) {
+                    TaskRun taskRun = taskRuns.poll();
                     taskRun.getStatus().setErrorMessage("Fe abort the task");
                     taskRun.getStatus().setErrorCode(-1);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                     taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                            Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                 }
                 pendingIter.remove();
             }
@@ -119,8 +123,12 @@ public class TaskManager {
                 taskRun.getStatus().setErrorMessage("Fe abort the task");
                 taskRun.getStatus().setErrorCode(-1);
                 taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                taskRun.getStatus().setFinishTime(System.currentTimeMillis());
                 runningIter.remove();
                 taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                        Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
             }
         } finally {
             taskRunUnlock();
@@ -380,7 +388,7 @@ public class TaskManager {
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        if (fromStatus == Constants.TaskRunState.PENDING && toStatus == Constants.TaskRunState.RUNNING) {
+        if (fromStatus == Constants.TaskRunState.PENDING) {
             Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
             if (taskRunQueue == null) {
                 return;
@@ -392,12 +400,21 @@ public class TaskManager {
 
             TaskRun pendingTaskRun = taskRunQueue.poll();
             TaskRunStatus status = pendingTaskRun.getStatus();
-            if (status.getQueryId().equals(statusChange.getQueryId())) {
-                status.setState(Constants.TaskRunState.RUNNING);
-                taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
-                if (taskRunQueue.size() == 0) {
-                    taskRunManager.getPendingTaskRunMap().remove(taskId);
+
+            if (toStatus == Constants.TaskRunState.RUNNING) {
+                if (status.getQueryId().equals(statusChange.getQueryId())) {
+                    status.setState(Constants.TaskRunState.RUNNING);
+                    taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
                 }
+            // for fe restart, should keep logic same as clearUnfinishedTaskRun
+            } else if (toStatus == Constants.TaskRunState.FAILED) {
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(Constants.TaskRunState.FAILED);
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            }
+            if (taskRunQueue.size() == 0) {
+                taskRunManager.getPendingTaskRunMap().remove(taskId);
             }
         } else if (fromStatus == Constants.TaskRunState.RUNNING &&
                 (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
