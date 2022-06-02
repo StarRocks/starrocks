@@ -163,6 +163,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
 Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
+    int64_t consume_timeout = std::min<int64_t>(max_running_time_ms, config::routine_load_kafka_timeout_second * 1000);
     LOG(INFO) << "start kafka consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
 
     int64_t received_rows = 0;
@@ -186,7 +187,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         bool done = false;
         // consume 1 message at a time
         consumer_watch.start();
-        std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(1000 /* timeout, ms */));
+        std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(consume_timeout /* timeout, ms */));
         consumer_watch.stop();
         switch (msg->err()) {
         case RdKafka::ERR_NO_ERROR:
@@ -199,11 +200,14 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             }
             ++received_rows;
             break;
-        case RdKafka::ERR__TIMED_OUT:
-            // leave the status as OK, because this may happend
+        case RdKafka::ERR__TIMED_OUT: {
+            // leave the status as OK, because this may happened
             // if there is no data in kafka.
-            LOG(INFO) << "kafka consume timeout: " << _id;
+            std::stringstream ss;
+            ss << msg->errstr() << ", timeout " << consume_timeout;
+            LOG(INFO) << "kafka consume timeout: " << _id << " msg " << ss.str();
             break;
+        }
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
             done = true;
             std::stringstream ss;
@@ -242,8 +246,8 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        RdKafka::ErrorCode err =
-                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, 5000);
+        RdKafka::ErrorCode err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset,
+                                                                      config::routine_load_kafka_timeout_second * 1000);
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to query wartermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);
@@ -277,7 +281,8 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
-    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, 5000);
+    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata,
+                                                   config::routine_load_kafka_timeout_second * 1000);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to get partition meta: " << RdKafka::err2str(err);
