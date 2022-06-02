@@ -1,5 +1,24 @@
 # StarRocks version 2.2
 
+## 2.2.1
+
+Release date: June 2, 2022
+
+### Improvements
+
+- Optimized the data loading performance and reduced long tail latency by reconstructing part of the hotspot code and reducing lock granularity. [#6641](https://github.com/StarRocks/starrocks/pull/6641)
+- Added the CPU and memory usage information of the machines on which BEs are deployed for each query to the FE audit log. [#6208](https://github.com/StarRocks/starrocks/pull/6208) [#6209](https://github.com/StarRocks/starrocks/pull/6209)
+- Supported JSON data types in the tables that use the Primary Key model and tables that use the Unique Key model. [#6544](https://github.com/StarRocks/starrocks/pull/6544)
+- Reduced FEs load by reducing lock granularity and deduplicating BE report requests. Optimized the report performance when a large number of BEs are deployed, and solved the issue of Routine Load tasks getting stuck in a large cluster. [#6293](https://github.com/StarRocks/starrocks/pull/6293)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- An error occurs when StarRocks parses the escape characters specified in the `SHOW FULL TABLES FROM DatabaseName` statement. [#6559](https://github.com/StarRocks/starrocks/issues/6559)
+- FE disk space usage rises sharply (Fix this bug by rolling back the BDBJE version). [#6708](https://github.com/StarRocks/starrocks/pull/6708)
+- BEs become faulty because relevant fields cannot be found in the data returned after columnar scanning is enabled (`enable_docvalue_scan=true`). [#6600](https://github.com/StarRocks/starrocks/pull/6600)
+
 ## 2.2.0
 
 Release date: May 22, 2022
