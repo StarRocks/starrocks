@@ -1090,6 +1090,12 @@ public class Config extends ConfigBase {
     public static long routine_load_task_timeout_second = 15;
 
     /**
+     * kafka util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_kafka_timeout_second = 12;
+
+    /**
      * it can't auto-resume routine load job as long as one of the backends is down
      */
     @ConfField(mutable = true)
