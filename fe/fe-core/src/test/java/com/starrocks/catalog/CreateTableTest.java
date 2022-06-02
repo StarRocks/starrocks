@@ -135,7 +135,7 @@ public class CreateTableTest {
                 () -> createTable("create table test.atbl1\n" + "(k1 int, k2 float)\n" + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid partition column 'k3': invalid data type FLOAT",
                 () -> createTable("create table test.atbl3\n" + "(k1 int, k2 int, k3 float)\n" + "duplicate key(k1)\n"
                         + "partition by range(k3)\n" + "(partition p1 values less than(\"10\"))\n"
@@ -209,7 +209,7 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid data type of key column 'k2': 'JSON'",
                 () -> createTable("create table test.json_tbl0\n"
                         + "(k1 int, k2 json)\n"
@@ -363,7 +363,7 @@ public class CreateTableTest {
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
-        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Data type of first column cannot be HLL",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
 }

@@ -2,8 +2,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -347,7 +347,7 @@ public class CreateTableWithPartitionTest {
 
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionNumberWithDatekey() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE testCreateTableBatchPartitionNumberWithDatekey (\n" +
@@ -369,7 +369,7 @@ public class CreateTableWithPartitionTest {
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionStringUseNumber() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE testCreateTableBatchPartitionStringUseNumber (\n" +
@@ -390,7 +390,7 @@ public class CreateTableWithPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionNotSingleRangeColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionNotSingleRangeColumn` (\n" +
@@ -515,7 +515,7 @@ public class CreateTableWithPartitionTest {
         Assert.assertFalse(partitionDesc.toSql().contains("PARTITION p20140104 VALUES [('20140104'), ('20140105'))"));
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionIntersection() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionIntersection` (\n" +
@@ -541,7 +541,7 @@ public class CreateTableWithPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionDateStartLargeThanEnd() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionDateStartLargeThanEnd` (\n" +
@@ -566,7 +566,7 @@ public class CreateTableWithPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionIntStartLargeThanEnd() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionIntStartLargeThanEnd` (\n" +
@@ -590,7 +590,7 @@ public class CreateTableWithPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionZeroDay() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionZeroDay` (\n" +
@@ -615,7 +615,7 @@ public class CreateTableWithPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test(expected = AnalysisException.class)
     public void testCreateTableBatchPartitionNumber0() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE `table_range2` (\n" +
