@@ -9,10 +9,13 @@ docker pull starrocks/dev-env:{version}
 
 ## starrocks 与 image 对应关系
 
-| starrocks branch | image tag              |
-| ---------------- | ---------------------- |
-| main             | starrocks/dev-env:main |
-| ...              | ...                    |
+| starrocks branch | image tag                     |
+| ---------------- | ------------------------------|
+| main             | starrocks/dev-env:main        |
+| StarRocks-2.2.*  | starrocks/dev-env:branch-2.2  |
+| StarRocks-2.1.*  | starrocks/dev-env:branch-2.1  |
+| StarRocks-2.0.*  | starrocks/dev-env:branch-2.0  |
+| StarRocks-1.19.* | starrocks/dev-env:branch-1.19 |
 
 ## 使用方式
 
