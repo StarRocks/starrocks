@@ -1,5 +1,6 @@
 name: Open Question
 description: Ask questions about documentation.
+labels: docs/help wanted
 title: "[Question]: " 
 body:
 - type: markdown
