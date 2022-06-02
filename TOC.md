@@ -27,6 +27,7 @@
   + [Insert Into](/loading/InsertInto.md)
   + [ETL in Loading](/loading/Etl_in_loading.md)
   + [Json Loading](/loading/Json_loading.md)
+  + [Synchronize data from MySQL](/loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](/loading/Flink-connector-starrocks.md)
   + [DataX Writer](/loading/DataX-starrocks-writer.md)
 + Data Export
@@ -43,6 +44,7 @@
   + [Window Function](/using_starrocks/Window_function.md)
   + [Cost Based Optimizer](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [Configure a time zone](/using_starrocks/timezone.md)
   + [File manager](/using_starrocks/File_manager.md)
 + Reference
   + SQL Reference
@@ -312,7 +314,7 @@
   + [Backup and Restore](/administration/Backup_and_restore.md)
   + Data Recovery
     + [Data Recovery](/administration/Data_recovery.md)
-    + [Metadata Recovery](/administration/Metadata_recovery.md)
+    + [Restore FEs](/administration/Metadata_recovery.md)
   + [Replica](/administration/Replica.md)
   + [Query Planning](/administration/Query_planning.md)
   + [Profiling](/administration/Profiling.md)
