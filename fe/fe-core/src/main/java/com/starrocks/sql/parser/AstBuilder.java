@@ -2288,7 +2288,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr expr = intervalLiteral.getValue();
                 if (expr instanceof IntLiteral) {
                     intervalVal = ((IntLiteral) expr).getLongValue();
-                    if (intervalVal < 0) {
+                    if (intervalVal <= 0) {
                         throw new IllegalArgumentException("Unsupported negative interval value: " + expr);
                     }
                 } else {

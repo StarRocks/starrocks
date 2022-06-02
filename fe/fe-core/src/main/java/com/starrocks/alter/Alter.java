@@ -40,6 +40,7 @@ import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -234,7 +235,7 @@ public class Alter {
                 //change refresh scheme
                 processChangeRefreshScheme(refreshSchemeDesc, materializedView);
             } else {
-                throw new DdlException("unsupported modification for materialized view");
+                throw new DdlException("Unsupported modification for materialized view");
             }
         } finally {
             db.writeUnlock();
@@ -247,17 +248,19 @@ public class Alter {
         final String refreshType = refreshSchemeDesc.getType().name();
 
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-            throw new DdlException("unsupported change to SYNC refresh type");
+            throw new DdlException("Unsupported change to SYNC refresh type");
         } else if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             final long step = asyncRefreshSchemeDesc.getStep();
-            if (step < 0) {
-                throw new DdlException("unsupported negative step value");
+            final TimestampArithmeticExpr.TimeUnit timeUnit = asyncRefreshSchemeDesc.getTimeUnit();
+            if (timeUnit != null && step <= 0) {
+                throw new DdlException("Unsupported negative or zero step value");
             }
             asyncRefreshContext.setStep(step);
-            asyncRefreshContext.setTimeUnit(asyncRefreshSchemeDesc.getTimeUnit());
+
+            asyncRefreshContext.setTimeUnit(timeUnit);
         }
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
@@ -291,7 +294,7 @@ public class Alter {
         db.dropTable(oldMaterializedView.getName());
         oldMaterializedView.setName(newMaterializedViewName);
         db.createTable(oldMaterializedView);
-        LOG.info("replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+        LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                 newMaterializedViewName, oldMaterializedView.getId());
     }
 
@@ -312,7 +315,7 @@ public class Alter {
         newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
         oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
         LOG.info(
-                "replay materialized view [{}]'s refresh type to {}, start time to {}, " +
+                "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
                         "interval step to {}, time unit to {}, id: {}",
                 oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                 asyncRefreshContext.getStep(), asyncRefreshContext.getTimeUnit(), id);

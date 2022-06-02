@@ -120,7 +120,7 @@ public class AlterMaterializedViewTest {
 
     @Test(expected= IllegalArgumentException.class)
     public void testIllegalStep() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async every (interval -1 minute)";
+        String alterMvSql = "alter materialized view mv1 refresh async every (interval 0 minute)";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
     }
 
