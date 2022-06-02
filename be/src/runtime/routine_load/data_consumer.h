@@ -38,10 +38,9 @@ class StreamLoadPipe;
 
 class DataConsumer {
 public:
-    DataConsumer(StreamLoadContext* ctx)
+    DataConsumer()
             : _id(UniqueId::gen_uid()),
               _grp_id(UniqueId::gen_uid()),
-              _has_grp(false),
               _init(false),
               _cancelled(false),
               _last_visit_time(0) {}
@@ -63,16 +62,12 @@ public:
     virtual bool match(StreamLoadContext* ctx) = 0;
 
     const UniqueId& id() { return _id; }
-    time_t last_visit_time() { return _last_visit_time; }
-    void set_grp(const UniqueId& grp_id) {
-        _grp_id = grp_id;
-        _has_grp = true;
-    }
+    time_t last_visit_time() const { return _last_visit_time; }
+    void set_grp(const UniqueId& grp_id) { _grp_id = grp_id; }
 
 protected:
     UniqueId _id;
     UniqueId _grp_id;
-    bool _has_grp;
 
     // lock to protect the following bools
     std::mutex _lock;
@@ -111,8 +106,8 @@ public:
 
 class KafkaDataConsumer : public DataConsumer {
 public:
-    KafkaDataConsumer(StreamLoadContext* ctx)
-            : DataConsumer(ctx), _brokers(ctx->kafka_info->brokers), _topic(ctx->kafka_info->topic) {}
+    explicit KafkaDataConsumer(StreamLoadContext* ctx)
+            : DataConsumer(), _brokers(ctx->kafka_info->brokers), _topic(ctx->kafka_info->topic) {}
 
     ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
@@ -153,7 +148,6 @@ private:
 
     KafkaEventCb _k_event_cb;
     RdKafka::KafkaConsumer* _k_consumer = nullptr;
-    std::shared_ptr<KafkaConsumerPipe> _k_consumer_pipe;
 };
 
 } // end namespace starrocks

@@ -28,14 +28,14 @@ public:
     LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
                               const std::string& sort_keys, int64_t offset, int64_t partition_limit,
-                              const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              const RowDescriptor& parent_node_row_desc,
+                              const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
+                              TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                               const RowDescriptor& parent_node_child_row_desc);
 
     Status prepare(RuntimeState* state);
 
     // Add one chunk to partitioner
-    Status push_one_chunk_to_partitioner(const vectorized::ChunkPtr& chunk);
+    Status push_one_chunk_to_partitioner(RuntimeState* state, const vectorized::ChunkPtr& chunk);
 
     // Notify that there is no further input for partitiner
     void sink_complete();
@@ -49,19 +49,32 @@ public:
     // Return true if sink completed and all the data in the chunks_sorters has been pulled out
     bool is_finished();
 
+    // Pull one chunk from sorters or downgrade_buffer
+    StatusOr<vectorized::ChunkPtr> pull_one_chunk();
+
+private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
     StatusOr<vectorized::ChunkPtr> pull_one_chunk_from_sorters();
 
-private:
+    // TODO(hcf) set this value properly, maybe based on cache size
+    static const int32_t MAX_PARTITION_NUM;
+
+    bool _is_downgrade = false;
+    // We simply offer chunk to this buffer when number of partition reaches the threshould MAX_PARTITION_NUM
+    std::queue<vectorized::ChunkPtr> _downgrade_buffer;
+    std::mutex _buffer_lock;
+
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<vectorized::PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
+    // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
     vectorized::ChunksPartitionerPtr _chunks_partitioner;
+    bool _is_transfered = false;
 
     // Every partition holds a chunks_sorter
     vectorized::ChunksSorters _chunks_sorters;
@@ -71,6 +84,7 @@ private:
     const std::string _sort_keys;
     int64_t _offset;
     int64_t _partition_limit;
+    const TTopNType::type _topn_type;
     const std::vector<OrderByType>& _order_by_types;
     TupleDescriptor* _materialized_tuple_desc;
     const RowDescriptor& _parent_node_row_desc;
@@ -86,7 +100,8 @@ public:
     LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
                                      SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset,
-                                     int64_t partition_limit, const std::vector<OrderByType>& order_by_types,
+                                     int64_t partition_limit, const TTopNType::type topn_type,
+                                     const std::vector<OrderByType>& order_by_types,
                                      TupleDescriptor* materialized_tuple_desc,
                                      const RowDescriptor& parent_node_row_desc,
                                      const RowDescriptor& parent_node_child_row_desc);
@@ -105,6 +120,7 @@ private:
     const std::string _sort_keys;
     int64_t _offset;
     int64_t _partition_limit;
+    const TTopNType::type _topn_type;
     const std::vector<OrderByType>& _order_by_types;
     TupleDescriptor* _materialized_tuple_desc;
     const RowDescriptor& _parent_node_row_desc;

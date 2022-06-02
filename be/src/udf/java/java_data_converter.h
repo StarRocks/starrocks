@@ -11,11 +11,10 @@
 
 namespace starrocks::vectorized {
 struct JavaUDAFState {
-    JavaUDAFState(JavaGlobalRef&& handle) : _handle(std::move(handle)){};
+    JavaUDAFState(int handle_) : handle(std::move(handle_)) {}
     ~JavaUDAFState() = default;
-    jobject handle() const { return _handle.handle(); }
     // UDAF State
-    JavaGlobalRef _handle;
+    int handle;
 };
 // Column to DirectByteBuffer, which could avoid some memory copy,
 // directly access the C++ address space in Java
@@ -52,7 +51,8 @@ private:
 
 class JavaDataTypeConverter {
 public:
-    static jobject convert_to_object_array(uint8_t** data, size_t offset, int num_rows);
+    static jobject convert_to_states(uint8_t** data, size_t offset, int num_rows);
+    static jobject convert_to_states_with_filter(uint8_t** data, size_t offset, const uint8_t* filter, int num_rows);
 
     static void convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
                                        const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);

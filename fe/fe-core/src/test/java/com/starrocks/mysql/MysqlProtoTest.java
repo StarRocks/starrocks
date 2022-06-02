@@ -82,7 +82,7 @@ public class MysqlProtoTest {
                 minTimes = 0;
                 result = auth;
 
-                globalStateMgr.changeDb((ConnectContext) any, anyString);
+                globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                 minTimes = 0;
             }
         };

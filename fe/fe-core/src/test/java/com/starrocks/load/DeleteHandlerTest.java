@@ -16,6 +16,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -45,6 +46,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -474,5 +481,43 @@ public class DeleteHandlerTest {
         for (DeleteJob job : jobs) {
             Assert.assertEquals(job.getState(), DeleteState.FINISHED);
         }
+    }
+
+    @Test
+    public void testRemoveOldOnReplay() throws Exception {
+        Config.label_keep_max_second = 1;
+        Config.label_keep_max_num = 10;
+
+        // 1. noraml replay
+        DeleteInfo normalDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
+        deleteHandler.replayDelete(normalDelete, globalStateMgr);
+        Assert.assertEquals(1, deleteHandler.getDeleteInfosByDb(1).size());
+        MultiDeleteInfo multiDeleteInfo = new MultiDeleteInfo(1, 1, "test_tbl", new ArrayList<>());
+        deleteHandler.replayMultiDelete(multiDeleteInfo, globalStateMgr);
+        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+
+        // 2. replay after expire
+        DeleteInfo expireDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1,new ArrayList<>());
+        MultiDeleteInfo expireMultiDelete = new MultiDeleteInfo(1, 1, "test_tbl", new ArrayList<>());
+        Thread.sleep(2000);
+        deleteHandler.replayDelete(expireDelete, globalStateMgr);
+        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+        deleteHandler.replayMultiDelete(expireMultiDelete, globalStateMgr);
+        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+
+        // 3. run clean job clean expired job &
+        Config.label_keep_max_second = 1;
+        Config.label_keep_max_num = 1;
+        normalDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
+        deleteHandler.replayDelete(normalDelete, globalStateMgr);
+        Assert.assertEquals(3, deleteHandler.getDeleteInfosByDb(1).size());
+        normalDelete = new DeleteInfo(1, 2, "test_tbl2", -1, "test_partition", 1, new ArrayList<>());
+        deleteHandler.replayDelete(normalDelete, globalStateMgr);
+        Assert.assertEquals(4, deleteHandler.getDeleteInfosByDb(1).size());
+        deleteHandler.removeOldDeleteInfo();
+        List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(1);
+        Assert.assertEquals(1, deleteInfos.size());
+        Assert.assertEquals("test_tbl2", (String)deleteInfos.get(0).get(0));
+
     }
 }

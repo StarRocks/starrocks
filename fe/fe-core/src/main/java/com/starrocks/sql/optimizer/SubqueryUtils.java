@@ -98,13 +98,14 @@ public class SubqueryUtils {
     public static CallOperator createCountRowsOperator() {
         Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
                 Function.CompareMode.IS_IDENTICAL);
-        return new CallOperator("count", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)), count,
+        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
+                count,
                 false);
     }
 
     public static CallOperator createCountRowsOperator(ScalarOperator column) {
         Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
                 Function.CompareMode.IS_IDENTICAL);
-        return new CallOperator("count", Type.BIGINT, Lists.newArrayList(column), count, false);
+        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
     }
 }

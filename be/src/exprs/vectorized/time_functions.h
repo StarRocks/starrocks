@@ -127,6 +127,24 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year);
 
     /**
+     * Get week of the year.
+     * @param context
+     * @param column[0] [TimestampColumn] Columns that hold timestamps.
+     * @param mode's value is default 0.
+     * @return  IntColumn week of the year:
+     */
+    DEFINE_VECTORIZED_FN(week_of_year_with_default_mode);
+
+    /**
+     * Get week of the year.
+     * @param context
+     * @param column[0] [TimestampColumn] Columns that hold timestamps.
+     * @param column[1] [IntColumn] Columns that hold mode.
+     * @return  IntColumn week of the year:
+     */
+    DEFINE_VECTORIZED_FN(week_of_year_with_mode);
+
+    /**
      * Get hour of the day
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
@@ -538,6 +556,21 @@ public:
      * @return Int64Column
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
+
+    // Following const variables used to obtains number days of year
+    constexpr static int NUMBER_OF_LEAP_YEAR = 366;
+    constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
+
+    static long compute_daynr(uint year, uint month, uint day);
+    static int compute_weekday(long daynr, bool sunday_first_day_of_week);
+    static uint32_t compute_days_in_year(uint year);
+    static uint week_mode(uint mode);
+    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
+
+    /** Flags for calc_week() function.  */
+    constexpr static const unsigned int WEEK_MONDAY_FIRST = 1;
+    constexpr static const unsigned int WEEK_YEAR = 2;
+    constexpr static const unsigned int WEEK_FIRST_WEEKDAY = 4;
 
 private:
     // internal approach to process string content, based on any string format.

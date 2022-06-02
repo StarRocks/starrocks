@@ -74,6 +74,28 @@ public class GrantStmt extends DdlStmt {
         this.privileges = privs.toPrivilegeList();
     }
 
+    /**
+     * call by TablePrivEntry, DbPrivEntry, GlobalPrivEntry to transfer to SQL
+     */
+    public GrantStmt(UserIdentity userIdentity, TablePattern tblPattern, PrivBitSet bitSet) {
+        this.userIdent = userIdentity;
+        this.role = null;
+        this.tblPattern = tblPattern;
+        this.resourcePattern = null;
+        this.privileges = bitSet.toPrivilegeList();
+    }
+
+    /**
+     * call by ResourcePrivEntry to transfer to SQL
+     */
+    public GrantStmt(UserIdentity userIdentity, ResourcePattern resourcePattern, PrivBitSet bitSet) {
+        this.userIdent = userIdentity;
+        this.role = null;
+        this.tblPattern = null;
+        this.resourcePattern = resourcePattern;
+        this.privileges = bitSet.toPrivilegeList();
+    }
+
     public UserIdentity getUserIdent() {
         return userIdent;
     }

@@ -160,7 +160,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         } else {
             _chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-                    _offset, _limit, ChunksSorterTopn::tunning_buffered_chunks(_limit));
+                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::tunning_buffered_chunks(_limit));
         }
 
     } else {
@@ -196,6 +196,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
+    bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
     bool is_merging = _analytic_partition_exprs.empty();
     int64_t partition_limit = -1;
     if (is_partition) {
@@ -214,12 +215,12 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
                 degree_of_parallelism, _tnode.sort_node.partition_exprs, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, partition_limit, _order_by_types, _materialized_tuple_desc,
-                child(0)->row_desc(), _row_descriptor);
+                _is_null_first, _sort_keys, _offset, partition_limit, _tnode.sort_node.topn_type, _order_by_types,
+                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
     } else {
         context_factory = std::make_shared<SortContextFactory>(
-                runtime_state(), is_merging, _limit, degree_of_parallelism, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
-                _is_asc_order, _is_null_first);
+                runtime_state(), _tnode.sort_node.topn_type, is_merging, _limit, degree_of_parallelism,
+                _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first);
     }
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -234,8 +235,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
         sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
                 context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc,
-                child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
+                _is_null_first, _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types,
+                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
     }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
@@ -269,8 +270,9 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         source_operator->set_degree_of_parallelism(degree_of_parallelism);
     }
     operators_source_with_sort.emplace_back(std::move(source_operator));
-    // TODO(HCF) other type of limit
-    if (!is_partition && limit() != -1) {
+
+    // Do not add LimitOperator if topn has partition columns or its type is not ROW_NUMBER
+    if (!is_partition && !is_rank_topn_type && limit() != -1) {
         operators_source_with_sort.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

@@ -376,7 +376,7 @@ public class SchemaChangeJob extends AlterJob {
         // here we just sending tasks to AgentTaskQueue.
         // task report process will later resend this task
 
-        LOG.info("sending schema change job {}, start txn id: {}", tableId, transactionId);
+        LOG.info("sending schema change job {}, start txn_id: {}", tableId, transactionId);
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -868,7 +868,7 @@ public class SchemaChangeJob extends AlterJob {
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logFinishingSchemaChange(this);
-        LOG.info("schema change job is finishing. finishing txn id: {} table {}", transactionId, tableId);
+        LOG.info("schema change job is finishing. finishing txn_id: {} table {}", transactionId, tableId);
         return 1;
     }
 

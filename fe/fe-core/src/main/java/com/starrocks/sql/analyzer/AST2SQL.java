@@ -391,14 +391,14 @@ public class AST2SQL {
             StringBuilder output = new StringBuilder("CASE");
             int childIdx = 0;
             if (hasCaseExpr) {
-                output.append(" ").append(visit(node.getChild(childIdx++)));
+                output.append(" ").append(printWithParentheses(node.getChild(childIdx++)));
             }
             while (childIdx + 2 <= node.getChildren().size()) {
-                output.append(" WHEN ").append(visit(node.getChild(childIdx++)));
-                output.append(" THEN ").append(visit(node.getChild(childIdx++)));
+                output.append(" WHEN ").append(printWithParentheses(node.getChild(childIdx++)));
+                output.append(" THEN ").append(printWithParentheses(node.getChild(childIdx++)));
             }
             if (hasElseExpr) {
-                output.append(" ELSE ").append(visit(node.getChild(node.getChildren().size() - 1)));
+                output.append(" ELSE ").append(printWithParentheses(node.getChild(node.getChildren().size() - 1)));
             }
             output.append(" END");
             return output.toString();
@@ -410,15 +410,14 @@ public class AST2SQL {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + visit(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             if (CompoundPredicate.Operator.NOT.equals(node.getOp())) {
-                sqlBuilder.append("( NOT ");
+                sqlBuilder.append("NOT ");
                 sqlBuilder.append(printWithParentheses(node.getChild(0)));
-                sqlBuilder.append(" )");
             } else {
                 sqlBuilder.append(printWithParentheses(node.getChild(0)));
                 sqlBuilder.append(" ").append(node.getOp()).append(" ");
@@ -439,7 +438,7 @@ public class AST2SQL {
 
             }
             strBuilder.append("EXISTS ");
-            strBuilder.append(visit(node.getChild(0)));
+            strBuilder.append(printWithParentheses(node.getChild(0)));
             return strBuilder.toString();
         }
 
@@ -477,9 +476,9 @@ public class AST2SQL {
         public String visitInPredicate(InPredicate node, Void context) {
             StringBuilder strBuilder = new StringBuilder();
             String notStr = (node.isNotIn()) ? "NOT " : "";
-            strBuilder.append(visit(node.getChild(0))).append(" ").append(notStr).append("IN (");
+            strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN (");
             for (int i = 1; i < node.getChildren().size(); ++i) {
-                strBuilder.append(visit(node.getChild(i)));
+                strBuilder.append(printWithParentheses(node.getChild(i)));
                 strBuilder.append((i + 1 != node.getChildren().size()) ? ", " : "");
             }
             strBuilder.append(")");
@@ -487,11 +486,12 @@ public class AST2SQL {
         }
 
         public String visitIsNullPredicate(IsNullPredicate node, Void context) {
-            return visit(node.getChild(0)) + (node.isNotNull() ? " IS NOT NULL" : " IS NULL");
+            return printWithParentheses(node.getChild(0)) + (node.isNotNull() ? " IS NOT NULL" : " IS NULL");
         }
 
         public String visitLikePredicate(LikePredicate node, Void context) {
-            return visit(node.getChild(0)) + " " + node.getOp() + " " + visit(node.getChild(1));
+            return printWithParentheses(node.getChild(0))
+                    + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
         }
 
         public String visitLiteral(LiteralExpr node, Void context) {

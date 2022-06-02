@@ -68,34 +68,6 @@ enum class PredicateType {
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
 
-inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
-    switch (p) {
-    case PredicateType::kEQ:
-        return TExprOpcode::EQ;
-    case PredicateType::kNE:
-        return TExprOpcode::NE;
-    case PredicateType::kGT:
-        return TExprOpcode::GT;
-    case PredicateType::kGE:
-        return TExprOpcode::GE;
-    case PredicateType::kLT:
-        return TExprOpcode::LT;
-    case PredicateType::kLE:
-        return TExprOpcode::LE;
-    case PredicateType::kInList:
-        return TExprOpcode::FILTER_IN;
-    case PredicateType::kNotInList:
-        return TExprOpcode::FILTER_NOT_IN;
-    case PredicateType::kAnd:
-        return TExprOpcode::COMPOUND_AND;
-    case PredicateType::kOr:
-        return TExprOpcode::COMPOUND_OR;
-    default:
-        CHECK(false) << "not supported";
-        __builtin_unreachable();
-    }
-}
-
 template <typename T>
 static inline T string_to_int(const Slice& s) {
     StringParser::ParseResult r;
@@ -137,23 +109,25 @@ public:
 
     uint32_t column_id() const { return _column_id; }
 
-    void evaluate(const Column* column, uint8_t* selection) const { evaluate(column, selection, 0, column->size()); }
-
-    void evaluate_and(const Column* column, uint8_t* selection) const {
-        evaluate_and(column, selection, 0, column->size());
+    Status evaluate(const Column* column, uint8_t* selection) const {
+        return evaluate(column, selection, 0, column->size());
     }
 
-    void evaluate_or(const Column* column, uint8_t* selection) const {
-        evaluate_or(column, selection, 0, column->size());
+    Status evaluate_and(const Column* column, uint8_t* selection) const {
+        return evaluate_and(column, selection, 0, column->size());
     }
 
-    virtual void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    Status evaluate_or(const Column* column, uint8_t* selection) const {
+        return evaluate_or(column, selection, 0, column->size());
+    }
 
-    virtual void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    virtual void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+    virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    virtual uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
+    virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+
+    virtual StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
         CHECK(false) << "not supported";
         return 0;
     }

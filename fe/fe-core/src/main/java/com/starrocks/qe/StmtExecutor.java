@@ -95,6 +95,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -300,7 +301,8 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewPlanner(parsedStmt)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) ||
+                    StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
@@ -356,7 +358,6 @@ public class StmtExecutor {
             if (context.getIsLastStmt()) {
                 addRunningQueryDetail();
             }
-
 
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
@@ -449,6 +450,8 @@ public class StmtExecutor {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
                 handleDelSqlBlackListStmt();
+            } else if (parsedStmt instanceof ExecuteAsStmt) {
+                handleExecAsStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -557,8 +560,12 @@ public class StmtExecutor {
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {
+        long profileBeginTime = System.currentTimeMillis();
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
+        long profileEndTime = System.currentTimeMillis();
+        profile.getChildMap().get("Summary")
+                .addInfoString(ProfileManager.PROFILE_TIME, DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
@@ -799,6 +806,10 @@ public class StmtExecutor {
         }
     }
 
+    private void handleExecAsStmt() {
+        ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
+    }
+
     private void handleUnsupportedStmt() {
         context.getMysqlChannel().reset();
         // do nothing
@@ -812,7 +823,8 @@ public class StmtExecutor {
             if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
             }
-            context.getGlobalStateMgr().changeDb(context, useStmt.getDatabase());
+            // TODO: refactor useStmt and rename getDatabase
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;
@@ -917,7 +929,12 @@ public class StmtExecutor {
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
-                sendShowResult(resultSet);
+                if (isProxy) {
+                    proxyResultSet = resultSet;
+                    context.getState().setEof();
+                } else {
+                    sendShowResult(resultSet);
+                }
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {

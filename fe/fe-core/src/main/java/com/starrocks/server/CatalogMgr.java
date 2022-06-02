@@ -18,15 +18,20 @@ import com.starrocks.persist.CreateCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CatalogMgr {
-
+    private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
     private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
     private final ConnectorMgr connectorMgr;
+    private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Catalog").add("Type").add("Comment")
@@ -35,6 +40,7 @@ public class CatalogMgr {
     private final CatalogProcNode procNode = new CatalogProcNode();
 
     public CatalogMgr(ConnectorMgr connectorMgr) {
+        Preconditions.checkNotNull(connectorMgr, "ConnectorMgr is null");
         this.connectorMgr = connectorMgr;
     }
 
@@ -47,23 +53,56 @@ public class CatalogMgr {
             throw new DdlException("Missing properties 'type'");
         }
 
-        Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+        readLock();
+        try {
+            Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+        } finally {
+            readUnlock();
+        }
+
         connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
         Catalog catalog = new ExternalCatalog(catalogName, comment, properties);
-        catalogs.put(catalogName, catalog);
+
+        writeLock();
+        try {
+            catalogs.put(catalogName, catalog);
+        } finally {
+            writeUnLock();
+        }
         // TODO edit log
     }
 
     public synchronized void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
-        Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+        readLock();
+        try {
+            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+        } finally {
+            readUnlock();
+        }
         connectorMgr.removeConnector(catalogName);
-        catalogs.remove(catalogName);
+
+        writeLock();
+        try {
+            catalogs.remove(catalogName);
+        } finally {
+            writeUnLock();
+        }
         // TODO edit log
     }
 
+    // TODO @caneGuy we should put internal catalog into catalogmgr
     public boolean catalogExists(String catalogName) {
-        return catalogs.containsKey(catalogName);
+        if (catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            return true;
+        }
+
+        readLock();
+        try {
+            return catalogs.containsKey(catalogName);
+        } finally {
+            readUnlock();
+        }
     }
 
     public static boolean isInternalCatalog(String name) {
@@ -96,6 +135,22 @@ public class CatalogMgr {
 
     public CatalogProcNode getProcNode() {
         return procNode;
+    }
+
+    private void readLock() {
+        this.catalogLock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        this.catalogLock.readLock().unlock();
+    }
+
+    private void writeLock() {
+        this.catalogLock.writeLock().lock();
+    }
+
+    private void writeUnLock() {
+        this.catalogLock.writeLock().unlock();
     }
 
     public class CatalogProcNode implements ProcNodeInterface {

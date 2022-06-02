@@ -35,12 +35,12 @@ public:
               _column_size(column_size),
               _scan_range(scan_range) {}
 
-    void rewrite_predicate(ObjectPool* pool);
+    Status rewrite_predicate(ObjectPool* pool);
 
 private:
-    bool _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
-    bool _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
-                                 const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
+    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
+    StatusOr<bool> _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
+                                           const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
     void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);
     void _get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
                                bool field_nullable);
@@ -66,7 +66,7 @@ public:
                                   std::vector<uint8_t>* disable_rewrite)
             : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
-    void rewrite_predicate(ObjectPool* pool);
+    Status rewrite_predicate(ObjectPool* pool);
 
     bool column_need_rewrite(ColumnId cid) {
         if (_disable_dict_rewrite && (*_disable_dict_rewrite)[cid]) return false;

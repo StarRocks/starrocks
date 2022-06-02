@@ -116,7 +116,8 @@ public class Optimizer {
         // statistics won't set correctly after physicalRuleRewrite.
         // we need set plan costs before physical rewrite stage.
         final CostEstimate costs = Explain.buildCost(result);
-        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost()).setPlanMemCosts(costs.getMemoryCost());
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
+                .setPlanMemCosts(costs.getMemoryCost());
 
         OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
         OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
@@ -129,7 +130,8 @@ public class Optimizer {
 
         // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        if (!sessionVariable.isDisableJoinReorder()) {
+        if (!sessionVariable.isDisableJoinReorder()
+                && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();

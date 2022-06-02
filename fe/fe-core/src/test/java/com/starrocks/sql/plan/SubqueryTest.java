@@ -189,4 +189,61 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n";
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
+
+    @Test
+    public void testInSubQueryWithAggAndPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    "IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT(t1d)\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 4> : 4: t1d\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        FeConstants.runningUnitTest = false;
+    }
 }

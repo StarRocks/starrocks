@@ -439,11 +439,11 @@ public class CatalogMocker {
                     minTimes = 0;
                     result = new EditLog("name");
 
-                    globalStateMgr.changeDb((ConnectContext) any, WRONG_DB);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, WRONG_DB);
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
                 }
             };

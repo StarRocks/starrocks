@@ -11,6 +11,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -203,7 +204,8 @@ public:
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table.reset(new MemTable(1, _schema.get(), _slots, _writer.get(), _mem_tracker.get()));
+        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
+        _mem_table.reset(new MemTable(1, _schema.get(), _slots, _mem_table_sink.get(), _mem_tracker.get()));
     }
 
     void TearDown() override {
@@ -219,6 +221,7 @@ public:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
+    unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {

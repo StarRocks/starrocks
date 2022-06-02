@@ -31,8 +31,12 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +145,23 @@ public class SplitAggregateRule extends TransformationRule {
         return hasSameMultiColumn;
     }
 
+    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
+        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            return false;
+        }
+
+        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
+        double rowCount = Math.max(1, statistics.getOutputRowCount());
+        if (rowCount / inputRowCount < StatisticsEstimateCoefficient.DEFAULT_AGGREGATE_EFFECT_COEFFICIENT) {
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         List<OptExpression> newExpressions = new ArrayList<>();
@@ -179,19 +200,18 @@ public class SplitAggregateRule extends TransformationRule {
             if (!operator.getGroupingKeys().isEmpty()) {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
                     if (isGroupByAllConstant(input, operator)) {
-                        newExpressions.addAll(implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
+                        return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
                                 input, operator, distinctColumns, singleDistinctFunctionPos,
-                                operator.getGroupingKeys()));
+                                operator.getGroupingKeys());
+                        // If agg node has limit or has a very good aggregation effect which could reduce the shuffle data,
+                        // we prefer to choose 2 phase aggregate
+                    } else if (canGenerateTwoStageAggregate(operator, distinctColumns) &&
+                            (operator.hasLimit() || hasAggregateEffect(input, distinctColumns))) {
+                        return implementTwoStageAgg(input, operator);
                     } else {
-                        newExpressions.addAll(implementOneDistinctWithGroupByAgg(
-                                context.getColumnRefFactory(), input, operator,
-                                singleDistinctFunctionPos));
+                        return implementOneDistinctWithGroupByAgg(context.getColumnRefFactory(), input, operator,
+                                singleDistinctFunctionPos);
                     }
-                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
-                        return newExpressions;
-                    }
-                    newExpressions.addAll(implementTwoStageAgg(input, operator));
-                    return newExpressions;
                 } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
                         canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
@@ -207,13 +227,8 @@ public class SplitAggregateRule extends TransformationRule {
                 }
             } else {
                 if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
-                    newExpressions.addAll(implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
-                            input, operator, distinctColumns, singleDistinctFunctionPos));
-                    if (!canGenerateTwoStageAggregate(operator, distinctColumns)) {
-                        return newExpressions;
-                    }
-                    newExpressions.addAll(implementTwoStageAgg(input, operator));
-                    return newExpressions;
+                    return implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
+                            input, operator, distinctColumns, singleDistinctFunctionPos);
                 } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
                         canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
@@ -259,7 +274,7 @@ public class SplitAggregateRule extends TransformationRule {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
-        } else if (functionName.equalsIgnoreCase("SUM")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
@@ -361,7 +376,7 @@ public class SplitAggregateRule extends TransformationRule {
         if (childProjection != null) {
             childProjection.getColumnRefMap().entrySet().stream()
                     .filter(entry -> groupByColumns.contains(entry.getKey())).forEach(entry -> columnRefMap.put(
-                    entry.getKey(), entry.getValue()));
+                            entry.getKey(), entry.getValue()));
         }
 
         LogicalAggregationOperator distinctGlobalWithProjection = new LogicalAggregationOperator.Builder()

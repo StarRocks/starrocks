@@ -231,12 +231,12 @@ private:
     // if we are in a literal run.  If the repeat_count_ get high enough, we switch
     // to encoding repeated runs.
     uint64_t current_value_;
-    int repeat_count_;
+    uint32_t repeat_count_;
 
     // Number of literals in the current run.  This does not include the literals
     // that might be in buffered_values_.  Only after we've got a group big enough
     // can we decide if they should part of the literal_count_ or repeat_count_
-    int literal_count_;
+    uint32_t literal_count_;
 
     // Index of a byte in the underlying buffer that stores the indicator byte.
     // This is reserved as soon as we need a literal run but the value is written
@@ -252,7 +252,7 @@ inline bool RleDecoder<T>::ReadHeader() {
     if (PREDICT_FALSE(literal_count_ == 0 && repeat_count_ == 0)) {
         // Read the next run's indicator int, it could be a literal or repeated run
         // The int is encoded as a vlq-encoded value.
-        int32_t indicator_value = 0;
+        uint32_t indicator_value = 0;
         bool result = bit_reader_.GetVlqInt(&indicator_value);
         if (PREDICT_FALSE(!result)) {
             return false;
@@ -483,8 +483,8 @@ inline void RleEncoder<T>::FlushLiteralRun(bool update_indicator_byte) {
         // The logic makes sure we flush literal runs often enough to not overrun
         // the 1 byte.
         //int num_groups = BitUtil::Ceil(literal_count_, 8);
-        int num_groups = literal_count_ / 8;
-        int32_t indicator_value = (num_groups << 1) | 1;
+        uint32_t num_groups = literal_count_ / 8;
+        uint32_t indicator_value = (num_groups << 1) | 1;
         DCHECK_EQ(indicator_value & 0xFFFFFF00, 0);
         bit_writer_.buffer()->data()[literal_indicator_byte_idx_] = indicator_value;
         literal_indicator_byte_idx_ = -1;
@@ -496,7 +496,17 @@ template <typename T>
 inline void RleEncoder<T>::FlushRepeatedRun() {
     DCHECK_GT(repeat_count_, 0);
     // The lsb of 0 indicates this is a repeated run
-    int32_t indicator_value = repeat_count_ << 1 | 0;
+
+    // Don't try to handle run lengths that don't fit in an int32_t - just fail gracefully.
+    // The Parquet standard does not allow longer runs - see PARQUET-1290.
+    if (UNLIKELY(repeat_count_ > std::numeric_limits<int32_t>::max())) {
+        num_buffered_values_ = 0;
+        repeat_count_ = 0;
+        LOG(WARNING) << "Run length don't fit in an int32_t";
+        return;
+    }
+
+    uint32_t indicator_value = repeat_count_ << 1 | 0;
     bit_writer_.PutVlqInt(indicator_value);
     bit_writer_.PutAligned(current_value_, BitUtil::Ceil(bit_width_, 8));
     num_buffered_values_ = 0;

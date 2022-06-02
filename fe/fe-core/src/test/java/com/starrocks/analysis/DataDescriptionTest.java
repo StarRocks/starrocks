@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.privilege.Auth;
@@ -106,7 +107,7 @@ public class DataDescriptionTest {
         params.add(new StringLiteral("day"));
         params.add(new SlotRef(null, "k2"));
         BinaryPredicate predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
-                new FunctionCallExpr("alignment_timestamp", params));
+                new FunctionCallExpr(FunctionSet.ALIGNMENT_TIMESTAMP, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
@@ -121,7 +122,7 @@ public class DataDescriptionTest {
         params.add(new StringLiteral("-"));
         params.add(new StringLiteral("10"));
         predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
-                new FunctionCallExpr("replace_value", params));
+                new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null,
@@ -136,7 +137,7 @@ public class DataDescriptionTest {
         params.add(new StringLiteral(""));
         params.add(new NullLiteral());
         predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
-                new FunctionCallExpr("replace_value", params));
+                new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,

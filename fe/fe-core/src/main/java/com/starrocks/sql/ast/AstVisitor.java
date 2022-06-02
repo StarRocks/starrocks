@@ -22,6 +22,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -110,6 +111,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -138,8 +147,16 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
+    }
+
+    public R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {

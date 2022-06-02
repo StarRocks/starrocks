@@ -24,6 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.TimeUtils;
@@ -91,6 +92,8 @@ public class ConnectContext {
     protected MysqlCapability capability;
     // Indicate if this client is killed.
     protected boolean isKilled;
+    // catalog
+    protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
 
@@ -236,6 +239,7 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    // TODO @caneGuy rename to setGlobalStateMgr
     public void setCatalog(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -475,6 +479,14 @@ public class ConnectContext {
 
     public void setWorkGroup(WorkGroup workGroup) {
         this.workGroup = workGroup;
+    }
+
+    public String getCurrentCatalog() {
+        return currentCatalog;
+    }
+
+    public void setCurrentCatalog(String currentCatalog) {
+        this.currentCatalog = currentCatalog;
     }
 
     // kill operation with no protect.

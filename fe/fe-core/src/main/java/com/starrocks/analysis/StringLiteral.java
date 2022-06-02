@@ -118,7 +118,11 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public String toSqlImpl() {
-        return "'" + value + "'";
+        String sql = value;
+        if (value != null && value.contains("\\")) {
+            sql = value.replace("\\", "\\\\");
+        }
+        return "'" + sql + "'";
     }
 
     @Override

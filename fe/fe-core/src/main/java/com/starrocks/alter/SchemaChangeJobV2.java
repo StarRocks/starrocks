@@ -350,7 +350,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        LOG.info("transfer schema change job {} state to {}, watershed txn id: {}", jobId, this.jobState,
+        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
     }
 

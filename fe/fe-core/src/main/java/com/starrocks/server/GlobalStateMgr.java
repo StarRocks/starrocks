@@ -30,8 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.sleepycat.je.rep.NetworkRestore;
-import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
@@ -72,7 +70,6 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
@@ -129,6 +126,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -160,6 +158,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -207,6 +206,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -575,6 +575,11 @@ public class GlobalStateMgr {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    @VisibleForTesting
+    public ConcurrentHashMap<Long, Database> getIdToDb() {
+        return localMetastore.getIdToDb();
     }
 
     // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
@@ -1130,11 +1135,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.loadSmallFiles(dis, checksum);
             checksum = pluginMgr.loadPlugins(dis, checksum);
             checksum = loadDeleteHandler(dis, checksum);
-
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = workGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = auth.readAsGson(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = taskManager.loadTasks(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1358,11 +1366,14 @@ public class GlobalStateMgr {
             checksum = smallFileMgr.saveSmallFiles(dos, checksum);
             checksum = pluginMgr.savePlugins(dos, checksum);
             checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = workGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = auth.writeAsGson(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1487,13 +1498,10 @@ public class GlobalStateMgr {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
                 } catch (InsufficientLogException insufficientLogEx) {
-                    // Copy the missing log files from a member of the
-                    // replication group who owns the files
-                    LOG.error("catch insufficient log exception. please restart.", insufficientLogEx);
-                    NetworkRestore restore = new NetworkRestore();
-                    NetworkRestoreConfig config = new NetworkRestoreConfig();
-                    config.setRetainLogFiles(false);
-                    restore.execute(insufficientLogEx, config);
+                    // for InsufficientLogException we should refresh the log and
+                    // then exit the process because we may have read dirty data.
+                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
+                    ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal.", e);
@@ -2715,17 +2723,42 @@ public class GlobalStateMgr {
         this.alter.getClusterHandler().cancel(stmt);
     }
 
-    // Change current database of this session.
-    public void changeDb(ConnectContext ctx, String qualifiedDb) throws DdlException {
-        if (!auth.checkDbPriv(ctx, qualifiedDb, PrivPredicate.SHOW)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED, ctx.getQualifiedUser(), qualifiedDb);
+    // Change current catalog and database of this session.
+    // We can support 'USE CATALOG.DB'
+    public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
+        String currentCatalogName = ctx.getCurrentCatalog();
+        String dbName = ctx.getDatabase();
+
+        String[] parts = identifier.split("\\.");
+        if (parts.length != 1 && parts.length != 2) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+        } else if (parts.length == 1) {
+            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
+                    ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
+        } else {
+            String newCatalogName = parts[0];
+            if (catalogMgr.catalogExists(newCatalogName)) {
+                dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
+                        ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+            }
+            ctx.setCurrentCatalog(newCatalogName);
         }
 
-        if (getDb(qualifiedDb) == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, qualifiedDb);
+        // check auth for internal catalog
+        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+                !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
         }
 
-        ctx.setDatabase(qualifiedDb);
+        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        ctx.setDatabase(dbName);
     }
 
     // for test only
@@ -2784,7 +2817,7 @@ public class GlobalStateMgr {
         return localMetastore.getMigrations();
     }
 
-    public void refreshExternalTable(RefreshExternalTableStmt stmt) throws DdlException {
+    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
@@ -3081,6 +3114,16 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            taskManager.removeOldTaskInfo();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old task failed", t);
+        }
+        try {
+            taskManager.removeOldTaskRunHistory();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean old run history failed", t);
         }
     }
 }
