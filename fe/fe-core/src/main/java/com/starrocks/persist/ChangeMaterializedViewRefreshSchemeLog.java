@@ -13,7 +13,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
-    @SerializedName(value = "MaterializedViewId")
+    @SerializedName(value = "id")
     private long id;
 
     @SerializedName(value = "dbId")

@@ -13,7 +13,7 @@ import java.io.IOException;
 
 public class RenameMaterializedViewLog implements Writable {
 
-    @SerializedName(value = "MaterializedViewId")
+    @SerializedName(value = "id")
     private long id;
 
     @SerializedName(value = "dbId")
