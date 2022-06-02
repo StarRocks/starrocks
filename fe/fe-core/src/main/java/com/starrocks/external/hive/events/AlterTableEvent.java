@@ -4,12 +4,10 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveTableKey;
 import com.starrocks.external.hive.HiveTableName;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -32,7 +30,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
     // true if this alter event was due to a rename operation
     protected final boolean isRename;
     // true if this alter event was due to a schema change operation
-    protected final boolean isSchemaChange;
+    protected boolean isSchemaChange = false;
 
     private AlterTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
@@ -44,7 +42,10 @@ public class AlterTableEvent extends MetastoreTableEvent {
             hmsTbl = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
             tableAfter = Preconditions.checkNotNull(alterTableMessage.getTableObjAfter());
             tableBefore = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
-            isSchemaChange = isSchemaChange(tableBefore.getSd().getCols(), tableAfter.getSd().getCols());
+            // ignore schema change on internal catalog's hive table
+            if (!HiveMetaStoreTableUtils.isInternalCatalog(metaCache.getResourceName())) {
+                isSchemaChange = isSchemaChange(tableBefore.getSd().getCols(), tableAfter.getSd().getCols());
+            }
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter table message"), e);
@@ -121,16 +122,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
         try {
             if (isSchemaChange) {
-                if (HiveMetaStoreTableUtils.isInternalCatalog(cache.getResourceName())) {
-                    HiveTable srTable = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                            .getHiveTable(cache.getResourceName(), dbName, tblName);
-                    if (srTable == null) {
-                        return;
-                    }
-                    srTable.refreshExternalTableSchema(tableAfter);
-                } else {
-                    cache.refreshConnectorTableSchema(HiveTableName.of(dbName, tblName));
-                }
+                cache.refreshConnectorTableSchema(HiveTableName.of(dbName, tblName));
             }
             cache.alterTableByEvent(HiveTableKey.gen(dbName, tblName), getHivePartitionKey(),
                     tableAfter.getSd(), tableAfter.getParameters());

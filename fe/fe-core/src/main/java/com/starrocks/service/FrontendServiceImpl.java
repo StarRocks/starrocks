@@ -31,6 +31,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -1057,6 +1058,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TRefreshTableResponse refreshTable(TRefreshTableRequest request) throws TException {
         try {
+            // Adapt to the situation that the Fe node before upgrading sends a request to the Fe node after upgrading.
+            if (request.getCatalog_name() == null) {
+                request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            }
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
                             request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));

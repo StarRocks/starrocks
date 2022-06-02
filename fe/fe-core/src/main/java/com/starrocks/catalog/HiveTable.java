@@ -108,9 +108,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     private HiveMetaStoreTableInfo hmsTableInfo;
 
-    // use to write edit ModifyTableColumnOperationLog log
-    private String srFullDbName;
-
     private final HiveRepository hiveRepository;
 
     public HiveTable() {
@@ -136,10 +133,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public String getResourceName() {
         return resourceName;
-    }
-
-    public void setSrFullDbName(String srFullDbName) {
-        this.srFullDbName = srFullDbName;
     }
 
     public String getHiveDb() {
@@ -208,12 +201,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
         return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
-    }
-
-    public void refreshExternalTableSchema(org.apache.hadoop.hive.metastore.api.Table table) throws DdlException {
-        Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
-        refreshSchemaCache(table.getSd().getCols(), updatedTableSchemas);
-        modifyTableSchema(srFullDbName, getName());
     }
 
     @Override
@@ -289,12 +276,25 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void modifyTableSchema(String dbName, String tableName) {
+    public void modifyTableSchema(String dbName, String tableName) throws DdlException {
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             return;
         }
-        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Not found database " + dbName);
+        }
+        db.readLock();
+        try {
+            Table hiveTable = db.getTable(tableName);
+            if (hiveTable == null) {
+                throw new DdlException("Not found table " + dbName + "." + tableName);
+            }
+            ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+        } finally {
+            db.readUnlock();
+        }
     }
 
     @Override
@@ -531,9 +531,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             }
             jsonObject.add(JSON_KEY_HIVE_PROPERTIES, jHiveProperties);
         }
-        if (!Strings.isNullOrEmpty(srFullDbName)) {
-            jsonObject.addProperty(JSON_KEY_SR_DB_NAME, srFullDbName);
-        }
         Text.writeString(out, jsonObject.toString());
     }
 
@@ -581,9 +578,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                         dataColumnNames.add(col.getName());
                     }
                 }
-            }
-            if (jsonObject.has(JSON_KEY_SR_DB_NAME)) {
-                srFullDbName = jsonObject.getAsJsonPrimitive(JSON_KEY_SR_DB_NAME).getAsString();
             }
         } else {
             hiveDbName = Text.readString(in);
