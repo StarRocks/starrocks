@@ -1,5 +1,6 @@
 name: New Content
 description: Want to add new content？
+labels: docs/new content
 title: "[New Content]: " 
 body:
 - type: markdown
