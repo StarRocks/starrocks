@@ -318,7 +318,7 @@ public class CreateTableTest {
         Assert.assertTrue(table == null);
     }
 
-    
+    /*
     @Test
     public void testCreateOlapTableWithLakeTablet() throws DdlException {
         Config.use_staros = true;
@@ -354,6 +354,7 @@ public class CreateTableTest {
 
         Config.use_staros = false;
     }
+     */
     
     @Test
     public void testCreateTableWithoutDistribution() {
