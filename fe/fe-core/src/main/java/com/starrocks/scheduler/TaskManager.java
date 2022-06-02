@@ -106,18 +106,17 @@ public class TaskManager {
             while (pendingIter.hasNext()) {
                 Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().get(pendingIter.next());
                 for (TaskRun taskRun : taskRuns) {
-                    taskRun.getStatus().setErrorMessage("Fe restart abort the task");
+                    taskRun.getStatus().setErrorMessage("Fe abort the task");
                     taskRun.getStatus().setErrorCode(-1);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                     taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
                 }
                 pendingIter.remove();
             }
-            // will not happen, but defensive programming
             Iterator<Long> runningIter = taskRunManager.getRunningTaskRunMap().keySet().iterator();
             while (runningIter.hasNext()) {
                 TaskRun taskRun = taskRunManager.getRunningTaskRunMap().get(runningIter.next());
-                taskRun.getStatus().setErrorMessage("Fe restart abort the task");
+                taskRun.getStatus().setErrorMessage("Fe abort the task");
                 taskRun.getStatus().setErrorCode(-1);
                 taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                 runningIter.remove();
@@ -378,10 +377,14 @@ public class TaskManager {
     }
 
     public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
+        Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
-        if (taskRunQueue != null) {
+        if (fromStatus == Constants.TaskRunState.PENDING && toStatus == Constants.TaskRunState.RUNNING) {
+            Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
+            if (taskRunQueue == null) {
+                return;
+            }
             if (taskRunQueue.size() == 0) {
                 taskRunManager.getPendingTaskRunMap().remove(taskId);
                 return;
@@ -389,6 +392,20 @@ public class TaskManager {
 
             TaskRun pendingTaskRun = taskRunQueue.poll();
             TaskRunStatus status = pendingTaskRun.getStatus();
+            if (status.getQueryId().equals(statusChange.getQueryId())) {
+                status.setState(Constants.TaskRunState.RUNNING);
+                taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
+                if (taskRunQueue.size() == 0) {
+                    taskRunManager.getPendingTaskRunMap().remove(taskId);
+                }
+            }
+        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
+                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+            TaskRun runningTaskRun = taskRunManager.getRunningTaskRunMap().remove(taskId);
+            if (runningTaskRun == null) {
+                return;
+            }
+            TaskRunStatus status = runningTaskRun.getStatus();
             if (status.getQueryId().equals(statusChange.getQueryId())) {
                 if (toStatus == Constants.TaskRunState.FAILED) {
                     status.setErrorMessage(statusChange.getErrorMessage());
@@ -398,6 +415,9 @@ public class TaskManager {
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
+        } else {
+            LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
+                    statusChange.getQueryId(), fromStatus, toStatus);
         }
     }
 
