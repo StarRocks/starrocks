@@ -66,7 +66,7 @@ private:
 
 class ShortKeyIndexDecoderGroup {
 public:
-    explicit ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*> sk_index_decoders);
+    explicit ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*>&& sk_index_decoders);
 
     ShortKeyIndexGroupIterator begin() const;
     ShortKeyIndexGroupIterator end() const;

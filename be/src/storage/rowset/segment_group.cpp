@@ -18,7 +18,7 @@ Slice ShortKeyIndexGroupIterator::operator*() const {
 }
 
 /// ShortKeyIndexDecoderGroup
-ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*> sk_index_decoders)
+ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*>&& sk_index_decoders)
         : _sk_index_decoders(std::move(sk_index_decoders)) {
     _decoder_start_ordinals.reserve(_sk_index_decoders.size() + 1);
     ssize_t num_total_items = 0;
