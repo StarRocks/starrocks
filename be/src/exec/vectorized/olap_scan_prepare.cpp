@@ -600,6 +600,7 @@ private:
 
 Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
+    scan_keys.set_is_convertible(unlimited);
     const std::vector<std::string>& ref_key_column_names = *key_column_names;
 
     for (const auto& key_column_name : ref_key_column_names) {
@@ -608,15 +609,12 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-
-    // When there is only one conditional key column,
-    // searching for range is better than searching for multiple points.
-    scan_keys.set_is_convertible(unlimited && conditional_key_columns > 1);
-
-    for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
-        ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
-        if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
-            break;
+    if (conditional_key_columns > 1) {
+        for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
+            ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
+            if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
+                break;
+            }
         }
     }
     return Status::OK();
