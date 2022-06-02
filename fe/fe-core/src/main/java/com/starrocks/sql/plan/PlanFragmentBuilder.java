@@ -1615,6 +1615,7 @@ public class PlanFragmentBuilder {
             PlanNode leftPlanRoot = visit(optExpr.inputAt(0), context).getPlanRoot();
             PlanNode rightPlanRoot = visit(optExpr.inputAt(1), context).getPlanRoot();
             context.getFragments().clear();
+            context.getScanNodes().clear();
             OptExpression leftExpression = optExpr.inputAt(0);
             OptExpression rightExpression = optExpr.inputAt(1);
             boolean needDealSort = leftExpression.getInputs().size() > 0 && rightExpression.getInputs().size() > 0;
