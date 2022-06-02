@@ -91,12 +91,14 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -155,6 +157,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -2276,6 +2279,40 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        Database db = this.fullNameToDb.get(dbName);
+        db.createTableWithLock(materializedView, true);
+
+        if (!isCheckpointThread()) {
+            // add to inverted index
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            long dbId = db.getId();
+            long tableId = materializedView.getId();
+            for (Partition partition : materializedView.getAllPartitions()) {
+                long partitionId = partition.getId();
+                TStorageMedium medium = materializedView.getPartitionInfo().getDataProperty(
+                        partitionId).getStorageMedium();
+                boolean useStarOS = partition.isUseStarOS();
+                for (MaterializedIndex mIndex : partition.getMaterializedIndices(
+                        MaterializedIndex.IndexExtState.ALL)) {
+                    long indexId = mIndex.getId();
+                    int schemaHash = materializedView.getSchemaHashByIndexId(indexId);
+                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium);
+                    for (Tablet tablet : mIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        invertedIndex.addTablet(tabletId, tabletMeta);
+                        if (!useStarOS) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
+                        }
+                    }
+                }
+            } // end for partitions
+            // todo add async task after task framework is completed
+        }
+    }
+
     private void createTablets(String clusterName, MaterializedIndex index, Replica.ReplicaState replicaState,
                                DistributionInfo distributionInfo, long version, short replicationNum,
                                TabletMeta tabletMeta, Set<Long> tabletIdSet) throws DdlException {
@@ -2845,11 +2882,11 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createMaterializedView(CreateMaterializedViewStatement statement)
+    public void createMaterializedView(CreateMaterializedViewStatement stmt)
             throws DdlException {
-        // check Mv exists,name must be different from view/mv/table which exists in metadata
-        String mvName = statement.getTableName().getTbl();
-        String dbName = statement.getTableName().getDb();
+        // check mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = stmt.getTableName().getTbl();
+        String dbName = stmt.getTableName().getDb();
         LOG.debug("Begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);
@@ -2860,7 +2897,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.readLock();
         try {
             if (db.getTable(mvName) != null) {
-                if (statement.isIfNotExists()) {
+                if (stmt.isIfNotExists()) {
                     LOG.info("Create materialized view [{}] which already exists", mvName);
                     return;
                 } else {
@@ -2870,6 +2907,112 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.readUnlock();
         }
+        // create columns
+        List<Column> baseSchema = stmt.getMvColumnItems();
+        validateColumns(baseSchema);
+        // create partition info
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        Map<String, Long> partitionNameToId = Maps.newHashMap();
+        PartitionInfo partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+        // create distribution info
+        DistributionDesc distributionDesc = stmt.getDistributionDesc();
+        Preconditions.checkNotNull(distributionDesc);
+        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        // create refresh scheme
+        MaterializedView.MvRefreshScheme mvRefreshScheme = null;
+        new MaterializedView.MvRefreshScheme();
+        RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        if (refreshSchemeDesc.getType() == RefreshType.ASYNC) {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+        }
+        // create mv
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedView materializedView =
+                new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                        distributionInfo,
+                        mvRefreshScheme);
+        // set comment
+        materializedView.setComment(stmt.getComment());
+        // set baseTableIds
+        materializedView.setBaseTableIds(stmt.getBaseTableIds());
+        // set viewDefineSql
+        materializedView.setViewDefineSql(stmt.getInlineViewDef());
+        // set base index id
+        long baseIndexId = getNextId();
+        materializedView.setBaseIndexId(baseIndexId);
+        // set base index meta
+        int schemaVersion = 0;
+        int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
+        TStorageType baseIndexStorageType = TStorageType.COLUMN;
+        materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
+                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
+        // set replication_num
+        Map<String, String> properties = stmt.getProperties();
+        short replicationNum = FeConstants.default_replication_num;
+        try {
+            boolean isReplicationNumSet =
+                    properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+            replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+            if (isReplicationNumSet) {
+                materializedView.setReplicationNum(replicationNum);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        // set storage medium
+        try {
+            boolean hasMedium = false;
+            if (properties != null) {
+                hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+            }
+            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.DEFAULT_DATA_PROPERTY);
+            if (hasMedium) {
+                materializedView.setStorageMedium(dataProperty.getStorageMedium());
+                // set storage coldown time into table property,
+                // because we don't have property in MaterializedView
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
+                                String.valueOf(dataProperty.getCooldownTimeMs()));
+            }
+            if (properties != null && !properties.isEmpty()) {
+                // here, all properties should be checked
+                throw new DdlException("Unknown properties: " + properties);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        boolean createMvSuccess;
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            if (getDb(db.getId()) == null) {
+                throw new DdlException("Database has been dropped when creating materialized view");
+            }
+            createMvSuccess = db.createMaterializedWithLock(materializedView, false);
+            if (!createMvSuccess) {
+                if (!stmt.isIfNotExists()) {
+                    ErrorReport
+                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
+                                    "Materialized view already exists");
+                } else {
+                    LOG.info("Create materialized view[{}] which already exists", materializedView);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+        LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
+
+        // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
+        // todo add async task after task framework is completed
     }
 
     @Override

@@ -36,6 +36,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -200,6 +201,13 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getFullName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    break;
+                }
+                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
+                    CreateTableInfo info = (CreateTableInfo) journal.getData();
+                    LOG.info("Begin to unprotect create materialized view. db = "
+                            + info.getDbName() + " create materialized view = " + info.getTable().getId());
+                    globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -987,6 +995,10 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logEdit(OperationType.OP_CREATE_TABLE, info);
+    }
+
+    public void logCreateMaterializedView(CreateTableInfo info) {
+        logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
     public void logWorkGroupOp(WorkGroupOpEntry op) {

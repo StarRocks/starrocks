@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
@@ -77,6 +79,7 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Set<Long> baseTableIds = Sets.newHashSet();
             tableNameTableMap.forEach((tableName, table) -> {
                 if (!tableName.getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException(
@@ -87,7 +90,9 @@ public class MaterializedViewAnalyzer {
                             "Materialized view only support olap table:" + tableName.getTbl() + " type:" +
                                     table.getType().name());
                 }
+                baseTableIds.add(table.getId());
             });
+            statement.setBaseTableIds(baseTableIds);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
@@ -130,6 +135,8 @@ public class MaterializedViewAnalyzer {
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
                 Column column = new Column(columnOutputNames.get(i), outputExpression.get(i).getType());
+                // set column is duplicate key
+                column.setIsKey(true);
                 mvColumns.add(column);
                 columnExprMap.put(column, outputExpression.get(i));
             }
