@@ -1141,6 +1141,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = catalogMgr.loadCatalogs(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1371,6 +1373,8 @@ public class GlobalStateMgr {
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
         }
 
