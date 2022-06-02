@@ -488,7 +488,7 @@ public class Coordinator {
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                // shuffle partitions'ordinals in DataStreamSink. backendIds of Fragment instances that
+                // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
                 // contains shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
@@ -1334,6 +1334,28 @@ public class Coordinator {
         }
     }
 
+<<<<<<< HEAD
+=======
+    static final int BUCKET_ABSENT = 2147483647;
+
+    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
+        Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
+        // absence of buckets.
+        for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
+            bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
+        }
+        for (int i = 0; i < params.instanceExecParams.size(); ++i) {
+            FInstanceExecParam instance = params.instanceExecParams.get(i);
+            for (Integer bucketSeq : instance.bucketSeqSet) {
+                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
+                bucketSeq2InstanceOrdinal[bucketSeq] = i;
+            }
+        }
+        fragmentIdToSeqToInstanceMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2InstanceOrdinal));
+    }
+
+>>>>>>> 09e949b69 ([BugFix] Fix backend number assert (#6809))
     private boolean isColocateFragment(PlanNode node) {
         // Cache the colocateFragmentIds
         if (colocateFragmentIds.contains(node.getFragmentId().asInt())) {
@@ -1569,13 +1591,12 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        if (params.backend_num >= backendExecStates.size()) {
-            LOG.warn("unknown backend number: {}, expected less than: {}",
-                    params.backend_num, backendExecStates.size());
+        BackendExecState execState = backendExecStates.get(params.backend_num);
+        if (execState == null) {
+            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
+                    backendExecStates.keySet());
             return;
         }
-
-        BackendExecState execState = backendExecStates.get(params.backend_num);
         lock();
         try {
             if (!execState.updateProfile(params)) {
