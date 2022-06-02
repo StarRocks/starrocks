@@ -2281,13 +2281,13 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         Database db = this.fullNameToDb.get(dbName);
-        db.createTableWithLock(materializedView, true);
+        db.createMaterializedWithLock(materializedView, true);
 
         if (!isCheckpointThread()) {
             // add to inverted index
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             long dbId = db.getId();
-            long tableId = materializedView.getId();
+            long mvId = materializedView.getId();
             for (Partition partition : materializedView.getAllPartitions()) {
                 long partitionId = partition.getId();
                 TStorageMedium medium = materializedView.getPartitionInfo().getDataProperty(
@@ -2297,7 +2297,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = mIndex.getId();
                     int schemaHash = materializedView.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium);
+                    TabletMeta tabletMeta = new TabletMeta(dbId, mvId, partitionId, indexId, schemaHash, medium);
                     for (Tablet tablet : mIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
