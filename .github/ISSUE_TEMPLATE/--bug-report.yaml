@@ -1,5 +1,6 @@
 name: Docs Bug
 description: Report a problem with documentation.
+labels: docs/bug
 title: "[Docs Bug]: " 
 body:
 - type: markdown
