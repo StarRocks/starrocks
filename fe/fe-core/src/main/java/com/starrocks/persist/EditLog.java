@@ -285,7 +285,7 @@ public class EditLog {
                 }
                 case OperationType.OP_RESTORE_JOB: {
                     RestoreJob job = (RestoreJob) journal.getData();
-                    job.setCatalog(globalStateMgr);
+                    job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
