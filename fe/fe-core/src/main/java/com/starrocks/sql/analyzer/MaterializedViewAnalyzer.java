@@ -291,19 +291,23 @@ public class MaterializedViewAnalyzer {
                     LocalDateTime startTime = async.getStartTime();
                     final long step = async.getStep();
                     TimestampArithmeticExpr.TimeUnit timeUnit = async.getTimeUnit();
-                    if (startTime != null && timeUnit == null) {
-                        throw new SemanticException("please input interval clause");
-                    }
-                    if (startTime != null && startTime.isBefore(LocalDateTime.now())) {
-                        throw new IllegalArgumentException("Refresh start must be after current time");
+                    if (startTime != null) {
+                        if (startTime.isBefore(LocalDateTime.now())) {
+                            throw new SemanticException("Refresh start must be after current time");
+                        }
+                        if (timeUnit == null) {
+                            throw new SemanticException("Please input interval clause");
+                        }
                     } else {
                         async.setStartTime(LocalDateTime.now());
                     }
-                    if (timeUnit != null && async.getSupportedTimeUnitType().contains(timeUnit)) {
-                        throw new IllegalArgumentException("Unsupported time unit");
-                    }
-                    if (step < 0) {
-                        throw new IllegalArgumentException("Unsupported negative step value");
+                    if (timeUnit != null) {
+                        if (step <= 0) {
+                            throw new SemanticException("Unsupported negative or zero step value");
+                        }
+                        if (!async.getSupportedTimeUnitType().contains(timeUnit)) {
+                            throw new SemanticException("Unsupported time unit");
+                        }
                     }
                 }
             } else {

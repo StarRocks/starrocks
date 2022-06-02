@@ -5,6 +5,7 @@ import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
@@ -91,6 +92,12 @@ public class AlterMaterializedViewTest {
                 TimestampArithmeticExpr.TimeUnit.HOUR);
     }
 
+    @Test(expected= AnalysisException.class)
+    public void testAlterAsyncRefreshWithoutInterval() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23')";
+        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
     @Test
     public void testAlterAsyncRefreshWithoutAll() throws Exception {
         String alterMvSql = "alter materialized view mv1 refresh async";
@@ -104,4 +111,17 @@ public class AlterMaterializedViewTest {
         assertEquals((((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStep()), 0);
         assertNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getTimeUnit());
     }
+
+    @Test(expected= AnalysisException.class)
+    public void testIllegalTimeUnit() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async every (interval 1 second)";
+        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
+    @Test(expected= IllegalArgumentException.class)
+    public void testIllegalStep() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async every (interval -1 minute)";
+        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
 }
