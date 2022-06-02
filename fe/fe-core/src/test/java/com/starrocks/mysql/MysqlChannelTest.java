@@ -162,7 +162,7 @@ public class MysqlChannelTest {
                 minTimes = 0;
                 result = new Delegate() {
                     int fakeRead(ByteBuffer buffer) {
-                        int maxLen = 0xffffff - 1;
+                        int maxLen = MysqlChannel.MAX_PHYSICAL_PACKET_LENGTH;
                         MysqlSerializer serializer = MysqlSerializer.newInstance();
                         if (readIdx == 0) {
                             // packet
