@@ -550,7 +550,7 @@ public class GlobalStateMgr {
         if (Config.use_staros) {
             this.starOSAgent = new StarOSAgent();
         }
-        
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);

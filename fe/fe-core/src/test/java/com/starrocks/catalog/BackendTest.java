@@ -28,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,6 +51,7 @@ public class BackendTest {
     private int bePort = 21235;
     private int httpPort = 21237;
     private int beRpcPort = 21238;
+    private int starletPort = 21239;
 
     private GlobalStateMgr globalStateMgr;
 
@@ -69,6 +71,7 @@ public class BackendTest {
 
         backend = new Backend(backendId, host, heartbeatPort);
         backend.updateOnce(bePort, httpPort, beRpcPort);
+        backend.setStarletPort(starletPort);
     }
 
     @Test
@@ -77,6 +80,7 @@ public class BackendTest {
         Assert.assertEquals(host, backend.getHost());
         Assert.assertEquals(heartbeatPort, backend.getHeartbeatPort());
         Assert.assertEquals(bePort, backend.getBePort());
+        Assert.assertEquals(starletPort, backend.getStarletPort());
 
         // set new port
         int newBePort = 31235;
