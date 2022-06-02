@@ -2,15 +2,12 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
-import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ServiceInfo;
-import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
@@ -19,7 +16,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * StarOSAgent is responsible for
@@ -62,49 +58,15 @@ public class StarOSAgent {
     }
 
     public List<Long> createShards(int numShards) {
-        List<ShardInfo> shardInfos = Lists.newArrayList();
-        try {
-            shardInfos = client.createShard(serviceId, numShards);
-        } catch (StarClientException e) {
-            LOG.warn(e);
-            return Lists.newArrayList();
-        }
-
-        Preconditions.checkState(shardInfos.size() == numShards);
-        return shardInfos.stream().map(shardInfo -> shardInfo.getShardId()).collect(Collectors.toList());
+        return Lists.newArrayList();
     }
 
     public long getPrimaryBackendIdByShard(long shardId) {
-        Set<Long> backendIds = getBackendIdsByShard(shardId);
-        Preconditions.checkState(backendIds.size() == 1);
-        return backendIds.iterator().next();
+        return 0;
     }
 
     public Set<Long> getBackendIdsByShard(long shardId) {
-        Set<Long> backendIds = Sets.newHashSet();
-        List<ShardInfo> shardInfos = Lists.newArrayList();
-        try {
-            shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
-        } catch (StarClientException e) {
-            LOG.warn(e);
-            return Sets.newHashSet();
-        }
-
-        Preconditions.checkState(shardInfos.size() == 1);
-        List<ReplicaInfo> replicaInfos = shardInfos.get(0).getReplicaInfoList();
-        for (ReplicaInfo replicaInfo : replicaInfos) {
-            WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
-            String ipPort = workerInfo.getIpPort();
-            String host = ipPort.split(":")[0];
-            long workerId = workerToId.get(ipPort);
-            if (!workerToBackend.containsKey(workerId)) {
-                LOG.warn("Backend does not exists. host: {}", host);
-                continue;
-            }
-            long backendId = workerToBackend.get(workerId);
-            backendIds.add(backendId);
-        }
-        return backendIds;
+        return Sets.newHashSet();
     }
 
     public void registerAndBootstrapService(String serviceName) {
