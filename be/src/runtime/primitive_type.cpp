@@ -195,7 +195,7 @@ struct FixedLengthTypeGetter {
 };
 
 size_t get_size_of_fixed_length_type(PrimitiveType ptype) {
-    return type_dispatch_basic(ptype, FixedLengthTypeGetter());
+    return type_dispatch_all(ptype, FixedLengthTypeGetter());
 }
 
 } // namespace starrocks
