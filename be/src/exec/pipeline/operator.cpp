@@ -48,8 +48,6 @@ Status Operator::prepare(RuntimeState* state) {
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
 
-    _total_cost_cpu_time_ns_counter = ADD_TIMER(_common_metrics, "OperatorTotalCostCpuTime");
-
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
@@ -146,7 +144,7 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
-RuntimeState* Operator::runtime_state() {
+RuntimeState* Operator::runtime_state() const {
     return _factory->runtime_state();
 }
 
@@ -206,6 +204,23 @@ Status OperatorFactory::prepare(RuntimeState* state) {
 void OperatorFactory::close(RuntimeState* state) {
     if (_runtime_filter_collector) {
         _runtime_filter_collector->close(state);
+    }
+}
+
+void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+    for (auto& holder : holders) {
+        DCHECK(holder->is_ready());
+        auto* collector = holder->get_collector();
+
+        collector->rewrite_in_filters(_tuple_slot_mappings);
+
+        auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
+        for (auto* filter : in_filters) {
+            filter->prepare(state);
+            filter->open(state);
+            _runtime_in_filters.push_back(filter);
+        }
     }
 }
 

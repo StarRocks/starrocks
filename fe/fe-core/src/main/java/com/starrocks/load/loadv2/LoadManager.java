@@ -32,6 +32,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.TimeoutException;
@@ -49,18 +50,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -215,6 +219,10 @@ public class LoadManager implements Writable {
                 .add("operation", operation)
                 .add("msg", "replay end load job")
                 .build());
+        if (isJobExpired(job, System.currentTimeMillis())) {
+            LOG.info("remove expired job: {}", job);
+            unprotectedRemoveJobReleatedMeta(job);
+        }
     }
 
     public void replayUpdateLoadJobStateInfo(LoadJob.LoadJobStateUpdateInfo info) {
@@ -226,6 +234,11 @@ public class LoadManager implements Writable {
         }
 
         job.replayUpdateStateInfo(info);
+
+        if (isJobExpired(job, System.currentTimeMillis())) {
+            LOG.info("remove expired job: {}", job);
+            unprotectedRemoveJobReleatedMeta(job);
+        }
     }
 
     public long getLoadJobNum(JobState jobState, long dbId) {
@@ -277,33 +290,51 @@ public class LoadManager implements Writable {
         }
     }
 
+    private boolean isJobExpired(LoadJob job, long currentTimeMs) {
+        if (!job.isCompleted()) {
+            return false;
+        }
+        return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
+    }
+
     public void removeOldLoadJob() {
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
         try {
-            // get completed jobs
-            List<LoadJob> jobs =
-                    idToLoadJob.values().stream().filter(job -> job.isCompleted()).collect(Collectors.toList());
-            if (jobs.isEmpty()) {
-                return;
-            }
-
-            // sort by finish time asc
-            Collections.sort(jobs, new Comparator<LoadJob>() {
+            // add load job to a sorted tree set
+            Set<LoadJob> jobs = new TreeSet<>(new Comparator<LoadJob>() {
                 @Override
                 public int compare(LoadJob o1, LoadJob o2) {
+                    // sort by finish time desc
                     return Long.signum(o1.getFinishTimestamp() - o2.getFinishTimestamp());
                 }
             });
 
-            // remove jobs by label_keep_max_second and label_keep_max_num
-            int labelKeepMaxSecond = Config.label_keep_max_second;
-            int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
-            for (LoadJob job : jobs) {
-                if ((currentTimeMs - job.getFinishTimestamp()) / 1000 > labelKeepMaxSecond || numJobsToRemove > 0) {
+            for (Map.Entry<Long, LoadJob> entry : idToLoadJob.entrySet()) {
+                LoadJob job = entry.getValue();
+                if (!job.isCompleted()) {
+                    continue;
+                }
+                if (isJobExpired(job, currentTimeMs)) {
+                    // remove expired job
+                    LOG.info("remove expired job: {}", job);
                     unprotectedRemoveJobReleatedMeta(job);
-                    --numJobsToRemove;
+                } else {
+                    jobs.add(job);
+                }
+            }
+
+            // if there are still more jobs than LABEL_KEEP_MAX_NUM
+            // remove the ones that finished earlier
+            int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
+            if (numJobsToRemove > 0) {
+                LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
+                Iterator<LoadJob> iterator = jobs.iterator();
+                for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
+                    LoadJob job = iterator.next();
+                    LOG.info("remove redundant job: {}", job);
+                    unprotectedRemoveJobReleatedMeta(job);
                 }
             }
         } finally {
@@ -567,8 +598,14 @@ public class LoadManager implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
+        long now = System.currentTimeMillis();
         for (int i = 0; i < size; i++) {
             LoadJob loadJob = LoadJob.read(in);
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                continue;
+            }
             idToLoadJob.put(loadJob.getId(), loadJob);
             Map<String, List<LoadJob>> map = dbIdToLabelToLoadJobs.get(loadJob.getDbId());
             if (map == null) {
@@ -589,5 +626,18 @@ public class LoadManager implements Writable {
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
             }
         }
+    }
+
+    public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
+            readFields(in);
+        }
+        LOG.info("finished replay loadJobsV2 from image");
+        return checksum;
+    }
+
+    public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
     }
 }

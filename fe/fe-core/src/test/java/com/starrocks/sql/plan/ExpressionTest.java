@@ -7,6 +7,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -976,5 +977,28 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "common expressions:\n" +
                 "  |  <slot 13> : CAST(3: t1c AS VARCHAR(10))");
+    }
+
+    @Test
+    public void testTableFunctionNull() throws Exception {
+        String sql = "select * from test_all_type, json_each(null)";
+        try {
+            getFragmentPlan(sql);
+            Assert.fail();
+        } catch (StarRocksPlannerException e) {
+            Assert.assertEquals("table function not support null parameter", e.getMessage());
+        }
+
+        String sql2 = "select * from test_all_type, json_each(parse_json(null))";
+        try {
+            getFragmentPlan(sql2);
+            Assert.fail();
+        } catch (StarRocksPlannerException e) {
+            Assert.assertEquals("table function not support null parameter", e.getMessage());
+        }
+
+        // normal case
+        String sql3 = "select * from test_all_type, json_each(parse_json('{}'))";
+        getFragmentPlan(sql3);
     }
 }

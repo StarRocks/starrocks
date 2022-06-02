@@ -5,13 +5,16 @@ package com.starrocks.external;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.connector.ConnectorDatabaseId;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
@@ -33,6 +36,7 @@ import java.util.stream.Collectors;
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
     private static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
+    private static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -105,40 +109,65 @@ public class HiveMetaStoreTableUtils {
         return allHiveColumns;
     }
 
-    public static PrimitiveType convertColumnType(String hiveType) throws DdlException {
+    public static Type convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType;
         switch (typeUpperCase) {
             case "TINYINT":
-                return PrimitiveType.TINYINT;
+                primitiveType = PrimitiveType.TINYINT;
+                break;
             case "SMALLINT":
-                return PrimitiveType.SMALLINT;
+                primitiveType = PrimitiveType.SMALLINT;
+                break;
             case "INT":
             case "INTEGER":
-                return PrimitiveType.INT;
+                primitiveType = PrimitiveType.INT;
+                break;
             case "BIGINT":
-                return PrimitiveType.BIGINT;
+                primitiveType = PrimitiveType.BIGINT;
+                break;
             case "FLOAT":
-                return PrimitiveType.FLOAT;
+                primitiveType = PrimitiveType.FLOAT;
+                break;
             case "DOUBLE":
             case "DOUBLE PRECISION":
-                return PrimitiveType.DOUBLE;
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
             case "DECIMAL":
             case "NUMERIC":
-                return PrimitiveType.DECIMAL32;
+                primitiveType = PrimitiveType.DECIMAL32;
+                break;
             case "TIMESTAMP":
-                return PrimitiveType.DATETIME;
+                primitiveType = PrimitiveType.DATETIME;
+                break;
             case "DATE":
-                return PrimitiveType.DATE;
+                primitiveType = PrimitiveType.DATE;
+                break;
             case "STRING":
             case "VARCHAR":
             case "BINARY":
-                return PrimitiveType.VARCHAR;
+                primitiveType = PrimitiveType.VARCHAR;
+                break;
             case "CHAR":
-                return PrimitiveType.CHAR;
+                primitiveType = PrimitiveType.CHAR;
+                break;
             case "BOOLEAN":
-                return PrimitiveType.BOOLEAN;
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case "ARRAY":
+                Type type = Utils.convertToArrayType(hiveType);
+                if (type.isArrayType()) {
+                    return type;
+                }
             default:
                 throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+        }
+
+        if (primitiveType != PrimitiveType.DECIMAL32) {
+            return ScalarType.createType(primitiveType);
+        } else {
+            int[] parts = Utils.getPrecisionAndScale(hiveType);
+            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 
@@ -154,8 +183,8 @@ public class HiveMetaStoreTableUtils {
         List<Column> fullSchema = Lists.newArrayList();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            PrimitiveType srType = convertColumnType(fieldSchema.getType());
-            Column column = new Column(fieldSchema.getName(), ScalarType.createType(srType), true);
+            Type srType = convertColumnType(fieldSchema.getType());
+            Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
         }
 
@@ -168,6 +197,10 @@ public class HiveMetaStoreTableUtils {
 
         return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
                 fullSchema, properties, hiveTable);
+    }
+
+    public static Database convertToSRDatabase(String dbName) {
+        return new Database(connectorDbIdIdGenerator.getNextId().asInt(), dbName);
     }
 
     public static long doGetPartitionStatsRowCount(HiveMetaStoreTableInfo hmsTable,

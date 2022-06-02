@@ -166,8 +166,9 @@ public:
     // Remove rows from this chunk according to the vector |selection|.
     // The n-th row will be removed if selection[n] is zero.
     // The size of |selection| must be equal to the number of rows.
-    // Return the number of rows after filter.
-    size_t filter(const Buffer<uint8_t>& selection);
+    // @param force whether check zero-count of filter, skip the filter procedure if no data to filter
+    // @return the number of rows after filter.
+    size_t filter(const Buffer<uint8_t>& selection, bool force = false);
 
     // Return the number of rows after filter.
     size_t filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
@@ -229,9 +230,9 @@ public:
 
     std::string debug_row(uint32_t index) const;
 
-    bool reach_capacity_limit() const {
+    bool reach_capacity_limit(std::string* msg = nullptr) const {
         for (const auto& column : _columns) {
-            if (column->reach_capacity_limit()) {
+            if (column->reach_capacity_limit(msg)) {
                 return true;
             }
         }
@@ -264,7 +265,7 @@ inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
 }
 
 inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
-    DCHECK(is_slot_exist(slot_id));
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
     size_t idx = _slot_id_to_index[slot_id];
     return _columns[idx];
 }

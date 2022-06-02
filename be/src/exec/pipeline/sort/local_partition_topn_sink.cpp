@@ -20,7 +20,7 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(Runtim
 }
 
 Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    return _partition_topn_ctx->push_one_chunk_to_partitioner(chunk);
+    return _partition_topn_ctx->push_one_chunk_to_partitioner(state, chunk);
 }
 
 Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {

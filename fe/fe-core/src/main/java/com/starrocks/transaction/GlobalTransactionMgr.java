@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -51,7 +52,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -155,11 +158,11 @@ public class GlobalTransactionMgr implements Writable {
             throw new BeginTransactionException(errStr);
         } else {
             if (response.getTxn_id() <= 0) {
-                LOG.warn("beginRemoteTransaction returns invalid txn id: {}, label: {}",
+                LOG.warn("beginRemoteTransaction returns invalid txn_id: {}, label: {}",
                         response.getTxn_id(), label);
                 throw new BeginTransactionException("beginRemoteTransaction returns invalid txn id");
             }
-            LOG.info("begin remote txn, label: {}, txn id: {}", label, response.getTxn_id());
+            LOG.info("begin remote txn, label: {}, txn_id: {}", label, response.getTxn_id());
             return response.getTxn_id();
         }
     }
@@ -181,7 +184,7 @@ public class GlobalTransactionMgr implements Writable {
                             Config.thrift_rpc_retry_times,
                             client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}", addr, transactionId, e);
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new TransactionCommitFailedException(e.getMessage());
         }
         if (response.status.getStatus_code() != TStatusCode.OK) {
@@ -191,11 +194,11 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}, error: {}", addr, transactionId,
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
                     errStr);
             throw new TransactionCommitFailedException(errStr);
         } else {
-            LOG.info("commit remote, txn id: {}", transactionId);
+            LOG.info("commit remote, txn_id: {}", transactionId);
             return true;
         }
     }
@@ -217,7 +220,7 @@ public class GlobalTransactionMgr implements Writable {
                             Config.thrift_rpc_retry_times,
                             client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}", addr, transactionId, e);
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new AbortTransactionException(e.getMessage());
         }
         if (response.status.getStatus_code() != TStatusCode.OK) {
@@ -227,11 +230,11 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}, error: {}", addr, transactionId,
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
                     errStr);
             throw new AbortTransactionException(errStr);
         } else {
-            LOG.info("abort remote, txn id: {}", transactionId);
+            LOG.info("abort remote, txn_id: {}", transactionId);
         }
     }
 
@@ -571,19 +574,35 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
+        long now = System.currentTimeMillis();
         int numTransactions = in.readInt();
         for (int i = 0; i < numTransactions; ++i) {
             TransactionState transactionState = new TransactionState();
             transactionState.readFields(in);
+            if (transactionState.isExpired(now)) {
+                LOG.info("discard expired transaction state: {}", transactionState);
+                continue;
+            }
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
-                LOG.warn("failed to get db transaction manager for txn: {}", transactionState);
+                LOG.warn("failed to get db transaction manager for {}", transactionState);
                 throw new IOException("Read transaction states failed", e);
             }
         }
         idGenerator.readFields(in);
+    }
+
+    public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
+            int size = dis.readInt();
+            long newChecksum = checksum ^ size;
+            readFields(dis);
+            LOG.info("finished replay transactionState from image");
+            return newChecksum;
+        }
+        return checksum;
     }
 
     public TransactionState getTransactionStateByCallbackIdAndStatus(long dbId, long callbackId,
@@ -637,5 +656,13 @@ public class GlobalTransactionMgr implements Writable {
     public void updateDatabaseUsedQuotaData(long dbId, long usedQuotaDataBytes) throws AnalysisException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.updateDatabaseUsedQuotaData(usedQuotaDataBytes);
+    }
+
+    public long saveTransactionState(DataOutputStream dos, long checksum) throws IOException {
+        int size = getTransactionNum();
+        checksum ^= size;
+        dos.writeInt(size);
+        write(dos);
+        return checksum;
     }
 }

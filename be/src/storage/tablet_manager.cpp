@@ -32,6 +32,7 @@ DIAGNOSTIC_POP
 #include <memory>
 
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -45,7 +46,6 @@ DIAGNOSTIC_POP
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 #include "util/path_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -296,7 +296,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
         }
 
         TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
-        st = FileUtils::create_dir(new_tablet->schema_hash_path());
+        st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
@@ -1299,7 +1299,6 @@ TabletManager::TabletsShard& TabletManager::_get_tablets_shard(TTabletId tabletI
 
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                                        const string& schema_hash_path, bool restore) {
-    LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
@@ -1322,6 +1321,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (snapshot_meta->tablet_meta().updates().next_log_id() != 0) {
         return Status::InternalError("non-zero log id in tablet meta");
     }
+    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:", tablet_id,
+                            snapshot_meta->snapshot_version(), schema_hash_path);
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;
@@ -1383,6 +1384,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (old_tablet_ptr != nullptr) {
         if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
+            // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
+            old_tablet_ptr.reset();
             Status st = delete_shutdown_tablet(tablet_id);
             if (st.ok() || st.is_not_found()) {
                 LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id;
@@ -1423,7 +1426,7 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
 }
 
 Status TabletManager::_remove_tablet_directories(const TabletSharedPtr& tablet) {
-    return FileUtils::remove_all(tablet->tablet_id_path());
+    return fs::remove_all(tablet->tablet_id_path());
 }
 
 Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& tablet) {

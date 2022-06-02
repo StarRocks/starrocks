@@ -7,6 +7,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -39,10 +40,14 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
@@ -183,6 +188,7 @@ public class StatementPlanner {
                 || statement instanceof CreateCatalogStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateMaterializedViewStatement
+                || statement instanceof CreateMaterializedViewStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
@@ -191,9 +197,13 @@ public class StatementPlanner {
                 || statement instanceof DropMaterializedViewStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof ExecuteAsStmt
+                || statement instanceof GrantImpersonateStmt
                 || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
+                || statement instanceof RefreshTableStmt
                 || statement instanceof ShowAnalyzeStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt

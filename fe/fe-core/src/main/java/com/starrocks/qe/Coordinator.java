@@ -66,7 +66,7 @@ import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.proto.PStatus;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
@@ -109,6 +109,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -212,6 +213,8 @@ public class Coordinator {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
+
+    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -1266,6 +1269,7 @@ public class Coordinator {
 
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragment.getFragmentId(), parallelExecInstanceNum, params);
+                computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -1331,6 +1335,24 @@ public class Coordinator {
                 params.instanceExecParams.add(instanceParam);
             }
         }
+    }
+
+    static final int BUCKET_ABSENT = 2147483647;
+    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
+        Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
+        // absence of buckets.
+        for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
+            bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
+        }
+        for (int i = 0; i < params.instanceExecParams.size(); ++i) {
+            FInstanceExecParam instance = params.instanceExecParams.get(i);
+            for (Integer bucketSeq : instance.bucketSeqSet) {
+                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
+                bucketSeq2InstanceOrdinal[bucketSeq] = i;
+            }
+        }
+        fragmentIdToSeqToInstanceMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2InstanceOrdinal));
     }
 
     private boolean isColocateFragment(PlanNode node) {
@@ -2027,7 +2049,7 @@ public class Coordinator {
                     @Override
                     public PExecPlanFragmentResult get() {
                         PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-                        PStatus pStatus = new PStatus();
+                        StatusPB pStatus = new StatusPB();
                         pStatus.errorMsgs = Lists.newArrayList();
                         pStatus.errorMsgs.add(e.getMessage());
                         // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
@@ -2055,6 +2077,7 @@ public class Coordinator {
         }
     }
 
+
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,
     // used to assemble TPlanFragmentExecParas
@@ -2066,9 +2089,27 @@ public class Coordinator {
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
+        public boolean bucketSeqToInstanceForFilterIsSet = false;
 
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
+        }
+
+        void setBucketSeqToInstanceForRuntimeFilters() {
+            if (bucketSeqToInstanceForFilterIsSet) {
+                return;
+            }
+            bucketSeqToInstanceForFilterIsSet = true;
+            List<Integer> seqToInstance = fragmentIdToSeqToInstanceMap.get(fragment.getFragmentId());
+            if (seqToInstance == null || seqToInstance.isEmpty()) {
+                return;
+            }
+            for (RuntimeFilterDescription rf : fragment.getBuildRuntimeFilters().values()) {
+                if (!rf.isColocateOrBucketShuffle()) {
+                    continue;
+                }
+                rf.setBucketSeqToInstance(seqToInstance);
+            }
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
@@ -2103,7 +2144,7 @@ public class Coordinator {
                             connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
                 }
             }
-
+            setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);

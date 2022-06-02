@@ -43,6 +43,8 @@ public:
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type, JoinRuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
+
+    static StatusOr<ExprContext*> rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct, Chunk* chunk);
 };
 
 // how to generate & publish this runtime filter
@@ -113,6 +115,7 @@ public:
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
     bool is_local() const { return _is_local; }
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
+    const std::vector<int32_t>* bucketseq_to_partition() { return &_bucketseq_to_partition; }
 
 private:
     friend class HashJoinNode;
@@ -128,6 +131,8 @@ private:
     RuntimeProfile::Counter* _latency_timer = nullptr;
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
+    TRuntimeFilterBuildJoinMode::type _join_mode;
+    std::vector<int32_t> _bucketseq_to_partition;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

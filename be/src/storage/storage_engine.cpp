@@ -34,6 +34,7 @@
 #include "common/status.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
@@ -46,7 +47,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/file_utils.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -77,9 +77,9 @@ Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_
 }
 
 StorageEngine::StorageEngine(const EngineOptions& options)
-        : _options(options),
+        : _effective_cluster_id(-1),
+          _options(options),
           _available_storage_medium_type_count(0),
-          _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
 
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
@@ -151,8 +151,6 @@ Status StorageEngine::_open() {
     _update_storage_medium_type_count();
 
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
-
-    _index_stream_lru_cache = new_lru_cache(config::index_stream_cache_capacity);
 
     starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
@@ -515,8 +513,6 @@ void StorageEngine::stop() {
         _store_map.clear();
     }
 
-    SAFE_DELETE(_index_stream_lru_cache);
-
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
         _compaction_checker_thread.join();
@@ -532,7 +528,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) 
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                                            const std::vector<TPartitionId>& partition_ids) {
-    LOG(INFO) << "Clearing transaction task transaction_id=" << transaction_id;
+    LOG(INFO) << "Clearing transaction task txn_id: " << transaction_id;
 
     for (const TPartitionId& partition_id : partition_ids) {
         std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
@@ -553,7 +549,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
             StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
-    LOG(INFO) << "Cleared transaction task transaction_id=" << transaction_id;
+    LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
 }
 
 void StorageEngine::_start_clean_fd_cache() {
@@ -862,7 +858,7 @@ void StorageEngine::_clean_unused_txns() {
 
 Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& local_now, const int32_t expire) {
     Status res = Status::OK();
-    if (!FileUtils::check_exist(scan_root)) {
+    if (!fs::path_exist(scan_root)) {
         // dir not existed. no need to sweep trash.
         return res;
     }
@@ -891,7 +887,7 @@ Status StorageEngine::_do_sweep(const std::string& scan_root, const time_t& loca
             VLOG(10) << "get actual expire time " << actual_expire << " of dir: " << dir_name;
 
             if (difftime(local_now, mktime(&local_tm_create)) >= actual_expire) {
-                Status ret = FileUtils::remove_all(path_name);
+                Status ret = fs::remove_all(path_name);
                 if (!ret.ok()) {
                     LOG(WARNING) << "fail to remove file. path: " << path_name << ", error: " << ret.to_string();
                     res = Status::IOError(
@@ -1049,65 +1045,7 @@ Status StorageEngine::load_header(const std::string& shard_path, const TCloneReq
 }
 
 Status StorageEngine::execute_task(EngineTask* task) {
-    // 1. add wlock to related tablets
-    // 2. do prepare work
-    // 3. release wlock
-    {
-        std::vector<TabletInfo> tablet_infos;
-        task->get_related_tablets(&tablet_infos);
-        sort(tablet_infos.begin(), tablet_infos.end());
-        std::vector<TabletSharedPtr> related_tablets;
-        DeferOp release_lock([&]() {
-            for (TabletSharedPtr& tablet : related_tablets) {
-                tablet->release_header_lock();
-            }
-        });
-        for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
-                tablet->obtain_header_wrlock();
-                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
-                related_tablets.push_back(tablet);
-                release_guard.cancel();
-            } else {
-                LOG(WARNING) << "could not get tablet before prepare tabletid: " << tablet_info.tablet_id;
-            }
-        }
-        // add write lock to all related tablets
-        RETURN_IF_ERROR(task->prepare());
-    }
-
-    // do execute work without lock
-    RETURN_IF_ERROR(task->execute());
-
-    // 1. add wlock to related tablets
-    // 2. do finish work
-    // 3. release wlock
-    {
-        std::vector<TabletInfo> tablet_infos;
-        // related tablets may be changed after execute task, so that get them here again
-        task->get_related_tablets(&tablet_infos);
-        sort(tablet_infos.begin(), tablet_infos.end());
-        std::vector<TabletSharedPtr> related_tablets;
-        DeferOp release_lock([&]() {
-            for (TabletSharedPtr& tablet : related_tablets) {
-                tablet->release_header_lock();
-            }
-        });
-        for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
-                tablet->obtain_header_wrlock();
-                ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
-                related_tablets.push_back(tablet);
-                release_guard.cancel();
-            } else {
-                LOG(WARNING) << "Fail to get tablet before finish tablet_id=" << tablet_info.tablet_id;
-            }
-        }
-        // add write lock to all related tablets
-        return task->finish();
-    }
+    return task->execute();
 }
 
 // check whether any unused rowsets's id equal to rowset_id
@@ -1115,6 +1053,27 @@ bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id)
     std::lock_guard lock(_gc_mutex);
     auto search = _unused_rowsets.find(rowset_id.to_string());
     return search != _unused_rowsets.end();
+}
+
+DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
+        : StorageEngine(options), _conf_path(options.conf_path) {
+    _s_instance = this;
+    _effective_cluster_id = config::cluster_id;
+    cluster_id_mgr = std::make_unique<ClusterIdMgr>(options.conf_path);
+}
+
+Status DummyStorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
+    std::unique_ptr<DummyStorageEngine> engine = std::make_unique<DummyStorageEngine>(options);
+    RETURN_IF_ERROR(engine->cluster_id_mgr->init());
+    *engine_ptr = engine.release();
+    LOG(INFO) << "Opened Empty storage engine";
+    return Status::OK();
+}
+
+Status DummyStorageEngine::set_cluster_id(int32_t cluster_id) {
+    RETURN_IF_ERROR(cluster_id_mgr->set_cluster_id(cluster_id));
+    _effective_cluster_id = cluster_id;
+    return Status::OK();
 }
 
 } // namespace starrocks

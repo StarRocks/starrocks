@@ -36,6 +36,7 @@
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -55,7 +56,6 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 #include "util/monotime.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
@@ -64,6 +64,7 @@
 namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
+const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
@@ -287,20 +288,30 @@ void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request)
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;
+    int32_t sleep_time_second = config::sleep_one_second;
+    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    while (try_time < TASK_FINISH_MAX_RETRY) {
+    while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
         AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
 
         if (client_status == STARROCKS_SUCCESS) {
-            break;
-        } else {
-            try_time += 1;
-            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
-            LOG(WARNING) << "finish task failed " << try_time << "/" << TASK_FINISH_MAX_RETRY
-                         << ". status_code=" << result.status.status_code;
+            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
+            // so that we will sleep && retry 10 times
+            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
+                finish_task_request.task_type == TTaskType::ALTER) {
+                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
+                sleep_time_second = sleep_time_second * 2;
+            } else {
+                break;
+            }
         }
-        sleep(config::sleep_one_second);
+        try_time += 1;
+        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+        LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
+
+        sleep(sleep_time_second);
     }
 }
 
@@ -622,7 +633,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
             int num_of_remove_task = 0;
             if (push_req.push_type == TPushType::CANCEL_DELETE) {
-                LOG(INFO) << "get push task. remove delete task transaction_id: " << push_req.transaction_id
+                LOG(INFO) << "get push task. remove delete task txn_id: " << push_req.transaction_id
                           << " priority: " << priority << " push_type: " << push_req.push_type;
 
                 auto& tasks = worker_pool_this->_tasks;
@@ -639,7 +650,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
                         }
                     }
                 }
-                LOG(INFO) << "finish remove delete task transaction_id: " << push_req.transaction_id
+                LOG(INFO) << "finish remove delete task txn_id: " << push_req.transaction_id
                           << " num_of_remove_task: " << num_of_remove_task << " priority: " << priority
                           << " push_type: " << push_req.push_type;
             }
@@ -711,7 +722,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
 Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
                                                     const TPublishVersionRequest publish_version_req,
-                                                    std::set<TTabletId>* tablet_ids, size_t* tablet_n,
+                                                    std::set<TTabletId>* tablet_ids,
                                                     std::vector<TTabletId>* error_tablet_ids) {
     TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -742,36 +753,35 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
 
             uint32_t retry_time = 0;
 
-            Status st;
+            auto st = &statuses[idx];
             while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
                 // submit publishing tablet version task to the threadpool.
-                st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
-                                              &partition_id]() {
+                *st = threadpool->submit_func([&worker_pool_this, &tablet_rs, st, &version, &transaction_id,
+                                               &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
-                    auto& status = statuses[idx];
                     // if rowset is null, it means this be received write task, but failed during write
                     // and receive fe's publish version task
                     // this be must return as an error tablet
                     if (rowset == nullptr) {
                         LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
                                      << transaction_id;
-                        status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
-                                                              tablet_info.tablet_id, transaction_id));
+                        *st = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                           tablet_info.tablet_id, transaction_id));
                         return;
                     }
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
-                    status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                    if (!status.ok())
+                    *st = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (!st->ok())
                         LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
-                                     << ", txn_id " << transaction_id << ", err: " << status;
+                                     << ", txn_id " << transaction_id << ", err: " << st;
                 });
 
-                if (st.is_service_unavailable()) {
+                if (st->is_service_unavailable()) {
                     // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
-                    LOG(WARNING) << "publish version threadpool is busy, retry later. [transaction_id="
-                                 << publish_version_req.transaction_id << ", tablet_id=" << tablet_rs.first.tablet_id;
+                    LOG(WARNING) << "publish version threadpool is busy, retry later. [txn_id: "
+                                 << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id;
                     // In general, publish version is fast. A small sleep is needed here.
                     SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
                     continue;
@@ -779,16 +789,13 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                 break;
             }
 
-            // error category:
-            // 1. ServiceUnavailable, which means that the threadpool is busy even in retry.
-            // 2. error that is not ServiceUnavailable.
-            if (!st.ok()) return st;
-
             ++idx;
         }
-
         // wait until that all jobs in threadpool are done.
         threadpool->wait();
+
+        LOG(INFO) << "Publish version on partition. partition: " << partition_id << ", txn_id: " << transaction_id
+                  << ", version: " << version;
 
         // check status.
         for (size_t i = 0; i < tablet_infos.size(); ++i) {
@@ -813,8 +820,8 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     std::unique_ptr<ThreadPool> threadpool;
     auto st =
             ThreadPoolBuilder("publish_version")
-                    .set_min_threads(config::partition_publish_version_worker_count)
-                    .set_max_threads(config::partition_publish_version_worker_count)
+                    .set_min_threads(config::transaction_publish_version_worker_count)
+                    .set_max_threads(config::transaction_publish_version_worker_count)
                     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
                     // But it seems that there's no limit for the number of tablets of a partition.
                     // Since a large queue size brings a little overhead, a big one is chosen here.
@@ -860,7 +867,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 
         const auto& publish_version_task = priority_tasks.top();
         LOG(INFO) << "get publish version task, signature:" << publish_version_task->signature
-                  << " txn: " << publish_version_task->publish_version_req.transaction_id
+                  << " txn_id: " << publish_version_task->publish_version_req.transaction_id
                   << " priority queue size: " << priority_tasks.size();
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
 
@@ -870,10 +877,9 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         std::vector<TTabletId> error_tablet_ids;
         Status status;
 
-        size_t tablet_n = 0;
         error_tablet_ids.clear();
-        status = _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_ids, &tablet_n,
-                                              &error_tablet_ids);
+        status =
+                _publish_version_in_parallel(arg_this, threadpool, publish_version_req, &tablet_ids, &error_tablet_ids);
 
         int64_t publish_latency = MonotonicMillis() - start_ts;
         batch_publish_latency += publish_latency;
@@ -884,12 +890,14 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             // if publish failed, return failed, FE will ignore this error and
             // check error tablet ids and FE will also republish this task
             LOG(WARNING) << "Fail to publish version. signature:" << publish_version_task->signature
-                         << " related tablet num: " << tablet_n << " time: " << publish_latency << "ms";
+                         << " txn_id: " << publish_version_task->publish_version_req.transaction_id
+                         << " related tablet num: " << tablet_ids.size()
+                         << " error tablet num:" << error_tablet_ids.size() << " time: " << publish_latency << "ms";
             finish_task_request.__set_error_tablet_ids(error_tablet_ids);
         } else {
             LOG(INFO) << "publish_version success. signature:" << publish_version_task->signature
-                      << " txn: " << publish_version_task->publish_version_req.transaction_id
-                      << " related tablet num: " << tablet_n << " time: " << publish_latency << "ms";
+                      << " txn_id: " << publish_version_task->publish_version_req.transaction_id
+                      << " related tablet num: " << tablet_ids.size() << " time: " << publish_latency << "ms";
         }
 
         status.to_thrift(&finish_task_request.task_status);
@@ -952,7 +960,7 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
             worker_pool_this->_tasks.pop_front();
         }
         LOG(INFO) << "get clear transaction task task, signature:" << agent_task_req.signature
-                  << ", transaction_id: " << clear_transaction_task_req.transaction_id
+                  << ", txn_id: " << clear_transaction_task_req.transaction_id
                   << ", partition id size: " << clear_transaction_task_req.partition_id.size();
 
         TStatusCode::type status_code = TStatusCode::OK;
@@ -971,9 +979,9 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
                         clear_transaction_task_req.transaction_id);
             }
             LOG(INFO) << "finish to clear transaction task. signature:" << agent_task_req.signature
-                      << ", transaction_id: " << clear_transaction_task_req.transaction_id;
+                      << ", txn_id: " << clear_transaction_task_req.transaction_id;
         } else {
-            LOG(WARNING) << "invalid transaction id: " << clear_transaction_task_req.transaction_id
+            LOG(WARNING) << "invalid txn_id: " << clear_transaction_task_req.transaction_id
                          << ", signature: " << agent_task_req.signature;
         }
 
@@ -1661,7 +1669,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
                 // we need to add subdir: tablet_id/schema_hash/
                 std::stringstream ss;
                 ss << snapshot_path << "/" << snapshot_request.tablet_id << "/" << snapshot_request.schema_hash << "/";
-                st = FileUtils::list_files(FileSystem::Default(), ss.str(), &snapshot_files);
+                st = FileSystem::Default()->get_children(ss.str(), &snapshot_files);
                 if (!st.ok()) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "Fail to make snapshot tablet_id" << snapshot_request.tablet_id

@@ -31,22 +31,27 @@ struct ComparePairFirst final {
     }
 };
 
+enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3 };
+
 template <PrimitiveType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
     using TimeType = typename RunTimeTypeTraits<PT>::CppType;
     using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
+    using TimestampType = typename TimeType::type;
 
     // first args is timestamp, second is event position.
-    using TimestampEvent = std::pair<typename TimeType::type, uint8_t>;
+    using TimestampEvent = std::pair<TimestampType, uint8_t>;
     mutable std::vector<TimestampEvent> events_list;
+    using TimestampVector = std::vector<TimestampType>;
     int64_t window_size;
+    int32_t mode;
     uint8_t events_size;
     bool sorted = true;
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
-    void update(typename TimeType::type timestamp, uint8_t event_level) {
+    void update(TimestampType timestamp, uint8_t event_level) {
         // keep only one as a placeholder for someone group.
         if (events_list.size() > 0 && event_level == 0) {
             return;
@@ -68,11 +73,13 @@ struct WindowFunnelState {
 
         std::vector<TimestampEvent> other_list;
         window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
+        mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+
         events_size = (uint8_t)datum_array[0].get_int64();
         bool other_sorted = (uint8_t)datum_array[1].get_int64();
 
         for (size_t i = 2; i < datum_array.size() - 1; i += 2) {
-            typename TimeType::type timestamp = datum_array[i].get_int64();
+            TimestampType timestamp = datum_array[i].get_int64();
             int64_t event_level = datum_array[i + 1].get_int64();
             other_list.emplace_back(std::make_pair(timestamp, uint8_t(event_level)));
         }
@@ -104,9 +111,11 @@ struct WindowFunnelState {
             array.reserve(size * 2 + 2);
             array.emplace_back((int64_t)events_size);
             array.emplace_back((int64_t)sorted);
-            for (int i = 0; i < size; i++) {
-                array.emplace_back((int64_t)events_list[i].first);
-                array.emplace_back((int64_t)events_list[i].second);
+            auto curr = events_list.begin();
+            while (curr != events_list.end()) {
+                array.emplace_back((int64_t)(*curr).first);
+                array.emplace_back((int64_t)(*curr).second);
+                ++curr;
             }
             array_column->append_datum(array);
         }
@@ -117,30 +126,211 @@ struct WindowFunnelState {
             sort();
         }
 
-        std::vector<typename TimeType::type> events_timestamp(events_size, -1);
-        for (size_t i = 0; i < events_list.size(); i++) {
-            typename TimeType::type timestamp = (events_list)[i].first;
-            uint8_t event_idx = (events_list)[i].second;
+        auto const& ordered_events_list = events_list;
+        if (!mode) {
+            TimestampVector events_timestamp(events_size, -1);
+            auto begin = ordered_events_list.begin();
+            while (begin != ordered_events_list.end()) {
+                TimestampType timestamp = (*begin).first;
+                uint8_t event_idx = (*begin).second;
 
-            // this row match no conditions.
-            if (event_idx == 0) {
-                continue;
+                if (event_idx == 0) {
+                    ++begin;
+                    continue;
+                }
+
+                event_idx -= 1;
+                if (event_idx == 0) {
+                    events_timestamp[0] = timestamp;
+                } else if (events_timestamp[event_idx - 1] >= 0 &&
+                           timestamp <= events_timestamp[event_idx - 1] + window_size) {
+                    events_timestamp[event_idx] = events_timestamp[event_idx - 1];
+                    if (event_idx + 1 == events_size) {
+                        return events_size;
+                    }
+                }
+                ++begin;
             }
 
-            event_idx -= 1;
-            if (event_idx == 0) {
-                events_timestamp[0] = timestamp;
-            } else if (events_timestamp[event_idx - 1] >= 0 &&
-                       timestamp <= events_timestamp[event_idx - 1] + window_size) {
-                events_timestamp[event_idx] = events_timestamp[event_idx - 1];
-                if (event_idx + 1 == events_size) return events_size;
+            for (size_t event = events_timestamp.size(); event > 0; --event) {
+                if (events_timestamp[event - 1] >= 0) {
+                    return event;
+                }
             }
+            return 0;
         }
-        for (size_t event = events_timestamp.size(); event > 0; --event) {
-            if (events_timestamp[event - 1] >= 0) return event;
+
+        // max level when search event chains.
+        int8_t max_level = -1;
+        // curr_event_level is used to record max level in search for a event chain,
+        // It will update max_level and reduce when encounter condition of deduplication or fixed mode.
+        int8_t curr_event_level = -1;
+
+        /*
+         * EventTimestamp's element is the timestamp of event.
+         */
+        TimestampVector events_timestamp(events_size, -1);
+        auto begin = ordered_events_list.begin();
+        switch (mode) {
+        // mode: deduplication
+        case DEDUPLICATION: {
+            while (begin != ordered_events_list.end()) {
+                TimestampType timestamp = (*begin).first;
+                uint8_t event_idx = (*begin).second;
+
+                if (event_idx == 0) {
+                    ++begin;
+                    continue;
+                }
+
+                event_idx -= 1;
+                // begin a new event chain.
+                if (event_idx == 0) {
+                    events_timestamp[0] = timestamp;
+                    if (event_idx > curr_event_level) {
+                        curr_event_level = event_idx;
+                    }
+                    // encounter condition of deduplication: an existing event occurs.
+                } else if (events_timestamp[event_idx] >= 0) {
+                    if (curr_event_level > max_level) {
+                        max_level = curr_event_level;
+                    }
+
+                    // Eliminate last event chain
+                    eliminate_last_event_chains(&curr_event_level, &events_timestamp);
+
+                } else if (events_timestamp[event_idx - 1] >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                        return events_size;
+                    }
+                }
+                ++begin;
+            }
+        } break;
+        // mode: fixed
+        case FIXED: {
+            bool first_event = false;
+            while (begin != ordered_events_list.end()) {
+                TimestampType timestamp = (*begin).first;
+                uint8_t event_idx = (*begin).second;
+
+                if (event_idx == 0) {
+                    ++begin;
+                    continue;
+                }
+
+                event_idx -= 1;
+                if (event_idx == 0) {
+                    events_timestamp[0] = timestamp;
+                    if (event_idx > curr_event_level) {
+                        curr_event_level = event_idx;
+                    }
+                    first_event = true;
+                    // encounter condition of fixed: a leap event occurred.
+                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
+                    if (curr_event_level >= 0) {
+                        if (curr_event_level > max_level) {
+                            max_level = curr_event_level;
+                        }
+
+                        // Eliminate last event chain
+                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
+                    }
+                } else if (events_timestamp[event_idx - 1] >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                        return events_size;
+                    }
+                }
+                ++begin;
+            }
+        } break;
+        // mode: deduplication | fixed
+        case DEDUPLICATION_FIXED: {
+            bool first_event = false;
+            while (begin != ordered_events_list.end()) {
+                TimestampType timestamp = (*begin).first;
+                uint8_t event_idx = (*begin).second;
+
+                if (event_idx == 0) {
+                    ++begin;
+                    continue;
+                }
+
+                event_idx -= 1;
+
+                if (event_idx == 0) {
+                    events_timestamp[0] = timestamp;
+                    if (event_idx > curr_event_level) {
+                        curr_event_level = event_idx;
+                    }
+                    first_event = true;
+                } else if (events_timestamp[event_idx] >= 0) {
+                    if (curr_event_level > max_level) {
+                        max_level = curr_event_level;
+                    }
+
+                    // Eliminate last event chain
+                    eliminate_last_event_chains(&curr_event_level, &events_timestamp);
+
+                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
+                    if (curr_event_level >= 0) {
+                        if (curr_event_level > max_level) {
+                            max_level = curr_event_level;
+                        }
+
+                        // Eliminate last event chain
+                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
+                    }
+                } else if (events_timestamp[event_idx - 1] >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                        return events_size;
+                    }
+                }
+                ++begin;
+            }
+        } break;
+
+        default:
+            DCHECK(false);
         }
-        return 0;
+
+        if (curr_event_level > max_level) {
+            return curr_event_level + 1;
+        } else {
+            return max_level + 1;
+        }
     }
+
+    static void eliminate_last_event_chains(int8_t* curr_event_level, TimestampVector* events_timestamp) {
+        for (; (*curr_event_level) >= 0; --(*curr_event_level)) {
+            (*events_timestamp)[(*curr_event_level)] = -1;
+        }
+    }
+
+    bool promote_to_next_level(TimestampVector* events_timestamp, const TimestampType& timestamp,
+                               const int8_t event_idx, int8_t* curr_event_level) const {
+        auto first_timestamp = (*events_timestamp)[event_idx - 1];
+        bool time_matched = (timestamp <= (first_timestamp + window_size));
+
+        if (time_matched) {
+            // use prev level event's event_chain_level to record with this event.
+            (*events_timestamp)[event_idx] = first_timestamp;
+
+            // update curr_event_level to bigger one.
+            if (event_idx > (*curr_event_level)) {
+                (*curr_event_level) = event_idx;
+            }
+
+            if (event_idx + 1 == events_size) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 1th bit for deduplication, 2th bit for fixed.
+    static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
 template <PrimitiveType PT>
@@ -148,10 +338,12 @@ class WindowFunnelAggregateFunction final
         : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
     using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
     using TimeType = typename WindowFunnelState<PT>::TimeType;
+    using TimestampType = typename TimeType::type;
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
         this->data(state).window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(0));
+        this->data(state).mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
 
         // get timestamp
         TimeType tv;
@@ -180,7 +372,7 @@ public:
         if constexpr (PT == TYPE_DATETIME) {
             this->data(state).update(tv.to_unix_second(), event_level);
         } else if constexpr (PT == TYPE_DATE) {
-            this->data(state).update(tv.to_date_literal(), event_level);
+            this->data(state).update(tv.julian(), event_level);
         }
     }
 
@@ -207,11 +399,11 @@ public:
         const TimeTypeColumn* timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
-            typename TimeType::type tv;
+            TimestampType tv;
             if constexpr (PT == TYPE_DATETIME) {
                 tv = timestamp_column->get(i).get_timestamp().to_unix_second();
             } else if constexpr (PT == TYPE_DATE) {
-                tv = timestamp_column->get(i).get_date().to_date_literal();
+                tv = timestamp_column->get(i).get_date().julian();
             }
 
             // get 4th value: event cond array

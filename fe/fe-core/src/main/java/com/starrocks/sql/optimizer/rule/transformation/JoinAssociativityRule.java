@@ -39,12 +39,10 @@ import java.util.stream.Collectors;
 public class JoinAssociativityRule extends TransformationRule {
     private JoinAssociativityRule() {
         super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
-                .addChildren(
-                        Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(
-                                Pattern.create(OperatorType.PATTERN_LEAF)
-                                        .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)),
-                                Pattern.create(OperatorType.PATTERN_LEAF)),
-                        Pattern.create(OperatorType.PATTERN_LEAF)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)))
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     private static final JoinAssociativityRule instance = new JoinAssociativityRule();
@@ -169,7 +167,7 @@ public class JoinAssociativityRule extends TransformationRule {
                 // like expression mapping.
                 boolean isProjectToColumnRef = entry.getValue().isColumnRef() &&
                         entry.getKey().getName().equals(((ColumnRefOperator) entry.getValue()).getName());
-                if (! isProjectToColumnRef &&
+                if (!isProjectToColumnRef &&
                         newRightChildColumns.containsAll(entry.getValue().getUsedColumns())) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 } else if (!isProjectToColumnRef &&

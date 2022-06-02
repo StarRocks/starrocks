@@ -149,6 +149,7 @@ private:
     /// Variables keeping track of current state.
     bool _prepared;
     bool _opened;
+    RuntimeState* _runtime_state = nullptr;
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
 };

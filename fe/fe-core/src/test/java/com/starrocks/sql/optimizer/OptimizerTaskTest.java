@@ -79,7 +79,7 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
         ctx.getSessionVariable().setEnableReplicationJoin(false);
         ctx.setDumpInfo(new MockDumpInfo());
-        call = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
+        call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {{
             call.getUsedColumns();
             result = new ColumnRefSet();
@@ -87,7 +87,7 @@ public class OptimizerTaskTest {
 
             call.getFunction();
             minTimes = 0;
-            result = AggregateFunction.createBuiltin("sum",
+            result = AggregateFunction.createBuiltin(FunctionSet.SUM,
                     Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         }};
 
@@ -677,12 +677,13 @@ public class OptimizerTaskTest {
             }
         };
 
-        CallOperator call = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
+        CallOperator call =
+                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
             {
                 call.getFunction();
                 minTimes = 0;
-                result = AggregateFunction.createBuiltin("sum",
+                result = AggregateFunction.createBuiltin(FunctionSet.SUM,
                         Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             }
         };
@@ -1105,7 +1106,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        CallOperator call = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
+        CallOperator call =
+                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
 
         new Expectations(call) {
             {
@@ -1118,7 +1120,7 @@ public class OptimizerTaskTest {
                 minTimes = 0;
 
                 call.getFunction();
-                result = AggregateFunction.createBuiltin("sum",
+                result = AggregateFunction.createBuiltin(FunctionSet.SUM,
                         Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
                 minTimes = 0;
             }
@@ -1183,7 +1185,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        CallOperator call = new CallOperator("count", Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
+        CallOperator call =
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
 
         new Expectations(call) {{
             call.getUsedColumns();
@@ -1195,7 +1198,7 @@ public class OptimizerTaskTest {
             minTimes = 0;
 
             call.getFunction();
-            result = AggregateFunction.createBuiltin("count",
+            result = AggregateFunction.createBuiltin(FunctionSet.COUNT,
                     Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             minTimes = 0;
         }};

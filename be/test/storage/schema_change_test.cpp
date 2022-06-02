@@ -3,6 +3,7 @@
 #include "storage/schema_change.h"
 
 #include "column/datum_convert.h"
+#include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
@@ -10,7 +11,6 @@
 #include "storage/storage_engine.h"
 #include "storage/wrapper_field.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 
 namespace starrocks::vectorized {

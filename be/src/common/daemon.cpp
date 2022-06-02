@@ -52,6 +52,7 @@
 #include "util/timezone_utils.h"
 
 namespace starrocks {
+DEFINE_bool(cn, false, "start as compute node");
 
 bool k_starrocks_exit = false;
 
@@ -250,7 +251,11 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     // google::SetVersionString(get_build_version(false));
     // google::ParseCommandLineFlags(&argc, &argv, true);
     google::ParseCommandLineFlags(&argc, &argv, true);
-    init_glog("be", true);
+    if (FLAGS_cn) {
+        init_glog("cn", true);
+    } else {
+        init_glog("be", true);
+    }
 
     LOG(INFO) << get_version_string(false);
 

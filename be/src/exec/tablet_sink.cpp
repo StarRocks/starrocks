@@ -126,7 +126,7 @@ Status NodeChannel::init(RuntimeState* state) {
     // for get global_dict
     _runtime_state = state;
 
-    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id) +
+    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id: " + std::to_string(_parent->_txn_id) +
                  ", parallel=" + std::to_string(_max_parallel_request_size) +
                  ", compress_type=" + std::to_string(_compress_type);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";

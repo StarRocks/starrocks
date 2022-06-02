@@ -34,10 +34,10 @@ namespace starrocks {
 class ExecEnv;
 
 template <typename T>
-class PInternalServiceImpl : public T {
+class PInternalServiceImplBase : public T {
 public:
-    PInternalServiceImpl(ExecEnv* exec_env);
-    ~PInternalServiceImpl() override;
+    PInternalServiceImplBase(ExecEnv* exec_env);
+    ~PInternalServiceImplBase() override;
 
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
                        ::starrocks::PTransmitDataResult* response, ::google::protobuf::Closure* done) override;
@@ -83,7 +83,7 @@ public:
 private:
     Status _exec_plan_fragment(brpc::Controller* cntl);
 
-private:
+protected:
     ExecEnv* _exec_env;
 };
 

@@ -158,13 +158,13 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
 
         // if dir already exist then return err, it should not happen
         // should not remove the dir directly
-        if (FileUtils::check_exist(schema_hash_path)) {
+        if (fs::path_exist(schema_hash_path)) {
             LOG(INFO) << "Path already exist. "
                       << "schema_hash_path: " << schema_hash_path;
             return Status::AlreadyExist(fmt::format("Path already exist. schema_hash_path: {}", schema_hash_path));
         }
 
-        st = FileUtils::create_dir(schema_hash_path);
+        st = fs::create_directories(schema_hash_path);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create dir. path: " << schema_hash_path << ", error: " << st.to_string();
             return Status::IOError(
@@ -300,7 +300,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     // 4. clear
     if (!new_meta_file.empty()) {
         // remove hdr meta file
-        Status st = FileUtils::remove(new_meta_file);
+        Status st = fs::remove(new_meta_file);
         if (!st.ok()) {
             LOG(WARNING) << "failed to remove meta file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
                          << ", path=" << schema_hash_path << ", error=" << st.to_string();
@@ -308,7 +308,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     }
     if (!res.ok() && need_remove_new_path) {
         // remove all index and data files if migration failed
-        Status st = FileUtils::remove_all(schema_hash_path);
+        Status st = fs::remove_all(schema_hash_path);
         if (!st.ok()) {
             LOG(WARNING) << "failed to remove storage migration path"
                          << ". schema_hash_path=" << schema_hash_path << ", error=" << st.to_string();

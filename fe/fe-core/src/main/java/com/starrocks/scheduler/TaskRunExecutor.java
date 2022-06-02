@@ -2,7 +2,7 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.statistic.Constants;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

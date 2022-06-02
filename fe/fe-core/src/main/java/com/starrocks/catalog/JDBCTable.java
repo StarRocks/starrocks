@@ -70,7 +70,6 @@ public class JDBCTable extends Table {
         if (resource.getType() != ResourceType.JDBC) {
             throw new DdlException("resource [" + resourceName + "] is not jdbc resource");
         }
-
     }
 
     @Override

@@ -2,6 +2,7 @@
 package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -44,6 +45,23 @@ public class SqlParser {
         }
 
         return statements;
+    }
+
+    /**
+     * parse sql to expression, only supports new parser
+     * @param expressionSql expression sql
+     * @param sqlMode sqlMode
+     * @return Expr
+     */
+    public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(expressionSql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = sqlMode;
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
+        StarRocksParser.ExpressionContext expressionContext = parser.expression();
+        return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
     }
 
     public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {

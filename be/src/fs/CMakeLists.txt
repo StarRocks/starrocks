@@ -33,6 +33,7 @@ set(EXEC_FILES
     fs_memory.cpp
     fs_s3.cpp
     fs_hdfs.cpp
+    fs_util.cpp
     )
 
 add_library(FileSystem STATIC

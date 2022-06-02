@@ -68,9 +68,6 @@ public:
     // Create a vectorized column from field.
     static std::shared_ptr<Column> column_from_field(const Field& field);
 
-    // FieldType data size in memory
-    static size_t approximate_sizeof_type(FieldType type);
-
     // Get char column indexes
     static std::vector<size_t> get_char_field_indexes(const vectorized::Schema& schema);
 

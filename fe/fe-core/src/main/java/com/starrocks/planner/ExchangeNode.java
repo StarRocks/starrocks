@@ -31,16 +31,19 @@ import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Receiver side of a 1:n data stream. Logically, an ExchangeNode consumes the data
@@ -92,7 +95,17 @@ public class ExchangeNode extends PlanNode {
         }
         // Only apply the limit at the receiver if there are multiple senders.
         if (inputNode.getFragment().isPartitioned()) {
-            limit = inputNode.limit;
+            if (inputNode instanceof SortNode) {
+                SortNode sortNode = (SortNode) inputNode;
+                if (Objects.equals(TopNType.ROW_NUMBER, sortNode.getTopNType()) &&
+                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
+                    limit = inputNode.limit;
+                } else {
+                    unsetLimit();
+                }
+            } else {
+                limit = inputNode.limit;
+            }
         }
         computeTupleIds();
     }

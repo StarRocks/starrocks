@@ -10,6 +10,8 @@ import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -19,6 +21,7 @@ import org.junit.Test;
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
+    private static UserIdentity testUser2;
     private static Auth auth;
 
     @BeforeClass
@@ -38,6 +41,13 @@ public class PrivilegeCheckerTest {
 
         testUser = new UserIdentity("test", "%");
         testUser.analyze("default_cluster");
+
+        createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
+        createUserStmt = (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+        auth.createUser(createUserStmt);
+
+        testUser2 = new UserIdentity("test2", "%");
+        testUser2.analyze("default_cluster");
     }
 
     @Test
@@ -342,6 +352,39 @@ public class PrivilegeCheckerTest {
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testGrantImpersonate() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern pattern = new TablePattern("*", "*");
+        pattern.analyze("default_cluster");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+
+        String sql = "grant impersonate on test2 to test";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, pattern, PrivBitSet.of(Privilege.GRANT_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, pattern, PrivBitSet.of(Privilege.GRANT_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testExecuteAs() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+
+        String sql = "execute as test2 with no revert";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        auth.grantImpersonate(new GrantImpersonateStmt(testUser, testUser2));
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokeImpersonate(new RevokeImpersonateStmt(testUser, testUser2));
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }

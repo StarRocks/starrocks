@@ -72,6 +72,20 @@ bool RowSourceMaskBuffer::has_same_source(uint16_t source, size_t count) const {
     return true;
 }
 
+size_t RowSourceMaskBuffer::max_same_source_count(uint16_t source, size_t limit_num) const {
+    size_t upper_bound = std::min(limit_num, _mask_column->size() - _current_index);
+    size_t max_same_source_count = upper_bound;
+
+    for (int i = 1; i < upper_bound; ++i) {
+        RowSourceMask mask(_mask_column->get(_current_index + i).get_uint16());
+        if (mask.get_source_num() != source) {
+            max_same_source_count = i;
+            break;
+        }
+    }
+    return max_same_source_count;
+}
+
 Status RowSourceMaskBuffer::flip_to_read() {
     _current_index = 0;
     if (_tmp_file_fd > 0) {

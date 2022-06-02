@@ -27,12 +27,12 @@
 
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/tracer.h"
 #include "fmt/core.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
@@ -96,8 +96,8 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     if (_running) {
         return Status::TooManyTasks("Manual compaction task is running");
     }
-
     _running = true;
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
     DeferOp defer([&]() { _running = false; });
 
     uint64_t tablet_id;
@@ -115,7 +115,6 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     }
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-
     auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
@@ -154,7 +153,6 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     }
     _running = false;
     *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
-
     return Status::OK();
 }
 

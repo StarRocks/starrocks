@@ -2,21 +2,47 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
-public class QuantifiedApply2OuterJoinRule extends BaseApply2OuterJoinRule {
+public class QuantifiedApply2OuterJoinRule extends TransformationRule {
     public QuantifiedApply2OuterJoinRule() {
         super(RuleType.TF_QUANTIFIED_APPLY_TO_OUTER_JOIN,
                 Pattern.create(OperatorType.LOGICAL_APPLY, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
@@ -29,22 +55,363 @@ public class QuantifiedApply2OuterJoinRule extends BaseApply2OuterJoinRule {
                 && !Utils.containsCorrelationSubquery(input.getGroupExpression());
     }
 
+    /*
+     *
+     * @todo: support constant in sub-query
+     * e.g.
+     *   select v0, 1 in (select v0 from t0) from t1
+     *
+     * transform to:
+     *   select t1.v0,
+     *       case
+     *           when countRows is null then false;
+     *           when v1.t0 is null then null,
+     *           when d.v0 is null then null
+     *           when d.v0 is not null then true
+     *       else false
+     *       end
+     *   from t1 cross join (
+     *       select distinct v0, count(*) as countRows
+     *       from t0
+     *       where v0 = 1 or v0 is null
+     *       order by v0 desc limit 1) d;
+     */
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
+        List<ScalarOperator> joinOnPredicate = Utils.extractConjuncts(apply.getCorrelationConjuncts());
 
         // IN/NOT IN
-        InPredicateOperator ipo = (InPredicateOperator) apply.getSubqueryOperator();
-        List<ScalarOperator> correlationPredicates = Utils.extractConjuncts(apply.getCorrelationConjuncts());
+        InPredicateOperator inPredicate = (InPredicateOperator) apply.getSubqueryOperator();
+        joinOnPredicate.add(
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, inPredicate.getChildren()));
 
-        // put in predicate
-        BinaryPredicateOperator bpo =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
-        correlationPredicates.add(bpo);
-
-        List<ColumnRefOperator> correlationColumnRefs = Utils.extractColumnRef(ipo.getChild(0));
+        List<ColumnRefOperator> correlationColumnRefs = Utils.extractColumnRef(inPredicate.getChild(0));
         correlationColumnRefs.addAll(apply.getCorrelationColumnRefs());
 
-        return transform2OuterJoin(context, input, apply, correlationPredicates, correlationColumnRefs, ipo.isNotIn());
+        // check correlation filter
+        if (!SubqueryUtils.checkAllIsBinaryEQ(joinOnPredicate, correlationColumnRefs)) {
+            // @Todo:
+            // 1. require least a EQ predicate
+            // 2. for other binary predicate rewrite rule
+            //  a. outer-key < inner key -> outer-key < aggregate MAX(key)
+            //  b. outer-key > inner key -> outer-key > aggregate MIN(key)
+            throw new SemanticException("Not support Non-EQ correlation predicate correlation in sub-query");
+        }
+
+        CorrelationOuterJoinTransformer transformer = new CorrelationOuterJoinTransformer(input, context);
+        return Lists.newArrayList(transformer.transform());
+    }
+
+    private static class CorrelationOuterJoinTransformer {
+        private final boolean isNotIn;
+        private final OptimizerContext context;
+        private final LogicalApplyOperator apply;
+        private final ColumnRefFactory factory;
+        private final OptExpression input;
+        private final int cteId;
+
+        // e.g: select t0.v1, t0.v2 in (select t1.v2 from t1 where t0.v3 = t1.v3) from t0;
+        //
+        // origin in sub-query in predicate
+        // e.g: t0.v2 in (t1.v2) -> t0.v2 = t1.v2
+        private BinaryPredicateOperator inPredicate;
+
+        // origin correlation predicate
+        // e.g: t0.v3 = t1.v3
+        private ScalarOperator correlationPredicate;
+
+        private ColumnRefSet inPredicateUsedRefs;
+
+        private ColumnRefSet correlationPredicateInnerRefs;
+
+        private ScalarOperator countJoinOnPredicate;
+
+        private ScalarOperator distinctJoinOnPredicate;
+
+        private final List<ColumnRefOperator> distinctAggregateOutputs;
+
+        private ColumnRefOperator countRows;
+
+        private ColumnRefOperator countNulls;
+
+        public CorrelationOuterJoinTransformer(OptExpression input, OptimizerContext context) {
+            this.input = input;
+            this.apply = (LogicalApplyOperator) input.getOp();
+            InPredicateOperator in = (InPredicateOperator) apply.getSubqueryOperator();
+
+            this.isNotIn = in.isNotIn();
+            this.context = context;
+            this.factory = context.getColumnRefFactory();
+
+            this.inPredicate = BinaryPredicateOperator.eq(in.getChild(0), in.getChild(1));
+            this.correlationPredicate = apply.getCorrelationConjuncts();
+            this.cteId = factory.getNextRelationId();
+
+            this.distinctAggregateOutputs = Lists.newArrayList();
+        }
+
+        /*
+         * In:
+         * before: select t0.v1, t0.v2 in (select t1.v2 from t1 where t0.v3 = t1.v3) from t0;
+         * after: with xx as (select t1.v2, t1.v3 from t1)
+         *        select t0.v1,
+         *             case
+         *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false, will hit else
+         *                 when t1Rows = 0 then false
+         *                 when t0.v2 is null then null
+         *                 when t1d.v2 is not null then true
+         *                 when v2Nulls < t1Rows then null
+         *                 else false
+         *             end
+         *         from t0
+         *              left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
+         *                              on t0.v2= t1d.v2 and t0.v3 = t1d.v3
+         *              left outer join (select count(*) as t1Rows, count(xx.v2) as v2Nulls from xx group by xx.v3) as t1c
+         *                              on t1c.v3 = t0.v3
+         *
+         *                                           CTEAnchor
+         *                                          /        \
+         *                                    CTEProduce     Project
+         *    Apply(t0.v2 in t1.v2)              /               \
+         *    /          \          ===>     Project         left/cross join
+         *   t0          t1                   /              /          \
+         *                                Filter         Left join       Agg(count)
+         *                                 /             /       \           \
+         *                               t1            t0     Agg(distinct)  CTEConsume
+         *                                                         \
+         *                                                        CTEConsume
+         * */
+        public OptExpression transform() {
+            check();
+
+            OptExpression cteProduce = buildCTEProduce();
+
+            OptExpression distinctAggregate = buildDistinctAndConsume();
+            OptExpression countAggregate = buildCountAndConsume();
+
+            OptExpression leftJoin = OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN,
+                    distinctJoinOnPredicate), input.getInputs().get(0), distinctAggregate);
+
+            OptExpression crossJoin = buildCrossOrLeftJoin(leftJoin, countAggregate);
+
+            OptExpression caseWhen = buildCaseWhen(crossJoin);
+
+            OptExpression anchor = OptExpression.create(new LogicalCTEAnchorOperator(cteId), cteProduce, caseWhen);
+
+            context.getCteContext().addForceCTE(cteId);
+            return anchor;
+        }
+
+        private void check() {
+            if (!context.getSessionVariable().isEnablePipelineEngine()) {
+                throw new SemanticException("In sub-query depend on pipeline which one not in where-clause, " +
+                        "enable by: set enable_pipeline=true;");
+            }
+        }
+
+        /*
+         *
+         *   CTEProduce
+         *      |
+         *   project(optional)
+         *      |
+         *    filter(optional)
+         *      |
+         *    child
+         *
+         */
+        private OptExpression buildCTEProduce() {
+            // CTE Produce
+            OptExpression cteProduceChild = input.getInputs().get(1);
+
+            Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> correlationPredicatePair =
+                    SubqueryUtils.rewritePredicateAndExtractColumnRefs(Utils.extractConjuncts(correlationPredicate),
+                            apply.getCorrelationColumnRefs(), context);
+
+            Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> inPredicatePair =
+                    SubqueryUtils.rewritePredicateAndExtractColumnRefs(Lists.newArrayList(inPredicate),
+                            Utils.extractColumnRef(inPredicate.getChild(0)), context);
+
+            // update predicates
+            correlationPredicate = Utils.compoundAnd(correlationPredicatePair.first);
+            inPredicate = (BinaryPredicateOperator) inPredicatePair.first.get(0);
+
+            // update used columns
+            Preconditions.checkState(inPredicatePair.second.keySet().size() == 1);
+            inPredicateUsedRefs = new ColumnRefSet(inPredicatePair.second.keySet());
+            correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
+
+            // CTE produce filter
+            if (null != apply.getPredicate()) {
+                cteProduceChild =
+                        OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), cteProduceChild);
+            }
+
+            // CTE produce project
+            if (correlationPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef()) ||
+                    inPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef())) {
+                // has function, need project node
+                Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+
+                Arrays.stream(cteProduceChild.getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
+                        .forEach(i -> projectMap.put(i, i));
+                projectMap.putAll(correlationPredicatePair.second);
+                projectMap.putAll(inPredicatePair.second);
+
+                cteProduceChild = OptExpression.create(new LogicalProjectOperator(projectMap), cteProduceChild);
+            }
+
+            return OptExpression.create(new LogicalCTEProduceOperator(cteId), cteProduceChild);
+        }
+
+        /*
+         *  Aggregate(group by correlation columns + in column)
+         *              |
+         *          CTEConsume
+         */
+        private OptExpression buildDistinctAndConsume() {
+            // CTE distinct consume
+            Map<ColumnRefOperator, ColumnRefOperator> distinctConsumeOutputMaps = Maps.newHashMap();
+
+            for (int columnId : inPredicateUsedRefs.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                distinctConsumeOutputMaps.put(factory.create(ref, ref.getType(), ref.isNullable()), ref);
+            }
+
+            for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
+                distinctConsumeOutputMaps.put(dr, ref);
+            }
+
+            OptExpression distinctConsume =
+                    OptExpression.create(new LogicalCTEConsumeOperator(cteId, distinctConsumeOutputMaps));
+
+            // rewrite predicate by cte consume output
+            Map<ColumnRefOperator, ScalarOperator> distinctRewriteMap = Maps.newHashMap();
+            distinctConsumeOutputMaps.forEach((k, v) -> distinctRewriteMap.put(v, k));
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(distinctRewriteMap);
+
+            inPredicate = (BinaryPredicateOperator) rewriter.rewrite(inPredicate);
+            distinctJoinOnPredicate = Utils.compoundAnd(inPredicate, rewriter.rewrite(correlationPredicate));
+
+            distinctAggregateOutputs.addAll(distinctConsumeOutputMaps.keySet());
+            // distinct aggregate
+            return OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL,
+                    Lists.newArrayList(distinctAggregateOutputs), Maps.newHashMap()), distinctConsume);
+        }
+
+        /*
+         * Aggregate(count(1), count(in column), group by correlation columns)
+         *          |
+         *      CTEConsume
+         */
+        private OptExpression buildCountAndConsume() {
+            // CTE count consume
+            Map<ColumnRefOperator, ColumnRefOperator> countConsumeOutputMaps = Maps.newHashMap();
+
+            List<ColumnRefOperator> countAggregateGroupBys = Lists.newArrayList();
+            List<ColumnRefOperator> countAggregateCounts = Lists.newArrayList();
+
+            for (int columnId : inPredicateUsedRefs.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                ColumnRefOperator cr = factory.create(ref, ref.getType(), ref.isNullable());
+                countConsumeOutputMaps.put(cr, ref);
+
+                countAggregateCounts.add(cr);
+            }
+
+            for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                ColumnRefOperator cr = factory.create(ref, ref.getType(), ref.isNullable());
+
+                countConsumeOutputMaps.put(cr, ref);
+
+                countAggregateGroupBys.add(cr);
+            }
+
+            OptExpression countConsume =
+                    OptExpression.create(new LogicalCTEConsumeOperator(cteId, countConsumeOutputMaps));
+
+            // rewrite cross/left join on-clause by cte consume output
+            Map<ColumnRefOperator, ScalarOperator> countRewriteMap = Maps.newHashMap();
+            countConsumeOutputMaps.forEach((k, v) -> countRewriteMap.put(v, k));
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(countRewriteMap);
+            countJoinOnPredicate = rewriter.rewrite(correlationPredicate);
+
+            // count aggregate
+            Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+            CallOperator countRowsFn = SubqueryUtils.createCountRowsOperator();
+            countRows = factory.create("countRows", countRowsFn.getType(), countRowsFn.isNullable());
+            aggregates.put(countRows, countRowsFn);
+
+            Preconditions.checkState(countAggregateCounts.size() == 1);
+
+            CallOperator countNullFn = SubqueryUtils.createCountRowsOperator(countAggregateCounts.get(0));
+            countNulls = factory.create("countNulls", countNullFn.getType(), countNullFn.isNullable());
+            aggregates.put(countNulls, countNullFn);
+
+            return OptExpression.create(
+                    new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates), countConsume);
+        }
+
+        /*
+         * Correlation sub-query only need to consider the data related to the correlation key.
+         * 1. build cross join if un-correlation sub-query
+         * 2. build left join if correlation sub-query
+         */
+        private OptExpression buildCrossOrLeftJoin(OptExpression leftJoin, OptExpression countAggregate) {
+            if (countJoinOnPredicate != null) {
+                return OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, countJoinOnPredicate),
+                        leftJoin, countAggregate);
+            }
+
+            return OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null),
+                    leftJoin, countAggregate);
+        }
+
+        /*
+         * Project:
+         * case
+         *     when t1Rows = 0 then false
+         *     when t0.v2 is null then is null
+         *     when t1d.v2 is not null then true
+         *     when v2Nulls < t1Rows then null
+         *     else false
+         * end
+         */
+        private OptExpression buildCaseWhen(OptExpression left) {
+            // case when
+            Map<ColumnRefOperator, ScalarOperator> caseWhenMap = Maps.newHashMap();
+            Arrays.stream(input.getInputs().get(0).getOutputColumns().getColumnIds())
+                    .mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(d -> caseWhenMap.put(d, d));
+            distinctAggregateOutputs.forEach(k -> caseWhenMap.put(k, k));
+
+            List<ScalarOperator> whenThen = Lists.newArrayList();
+            whenThen.add(BinaryPredicateOperator.eq(countRows, ConstantOperator.createBigint(0)));
+            whenThen.add(ConstantOperator.createBoolean(false));
+
+            whenThen.add(new IsNullPredicateOperator(inPredicate.getChild(0)));
+            whenThen.add(ConstantOperator.createNull(Type.BOOLEAN));
+
+            whenThen.add(new IsNullPredicateOperator(true, inPredicate.getChild(1)));
+            whenThen.add(ConstantOperator.createBoolean(true));
+
+            whenThen.add(BinaryPredicateOperator.lt(countNulls, countRows));
+            whenThen.add(ConstantOperator.createNull(Type.BOOLEAN));
+
+            ScalarOperator caseWhen =
+                    new CaseWhenOperator(Type.BOOLEAN, null, ConstantOperator.createBoolean(false), whenThen);
+
+            if (isNotIn) {
+                caseWhenMap.put(apply.getOutput(),
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, caseWhen));
+            } else {
+                caseWhenMap.put(apply.getOutput(), caseWhen);
+            }
+
+            return OptExpression.create(new LogicalProjectOperator(caseWhenMap), left);
+        }
     }
 }

@@ -174,7 +174,7 @@ public class StarRocksAssert {
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
         return this;
@@ -190,7 +190,7 @@ public class StarRocksAssert {
 
     // With catalog
     public StarRocksAssert withCatalog(String sql) throws Exception {
-        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
         return this;
     }

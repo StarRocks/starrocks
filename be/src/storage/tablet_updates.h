@@ -213,6 +213,11 @@ public:
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 
+    Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
+
+    Status get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
+                                                std::vector<RowsetSharedPtr>& rowsets);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

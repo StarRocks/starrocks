@@ -527,6 +527,12 @@ struct TSortInfo {
   4: optional list<Exprs.TExpr> sort_tuple_slot_exprs
 }
 
+enum TTopNType {
+  ROW_NUMBER,
+  RANK,
+  DENSE_RANK
+}
+
 struct TSortNode {
   1: required TSortInfo sort_info
   // Indicates whether the backend service should use topn vs. sorting
@@ -554,6 +560,9 @@ struct TSortNode {
   // in order to eliminate time-consuming LocalMergeSortSourceOperator and parallelize
   // AnalyticNode
   22: optional list<Exprs.TExpr> analytic_partition_exprs
+  23: optional list<Exprs.TExpr> partition_exprs
+  24: optional i64 partition_limit
+  25: optional TTopNType topn_type;
 }
 
 enum TAnalyticWindowType {
@@ -797,6 +806,10 @@ struct TDecodeNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> string_functions
 }
 
+struct TCrossJoinNode {
+    1: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+}
+
 struct TTableFunctionNode {
     1: optional Exprs.TExpr table_function
     2: optional list<Types.TSlotId> param_columns
@@ -872,6 +885,8 @@ struct TPlanNode {
 
   // generic scan node with connector.
   61: optional TConnectorScanNode connector_scan_node;
+
+  62: optional TCrossJoinNode cross_join_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

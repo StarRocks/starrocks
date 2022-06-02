@@ -30,9 +30,9 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -97,10 +97,10 @@ public class TabletsProcDir implements ProcDirInterface {
             if (partition.isUseStarOS()) {
                 for (Tablet tablet : index.getTablets()) {
                     List<Comparable> tabletInfo = new ArrayList<Comparable>();
-                    StarOSTablet starOSTablet = (StarOSTablet) tablet;
-                    tabletInfo.add(starOSTablet.getId());
+                    LakeTablet lakeTablet = (LakeTablet) tablet;
+                    tabletInfo.add(lakeTablet.getId());
                     tabletInfo.add(-1); // replica id
-                    tabletInfo.add(new Gson().toJson(starOSTablet.getBackendIds()));
+                    tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds()));
                     tabletInfo.add(-1); // schema hash
                     tabletInfo.add(partition.getVisibleVersion());
                     tabletInfo.add(0); // version hash
@@ -109,8 +109,8 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // lst failed version
                     tabletInfo.add(0); // lst failed version hash
                     tabletInfo.add(-1); // lst failed time
-                    tabletInfo.add(starOSTablet.getDataSize(true));
-                    tabletInfo.add(starOSTablet.getRowCount(0L));
+                    tabletInfo.add(lakeTablet.getDataSize(true));
+                    tabletInfo.add(lakeTablet.getRowCount(0L));
                     tabletInfo.add(FeConstants.null_string); // state
                     tabletInfo.add(-1); // lst consistency check time
                     tabletInfo.add(-1); // check version
@@ -120,7 +120,7 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(FeConstants.null_string); // meta url
                     tabletInfo.add(FeConstants.null_string); // compaction status
                     if (Config.use_staros) {
-                        tabletInfo.add(starOSTablet.getShardId());
+                        tabletInfo.add(lakeTablet.getShardId());
                     }
 
                     tabletInfos.add(tabletInfo);

@@ -246,6 +246,61 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2017, 5, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2020, 9, 23, 0, 0, 0));
+    tc->append(TimestampValue::create(2015, 10, 11, 0, 0, 0));
+
+    int weeks[] = {0, 18, 38, 41};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::week_of_year_with_default_mode(_utils->get_fn_ctx(), columns);
+
+    auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+        ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, weekWithModeTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2017, 5, 1, 0, 0, 0));
+    tc->append(TimestampValue::create(2020, 9, 23, 0, 0, 0));
+    tc->append(TimestampValue::create(2015, 10, 11, 0, 0, 0));
+    tc->append(TimestampValue::create(2014, 12, 11, 0, 0, 0));
+    tc->append(TimestampValue::create(2001, 5, 3, 0, 0, 0));
+    tc->append(TimestampValue::create(2005, 2, 3, 0, 0, 0));
+    tc->append(TimestampValue::create(2003, 9, 3, 0, 0, 0));
+
+    auto mode_column = Int32Column::create();
+    mode_column->append(3);
+    mode_column->append(2);
+    mode_column->append(1);
+    mode_column->append(0);
+    mode_column->append(5);
+    mode_column->append(7);
+    mode_column->append(4);
+    mode_column->append(6);
+
+    int weeks[] = {1, 18, 39, 41, 49, 18, 5, 36};
+
+    Columns columns;
+    columns.emplace_back(tc);
+    columns.emplace_back(mode_column);
+
+    ColumnPtr result = TimeFunctions::week_of_year_with_mode(_utils->get_fn_ctx(), columns);
+
+    auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+        ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, toDateTest) {
     const int year = 2020, month = 6, day = 18;
     auto tc = TimestampColumn::create();

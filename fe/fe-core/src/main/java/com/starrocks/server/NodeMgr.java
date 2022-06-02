@@ -43,7 +43,6 @@ import com.starrocks.ha.MasterInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.master.MetaHelper;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.qe.ConnectContext;
@@ -107,18 +106,17 @@ public class NodeMgr {
     private final BrokerMgr brokerMgr;
     private final HeartbeatMgr heartbeatMgr;
 
-    private final EditLog editLog;
     private final GlobalStateMgr stateMgr;
 
     public NodeMgr(boolean isCheckpoint, GlobalStateMgr globalStateMgr) {
+        this.role = FrontendNodeType.UNKNOWN;
         this.masterRpcPort = 0;
         this.masterHttpPort = 0;
         this.masterIp = "";
         this.systemInfo = new SystemInfoService();
-        this.brokerMgr = new BrokerMgr();
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpoint);
+        this.brokerMgr = new BrokerMgr();
         this.stateMgr = globalStateMgr;
-        this.editLog = stateMgr.getEditLog();
     }
 
     public void initialize(String[] args) throws Exception {
@@ -172,7 +170,7 @@ public class NodeMgr {
         return this.systemInfo;
     }
 
-    private HeartbeatMgr getHeartbeatMgr() {
+    public HeartbeatMgr getHeartbeatMgr() {
         return this.heartbeatMgr;
     }
 
@@ -180,7 +178,7 @@ public class NodeMgr {
         return brokerMgr;
     }
 
-    private void getClusterIdAndRole() throws IOException {
+    public void getClusterIdAndRole() throws IOException {
         File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
         File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
 
@@ -482,6 +480,14 @@ public class NodeMgr {
         return checksum;
     }
 
+    public long loadBackends(DataInputStream dis, long checksum) throws IOException {
+        return systemInfo.loadBackends(dis, checksum);
+    }
+
+    public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
+        return systemInfo.saveBackends(dos, checksum);
+    }
+
     private StorageInfo getStorageInfo(URL url) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
 
@@ -571,7 +577,7 @@ public class NodeMgr {
      * happen when this node is removed from frontend list, and the drop
      * frontend log is deleted because of checkpoint.
      */
-    private void checkCurrentNodeExist() {
+    public void checkCurrentNodeExist() {
         if (Config.metadata_failure_recovery.equals("true")) {
             return;
         }
@@ -660,7 +666,7 @@ public class NodeMgr {
                 bdbha.removeNodeIfExist(host, editLogPort);
             }
 
-            editLog.logAddFrontend(fe);
+            stateMgr.getEditLog().logAddFrontend(fe);
         } finally {
             unlock();
         }
@@ -691,7 +697,7 @@ public class NodeMgr {
                 BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
                 ha.removeUnstableNode(host, getFollowerCnt());
             }
-            editLog.logRemoveFrontend(fe);
+            stateMgr.getEditLog().logRemoveFrontend(fe);
         } finally {
             unlock();
         }
@@ -787,6 +793,10 @@ public class NodeMgr {
 
     public int getClusterId() {
         return this.clusterId;
+    }
+
+    public void setClusterId(int clusterId) {
+        this.clusterId = clusterId;
     }
 
     public String getToken() {
@@ -888,6 +898,26 @@ public class NodeMgr {
         return frontends;
     }
 
+    public long loadBrokers(DataInputStream dis, long checksum) throws IOException {
+        if (MetaContext.get().getMetaVersion() >= FeMetaVersion.VERSION_31) {
+            int count = dis.readInt();
+            checksum ^= count;
+            for (long i = 0; i < count; ++i) {
+                String brokerName = Text.readString(dis);
+                int size = dis.readInt();
+                checksum ^= size;
+                List<FsBroker> addrs = Lists.newArrayList();
+                for (int j = 0; j < size; j++) {
+                    FsBroker addr = FsBroker.readIn(dis);
+                    addrs.add(addr);
+                }
+                brokerMgr.replayAddBrokers(brokerName, addrs);
+            }
+            LOG.info("finished replay brokerMgr from image");
+        }
+        return checksum;
+    }
+
     public long saveBrokers(DataOutputStream dos, long checksum) throws IOException {
         Map<String, List<FsBroker>> addressListMap = brokerMgr.getBrokerListMap();
         int size = addressListMap.size();
@@ -908,40 +938,43 @@ public class NodeMgr {
         return checksum;
     }
 
-    public long loadBrokers(DataInputStream dis, long checksum) throws IOException, DdlException {
-        if (MetaContext.get().getMetaVersion() >= FeMetaVersion.VERSION_31) {
-            int count = dis.readInt();
-            checksum ^= count;
-            for (long i = 0; i < count; ++i) {
-                String brokerName = Text.readString(dis);
-                int size = dis.readInt();
-                checksum ^= size;
-                List<FsBroker> addrs = Lists.newArrayList();
-                for (int j = 0; j < size; j++) {
-                    FsBroker addr = FsBroker.readIn(dis);
-                    addrs.add(addr);
-                }
-                brokerMgr.replayAddBrokers(brokerName, addrs);
-            }
-            LOG.info("finished replay brokerMgr from image");
-        }
+    public long loadMasterInfo(DataInputStream dis, long checksum) throws IOException {
+        masterIp = Text.readString(dis);
+        masterRpcPort = dis.readInt();
+        long newChecksum = checksum ^ masterRpcPort;
+        masterHttpPort = dis.readInt();
+        newChecksum ^= masterHttpPort;
+
+        LOG.info("finished replay masterInfo from image");
+        return newChecksum;
+    }
+
+    public long saveMasterInfo(DataOutputStream dos, long checksum) throws IOException {
+        Text.writeString(dos, masterIp);
+
+        checksum ^= masterRpcPort;
+        dos.writeInt(masterRpcPort);
+
+        checksum ^= masterHttpPort;
+        dos.writeInt(masterHttpPort);
+
         return checksum;
+    }
+
+    public void setMasterInfo() {
+        this.masterIp = FrontendOptions.getLocalHostAddress();
+        this.masterRpcPort = Config.rpc_port;
+        this.masterHttpPort = Config.http_port;
+        MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
+        GlobalStateMgr.getCurrentState().getEditLog().logMasterInfo(info);
     }
 
     public boolean isFirstTimeStartUp() {
         return isFirstTimeStartUp;
     }
 
-    public void setFirstTimeStartUp(boolean firstTimeStartUp) {
-        isFirstTimeStartUp = firstTimeStartUp;
-    }
-
     public boolean isElectable() {
         return isElectable;
-    }
-
-    public String getImageDir() {
-        return imageDir;
     }
 
     public void setImageDir(String imageDir) {

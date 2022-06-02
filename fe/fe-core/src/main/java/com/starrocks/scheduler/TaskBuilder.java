@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.scheduler;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -23,6 +24,7 @@ public class TaskBuilder {
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setProperties(submitTaskStmt.getProperties());
+        task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         return task;
     }
 
