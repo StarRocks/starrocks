@@ -188,6 +188,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -315,7 +316,6 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     _init_storage_page_cache();
     return Status::OK();
 }
