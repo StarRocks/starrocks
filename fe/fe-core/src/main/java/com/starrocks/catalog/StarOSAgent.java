@@ -51,6 +51,16 @@ public class StarOSAgent {
         workerToBackend = Maps.newHashMap();
     }
 
+    // for ut only
+    public long getServiceIdforTest() {
+        return serviceId;
+    }
+
+    // for ut only
+    public void setServiceId(long id) {
+        this.serviceId = id;
+    }
+
     public List<Long> createShards(int numShards) {
         List<ShardInfo> shardInfos = Lists.newArrayList();
         try {
@@ -136,6 +146,11 @@ public class StarOSAgent {
             System.exit(-1);
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
+    }
+
+    // for ut only
+    public long getWorkerId(String workerIpPort) {
+        return workerToId.get(workerIpPort);
     }
 
     public void addWorker(long backendId, String workerIpPort) {
