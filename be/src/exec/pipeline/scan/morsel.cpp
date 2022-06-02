@@ -294,7 +294,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
         if (num_taken_blocks < _sample_splitted_scan_blocks) {
             cur_num_taken_blocks = _sample_splitted_scan_blocks - num_taken_blocks;
         } else {
-            // If it has taken enough blocks but haven't found the _cur_range_lower different from _cur_range_lower,
+            // If it has taken enough blocks but hasn't found the _cur_range_lower different from _cur_range_lower,
             // just take quarter of _sample_splitted_scan_blocks once.
             cur_num_taken_blocks = std::max<int64_t>(_sample_splitted_scan_blocks / 4, 1);
         }
@@ -353,7 +353,7 @@ bool LogicalSplitMorselQueue::_valid_range(const vectorized::ShortKeyOptionPtr& 
     }
 
     Slice upper_key = upper->short_key;
-    // Empty short key of start ShortKeyOption means it is the last splitted key range,
+    // Empty short key of end ShortKeyOption means it is the last splitted key range,
     // so use end original short key to compare.
     if (upper_key.empty()) {
         auto end_iter = _block_ranges_per_seek_range[_range_idx].second;
