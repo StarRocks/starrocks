@@ -219,6 +219,15 @@ public class SlotRef extends Expr {
         }
     }
 
+    @Override
+    public String toJDBCSQL(boolean isMySQL) {
+        if (col != null) {
+            return isMySQL ? "`" + col + "`" : col;
+        } else {
+            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+        }
+    }
+
     public TableName getTableName() {
         Preconditions.checkState(isAnalyzed);
         Preconditions.checkNotNull(desc);
@@ -240,7 +249,12 @@ public class SlotRef extends Expr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.SLOT_REF;
-        msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+        if (desc != null) {
+            msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+        } else {
+            msg.slot_ref = new TSlotRef(0,0);
+        }
+
         msg.setOutput_column(outputColumn);
     }
 

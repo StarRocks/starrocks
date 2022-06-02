@@ -290,7 +290,7 @@ public class CreateTableTest {
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
     }
 
-    private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {
+    private void checkOlapTableWithLakeTablet(String dbName, String tableName) {
         String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         Table table = db.getTable(tableName);
@@ -309,7 +309,7 @@ public class CreateTableTest {
         Assert.assertTrue(throwException);
     }
 
-    private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {
+    private void dropOlapTableWithLakeTablet(String dbName, String tableName) {
         String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         Table table = db.getTable(tableName);
@@ -320,7 +320,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateOlapTableWithStarOSTablet() throws DdlException {
+    public void testCreateOlapTableWithLakeTablet() throws DdlException {
         Config.use_staros = true;
 
         // normal
@@ -328,8 +328,8 @@ public class CreateTableTest {
                 "create table test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
                         "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
-        dropOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
+        checkOlapTableWithLakeTablet("test", "single_partition_duplicate_key");
+        dropOlapTableWithLakeTablet("test", "single_partition_duplicate_key");
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.multi_partition_aggregate_key (key1 date, key2 varchar(10), v bigint sum)\n" +
@@ -338,8 +338,8 @@ public class CreateTableTest {
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 3\n" +
                         "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
-        dropOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
+        checkOlapTableWithLakeTablet("test", "multi_partition_aggregate_key");
+        dropOlapTableWithLakeTablet("test", "multi_partition_aggregate_key");
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.multi_partition_unique_key (key1 int, key2 varchar(10), v bigint)\n" +
@@ -349,8 +349,8 @@ public class CreateTableTest {
                         " partition p2 values less than (\"20\"))\n" +
                         "distributed by hash(key2) buckets 3\n" +
                         "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
-        dropOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
+        checkOlapTableWithLakeTablet("test", "multi_partition_unique_key");
+        dropOlapTableWithLakeTablet("test", "multi_partition_unique_key");
 
         Config.use_staros = false;
     }

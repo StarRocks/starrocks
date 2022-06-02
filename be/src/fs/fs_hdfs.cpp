@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "runtime/hdfs/hdfs_fs_cache.h"
+#include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -39,8 +40,16 @@ private:
 };
 
 HdfsInputStream::~HdfsInputStream() {
-    int r = hdfsCloseFile(_fs, _file);
-    PLOG_IF(ERROR, r != 0) << "close " << _file_name << " failed";
+    auto ret = call_hdfs_scan_function_in_pthread([this]() {
+        int r = hdfsCloseFile(this->_fs, this->_file);
+        if (r == 0) {
+            return Status::OK();
+        } else {
+            return Status::IOError("");
+        }
+    });
+    Status st = ret->get_future().get();
+    PLOG_IF(ERROR, !st.ok()) << "close " << _file_name << " failed";
 }
 
 StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
@@ -63,27 +72,38 @@ Status HdfsInputStream::seek(int64_t offset) {
 
 StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
-        auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
-        if (UNLIKELY(info == nullptr)) {
-            return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
-        }
-        _file_size = info->mSize;
-        hdfsFreeFileInfo(info, 1);
+        auto ret = call_hdfs_scan_function_in_pthread([this] {
+            auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
+            if (UNLIKELY(info == nullptr)) {
+                return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
+            }
+            this->_file_size = info->mSize;
+            hdfsFreeFileInfo(info, 1);
+            return Status::OK();
+        });
+        Status st = ret->get_future().get();
+        if (!st.ok()) return st;
     }
     return _file_size;
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
-    struct hdfsReadStatistics* hdfs_statistics = nullptr;
-    auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
-    if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
     auto statistics = std::make_unique<io::NumericStatistics>();
-    statistics->reserve(4);
-    statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
-    statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
-    statistics->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
-    statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
-    hdfsFileFreeReadStatistics(hdfs_statistics);
+    io::NumericStatistics* stats = statistics.get();
+    auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
+        struct hdfsReadStatistics* hdfs_statistics = nullptr;
+        auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
+        if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+        stats->reserve(4);
+        stats->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
+        stats->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
+        stats->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
+        stats->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
+        hdfsFileFreeReadStatistics(hdfs_statistics);
+        return Status::OK();
+    });
+    Status st = ret->get_future().get();
+    if (!st.ok()) return st;
     return std::move(statistics);
 }
 

@@ -24,8 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 public class CoordinatorTest {
-    @Test
-    public void testComputeBucketSeq2InstanceOrdinal() throws IOException {
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);
@@ -45,11 +44,21 @@ public class CoordinatorTest {
         params.instanceExecParams.add(instance1);
         params.instanceExecParams.add(instance2);
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
-        rf.setJoinMode(JoinNode.DistributionMode.COLOCATE);
+        rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
         coordinator.computeBucketSeq2InstanceOrdinal(params, 6);
-        params.setBucketSeqToInstanceForColocateRuntimeFilters();
+        params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
+    }
+
+    @Test
+    public void testColocateRuntimeFilter() throws IOException {
+        testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.COLOCATE);
+    }
+
+    @Test
+    public void testBucketShuffleRuntimeFilter() throws IOException {
+        testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 }

@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -274,7 +275,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         for (int i = 0; i < tabletCount; ++i) {
             Tablet tablet = null;
             if (useStarOS) {
-                tablet = StarOSTablet.read(in);
+                tablet = LakeTablet.read(in);
             } else {
                 tablet = LocalTablet.read(in);
             }

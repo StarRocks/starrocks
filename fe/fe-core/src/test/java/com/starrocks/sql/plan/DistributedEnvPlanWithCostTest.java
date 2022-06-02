@@ -1248,4 +1248,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "    EXCHANGE ID: 06\n" +
                 "    BUCKET_SHUFFLE_HASH_PARTITIONED: 2: O_CUSTKEY");
     }
+
+    @Test
+    public void testMultiTableCrossJoin() throws Exception {
+        String sql = "select * from lineitem a,lineitem b,lineitem c,lineitem d,lineitem e,lineitem f";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "15:CROSS JOIN\n" +
+                "  |  cross join:");
+    }
 }

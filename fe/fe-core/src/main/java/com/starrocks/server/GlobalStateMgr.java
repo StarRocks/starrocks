@@ -30,8 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.sleepycat.je.rep.NetworkRestore;
-import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
@@ -72,7 +70,6 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
@@ -161,6 +158,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -208,6 +206,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -1496,13 +1495,10 @@ public class GlobalStateMgr {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
                 } catch (InsufficientLogException insufficientLogEx) {
-                    // Copy the missing log files from a member of the
-                    // replication group who owns the files
-                    LOG.error("catch insufficient log exception. please restart.", insufficientLogEx);
-                    NetworkRestore restore = new NetworkRestore();
-                    NetworkRestoreConfig config = new NetworkRestoreConfig();
-                    config.setRetainLogFiles(false);
-                    restore.execute(insufficientLogEx, config);
+                    // for InsufficientLogException we should refresh the log and
+                    // then exit the process because we may have read dirty data.
+                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
+                    ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal.", e);
@@ -2818,7 +2814,7 @@ public class GlobalStateMgr {
         return localMetastore.getMigrations();
     }
 
-    public void refreshExternalTable(RefreshExternalTableStmt stmt) throws DdlException {
+    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);

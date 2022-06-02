@@ -51,6 +51,7 @@ import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
@@ -72,14 +73,16 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
@@ -163,7 +166,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<Tablet> tabletTypeAdapterFactory = RuntimeTypeAdapterFactory
             .of(Tablet.class, "clazz")
             .registerSubtype(LocalTablet.class, LocalTablet.class.getSimpleName(), true)
-            .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
+            .registerSubtype(LakeTablet.class, LakeTablet.class.getSimpleName());
 
     // runtime adapter for HeartbeatResponse
     private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor = RuntimeTypeAdapterFactory
@@ -182,6 +185,10 @@ public class GsonUtils {
     private static final JsonSerializer<QueryDumpInfo> dumpInfoSerializer = new QueryDumpSerializer();
 
     private static final JsonDeserializer<QueryDumpInfo> dumpInfoDeserializer = new QueryDumpDeserializer();
+
+    private static final JsonSerializer<Expr> expressionSerializer = new ExpressionSerializer();
+
+    private static final JsonDeserializer<Expr> expressionDeserializer = new ExpressionDeserializer();
 
     private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeSerializer();
 
@@ -205,7 +212,9 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoDeserializer)
-            .registerTypeAdapter(PrimitiveType.class, primitiveTypeDeserializer);
+            .registerTypeAdapter(PrimitiveType.class, primitiveTypeDeserializer)
+            .registerTypeHierarchyAdapter(Expr.class, expressionSerializer)
+            .registerTypeHierarchyAdapter(Expr.class, expressionDeserializer);
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -441,6 +450,25 @@ public class GsonUtils {
             } catch (Throwable t) {
                 return PrimitiveType.INVALID_TYPE;
             }
+        }
+    }
+
+    private static class ExpressionSerializer implements JsonSerializer<Expr> {
+        @Override
+        public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
+            JsonObject expressionJson = new JsonObject();
+            expressionJson.addProperty("expr", expr.toSql());
+            return expressionJson;
+        }
+    }
+
+    private static class ExpressionDeserializer implements JsonDeserializer<Expr> {
+        @Override
+        public Expr deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context)
+                throws JsonParseException {
+            JsonObject expressionObject = jsonElement.getAsJsonObject();
+            String expressionSql = expressionObject.get("expr").getAsString();
+            return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
         }
     }
 }

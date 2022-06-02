@@ -212,6 +212,7 @@ CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
 // The memory_limitation_per_thread_for_schema_change unit GB.
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
+CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
@@ -489,6 +490,9 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
+
+// kafka reqeust timeout
+CONF_Int32(routine_load_kafka_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.

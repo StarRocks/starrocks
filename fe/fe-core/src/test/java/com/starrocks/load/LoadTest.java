@@ -16,6 +16,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
@@ -89,7 +90,7 @@ public class LoadTest {
         // c1 = year(c1)
         List<Expr> params1 = Lists.newArrayList();
         params1.add(new SlotRef(null, c1Name));
-        Expr mapping1 = new FunctionCallExpr("year", params1);
+        Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
         columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
 
         // c1 is from path
@@ -145,13 +146,13 @@ public class LoadTest {
         // c1 = year(c1)
         List<Expr> params1 = Lists.newArrayList();
         params1.add(new SlotRef(null, c1Name));
-        Expr mapping1 = new FunctionCallExpr("year", params1);
+        Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
         columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
 
         // c2 = to_bitmap(c2)
         List<Expr> params2 = Lists.newArrayList();
         params2.add(new SlotRef(null, c2Name));
-        Expr mapping2 = new FunctionCallExpr("to_bitmap", params2);
+        Expr mapping2 = new FunctionCallExpr(FunctionSet.TO_BITMAP, params2);
         columnExprs.add(new ImportColumnDesc(c2Name, mapping2));
 
         // c31 = c3 + 1
@@ -211,7 +212,7 @@ public class LoadTest {
         // C1 = year(c1)
         List<Expr> params1 = Lists.newArrayList();
         params1.add(new SlotRef(null, c1NameInSource));
-        Expr mapping1 = new FunctionCallExpr("year", params1);
+        Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
         columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
 
         new Expectations() {

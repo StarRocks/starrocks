@@ -1,11 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog;
+package com.starrocks.catalog.lake;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.StarOSAgent;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -23,7 +26,7 @@ import java.io.FileOutputStream;
 import java.util.List;
 import java.util.Map;
 
-public class StarOSTabletTest {
+public class LakeTabletTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
@@ -37,12 +40,12 @@ public class StarOSTabletTest {
             }
         };
 
-        StarOSTablet tablet = new StarOSTablet(1L, 2L);
+        LakeTablet tablet = new LakeTablet(1L, 2L);
         tablet.setDataSize(3L);
         tablet.setRowCount(4L);
 
         // Serialize
-        File file = new File("./StarOSTabletSerializationTest");
+        File file = new File("./LakeTabletSerializationTest");
         file.createNewFile();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(file))) {
             tablet.write(dos);
@@ -50,9 +53,9 @@ public class StarOSTabletTest {
         }
 
         // Deserialize
-        StarOSTablet newTablet = null;
+        LakeTablet newTablet = null;
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
-            newTablet = StarOSTablet.read(dis);
+            newTablet = LakeTablet.read(dis);
         }
 
         // Check
@@ -86,7 +89,7 @@ public class StarOSTabletTest {
             }
         };
 
-        StarOSTablet tablet = new StarOSTablet(1L, 2L);
+        LakeTablet tablet = new LakeTablet(1L, 2L);
         Assert.assertEquals(Sets.newHashSet(backendId), tablet.getBackendIds());
         Assert.assertEquals(backendId, tablet.getPrimaryBackendId());
         List<Replica> allQuerableReplicas = Lists.newArrayList();

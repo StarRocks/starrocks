@@ -64,6 +64,7 @@
 namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
+const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
@@ -287,20 +288,30 @@ void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request)
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;
+    int32_t sleep_time_second = config::sleep_one_second;
+    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    while (try_time < TASK_FINISH_MAX_RETRY) {
+    while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
         AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
 
         if (client_status == STARROCKS_SUCCESS) {
-            break;
-        } else {
-            try_time += 1;
-            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
-            LOG(WARNING) << "finish task failed " << try_time << "/" << TASK_FINISH_MAX_RETRY
-                         << ". status_code=" << result.status.status_code;
+            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
+            // so that we will sleep && retry 10 times
+            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
+                finish_task_request.task_type == TTaskType::ALTER) {
+                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
+                sleep_time_second = sleep_time_second * 2;
+            } else {
+                break;
+            }
         }
-        sleep(config::sleep_one_second);
+        try_time += 1;
+        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+        LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
+
+        sleep(sleep_time_second);
     }
 }
 

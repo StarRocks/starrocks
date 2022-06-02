@@ -19,10 +19,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,8 +42,8 @@ import java.util.Map;
 
 public class TabletsProcDirTest {
     @Test
-    public void testFetchResultStarOSTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked SystemInfoService systemInfoService) {
+    public void testFetchResultLakeTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked SystemInfoService systemInfoService) {
         Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 1L;
         idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
@@ -72,8 +72,8 @@ public class TabletsProcDirTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
-        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+        Tablet tablet1 = new LakeTablet(tablet1Id, 0L);
+        Tablet tablet2 = new LakeTablet(tablet2Id, 1L);
 
         // Partition info and distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
