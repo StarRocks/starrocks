@@ -929,7 +929,12 @@ public class StmtExecutor {
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
-                sendShowResult(resultSet);
+                if (isProxy) {
+                    proxyResultSet = resultSet;
+                    context.getState().setEof();
+                } else {
+                    sendShowResult(resultSet);
+                }
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
