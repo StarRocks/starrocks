@@ -31,6 +31,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -138,6 +139,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_queue_size);
 
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+    CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
 
     _pipeline_hdfs_scan_io_thread_pool =
             new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
@@ -150,7 +152,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&hdfs_scan_worker_thread_pool));
-    _hdfs_scan_executor = new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor =
+            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
     _hdfs_scan_executor->initialize(hdfs_num_io_threads);
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
@@ -222,7 +225,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                                 .build(&scan_worker_thread_pool));
-        _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
+        _scan_executor =
+                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
         _scan_executor->initialize(num_io_threads);
 
         Status status = _load_path_mgr->init();
