@@ -45,8 +45,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         return Status::OK();
     }
     bool reach_limit = _unsorted_chunk->num_rows() >= kMaxBufferedChunkSize ||
-                       _unsorted_chunk->bytes_usage() >= kMaxBufferedChunkBytes ||
-                       _unsorted_chunk->reach_capacity_limit();
+                       _unsorted_chunk->bytes_usage() >= kMaxBufferedChunkBytes;
     if (done || reach_limit) {
         SCOPED_TIMER(_sort_timer);
 
