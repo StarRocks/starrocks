@@ -296,9 +296,11 @@
       + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
     + [cast function](/sql-reference/sql-functions/cast.md)
     + [hash function](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
-    + Crytographic Functions
+    + Cryptographic Functions
       + [md5](/sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](/sql-reference/sql-functions/crytographic-functions/sha2.md)
+    + Math Functions
+      + [RAND](/sql-reference/sql-functions/math-functions/rand.md)
   + [System Variables](/reference/System_variable.md)
   + [Error Code](/reference/Error_code.md)
   + [System Limit](/reference/System_limit.md)
