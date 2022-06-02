@@ -20,7 +20,7 @@ StarRocks可以创建自定义命名的角色。角色可以被看做是一组�
 
 * 用户属性 User Property
 
-用户属性直接附属于某一用户，而不是用户标识。即 cmy@'192.%' 和 cmy@\['domain'\] 都拥有同一组用户属性，该属性属于用户 cmy，而不是 cmy@'192.%' 或 cmy@\['domain'\]。用户属性包括但不限于： 用户最大连接数、导入集群配置等等。
+用户属性直接附属于某一用户，而不是用户标识。即 user1@'192.%' 和 user1@\['domain'\] 都拥有同一组用户属性，该属性属于用户 user1，而不是 user1@'192.%' 或 user1@\['domain'\]。用户属性包括但不限于： 用户最大连接数、导入集群配置等等。
 
 ## 支持的操作
 
@@ -115,19 +115,19 @@ ADMIN\_PRIV 和 GRANT\_PRIV 权限同时拥有授予权限的权限，较为特�
 * 域名与IP冲突
 
 假设创建了如下用户：  
-   `CREATE USER cmy@['domain'];`  
+   `CREATE USER user1@['domain'];`  
 并且授权：  
-   `GRANT SELECT_PRIV ON` `*.*` `TO cmy@['domain']`  
-该 domain 被解析为两个 IP：ip1 和 ip2。假设之后我们对 cmy@'ip1' 进行一次单独授权：  
-   `GRANT ALTER_PRIV ON` `*.*` `TO cmy@'ip1';`  
-则 cmy@'ip1' 的权限会被修改为 SELECT\_PRIV, ALTER\_PRIV，而且当我们再次变更 cmy@\['domain'\] 的权限时，cmy@'ip1' 也不会跟随改变。
+   `GRANT SELECT_PRIV ON` `*.*` `TO user1@['domain']`  
+该 domain 被解析为两个 IP：ip1 和 ip2。假设之后我们对 user1@'ip1' 进行一次单独授权：  
+   `GRANT ALTER_PRIV ON` `*.*` `TO user1@'ip1';`  
+则 user1@'ip1' 的权限会被修改为 SELECT\_PRIV, ALTER\_PRIV，而且当我们再次变更 user1@\['domain'\] 的权限时，user1@'ip1' 也不会跟随改变。
 
 * 重复IP冲突
 
 假设创建了如下用户：  
-   `CREATE USER cmy@'%' IDENTIFIED BY "12345";`  
-   `CREATE USER cmy@'192.%' IDENTIFIED BY "abcde";`  
-在优先级上，'192.%' 优先于 '%'，因此，当用户 cmy 从 192.168.1.1 这台机器尝试使用密码 '12345' 登陆 StarRocks 时会被拒绝。
+   `CREATE USER user1@'%' IDENTIFIED BY "12345";`  
+   `CREATE USER user1@'192.%' IDENTIFIED BY "abcde";`  
+在优先级上，'192.%' 优先于 '%'，因此，当用户 user1 从 192.168.1.1 这台机器尝试使用密码 '12345' 登陆 StarRocks 时会被拒绝。
 
 * 忘记密码  
     如果忘记密码无法登陆 StarRocks，可以在 StarRocks FE 节点所在机器，使用如下命令无密码登陆 StarRocks：  
@@ -161,4 +161,4 @@ StarRocks 集群的使用者分为管理员（Admin）、开发工程师（RD）
 
 ### 场景三：黑名单
 
-StarRocks 本身不支持黑名单，只有白名单功能，但我们可以通过某些方式来模拟黑名单。假设先创建了名为 user@'192.%' 的用户，表示允许来自 192.\* 的用户登录。此时如果想禁止来自 192.168.10.1 的用户登录。则可以再创建一个用户 cmy@'192.168.10.1' 的用户，并设置一个新的密码。因为 192.168.10.1 的优先级高于 192.%，所以来自 192.168.10.1 将不能再使用旧密码进行登录。
+StarRocks 本身不支持黑名单，只有白名单功能，但我们可以通过某些方式来模拟黑名单。假设先创建了名为 user@'192.%' 的用户，表示允许来自 192.\* 的用户登录。此时如果想禁止来自 192.168.10.1 的用户登录。则可以再创建一个用户 user1@'192.168.10.1' 的用户，并设置一个新的密码。因为 192.168.10.1 的优先级高于 192.%，所以来自 192.168.10.1 将不能再使用旧密码进行登录。
