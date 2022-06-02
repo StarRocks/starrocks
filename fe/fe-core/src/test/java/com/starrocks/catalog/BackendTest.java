@@ -26,6 +26,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.BackendHbResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.checkerframework.checker.units.qual.A;
@@ -227,6 +228,15 @@ public class BackendTest {
         backendStorageTypeCnt = backend.getAvailableBackendStorageTypeCnt();
         Assert.assertEquals(0, backendStorageTypeCnt);
 
+    }
+
+    @Test
+    public void testHearbeatOk() throws Exception {
+        Backend be = new Backend();
+        BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
+                System.currentTimeMillis(), "1.0", 64);
+        boolean isChanged = be.handleHbResponse(hbResponse);
+        Assert.assertTrue(isChanged);
     }
 
 }

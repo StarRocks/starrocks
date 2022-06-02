@@ -212,7 +212,6 @@ public class Backend implements Writable {
     }
 
     // for test only
-
     public void setStarletPort(int starletPort) {
         this.starletPort = starletPort;
     }
