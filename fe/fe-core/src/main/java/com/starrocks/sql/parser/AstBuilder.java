@@ -108,6 +108,7 @@ import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -266,13 +267,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowCreateTableStatement(StarRocksParser.ShowCreateTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        boolean isMaterializedView = context.MATERIALIZED() != null && context.VIEW() != null;
-        if (isMaterializedView) {
-            return new ShowCreateTableStmt(targetTableName, false, true);
+        if (context.MATERIALIZED() != null && context.VIEW() != null) {
+            return new ShowCreateTableStmt(targetTableName, TableType.MATERIALIZED_VIEW);
         }
-        boolean isView = context.VIEW() != null;
-        if (isView) {
-            return new ShowCreateTableStmt(targetTableName, true);
+        if (context.VIEW() != null) {
+            return new ShowCreateTableStmt(targetTableName, TableType.VIEW);
         }
         return new ShowCreateTableStmt(targetTableName);
     }

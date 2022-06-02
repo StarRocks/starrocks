@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
@@ -20,7 +21,8 @@ public class ShowCreateMaterializedViewStmtTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setCluster("testCluster");
         ctx.setDatabase("testDb");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testDb", "testTbl"), false, true);
+        ShowCreateTableStmt stmt =
+                new ShowCreateTableStmt(new TableName("testDb", "testTbl"), Table.TableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW testCluster:testDb.testTbl", stmt.toString());
         Assert.assertEquals("testCluster:testDb", stmt.getDb());
@@ -35,7 +37,7 @@ public class ShowCreateMaterializedViewStmtTest {
     @Test(expected = SemanticException.class)
     public void testNoTbl() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, Table.TableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
     }

@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
@@ -50,23 +51,15 @@ public class ShowCreateTableStmt extends ShowStmt {
                     .build();
 
     private TableName tbl;
-    private boolean isView;
-    private boolean isMaterializedView;
+    private TableType tableType;
 
     public ShowCreateTableStmt(TableName tbl) {
-        this(tbl, false, false);
+        this(tbl, null);
     }
 
-    public ShowCreateTableStmt(TableName tbl, boolean isView) {
+    public ShowCreateTableStmt(TableName tbl, TableType tableType) {
         this.tbl = tbl;
-        this.isView = isView;
-        this.isMaterializedView = false;
-    }
-
-    public ShowCreateTableStmt(TableName tbl, boolean isView, boolean isMaterializedView) {
-        this.tbl = tbl;
-        this.isView = isView;
-        this.isMaterializedView = isMaterializedView;
+        this.tableType = tableType;
     }
 
     public TableName getTbl() {
@@ -81,12 +74,8 @@ public class ShowCreateTableStmt extends ShowStmt {
         return tbl.getTbl();
     }
 
-    public boolean isView() {
-        return isView;
-    }
-
-    public boolean isMaterializedView() {
-        return isMaterializedView;
+    public TableType getTableType() {
+        return tableType;
     }
 
     public static ShowResultSetMetaData getViewMetaData() {
@@ -105,12 +94,15 @@ public class ShowCreateTableStmt extends ShowStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("SHOW CREATE ");
-        if (isMaterializedView) {
-            sb.append("MATERIALIZED VIEW ");
-        } else if (isView) {
-            sb.append("VIEW ");
-        } else {
+        if (tableType == null) {
             sb.append("TABLE ");
+        } else {
+            if (tableType == TableType.VIEW) {
+                sb.append("VIEW ");
+            }
+            if (tableType == TableType.MATERIALIZED_VIEW) {
+                sb.append("MATERIALIZED VIEW ");
+            }
         }
         sb.append(tbl);
         return sb.toString();

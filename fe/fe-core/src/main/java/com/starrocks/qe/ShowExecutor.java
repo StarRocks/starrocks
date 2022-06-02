@@ -667,7 +667,7 @@ public class ShowExecutor {
             }
 
             if (table instanceof View) {
-                if (showStmt.isMaterializedView()) {
+                if (showStmt.getTableType() == Table.TableType.MATERIALIZED_VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "MATERIALIZED VIEW");
                 }
@@ -677,18 +677,18 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
                 resultSet = new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
             } else if (table instanceof MaterializedView) {
-                if (showStmt.isView()) {
+                if (showStmt.getTableType() == Table.TableType.VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "VIEW");
                 }
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                 resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
             } else {
-                if (showStmt.isMaterializedView()) {
+                if (showStmt.getTableType() == Table.TableType.MATERIALIZED_VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "MATERIALIZED VIEW");
                 }
-                if (showStmt.isView()) {
+                if (showStmt.getTableType() == Table.TableType.VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "VIEW");
                 }
