@@ -9,6 +9,10 @@
 
 #include "runtime/exec_env.h"
 // #include "runtime/hdfs/hdfs_fs_cache.h"
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include "udf/java/utils.h"
 #include "util/brpc_stub_cache.h"
 #include "util/hdfs_util.h"
@@ -105,8 +109,15 @@ namespace starrocks {
 // Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(doris::PBackendService_Stub* stub, const std::string& session_id, const std::string& path)
-            : _stub(stub), _session_id(session_id), _file_name(path), _offset(0), _file_size(0) {
+    HdfsInputStream(doris::PBackendService_Stub* stub, const std::string& session_id, const std::string& path,
+                    void* addr, int mmapFileSize)
+            : _stub(stub),
+              _session_id(session_id),
+              _file_name(path),
+              _offset(0),
+              _file_size(0),
+              _addr(addr),
+              _mmapFileSize(mmapFileSize) {
         request.set_session_id(session_id);
     }
 
@@ -127,9 +138,13 @@ private:
     HdfsRequest request;
     HdfsResponse response;
     brpc::Controller cntl;
+    void* _addr;
+    int _mmapFileSize;
 };
 
 HdfsInputStream::~HdfsInputStream() {
+    int code = munmap(_addr, _mmapFileSize);
+    PLOG_IF(ERROR, code != 0) << "munmap failed";
     cntl.Reset();
     _stub->HdfsClose(&cntl, &request, &response, nullptr);
     brpc::Join(cntl.call_id());
@@ -146,7 +161,8 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, cntl.ErrorText()));
     }
     _offset += size;
-    memcpy(data, response.data().data(), size);
+    memcpy(data, _addr, size);
+    // memcpy(data, response.data().data(), size);
     return size;
 }
 
@@ -311,8 +327,19 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
         return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}, text={}", path, cntl.ErrorText()));
     }
 
+    const std::string& mmapFilePath = response.mmapfilepath();
+    int mmapFileSize = response.size();
+    int fd = open(mmapFilePath.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return Status::IOError("open mmap file failed");
+    }
+    void* addr = mmap(nullptr, mmapFileSize, PROT_READ, MAP_SHARED, fd, 0);
+    if (addr == nullptr) {
+        return Status::IOError("mmap failed");
+    }
+
     const std::string& session_id = response.session_id();
-    auto stream = std::make_shared<HdfsInputStream>(stub, session_id, path);
+    auto stream = std::make_shared<HdfsInputStream>(stub, session_id, path, addr, mmapFileSize);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 

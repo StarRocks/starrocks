@@ -315,6 +315,7 @@ message HdfsResponse {
   optional bytes data = 2;
   optional int64 size = 3;
   optional HdfsStats stats = 4;
+  optional string mmapFilePath = 5;
 }
 
 // NOTE(zc): If you want to add new method here,

@@ -23,7 +23,7 @@ public class JavaProxyServer {
         int port = 50051;
         int windowSize = 64 * 1024 * 1024;
         server = NettyServerBuilder.forPort(port)
-                .addService(new HdfsRpcHandler())
+                .addService(new MmapHdfsRpcHandler())
                 .flowControlWindow(windowSize)
                 .initialFlowControlWindow(windowSize)
                 .executor(Executors.newFixedThreadPool(128))
