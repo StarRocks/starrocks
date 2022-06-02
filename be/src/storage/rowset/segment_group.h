@@ -66,7 +66,7 @@ private:
 
 class ShortKeyIndexDecoderGroup {
 public:
-    explicit ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*>&& sk_index_decoders);
+    explicit ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments);
 
     ShortKeyIndexGroupIterator begin() const;
     ShortKeyIndexGroupIterator end() const;
@@ -86,7 +86,7 @@ private:
 
 private:
     // The short keys among decoders are increasing.
-    const std::vector<const ShortKeyIndexDecoder*> _sk_index_decoders;
+    std::vector<const ShortKeyIndexDecoder*> _sk_index_decoders;
     // _decoder_start_ordinals[i] represents the start ordinal of _sk_index_decoder[i].
     // _decoder_start_ordinals[_sk_index_decoders.size()] represents the total number of rows among decoders.
     std::vector<ssize_t> _decoder_start_ordinals;
@@ -96,17 +96,17 @@ class SegmentGroup {
 public:
     SegmentGroup(std::vector<SegmentSharedPtr> segments);
 
-    ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group->lower_bound(key); }
+    ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group.lower_bound(key); }
 
-    ShortKeyIndexGroupIterator upper_bound(const Slice& key) const { return _decoder_group->upper_bound(key); }
+    ShortKeyIndexGroupIterator upper_bound(const Slice& key) const { return _decoder_group.upper_bound(key); }
 
-    ShortKeyIndexGroupIterator begin() const { return _decoder_group->begin(); }
+    ShortKeyIndexGroupIterator begin() const { return _decoder_group.begin(); }
 
-    ShortKeyIndexGroupIterator end() const { return _decoder_group->end(); }
+    ShortKeyIndexGroupIterator end() const { return _decoder_group.end(); }
 
-    ShortKeyIndexGroupIterator back() const { return _decoder_group->back(); }
+    ShortKeyIndexGroupIterator back() const { return _decoder_group.back(); }
 
-    ssize_t num_blocks() const { return _decoder_group->num_blocks(); }
+    ssize_t num_blocks() const { return _decoder_group.num_blocks(); }
 
     uint32_t num_rows_per_block() const {
         if (_segments.empty()) {
@@ -124,7 +124,7 @@ public:
 
 private:
     std::vector<SegmentSharedPtr> _segments;
-    std::unique_ptr<ShortKeyIndexDecoderGroup> _decoder_group = nullptr;
+    ShortKeyIndexDecoderGroup _decoder_group;
 };
 
 } // namespace starrocks

@@ -9,18 +9,25 @@ ShortKeyIndexGroupIterator::ShortKeyIndexGroupIterator(const ShortKeyIndexDecode
         : _decoder_group(decoder_group), _ordinal(ordinal) {}
 
 bool ShortKeyIndexGroupIterator::valid() const {
-    return _ordinal >= 0 && _ordinal < _decoder_group->num_blocks();
+    return _ordinal >= 0 && _ordinal < _decoder_group.num_blocks();
 }
 
 Slice ShortKeyIndexGroupIterator::operator*() const {
     DCHECK(valid());
-    return _decoder_group->key(_ordinal);
+    return _decoder_group.key(_ordinal);
 }
 
 /// ShortKeyIndexDecoderGroup
-ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(std::vector<const ShortKeyIndexDecoder*>&& sk_index_decoders)
-        : _sk_index_decoders(std::move(sk_index_decoders)) {
-    _decoder_start_ordinals.reserve(_sk_index_decoders.size() + 1);
+ShortKeyIndexDecoderGroup::ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments) {
+    size_t num_decoders = segments.size();
+
+    _sk_index_decoders.reserve(num_decoders);
+    for (const auto& segment : segments) {
+        DCHECK(segment->has_loaded_index());
+        _sk_index_decoders.emplace_back(segment->decoder());
+    }
+
+    _decoder_start_ordinals.reserve(num_decoders + 1);
     ssize_t num_total_items = 0;
     _decoder_start_ordinals.emplace_back(num_total_items);
     for (auto* decoder : _sk_index_decoders) {
@@ -80,14 +87,7 @@ void ShortKeyIndexDecoderGroup::_find_position(ssize_t ordinal, ssize_t* decoder
 }
 
 /// SegmentGroup
-SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr> segments) : _segments(std::move(segments)) {
-    std::vector<const ShortKeyIndexDecoder*> sk_index_decoders;
-    sk_index_decoders.reserve(_segments.size());
-    for (const auto& segment : _segments) {
-        DCHECK(segment->has_loaded_index());
-        sk_index_decoders.emplace_back(segment->decoder());
-    }
-    _decoder_group = std::make_unique<ShortKeyIndexDecoderGroup>(std::move(sk_index_decoders));
-}
+SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr> segments)
+        : _segments(std::move(segments)), _decoder_group(_segments) {}
 
 } // namespace starrocks
