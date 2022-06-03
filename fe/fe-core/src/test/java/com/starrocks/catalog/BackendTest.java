@@ -86,8 +86,11 @@ public class BackendTest {
         // set new port
         int newBePort = 31235;
         int newHttpPort = 31237;
+        int newStarletPort = 31239;
         backend.updateOnce(newBePort, newHttpPort, beRpcPort);
         Assert.assertEquals(newBePort, backend.getBePort());
+        backend.setStarletPort(starletPort);
+        Assert.assertEquals(newBePort, backend.getStarletPort());
 
         // check alive
         Assert.assertTrue(backend.isAlive());
