@@ -184,12 +184,12 @@ private:
 
     const SlotDescriptor* get_slot_desc(SlotId slot_id);
 
-    ExprContext* _context;
+    ExprContext* _context = nullptr;
     int _disjuncts_num = 0;
-    const TupleDescriptor* _tuple_desc;
+    const TupleDescriptor* _tuple_desc = nullptr;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
-    ObjectPool* _pool;
+    ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };
 
