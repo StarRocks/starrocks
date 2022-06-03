@@ -8,6 +8,9 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class IcebergUtilTest {
 
     @Test
@@ -27,7 +30,8 @@ public class IcebergUtilTest {
 
     @Test
     public void testGetIcebergHiveCatalog() {
-        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030");
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030", icebergProperties);
         Assert.assertTrue(catalog instanceof IcebergHiveCatalog);
     }
 }

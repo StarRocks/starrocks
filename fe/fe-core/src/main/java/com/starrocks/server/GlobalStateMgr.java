@@ -2141,6 +2141,10 @@ public class GlobalStateMgr {
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
             sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
+            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
+            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
+                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
+            }
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
