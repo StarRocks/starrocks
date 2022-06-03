@@ -33,8 +33,8 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
-#include "runtime/date_value.hpp"
 #include "storage/tablet_schema.h"
+#include "types/date_value.hpp"
 
 namespace starrocks {
 

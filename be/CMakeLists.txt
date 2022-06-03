@@ -466,6 +466,7 @@ set(STARROCKS_LINK_LIBS
     Service
     ServiceBE
     ServiceCN
+    Types
     Udf
     Util
     StarRocksGen
@@ -631,6 +632,7 @@ add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
+add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
