@@ -7,6 +7,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.iceberg.hive.CachedClientPool;
 import com.starrocks.external.iceberg.hive.HiveTableOperations;
+import com.starrocks.external.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -25,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,9 +36,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog =
             new ConcurrentHashMap<>();
 
-    public static synchronized IcebergHiveCatalog getInstance(String uri) {
+    public static synchronized IcebergHiveCatalog getInstance(String uri, Map<String, String> properties) {
         if (!metastoreUriToCatalog.containsKey(uri)) {
-            Map<String, String> properties = new HashMap<>();
             properties.put(CatalogProperties.URI, uri);
             metastoreUriToCatalog.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
                     new Configuration(), properties).loadCatalog());
@@ -103,6 +102,11 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
         this.fileIO =
                 fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
+
+        // warp cache fileIO
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(fileIO);
+        cachingFileIO.initialize(properties);
+        this.fileIO = cachingFileIO;
 
         this.clients = new CachedClientPool(conf, properties);
     }
