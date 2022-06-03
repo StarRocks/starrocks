@@ -4,6 +4,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
 add_library(Types STATIC
+    bitmap_value.cpp
     date_value.cpp
     timestamp_value.cpp
 )

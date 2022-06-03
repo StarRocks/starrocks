@@ -26,7 +26,7 @@
 
 #include "util/coding.h"
 #define private public
-#include "util/bitmap_value.h"
+#include "types/bitmap_value.h"
 
 namespace starrocks {
 
