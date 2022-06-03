@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "runtime/timestamp_value.h"
+#include "types/timestamp_value.h"
 
 #include "runtime/time_types.h"
 #include "util/timezone_utils.h"

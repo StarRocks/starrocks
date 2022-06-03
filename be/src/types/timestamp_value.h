@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "runtime/date_value.h"
 #include "runtime/time_types.h"
+#include "types/date_value.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks::vectorized {
