@@ -83,8 +83,6 @@ set(RUNTIME_FILES
     mysql_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
-    date_value.cpp
-    timestamp_value.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp

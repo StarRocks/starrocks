@@ -23,7 +23,6 @@
 
 #include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
-#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
@@ -37,6 +36,7 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/uint24.h"
+#include "types/date_value.hpp"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/slice.h"
