@@ -309,6 +309,7 @@ public class InsertOverwriteJobRunner {
                         .map(partitionName -> targetTable.getPartition(partitionName, true).getId())
                         .collect(Collectors.toList());
                 PartitionNames partitionNames = new PartitionNames(true, job.getNewPartitionNames());
+                insertStmt.setOriginalTargetPartitionIds(insertStmt.getTargetPartitionIds());
                 insertStmt.setTargetPartitionNames(partitionNames);
                 insertStmt.setTargetPartitionIds(newPartitionIds);
             } finally {

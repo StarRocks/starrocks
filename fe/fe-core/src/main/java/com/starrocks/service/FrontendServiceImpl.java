@@ -877,6 +877,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             throw new UserException("unknown database, database=" + dbName);
         }
+        // collect table-level metrics
+        Table tbl = db.getTable(request.getTbl());
+        if (tbl == null) {
+            throw new UserException("unknown table, table=" + request.getTbl());
+        }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make publish timeout is less than thrift_rpc_timeout_ms
@@ -886,7 +891,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
-                timeoutMs, attachment);
+                timeoutMs, attachment, Lists.newArrayList(tbl.getId()), Maps.newHashMap(), false);
         if (!ret) {
             return ret;
         }
@@ -895,11 +900,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (null == attachment) {
             return ret;
         }
-        // collect table-level metrics
-        Table tbl = db.getTable(request.getTbl());
-        if (null == tbl) {
-            return ret;
-        }
+
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:

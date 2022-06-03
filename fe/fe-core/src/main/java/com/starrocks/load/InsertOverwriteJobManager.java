@@ -48,7 +48,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     private List<InsertOverwriteJob> runningJobs;
 
-    private Map<Long, Long> jobToTxnId;
+    // private Map<Long, Long> jobToTxnId;
 
     private ReentrantReadWriteLock lock;
 
@@ -59,7 +59,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
         this.lock = new ReentrantReadWriteLock();
-        this.jobToTxnId = Maps.newHashMap();
+        // this.jobToTxnId = Maps.newHashMap();
         this.jobNum = 0;
     }
 
@@ -80,6 +80,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
+    /*
     public void registerOverwriteJobTxn(long jobId, long txnId) {
         lock.writeLock().lock();
         try {
@@ -89,6 +90,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
+     */
+
     public boolean registerOverwriteJob(InsertOverwriteJob job) {
         lock.writeLock().lock();
         try {
@@ -96,10 +99,14 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 LOG.warn("insert overwrite job:{} is running", job.getJobId());
                 return false;
             }
+
+            /*
             if (!GlobalStateMgr.getCurrentState().getLockManager()
                     .tryWriteLockPartitions(job.getTargetTableId(), job.getOriginalTargetPartitionIds())) {
                 return false;
             }
+
+             */
             // check whether there is a overwrite job running in partitions
             /*
             if (hasRunningOverwriteJob(-1, job.getTargetTableId(), job.getOriginalTargetPartitionIds())) {
@@ -128,9 +135,12 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return true;
             }
             InsertOverwriteJob job = overwriteJobMap.get(jobid);
+            /*
             GlobalStateMgr.getCurrentState().getLockManager()
                     .writeUnlockPartitions(jobid, job.getOriginalTargetPartitionIds());
-            jobToTxnId.remove(jobid);
+
+             */
+            // jobToTxnId.remove(jobid);
             List<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
             if (partitionIds != null) {
                 partitionIds.removeAll(job.getOriginalTargetPartitionIds());
@@ -151,6 +161,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
+    /*
     public boolean hasRunningOverwriteJob(long txnId, long tableId, List<Long> partitions) {
         lock.readLock().lock();
         try {
@@ -179,6 +190,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             lock.readLock().unlock();
         }
     }
+
+     */
 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobInfo jobInfo) {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),

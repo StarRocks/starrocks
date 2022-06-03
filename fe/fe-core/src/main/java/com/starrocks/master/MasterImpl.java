@@ -24,6 +24,7 @@ package com.starrocks.master;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2.JobType;
@@ -126,6 +127,7 @@ import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -137,6 +139,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MasterImpl {
@@ -1231,7 +1234,8 @@ public class MasterImpl {
             txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
+                    Maps.newHashMap(), false);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1246,6 +1250,28 @@ public class MasterImpl {
         response.setTxn_label(request.getLabel());
         LOG.info("begin remote txn, label: {}, txn_id: {}", request.getLabel(), txnId);
         return response;
+    }
+
+    List<Long> getTableIdsFromCommitInfos(Database db, List<TabletCommitInfo> tabletCommitInfos) {
+        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        db.readLock();
+        try {
+            Set<Long> tableIdSets = Sets.newHashSet();
+            List<Long> tabletIds = tabletCommitInfos.stream().map(
+                    TabletCommitInfo::getTabletId).collect(Collectors.toList());
+            List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
+            for (int i = 0; i < tabletMetaList.size(); i++) {
+                TabletMeta tabletMeta = tabletMetaList.get(i);
+                if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                    continue;
+                }
+                long tableId = tabletMeta.getTableId();
+                tableIdSets.add(tableId);
+            }
+            return tableIdSets.stream().collect(Collectors.toList());
+        } finally {
+            db.readUnlock();
+        }
     }
 
     public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
@@ -1289,10 +1315,12 @@ public class MasterImpl {
             // Otherwise, the publish will be successful but commit timeout in FE
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
+            List<TabletCommitInfo> tabletCommitInfos = TabletCommitInfo.fromThrift(request.getCommit_infos());
+            List<Long> tableIdList = getTableIdsFromCommitInfos(db, tabletCommitInfos);
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
-                    timeoutMs, attachment);
+                    timeoutMs, attachment, tableIdList, Maps.newHashMap(), false);
             if (!ret) {
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));
