@@ -1493,7 +1493,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowWorkGroup() {
+    private void handleShowWorkGroup() throws AnalysisException {
         ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
         List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
         resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);

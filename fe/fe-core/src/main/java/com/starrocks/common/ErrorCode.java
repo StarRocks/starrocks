@@ -256,7 +256,9 @@ public enum ErrorCode {
     ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
             "set config failed: %s"),
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
-            "Query cancelled by crash of backends.");
+            "Query cancelled by crash of backends."),
+    ERROR_NO_WG_ERROR(5077, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown workgroup '%s' ");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

@@ -36,6 +36,7 @@ import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -514,6 +515,16 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
 
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowUnknownWorkGroup() throws AnalysisException, DdlException{
+        ShowWorkGroupStmt stmt = new ShowWorkGroupStmt("abc", false);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("Unknown workgroup 'abc'");
+        executor.execute();
     }
 
     @Test
