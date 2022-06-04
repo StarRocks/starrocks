@@ -19,13 +19,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <thread>
 
 #include "gen_cpp/segment.pb.h"
+#include "util/faststring.h"
+#include "util/random.h"
 
 namespace starrocks {
 class BlockCompressionTest : public testing::Test {
@@ -192,4 +195,256 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::GZIP);
 }
 
+static std::string random_string(int len) {
+    static starrocks::Random rand(20200722);
+    std::string s;
+    s.reserve(len * 5);
+    for (int i = 0; i < len; i++) {
+        char c = 'a' + rand.Next() % ('z' - 'a' + 1);
+        std::string tmp_str =
+                std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c);
+        s.append(tmp_str);
+    }
+    return s;
+}
+
+static const size_t kBenchmarkCompressionTimes = 1000;
+static const size_t kBenchmarkCompressionConcurrentThreads = 32;
+static const size_t kBenchmarkCompressionMultiSliceNum = 5;
+static const size_t str_length = 1024 * 64;
+
+void benchmark_single_slice_compression(starrocks::CompressionTypePB type, std::string& str) {
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(type, &codec);
+    ASSERT_TRUE(st.ok());
+
+    std::string orig = str;
+    Slice orig_slices(orig);
+
+    size_t total_size = orig.size();
+    size_t max_len = codec->max_compressed_len(total_size);
+
+    for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
+        std::string compressed;
+        compressed.resize(max_len);
+        Slice compressed_slice(compressed);
+        st = codec->compress(orig_slices, &compressed_slice);
+        ASSERT_TRUE(st.ok());
+        compressed.resize(compressed_slice.size);
+    }
+}
+
+void benchmark_compression(starrocks::CompressionTypePB type, std::string& str) {
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(type, &codec);
+    ASSERT_TRUE(st.ok());
+
+    std::vector<std::string> orig_strs;
+    for (int i = 0; i < kBenchmarkCompressionMultiSliceNum; i++) {
+        orig_strs.emplace_back(str);
+    }
+    std::vector<Slice> orig_slices;
+    std::string orig;
+    for (auto& str : orig_strs) {
+        orig_slices.emplace_back(str);
+        orig.append(str);
+    }
+
+    size_t total_size = orig.size();
+    size_t max_len = codec->max_compressed_len(total_size);
+
+    for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
+        std::string compressed;
+        compressed.resize(max_len);
+        Slice compressed_slice(compressed);
+        st = codec->compress(orig_slices, &compressed_slice);
+        ASSERT_TRUE(st.ok());
+        compressed.resize(compressed_slice.size);
+        compressed.shrink_to_fit();
+    }
+}
+
+void benchmark_compression_buffer(starrocks::CompressionTypePB type, std::string& str) {
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(type, &codec);
+    ASSERT_TRUE(st.ok());
+
+    std::vector<std::string> orig_strs;
+    for (int i = 0; i < kBenchmarkCompressionMultiSliceNum; i++) {
+        orig_strs.emplace_back(str);
+    }
+    std::vector<Slice> orig_slices;
+    std::string orig;
+    for (auto& str : orig_strs) {
+        orig_slices.emplace_back(str);
+        orig.append(str);
+    }
+
+    size_t total_size = orig.size();
+    for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
+        faststring compressed;
+        Slice compressed_slice;
+        st = codec->compress(orig_slices, &compressed_slice, total_size, &compressed);
+        compressed.shrink_to_fit();
+        ASSERT_TRUE(st.ok());
+    }
+}
+
+void benchmark_decompression(starrocks::CompressionTypePB type, std::string& str) {
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(type, &codec);
+    ASSERT_TRUE(st.ok());
+
+    std::vector<std::string> orig_strs;
+    for (int i = 0; i < kBenchmarkCompressionMultiSliceNum; i++) {
+        orig_strs.emplace_back(str);
+    }
+    std::vector<Slice> orig_slices;
+    std::string orig;
+    for (auto& str : orig_strs) {
+        orig_slices.emplace_back(str);
+        orig.append(str);
+    }
+
+    size_t total_size = orig.size();
+    size_t max_len = codec->max_compressed_len(total_size);
+
+    std::string compressed;
+    compressed.resize(max_len);
+    Slice compressed_slice(compressed);
+    st = codec->compress(orig_slices, &compressed_slice);
+    ASSERT_TRUE(st.ok());
+
+    for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
+        std::string uncompressed;
+        uncompressed.resize(total_size);
+        // normal case
+        {
+            Slice uncompressed_slice(uncompressed);
+            st = codec->decompress(compressed_slice, &uncompressed_slice);
+            ASSERT_TRUE(st.ok());
+
+            ASSERT_STREQ(orig.c_str(), uncompressed.c_str());
+        }
+    }
+}
+
+// #define LZ4F_BENCHMARK
+// #define ZSTD_BENCHMARK
+
+#ifdef LZ4F_BENCHMARK
+TEST_F(BlockCompressionTest, LZ4F_benchmark_single_slice_compression) {
+    std::string str = random_string(str_length);
+    benchmark_single_slice_compression(starrocks::CompressionTypePB::LZ4_FRAME, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4F_benchmark_compression) {
+    std::string str = random_string(str_length);
+    benchmark_compression(starrocks::CompressionTypePB::LZ4_FRAME, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4F_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    benchmark_compression_buffer(starrocks::CompressionTypePB::LZ4_FRAME, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4F_benchmark_decompression) {
+    std::string str = random_string(str_length);
+    benchmark_decompression(starrocks::CompressionTypePB::LZ4_FRAME, str);
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4F_benchmark_compression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(new std::thread(
+                [this, &str] { benchmark_compression(starrocks::CompressionTypePB::LZ4_FRAME, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4F_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(new std::thread(
+                [this, &str] { benchmark_compression_buffer(starrocks::CompressionTypePB::LZ4_FRAME, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4F_benchmark_decompression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(new std::thread(
+                [this, &str] { benchmark_decompression(starrocks::CompressionTypePB::LZ4_FRAME, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+#endif
+
+#ifdef ZSTD_BENCHMARK
+TEST_F(BlockCompressionTest, ZSTD_benchmark_single_slice_compression) {
+    std::string str = random_string(str_length);
+    benchmark_single_slice_compression(starrocks::CompressionTypePB::ZSTD, str);
+}
+
+TEST_F(BlockCompressionTest, ZSTD_benchmark_compression) {
+    std::string str = random_string(str_length);
+    benchmark_compression(starrocks::CompressionTypePB::ZSTD, str);
+}
+
+TEST_F(BlockCompressionTest, ZSTD_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    benchmark_compression_buffer(starrocks::CompressionTypePB::ZSTD, str);
+}
+
+TEST_F(BlockCompressionTest, ZSTD_benchmark_compression_decompression) {
+    std::string str = random_string(str_length);
+    benchmark_decompression(starrocks::CompressionTypePB::ZSTD, str);
+}
+
+TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_compression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(
+                new std::thread([this, &str] { benchmark_compression(starrocks::CompressionTypePB::ZSTD, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(new std::thread(
+                [this, &str] { benchmark_compression_buffer(starrocks::CompressionTypePB::ZSTD, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(
+                new std::thread([this, &str] { benchmark_decompression(starrocks::CompressionTypePB::ZSTD, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+#endif
 } // namespace starrocks

@@ -38,7 +38,7 @@
 #include "simd/simd.h"
 #include "types/hll.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression_utils.h"
+#include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/uid_util.h"

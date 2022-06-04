@@ -21,8 +21,8 @@
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "service/brpc.h"
-#include "util/block_compression.h"
-#include "util/compression_utils.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 #include "util/debug_util.h"
 #include "util/thrift_client.h"
 

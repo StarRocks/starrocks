@@ -41,7 +41,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/bitmap.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 

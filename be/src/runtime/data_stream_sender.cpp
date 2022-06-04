@@ -44,9 +44,9 @@
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "service/brpc.h"
-#include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression_utils.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
 

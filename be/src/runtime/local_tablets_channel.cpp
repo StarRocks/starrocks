@@ -36,7 +36,7 @@ DIAGNOSTIC_POP
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
