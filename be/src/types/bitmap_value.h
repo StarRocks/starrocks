@@ -36,7 +36,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "util/coding.h"
-#include "util/phmap/phmap.h"
+#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -59,6 +59,7 @@ public:
         other._sv = 0;
         other._type = EMPTY;
     }
+
     BitmapValue& operator=(BitmapValue&& other) noexcept {
         if (this != &other) {
             this->_bitmap = std::move(other._bitmap);
@@ -87,8 +88,6 @@ public:
 
     void add(uint64_t value);
 
-    void to_bitmap();
-
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.
     // Possible type transitions are:
@@ -108,15 +107,7 @@ public:
     void remove(uint64_t rhs);
 
     BitmapValue& operator-=(const BitmapValue& rhs);
-
-    // only_value: values that in original_set and not in original_bitmap,
-    // common_value: values that in original_set and original_bitmap.
-    static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_hash_set<uint64_t>& original_set,
-                                                                 const detail::Roaring64Map& original_bitmap,
-                                                                 phmap::flat_hash_set<uint64_t>* set,
-                                                                 detail::Roaring64Map* bitmap);
-
-    BitmapValue& operator^=(BitmapValue& rhs);
+    BitmapValue& operator^=(const BitmapValue& rhs);
 
     // check if value x is present
     bool contains(uint64_t x);
@@ -158,6 +149,7 @@ public:
 
 private:
     void _convert_to_smaller_type();
+    void _from_set_to_bitmap();
 
     enum BitmapDataType {
         EMPTY = 0,
@@ -165,9 +157,10 @@ private:
         BITMAP = 2, // more than one elements
         SET = 3
     };
+
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
-    phmap::flat_hash_set<uint64_t> _set;
+    std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set = nullptr;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
 };

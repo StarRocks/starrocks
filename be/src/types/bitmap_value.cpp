@@ -22,19 +22,37 @@
 #include "types/bitmap_value.h"
 
 #include "types/bitmap_value_detail.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
+// only_value: values that in original_set and not in original_bitmap,
+// common_value: values that in original_set and original_bitmap.
+static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_hash_set<uint64_t>& original_set,
+                                                             const detail::Roaring64Map& original_bitmap,
+                                                             phmap::flat_hash_set<uint64_t>* set,
+                                                             detail::Roaring64Map* bitmap) {
+    for (auto x : original_set) {
+        if (!original_bitmap.contains(x)) {
+            // collect values only in set.
+            set->insert(x);
+        } else {
+            // collect values in common of set and bitmap.
+            bitmap->add(x);
+        }
+    }
+}
+
 BitmapValue::BitmapValue(const BitmapValue& other)
         : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
-          _set(other._set),
+          _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
           _sv(other._sv),
           _type(other._type) {}
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
         this->_bitmap = (other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap));
-        this->_set = other._set;
+        this->_set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
         this->_sv = other._sv;
         this->_type = other._type;
     }
@@ -69,29 +87,31 @@ void BitmapValue::add(uint64_t value) {
         if (_sv == value) {
             break;
         }
-        _set.insert(_sv);
-        _set.insert(value);
+
+        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+        _set->insert(_sv);
+        _set->insert(value);
         _type = SET;
         break;
     case BITMAP:
         _bitmap->add(value);
         break;
     case SET:
-        if (_set.size() < 32) {
-            _set.insert(value);
+        if (_set->size() < 32) {
+            _set->insert(value);
         } else {
-            to_bitmap();
+            _from_set_to_bitmap();
             _bitmap->add(value);
         }
     }
 }
 
-void BitmapValue::to_bitmap() {
+void BitmapValue::_from_set_to_bitmap() {
     _bitmap = std::make_shared<detail::Roaring64Map>();
-    for (const auto& x : _set) {
+    for (auto x : *_set) {
         _bitmap->add(x);
     }
-    _set.clear();
+    _set.reset();
     _type = BITMAP;
 }
 
@@ -125,36 +145,36 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
             break;
         case SET:
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
-            for (const auto& x : _set) {
+            for (auto x : *_set) {
                 _bitmap->add(x);
             }
             _type = BITMAP;
-            _set.clear();
+            _set.reset();
         }
         break;
     case SET:
         switch (_type) {
         case EMPTY:
-            _set = rhs._set;
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>(*rhs._set);
             _type = SET;
             break;
         case SINGLE:
-            _set = rhs._set;
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>(*rhs._set);
             _type = SET;
-            if (_set.size() < 32) {
-                _set.insert(_sv);
+            if (_set->size() < 32) {
+                _set->insert(_sv);
             } else {
-                to_bitmap();
+                _from_set_to_bitmap();
                 _bitmap->add(_sv);
             }
             break;
         case SET:
-            for (const auto& x : rhs._set) {
+            for (auto x : *rhs._set) {
                 add(x);
             }
             break;
         case BITMAP:
-            for (const auto& x : rhs._set) {
+            for (auto x : *rhs._set) {
                 _bitmap->add(x);
             }
             _type = BITMAP;
@@ -195,13 +215,13 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             _bitmap->clear();
             break;
         case SET:
-            if (!_set.contains(rhs._sv)) {
+            if (!_set->contains(rhs._sv)) {
                 _type = EMPTY;
             } else {
                 _type = SINGLE;
                 _sv = rhs._sv;
             }
-            _set.clear();
+            _set.reset();
             break;
         }
         break;
@@ -220,10 +240,10 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             _convert_to_smaller_type();
             break;
         case SET: {
-            phmap::flat_hash_set<uint64_t> set;
-            for (const auto& x : _set) {
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            for (auto x : *_set) {
                 if (rhs._bitmap->contains(x)) {
-                    set.insert(x);
+                    set->insert(x);
                 }
             }
             _set = std::move(set);
@@ -236,28 +256,28 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
         case EMPTY:
             break;
         case SINGLE:
-            if (!rhs._set.contains(_sv)) {
+            if (!rhs._set->contains(_sv)) {
                 _type = EMPTY;
                 clear();
             }
             break;
         case BITMAP: {
-            phmap::flat_hash_set<uint64_t> set;
-            for (const auto& x : rhs._set) {
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            for (auto x : *rhs._set) {
                 if (_bitmap->contains(x)) {
-                    set.insert(x);
+                    set->insert(x);
                 }
             }
             _set = std::move(set);
-            _bitmap = nullptr;
+            _bitmap.reset();
             _type = SET;
             break;
         }
         case SET: {
-            phmap::flat_hash_set<uint64_t> set;
-            for (const auto& x : rhs._set) {
-                if (_set.contains(x)) {
-                    set.insert(x);
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            for (auto x : *rhs._set) {
+                if (_set->contains(x)) {
+                    set->insert(x);
                 }
             }
             _set = std::move(set);
@@ -283,7 +303,7 @@ void BitmapValue::remove(uint64_t rhs) {
         _bitmap->remove(rhs);
         break;
     case SET:
-        _set.erase(rhs);
+        _set->erase(rhs);
         break;
     }
 }
@@ -306,7 +326,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             _bitmap->remove(rhs._sv);
             break;
         case SET:
-            _set.erase(rhs._sv);
+            _set->erase(rhs._sv);
             break;
         }
         break;
@@ -325,10 +345,10 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             _convert_to_smaller_type();
             break;
         case SET: {
-            phmap::flat_hash_set<uint64_t> set;
-            for (const auto& x : _set) {
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            for (const auto& x : *_set) {
                 if (!rhs._bitmap->contains(x)) {
-                    set.insert(x);
+                    set->insert(x);
                 }
             }
             _set = std::move(set);
@@ -341,24 +361,24 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
         case EMPTY:
             break;
         case SINGLE:
-            if (rhs._set.contains(_sv)) {
+            if (rhs._set->contains(_sv)) {
                 _type = EMPTY;
                 clear();
             }
             break;
         case BITMAP: {
             detail::Roaring64Map bitmap;
-            for (const auto& x : rhs._set) {
+            for (auto x : *rhs._set) {
                 _bitmap->remove(x);
             }
             _convert_to_smaller_type();
             break;
         }
         case SET: {
-            phmap::flat_hash_set<uint64_t> set;
-            for (const auto& x : _set) {
-                if (!rhs._set.contains(x)) {
-                    set.insert(x);
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            for (auto x : *_set) {
+                if (!rhs._set->contains(x)) {
+                    set->insert(x);
                 }
             }
             _set = std::move(set);
@@ -370,24 +390,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
     return *this;
 }
 
-// only_value: values that in original_set and not in original_bitmap,
-// common_value: values that in original_set and original_bitmap.
-void BitmapValue::get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_hash_set<uint64_t>& original_set,
-                                                                   const detail::Roaring64Map& original_bitmap,
-                                                                   phmap::flat_hash_set<uint64_t>* set,
-                                                                   detail::Roaring64Map* bitmap) {
-    for (const auto& x : original_set) {
-        if (!original_bitmap.contains(x)) {
-            // collect values only in set.
-            set->insert(x);
-        } else {
-            // collect values in common of set and bitmap.
-            bitmap->add(x);
-        }
-    }
-}
-
-BitmapValue& BitmapValue::operator^=(BitmapValue& rhs) {
+BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
     switch (rhs._type) {
     case EMPTY:
         break;
@@ -412,10 +415,10 @@ BitmapValue& BitmapValue::operator^=(BitmapValue& rhs) {
             }
             break;
         case SET:
-            if (_set.contains(rhs._sv)) {
-                _set.erase(rhs._sv);
+            if (_set->contains(rhs._sv)) {
+                _set->erase(rhs._sv);
             } else {
-                _set.insert(rhs._sv);
+                _set->insert(rhs._sv);
             }
             break;
         }
@@ -446,18 +449,18 @@ BitmapValue& BitmapValue::operator^=(BitmapValue& rhs) {
             phmap::flat_hash_set<uint64_t> set;
             detail::Roaring64Map bitmap;
 
-            get_only_value_to_set_and_common_value_to_bitmap(_set, *rhs._bitmap, &set, &bitmap);
+            get_only_value_to_set_and_common_value_to_bitmap(*_set, *rhs._bitmap, &set, &bitmap);
 
             // obtain values only in right bitmap
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
             *_bitmap -= bitmap;
 
             // collect all values that only in left set or only in right bitmap.
-            for (const auto& x : set) {
+            for (auto x : set) {
                 _bitmap->add(x);
             }
             _type = BITMAP;
-            _set.clear();
+            _set.reset();
 
             break;
         }
@@ -466,48 +469,48 @@ BitmapValue& BitmapValue::operator^=(BitmapValue& rhs) {
     case SET:
         switch (_type) {
         case EMPTY:
-            _set = rhs._set;
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>(*rhs._set);
             _type = SET;
             break;
         case SINGLE:
-            if (rhs._set.contains(_sv)) {
-                rhs._set.erase(_sv);
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>(*rhs._set);
+            if (_set->contains(_sv)) {
+                _set->erase(_sv);
             } else {
-                rhs._set.insert(_sv);
+                _set->insert(_sv);
             }
-            _set = rhs._set;
             _type = SET;
             break;
         case BITMAP: {
             phmap::flat_hash_set<uint64_t> set;
             detail::Roaring64Map bitmap;
 
-            get_only_value_to_set_and_common_value_to_bitmap(rhs._set, *_bitmap, &set, &bitmap);
+            get_only_value_to_set_and_common_value_to_bitmap(*rhs._set, *_bitmap, &set, &bitmap);
 
             // obtain values only in left bitmap
             *_bitmap -= bitmap;
 
             // collect all values that only in right set or only in left bitmap.
-            for (const auto& x : set) {
+            for (auto x : set) {
                 _bitmap->add(x);
             }
 
             break;
         }
         case SET: {
-            phmap::flat_hash_set<uint64_t> set;
+            auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
 
             // collect values only in left set.
-            for (const auto& x : _set) {
-                if (!rhs._set.contains(x)) {
-                    set.insert(x);
+            for (auto x : *_set) {
+                if (!rhs._set->contains(x)) {
+                    set->insert(x);
                 }
             }
 
             // collect values only in right set.
-            for (const auto& x : rhs._set) {
-                if (!_set.contains(x)) {
-                    set.insert(x);
+            for (auto x : *rhs._set) {
+                if (!_set->contains(x)) {
+                    set->insert(x);
                 }
             }
 
@@ -531,7 +534,7 @@ bool BitmapValue::contains(uint64_t x) {
     case BITMAP:
         return _bitmap->contains(x);
     case SET:
-        return _set.contains(x);
+        return _set->contains(x);
     }
     return false;
 }
@@ -546,7 +549,7 @@ int64_t BitmapValue::cardinality() const {
     case BITMAP:
         return _bitmap->cardinality();
     case SET:
-        return _set.size();
+        return _set->size();
     }
     return 0;
 }
@@ -561,7 +564,7 @@ uint64_t BitmapValue::max() const {
         return _bitmap->maximum();
     case SET:
         uint64_t max = 0;
-        for (const auto value : _set) {
+        for (auto value : *_set) {
             if (value > max) {
                 max = value;
             }
@@ -580,11 +583,11 @@ int64_t BitmapValue::min() const {
     case BITMAP:
         return _bitmap->minimum();
     case SET:
-        if (_set.size() == 0) {
+        if (_set->size() == 0) {
             return -1;
         }
         uint64_t min = std::numeric_limits<uint64_t>::max();
-        for (const auto value : _set) {
+        for (const auto value : *_set) {
             if (value < min) {
                 min = value;
             }
@@ -614,7 +617,7 @@ size_t BitmapValue::getSizeInBytes() const {
         res = _bitmap->getSizeInBytes(config::bitmap_serialize_version);
         break;
     case SET:
-        res = 1 + sizeof(uint32_t) + sizeof(uint64_t) * _set.size();
+        res = 1 + sizeof(uint32_t) + sizeof(uint64_t) * _set->size();
     }
     return res;
 }
@@ -642,10 +645,10 @@ void BitmapValue::write(char* dst) const {
 
         *dst = BitmapTypeCode::SET;
         dst += 1;
-        uint32_t size = _set.size();
+        uint32_t size = _set->size();
         memcpy(dst, &size, sizeof(uint32_t));
         dst += sizeof(uint32_t);
-        for (auto& key : _set) {
+        for (auto key : *_set) {
             memcpy(dst, &key, sizeof(uint64_t));
             dst += sizeof(uint64_t);
         }
@@ -686,12 +689,14 @@ bool BitmapValue::deserialize(const char* src) {
         uint32_t size{};
         memcpy(&size, src + 1, sizeof(uint32_t));
         src += sizeof(uint32_t) + 1;
-        _set.reserve(size);
+
+        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+        _set->reserve(size);
 
         for (int i = 0; i < size; ++i) {
             uint64_t key{};
             memcpy(&key, src, sizeof(uint64_t));
-            _set.insert(key);
+            _set->insert(key);
             src += sizeof(uint64_t);
         }
         break;
@@ -734,8 +739,8 @@ std::string BitmapValue::to_string() const {
     }
     case SET:
         int pos = 0;
-        int64_t values[_set.size()];
-        for (const auto value : _set) {
+        int64_t values[_set->size()];
+        for (auto value : *_set) {
             values[pos++] = value;
         }
         bool first = true;
@@ -768,8 +773,8 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         break;
     }
     case SET:
-        array->reserve(array->size() + _set.size());
-        auto iter = array->insert(array->end(), _set.begin(), _set.end());
+        array->reserve(array->size() + _set->size());
+        auto iter = array->insert(array->end(), _set->begin(), _set->end());
         std::sort(iter, array->end());
         break;
     }
@@ -794,7 +799,7 @@ void BitmapValue::clear() {
     if (_bitmap != nullptr) {
         _bitmap->clear();
     }
-    _set.clear();
+    _set.reset();
     _sv = 0;
 }
 
