@@ -167,12 +167,12 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
-import com.starrocks.load.PartitionLockManager;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadManager;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+import com.starrocks.load.lock.LockManager;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
@@ -403,7 +403,7 @@ public class GlobalStateMgr {
     private ConnectorMgr connectorMgr;
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
-    private PartitionLockManager partitionLockManager;
+    private LockManager lockManager;
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
@@ -563,7 +563,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-        this.partitionLockManager = new PartitionLockManager();
+        this.lockManager = new LockManager();
     }
 
     public static void destroyCheckpoint() {
@@ -730,8 +730,8 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
-    public PartitionLockManager getLockManager() {
-        return partitionLockManager;
+    public LockManager getLockManager() {
+        return lockManager;
     }
 
     // Use tryLock to avoid potential dead lock

@@ -34,6 +34,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.load.lock.Lock;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PublishVersionTask;
@@ -231,8 +232,10 @@ public class TransactionState implements Writable {
 
     private long lastErrTimeMs = 0;
 
-    // used by insert overwrite
-    Map<Long, List<Long>> tableToOriginalTargetPartitions;
+    Map<Long, List<Long>> originalTargetPartitions;
+
+    // transaction related locks
+    List<Lock> locks;
 
     public TransactionState() {
         this.dbId = -1;
@@ -278,14 +281,22 @@ public class TransactionState implements Writable {
     }
 
     public List<Long> getOriginalTargetPartitions(long tableId) {
-        if (tableToOriginalTargetPartitions == null) {
-            return null;
-        }
-        return tableToOriginalTargetPartitions.get(tableId);
+        return originalTargetPartitions.get(tableId);
     }
 
-    public void setOriginalTargetPartitions(Map<Long, List<Long>> tableToOriginalTargetPartitions) {
-        this.tableToOriginalTargetPartitions = tableToOriginalTargetPartitions;
+    public void setOriginalTargetPartitions(Map<Long, List<Long>> originalTargetPartitions) {
+        this.originalTargetPartitions = originalTargetPartitions;
+    }
+
+    public void setLocks(List<Lock> locks) {
+        this.locks = locks;
+    }
+
+    public void unlock() {
+        if (locks != null) {
+            LOG.info("start to unlock locks. size:{}", locks.size());
+            GlobalStateMgr.getCurrentState().getLockManager().unlock(locks);
+        }
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {

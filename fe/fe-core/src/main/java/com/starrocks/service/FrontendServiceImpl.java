@@ -815,11 +815,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
+        Table table = null;
+        db.readLock();
+        try {
+            table = db.getTable(request.tbl);
+            if (table == null || table.getType() != TableType.OLAP) {
+                throw new UserException("unknown table, table=" + request.tbl);
+            }
+        } finally {
+            db.readUnlock();
+        }
+
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(), request.getLabel(), request.getRequest_id(),
+                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
@@ -891,7 +902,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
-                timeoutMs, attachment, Lists.newArrayList(tbl.getId()), Maps.newHashMap(), false);
+                timeoutMs, attachment);
         if (!ret) {
             return ret;
         }

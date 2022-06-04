@@ -14,7 +14,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.PartitionPersistInfo;
@@ -35,7 +34,6 @@ public class InsertOverwriteJobRunner {
 
     private InsertOverwriteJob job;
 
-    private long watershedTxnId = -1;
     private InsertStmt insertStmt;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
@@ -44,7 +42,6 @@ public class InsertOverwriteJobRunner {
     private String postfix;
 
     private long createPartitionElapse;
-    private long waitInsertIntoElapse;
     private long insertElapse;
 
     public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor,
@@ -57,7 +54,6 @@ public class InsertOverwriteJobRunner {
         this.targetTable = targetTable;
         this.postfix = "_" + job.getJobId();
         this.createPartitionElapse = 0;
-        this.waitInsertIntoElapse = 0;
         this.insertElapse = 0;
     }
 
@@ -68,7 +64,6 @@ public class InsertOverwriteJobRunner {
         this.targetTable = (OlapTable) db.getTable(job.getTargetTableId());
         this.postfix = "_" + job.getJobId();
         this.createPartitionElapse = 0;
-        this.waitInsertIntoElapse = 0;
         this.insertElapse = 0;
     }
 
@@ -112,14 +107,12 @@ public class InsertOverwriteJobRunner {
                 break;
             case OVERWRITE_FAILED:
                 gc();
-                LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{} ms," +
-                                " waitInsertIntoElapse:{} ms, insertElapse:{} ms",
-                        job.getJobId(), createPartitionElapse, waitInsertIntoElapse, insertElapse);
+                LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{} ms, insertElapse:{} ms",
+                        job.getJobId(), createPartitionElapse, insertElapse);
                 break;
             case OVERWRITE_SUCCESS:
-                LOG.info("insert overwrite job:{} succeed. createPartitionElapse:{} ms," +
-                        " waitInsertIntoElapse:{} ms, insertElapse:{} ms",
-                        job.getJobId(), createPartitionElapse, waitInsertIntoElapse, insertElapse);
+                LOG.info("insert overwrite job:{} succeed. createPartitionElapse:{} ms, insertElapse:{} ms",
+                        job.getJobId(), createPartitionElapse, insertElapse);
                 break;
             default:
                 throw new RuntimeException("invalid jobState:" + job.getJobState());
@@ -182,8 +175,6 @@ public class InsertOverwriteJobRunner {
 
     private void prepare() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PENDING);
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         List<Partition> sourcePartitions = job.getOriginalTargetPartitionIds().stream()
                 .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
         List<String> sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
@@ -294,11 +285,6 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .isPreviousTransactionsFinished(watershedTxnId, job.getTargetDbId(), Lists.newArrayList(job.getTargetTableId()));
-    }
-
     private void prepareInsert() {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
@@ -314,16 +300,6 @@ public class InsertOverwriteJobRunner {
                 insertStmt.setTargetPartitionIds(newPartitionIds);
             } finally {
                 db.readUnlock();
-            }
-
-            // wait the previous loads util finish
-            long waitInsertStartTimestamp = System.currentTimeMillis();
-            while (!isPreviousLoadFinished() && !context.isKilled()) {
-                Thread.sleep(500);
-            }
-            waitInsertIntoElapse = System.currentTimeMillis() - waitInsertStartTimestamp;
-            if (context.isKilled()) {
-                throw new RuntimeException("insert overwrite context is killed");
             }
         } catch (Exception e) {
             throw new RuntimeException("prepareInsert exception", e);

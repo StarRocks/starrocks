@@ -1320,7 +1320,7 @@ public class MasterImpl {
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
-                    timeoutMs, attachment, tableIdList, Maps.newHashMap(), false);
+                    timeoutMs, attachment);
             if (!ret) {
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));

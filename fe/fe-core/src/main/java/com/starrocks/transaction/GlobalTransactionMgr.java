@@ -32,6 +32,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.load.lock.LockException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -258,43 +259,6 @@ public class GlobalTransactionMgr implements Writable {
                                   TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                   long timeoutSecond, Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
-        List<Long> lockedTables = Lists.newArrayList();
-        boolean allLocked = true;
-        if (isExclusive) {
-            for (long tableId : tableIdList) {
-                if (GlobalStateMgr.getCurrentState().getLockManager()
-                        .tryWriteLockPartitions(tableId, tablePartitionIds.get(tableId))) {
-                    lockedTables.add(tableId);
-                } else {
-                    allLocked = false;
-                    break;
-                }
-            }
-            if (!allLocked) {
-                for (long tableId : lockedTables) {
-                    GlobalStateMgr.getCurrentState().getLockManager()
-                            .readUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-                }
-                throw new RuntimeException("begin transaction failed because fail to acquire locks");
-            }
-        } else {
-            for (long tableId : tableIdList) {
-                if (GlobalStateMgr.getCurrentState().getLockManager()
-                        .tryReadLockPartitions(tableId, tablePartitionIds.get(tableId))) {
-                    lockedTables.add(tableId);
-                } else {
-                    allLocked = false;
-                    break;
-                }
-            }
-            if (!allLocked) {
-                for (long tableId : lockedTables) {
-                    GlobalStateMgr.getCurrentState().getLockManager()
-                            .readUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-                }
-                throw new RuntimeException("begin transaction failed because fail to acquire locks");
-            }
-        }
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -310,7 +274,8 @@ public class GlobalTransactionMgr implements Writable {
 
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         return dbTransactionMgr
-                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
+                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
+                        tablePartitionIds, isExclusive);
     }
 
     /**
@@ -359,33 +324,6 @@ public class GlobalTransactionMgr implements Writable {
             throws UserException {
         commitTransaction(dbId, transactionId, tabletCommitInfos, null);
     }
-
-    // final call of commmitTransaction
-    // release lock after commit transaction successfully
-    private void commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                  TxnCommitAttachment txnCommitAttachment, List<Long> tableIdList,
-                                   Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
-            throws UserException {
-        if (Config.disable_load_job) {
-            throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
-        }
-
-        LOG.debug("try to commit transaction: {}", transactionId);
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
-        if (isExclusive) {
-            for (long tableId : tableIdList) {
-                GlobalStateMgr.getCurrentState()
-                        .getLockManager().writeUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-            }
-        } else {
-            for (long tableId : tableIdList) {
-                GlobalStateMgr.getCurrentState()
-                        .getLockManager().readUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-            }
-        }
-    }
-
     /**
      * @param transactionId
      * @param tabletCommitInfos
@@ -398,32 +336,24 @@ public class GlobalTransactionMgr implements Writable {
     public void commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
+        if (Config.disable_load_job) {
+            throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        LOG.debug("try to commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        TransactionState transactionState = dbTransactionMgr.getTransactionState(transactionId);
-        commitTransaction(dbId, transactionId, tabletCommitInfos, txnCommitAttachment,
-                transactionState.getTableIdList(), Maps.newHashMap(), false);
+        dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-                                               List<TabletCommitInfo> tabletCommitInfos, long timeoutMillis,
-                                               List<Long> tableIdList, Map<Long, List<Long>> tablePartitionIds,
-                                               boolean isExclusive)
-            throws UserException {
-        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMillis, null,
-                tableIdList, tablePartitionIds, isExclusive);
-    }
-
-    public boolean commitAndPublishTransaction(Database db, long transactionId, List<Long> tableIds,
                                                List<TabletCommitInfo> tabletCommitInfos, long timeoutMillis)
             throws UserException {
-        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMillis, null,
-                tableIds, Maps.newHashMap(), false);
+        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMillis, null);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
                                                List<TabletCommitInfo> tabletCommitInfos, long timeoutMillis,
-                                               TxnCommitAttachment txnCommitAttachment, List<Long> tableIdList,
-                                               Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
+                                               TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
@@ -432,8 +362,7 @@ public class GlobalTransactionMgr implements Writable {
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
-            commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment,
-                    tableIdList, tablePartitionIds, isExclusive);
+            commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment);
         } finally {
             db.writeUnlock();
         }
@@ -448,47 +377,20 @@ public class GlobalTransactionMgr implements Writable {
         return dbTransactionMgr.publishTransaction(db, transactionId, publishTimeoutMillis);
     }
 
-    public void abortTransaction(long dbId, long transactionId, String reason, List<Long> tableIdList,
-                                 Map<Long, List<Long>> tablePartitionIds, boolean isExclusive) throws UserException {
-        abortTransaction(dbId, transactionId, reason, null, tableIdList, tablePartitionIds, isExclusive);
-    }
-
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
         abortTransaction(dbId, transactionId, reason, null);
-    }
-
-    // final call for abortTransaction
-    private void abortTransaction(Long dbId, Long txnId, String reason, TxnCommitAttachment txnCommitAttachment,
-                                 List<Long> tableIdList, Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
-            throws UserException {
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        if (isExclusive) {
-            for (long tableId : tableIdList) {
-                GlobalStateMgr.getCurrentState()
-                        .getLockManager().writeUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-            }
-        } else {
-            for (long tableId : tableIdList) {
-                GlobalStateMgr.getCurrentState()
-                        .getLockManager().readUnlockPartitions(tableId, tablePartitionIds.get(tableId));
-            }
-        }
-        dbTransactionMgr.abortTransaction(txnId, reason, txnCommitAttachment);
     }
 
     public void abortTransaction(Long dbId, Long txnId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        TransactionState transactionState = dbTransactionMgr.getTransactionState(txnId);
-        List<Long> tableIds = transactionState.getTableIdList();
-        abortTransaction(dbId, txnId, reason, txnCommitAttachment, tableIds, Maps.newHashMap(), false);
+        dbTransactionMgr.abortTransaction(txnId, reason, txnCommitAttachment);
     }
 
     // for http cancel stream load api
     public void abortTransaction(Long dbId, String label, String reason) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        long txnId = dbTransactionMgr.getPreparedTxnIdForLabel(label);
-        abortTransaction(dbId, txnId, reason);
+        dbTransactionMgr.abortTransaction(label, reason);
     }
 
     /*
@@ -601,6 +503,8 @@ public class GlobalTransactionMgr implements Writable {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
             dbTransactionMgr.replayUpsertTransactionState(transactionState);
         } catch (AnalysisException e) {
+            LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
+        } catch (LockException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
 
@@ -761,10 +665,6 @@ public class GlobalTransactionMgr implements Writable {
         for (Pair<Long, Long> txnInfo : transactionIdByCoordinateBe) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnInfo.first);
-                TransactionState transactionState = dbTransactionMgr.getTransactionState(txnInfo.second);
-                for (long tableId : transactionState.getTableIdList()) {
-                    GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tableId);
-                }
                 dbTransactionMgr.abortTransaction(txnInfo.second, "coordinate BE is down", null);
             } catch (UserException e) {
                 LOG.warn("Abort txn on coordinate BE {} failed, msg={}", coordinateHost, e.getMessage());

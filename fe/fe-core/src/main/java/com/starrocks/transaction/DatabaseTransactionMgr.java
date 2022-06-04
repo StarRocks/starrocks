@@ -52,6 +52,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.lock.Lock;
+import com.starrocks.load.lock.LockException;
+import com.starrocks.load.lock.LockMode;
+import com.starrocks.load.lock.LockTarget;
+import com.starrocks.load.lock.LockTargetDesc;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -69,6 +74,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.io.DataOutput;
 import java.io.IOException;
@@ -168,15 +174,6 @@ public class DatabaseTransactionMgr {
         return dbId;
     }
 
-    public TransactionState getRunningTransactionState(Long transactionId) {
-        readLock();
-        try {
-            return idToRunningTransactionState.get(transactionId);
-        } finally {
-            readUnlock();
-        }
-    }
-
     public TransactionState getTransactionState(Long transactionId) {
         readLock();
         try {
@@ -186,15 +183,6 @@ public class DatabaseTransactionMgr {
             } else {
                 return idToFinalStatusTransactionState.get(transactionId);
             }
-        } finally {
-            readUnlock();
-        }
-    }
-
-    public TransactionState getTransactionState(long transactionId) {
-        readLock();
-        try {
-            return unprotectedGetTransactionState(transactionId);
         } finally {
             readUnlock();
         }
@@ -271,17 +259,37 @@ public class DatabaseTransactionMgr {
         info.add(txnState.getErrMsg());
     }
 
-    public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
-                                 TransactionState.TxnCoordinator coordinator,
-                                 TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
-        return beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond, false);
+    public List<LockTargetDesc> getLockTargetDesc(long dbId, List<Long> tableIds,
+                                                  Map<Long, List<Long>> tablePartitonIds,
+                                                  LockTarget.TargetContext targetContext) {
+        List<LockTargetDesc> lockTargetDescs = Lists.newArrayList();
+        for (long tableId : tableIds) {
+            if (tablePartitonIds.containsKey(tableId)) {
+                List<Long> tablePartitionList = tablePartitonIds.get(tableId);
+                for (long pid : tablePartitionList) {
+                    Long[] pathIds = new Long[3];
+                    pathIds[0] = dbId;
+                    pathIds[1] = tableId;
+                    pathIds[2] = pid;
+                    LockTarget lockTarget = new LockTarget(pathIds, targetContext);
+
+                    lockTargetDescs.add(new LockTargetDesc(lockTarget, targetContext.getLockMode()));
+                }
+            } else {
+                Long[] pathIds = new Long[2];
+                pathIds[0] = dbId;
+                pathIds[1] = tableId;
+                LockTarget lockTarget = new LockTarget(pathIds, targetContext);
+                lockTargetDescs.add(new LockTargetDesc(lockTarget, targetContext.getLockMode()));
+            }
+        }
+        return lockTargetDescs;
     }
 
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
                                  TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond,
-                                 boolean isExclusive)
+                                 Map<Long, List<Long>> partitionMap, boolean isExclusive)
             throws DuplicatedRequestException, LabelAlreadyUsedException, BeginTransactionException, AnalysisException {
         checkDatabaseDataQuota();
         writeLock();
@@ -330,6 +338,25 @@ public class DatabaseTransactionMgr {
                     new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                             coordinator, listenerId, timeoutSecond * 1000);
             transactionState.setPrepareTime(System.currentTimeMillis());
+            if (sourceType == TransactionState.LoadJobSourceType.INSERT_OVERWRITE) {
+                // for abort timeout insert overwrite txn
+                transactionState.setOriginalTargetPartitions(partitionMap);
+            }
+            LockMode lockMode = isExclusive ? LockMode.EXCLUSIVE : LockMode.SHARED;
+            LockTarget.TargetContext targetContext = new LockTarget.TargetContext(tid, lockMode,
+                    transactionState.getPrepareTime(), sourceType);
+            List<LockTargetDesc> lockTargetDescs = getLockTargetDesc(dbId, tableIdList, partitionMap, targetContext);
+            List<Lock> locks = globalStateMgr.getLockManager().tryLock(lockTargetDescs);
+            if (locks == null) {
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append("lock failed when load.");
+                stringBuilder.append(", dbId:").append(dbId);
+                stringBuilder.append(", tableIds:").append(Strings.join(tableIdList, ','));
+                LOG.warn(stringBuilder.toString());
+                throw new LockException(stringBuilder.toString());
+            }
+            transactionState.setLocks(locks);
+            LOG.info("acquire locks size:{}", locks.size());
             unprotectUpsertTransactionState(transactionState, false);
 
             if (MetricRepo.isInit) {
@@ -586,12 +613,13 @@ public class DatabaseTransactionMgr {
             txnOperated = true;
         } finally {
             writeUnlock();
+            transactionState.unlock();
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        updateCatalogAfterCommitted(transactionState, db, false);
+        updateCatalogAfterCommitted(transactionState, db);
         LOG.info("transaction:[{}] successfully committed", transactionState);
     }
 
@@ -1044,36 +1072,6 @@ public class DatabaseTransactionMgr {
         txnIds.add(transactionState.getTransactionId());
     }
 
-    public long getPreparedTxnIdForLabel(String label) throws TransactionNotFoundException {
-        Preconditions.checkNotNull(label);
-        long transactionId = -1;
-        readLock();
-        try {
-            Set<Long> existingTxns = unprotectedGetTxnIdsByLabel(label);
-            if (existingTxns == null || existingTxns.isEmpty()) {
-                throw new TransactionNotFoundException("transaction not found, label=" + label);
-            }
-            // find PREPARE txn. For one load label, there should be only one PREPARE txn.
-            TransactionState prepareTxn = null;
-            for (Long txnId : existingTxns) {
-                TransactionState txn = unprotectedGetTransactionState(txnId);
-                if (txn.getTransactionStatus() == TransactionStatus.PREPARE) {
-                    prepareTxn = txn;
-                    break;
-                }
-            }
-
-            if (prepareTxn == null) {
-                throw new TransactionNotFoundException("running transaction not found, label=" + label);
-            }
-
-            transactionId = prepareTxn.getTransactionId();
-        } finally {
-            readUnlock();
-        }
-        return transactionId;
-    }
-
     public void abortTransaction(String label, String reason) throws UserException {
         Preconditions.checkNotNull(label);
         long transactionId = -1;
@@ -1135,6 +1133,7 @@ public class DatabaseTransactionMgr {
             txnOperated = unprotectAbortTransaction(transactionId, reason);
         } finally {
             writeUnlock();
+            transactionState.unlock();
         }
 
         // send clear txn task to BE to clear the transactions on BE.
@@ -1392,7 +1391,7 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    private void updateCatalogAfterCommitted(TransactionState transactionState, Database db, boolean isReplay) {
+    private void updateCatalogAfterCommitted(TransactionState transactionState, Database db) {
         Set<Long> errorReplicaIds = transactionState.getErrorReplicas();
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
@@ -1555,21 +1554,6 @@ public class DatabaseTransactionMgr {
         // abort timeout txns
         for (Long txnId : timeoutTxns) {
             try {
-                TransactionState transactionState = getRunningTransactionState(txnId);
-                if (transactionState == null) {
-                    LOG.warn("abort timeout txn {} failed. no related transaction state", txnId);
-                    continue;
-                }
-                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_OVERWRITE) {
-                    for (long tableId : transactionState.getTableIdList()) {
-                        GlobalStateMgr.getCurrentState().getLockManager().readUnlockPartitions(tableId,
-                                transactionState.getOriginalTargetPartitions(tableId));
-                    }
-                } else {
-                    for (long tableId : transactionState.getTableIdList()) {
-                        GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tableId);
-                    }
-                }
                 abortTransaction(txnId, "timeout by txn manager", null);
                 LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
             } catch (UserException e) {
@@ -1579,7 +1563,7 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    public void replayUpsertTransactionState(TransactionState transactionState) {
+    public void replayUpsertTransactionState(TransactionState transactionState) throws AnalysisException {
         writeLock();
         try {
             // set transaction status will call txn state change listener
@@ -1587,13 +1571,11 @@ public class DatabaseTransactionMgr {
             Database db = globalStateMgr.getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 LOG.info("replay a committed transaction {}", transactionState);
-                updateCatalogAfterCommitted(transactionState, db, true);
+                updateCatalogAfterCommitted(transactionState, db);
                 if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_OVERWRITE) {
                     // just process source types except INSERT_OVERWRITE
                     // because INSERT_OVERWRITE will failover
-                    for (long tid : transactionState.getTableIdList()) {
-                        GlobalStateMgr.getCurrentState().getLockManager().readUnlockTable(tid);
-                    }
+                    transactionState.unlock();
                 }
             } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
                 LOG.info("replay a visible transaction {}", transactionState);
@@ -1602,9 +1584,28 @@ public class DatabaseTransactionMgr {
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_OVERWRITE) {
                 // just process source types except INSERT_OVERWRITE
                 // because INSERT_OVERWRITE will failover
-                for (long tid : transactionState.getTableIdList()) {
-                    GlobalStateMgr.getCurrentState().getLockManager().tryReadLockTable(tid);
+                LockTarget.TargetContext targetContext = new LockTarget.TargetContext(transactionState.getTransactionId(),
+                        LockMode.SHARED, transactionState.getPrepareTime(), transactionState.getSourceType());
+                List<LockTargetDesc> lockTargetDescs =
+                        Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
+                for (long tableId : transactionState.getTableIdList()) {
+                    Long[] pathIds = new Long[2];
+                    pathIds[0] = transactionState.getDbId();
+                    pathIds[1] = tableId;
+                    LockTarget lockTarget = new LockTarget(pathIds, targetContext);
+                    LockTargetDesc targetDesc = new LockTargetDesc(lockTarget, targetContext.getLockMode());
+                    lockTargetDescs.add(targetDesc);
                 }
+                List<Lock> locks = GlobalStateMgr.getCurrentState().getLockManager().tryLock(lockTargetDescs);
+                if (locks == null) {
+                    // impossible to reach here, just add log
+                    String msg = String.format("acquire locks failed for txnId:{}, lock targets:{}",
+                            transactionState.getTransactionId(),
+                            lockTargetDescs.stream().map(desc -> desc.toString()).collect(Collectors.joining(",")));
+                    LOG.warn(msg);
+                    throw new LockException(msg);
+                }
+                transactionState.setLocks(locks);
             }
             unprotectUpsertTransactionState(transactionState, true);
             if (transactionState.isExpired(System.currentTimeMillis())) {

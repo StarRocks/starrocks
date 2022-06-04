@@ -376,13 +376,13 @@ public class DeleteHandler implements Writable {
                             cancelJob(deleteJob, CancelType.UNKNOWN, e.getMessage());
                             throw new DdlException(e.getMessage(), e);
                         }
-                        commitJob(deleteJob, db, timeoutMs, stmt.getTable().getId());
+                        commitJob(deleteJob, db, timeoutMs);
                         break;
                     default:
                         throw new IllegalStateException("wrong delete job state: " + state.name());
                 }
             } else {
-                commitJob(deleteJob, db, timeoutMs, stmt.getTable().getId());
+                commitJob(deleteJob, db, timeoutMs);
             }
         } finally {
             if (!FeConstants.runningUnitTest) {
@@ -495,10 +495,10 @@ public class DeleteHandler implements Writable {
         return columnFilters;
     }
 
-    private void commitJob(DeleteJob job, Database db, long timeoutMs, long tableId) throws DdlException, QueryStateException {
+    private void commitJob(DeleteJob job, Database db, long timeoutMs) throws DdlException, QueryStateException {
         TransactionStatus status = null;
         try {
-            if (unprotectedCommitJob(job, db, timeoutMs, tableId)) {
+            if (unprotectedCommitJob(job, db, timeoutMs)) {
                 updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(), job.getDeleteInfo().getTableId());
             }
             status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
@@ -542,7 +542,7 @@ public class DeleteHandler implements Writable {
      * @return
      * @throws UserException
      */
-    private boolean unprotectedCommitJob(DeleteJob job, Database db, long timeoutMs, long tableId) throws UserException {
+    private boolean unprotectedCommitJob(DeleteJob job, Database db, long timeoutMs) throws UserException {
         long transactionId = job.getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         List<TabletCommitInfo> tabletCommitInfos = new ArrayList<TabletCommitInfo>();
@@ -558,8 +558,7 @@ public class DeleteHandler implements Writable {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
             }
         }
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, Lists.newArrayList(tableId),
-                tabletCommitInfos, timeoutMs);
+        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMs);
     }
 
     /**
