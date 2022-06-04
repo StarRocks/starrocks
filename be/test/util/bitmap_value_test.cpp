@@ -28,6 +28,7 @@
 #define private public
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -360,4 +361,24 @@ TEST(BitmapValueTest, bitmap_min) {
     bitmap.add(0);
     ASSERT_EQ(bitmap.min(), 0);
 }
+
+TEST(BitmapValueTest, bitmap_xor) {
+    // {3} ^ {1,2} = {1,2,3}
+    {
+        BitmapValue bm1;
+        bm1.add(3);
+        BitmapValue bm2;
+        bm2.add(1);
+        bm2.add(2);
+
+        bm1 ^= bm2;
+        ASSERT_EQ(3, bm1.cardinality());
+        ASSERT_EQ(3, bm1.max());
+        ASSERT_EQ(1, bm1.min());
+
+        // and b2 should not be changed
+        ASSERT_EQ(2, bm2.cardinality());
+    }
+}
+
 } // namespace starrocks
