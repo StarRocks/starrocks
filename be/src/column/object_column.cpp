@@ -4,7 +4,7 @@
 
 #include "gutil/casts.h"
 #include "storage/hll.h"
-#include "util/bitmap_value.h"
+#include "types/bitmap_value.h"
 #include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
