@@ -23,7 +23,6 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.loadv2.InsertOverwriteAttachment;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
@@ -80,10 +79,6 @@ public abstract class TxnCommitAttachment implements Writable {
         } else if (type == LoadJobSourceType.FRONTEND) {
             // spark load
             attachment = new LoadJobFinalOperation();
-        } else if (type == LoadJobSourceType.INSERT_OVERWRITE) {
-            attachment = InsertOverwriteAttachment.read(in);
-            attachment.setTypeRead(true);
-            return attachment;
         } else {
             throw new IOException("Unknown load job source type: " + type.name());
         }
