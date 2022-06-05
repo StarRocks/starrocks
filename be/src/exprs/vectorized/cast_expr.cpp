@@ -21,7 +21,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
 
