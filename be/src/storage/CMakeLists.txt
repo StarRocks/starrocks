@@ -32,7 +32,6 @@ add_library(Storage STATIC
     decimal12.cpp
     delete_handler.cpp
     del_vector.cpp
-    hll.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     kv_store.cpp
