@@ -23,8 +23,7 @@
 
 #include <cmath>
 #include <cstdio>
-#include <map>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,7 +32,7 @@
 #include "gutil/macros.h"
 #include "runtime/memory/chunk.h"
 #include "runtime/memory/chunk_allocator.h"
-#include "util/phmap/phmap.h"
+#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -145,7 +144,9 @@ public:
 
 private:
     HllDataType _type = HLL_DATA_EMPTY;
-    phmap::flat_hash_set<uint64_t> _hash_set;
+
+    using ElementSet = phmap::flat_hash_set<uint64_t>;
+    std::unique_ptr<ElementSet> _hash_set;
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.

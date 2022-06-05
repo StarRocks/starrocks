@@ -15,6 +15,7 @@
 #include "simd/simd.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 
