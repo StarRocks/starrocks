@@ -10,7 +10,6 @@
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 #include "util/int96.h"
-#include "util/json.h"
 #include "util/percentile_value.h"
 #include "util/slice.h"
 
@@ -150,15 +149,9 @@ public:
     }
 
 private:
-    // NOTE
-    // Either JsonValue and JsonValue* could stored in datum.
-    // - Pointer type JsonValue* is used as view-type, to navigate datum in a column without copy data
-    // - Value type JsonValue is used to store real data and own the value itself, which is mostly used to hold a
-    //   JsonValue as return value. Right now only schema-change procedure use it.
-    using Variant =
-            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
-                         uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
-                         HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, JsonValue>;
+    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
+                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
+                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
     Variant _value;
 };
 
