@@ -75,7 +75,7 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             tableNameTableMap.forEach((tableName, table) -> {
                 if (!tableName.getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException(

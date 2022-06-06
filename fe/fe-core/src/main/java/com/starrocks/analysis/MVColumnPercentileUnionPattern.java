@@ -37,7 +37,7 @@ public class MVColumnPercentileUnionPattern implements MVColumnPattern {
         }
         if (fnExpr.getChild(0) instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) fnExpr.getChild(0);
-            if (slotRef.getType().getPrimitiveType() == PrimitiveType.PERCENTILE && slotRef.getColumn() != null) {
+            if (slotRef.getType().getPrimitiveType() == PrimitiveType.PERCENTILE) {
                 return true;
             } else {
                 return false;
