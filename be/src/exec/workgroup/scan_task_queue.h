@@ -65,7 +65,7 @@ private:
 
 class ScanTaskQueueWithWorkGroup final : public ScanTaskQueue {
 public:
-    ScanTaskQueueWithWorkGroup() = default;
+    ScanTaskQueueWithWorkGroup(ScanExecutorType type) : _type(type) {}
     ~ScanTaskQueueWithWorkGroup() override = default;
 
     void close() override;
@@ -88,6 +88,7 @@ private:
     std::mutex _global_mutex;
     std::condition_variable _cv;
 
+    const ScanExecutorType _type;
     bool _is_closed = false;
 
     std::unordered_set<WorkGroupPtr> _ready_wgs;
