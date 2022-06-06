@@ -411,7 +411,7 @@ FROM test_basic;
 
 ### UDTF
 
-> 目前仅支持使用UDTF返回多行单列。
+> 说明：目前 UDTF 只支持返回多行单列。
 
 #### 步骤一：创建 Maven 项目
 
