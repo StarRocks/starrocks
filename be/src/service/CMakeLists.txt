@@ -33,11 +33,8 @@ set(EXEC_FILES
     backend_base.cpp
     brpc_service.cpp
     internal_service.cpp
+    staros_worker.cpp
     mem_hook.cpp)
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND EXEC_FILES staros_worker.cpp)
-endif()
 
 add_library(Service
         ${EXEC_FILES}

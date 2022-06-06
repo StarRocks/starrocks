@@ -5,7 +5,6 @@
 #include <fmt/format.h>
 #include <fs/fs_starlet.h>
 #include <gtest/gtest.h>
-#include <starlet.h>
 
 #include <fstream>
 
@@ -13,47 +12,57 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
+#include "storage/lake/group_assigner.h"
 #include "storage/lake/tablet.h"
+#include "storage/options.h"
 #include "testutil/assert.h"
+#include "util/filesystem_util.h"
 
 namespace starrocks {
 
-extern staros::starlet::Starlet* g_starlet;
-extern std::shared_ptr<StarOSWorker> g_worker;
+class LocalGroupAssigner : public lake::GroupAssigner {
+public:
+    LocalGroupAssigner(const std::string& dir) : _local_dir(dir){};
+
+    StatusOr<std::string> get_group(int64_t tablet_id) override { return _local_dir; };
+
+    Status list_group(std::vector<std::string>* groups) override {
+        return Status::NotSupported("LocalGroupAssigner::list_group");
+    };
+
+private:
+    std::string _local_dir;
+};
 
 class LakeTabletManagerTest : public testing::Test {
 public:
     LakeTabletManagerTest() = default;
     ~LakeTabletManagerTest() override = default;
     void SetUp() override {
-        g_worker = std::make_shared<StarOSWorker>();
-        _starlet = new staros::starlet::Starlet(g_worker);
-        _starlet->init(8888);
-        _tabletManager = new starrocks::lake::TabletManager(_starlet, 1024);
-        g_starlet = _starlet;
+        std::vector<starrocks::StorePath> paths;
+        starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+        _test_dir = paths[0].path + "/lake";
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
+        _group_assigner = new LocalGroupAssigner(_test_dir);
+        _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 1024);
     }
-    std::string group_path(std::string_view path) {
-        if (path.front() == '/') {
-            return fmt::format("s3://{}.s3.{}.{}{}", kBucket, kRegion, kDomain, path);
-        } else {
-            return fmt::format("s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
-        }
+    std::string tablet_group(std::string_view prefix, int64_t tablet_id) {
+        ASSIGN_OR_ABORT(auto group_path, _group_assigner->get_group(tablet_id));
+        auto tablet_group = fmt::format("{}/{}", group_path, prefix);
+        FileSystemUtil::create_directory(tablet_group);
+        return tablet_group;
     }
 
     void TearDown() override {
-        g_starlet = nullptr;
-        g_worker.reset();
-        delete _starlet;
         delete _tabletManager;
+        delete _group_assigner;
+        (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
-    starrocks::lake::TabletManager* _tabletManager;
-
 private:
-    staros::starlet::Starlet* _starlet;
-    constexpr static const char* kBucket = "starlet-test";
-    constexpr static const char* kRegion = "oss-cn-hangzhou";
-    constexpr static const char* kDomain = "aliyuncs.com";
+    starrocks::lake::TabletManager* _tabletManager;
+    std::string _test_dir;
+    LocalGroupAssigner* _group_assigner;
 };
 
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -65,33 +74,33 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
-    auto group = group_path("shard1");
+    auto group = tablet_group("shard1", 12345);
     EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     auto res = _tabletManager->get_tablet_metadata(group, 12345, 2);
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->id(), 12345);
     EXPECT_EQ(res.value()->version(), 2);
     EXPECT_OK(_tabletManager->delete_tablet_metadata(group, 12345, 2));
+    res = _tabletManager->get_tablet_metadata(group, 12345, 2);
+    EXPECT_TRUE(res.status().is_not_found());
 }
 
 TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
-    auto group = group_path("shard1");
+    auto group = tablet_group("shard1", 12345);
     EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
     auto res = _tabletManager->get_txn_log(group, 12345, 2);
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->tablet_id(), 12345);
     EXPECT_EQ(res.value()->txn_id(), 2);
     EXPECT_OK(_tabletManager->delete_txn_log(group, 12345, 2));
+    res = _tabletManager->get_txn_log(group, 12345, 2);
+    EXPECT_TRUE(res.status().is_not_found());
 }
 
 TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
-    staros::starlet::ShardInfo shard_info;
-    shard_info.id = 65535;
-    shard_info.obj_store_info.uri = group_path("shard2");
-    g_worker->add_shard(shard_info);
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
@@ -101,6 +110,18 @@ TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
     EXPECT_OK(_tabletManager->create_tablet(req));
     auto res = _tabletManager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
+
+    starrocks::lake::TxnLog txnLog;
+    txnLog.set_tablet_id(65535);
+    txnLog.set_txn_id(2);
+    auto group = res.value().group();
+    EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
     EXPECT_OK(_tabletManager->drop_tablet(65535));
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(group));
+    auto st = fs->path_exists(fmt::format("{}/tbl_{:016X}_{:016X}", group, 65535, 1));
+    EXPECT_TRUE(st.is_not_found());
+    st = fs->path_exists(fmt::format("{}/txn_{:016X}_{:016X}", group, 65535, 2));
+    EXPECT_TRUE(st.is_not_found());
 }
 } // namespace starrocks
