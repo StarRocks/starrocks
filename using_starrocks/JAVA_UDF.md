@@ -411,7 +411,7 @@ FROM test_basic;
 
 ### UDTF
 
-> 目前仅支持使用UDTF返回多行单列。
+> 说明：目前 UDTF 只支持返回多行单列。
 
 #### 步骤一：创建 Maven 项目
 
@@ -451,8 +451,6 @@ FROM test_basic;
 #### 步骤三：在 StarRocks 中创建 UDTF 函数
 
 执行如下命令，在 StarRocks 中创建 UDTF 函数。
-
-> 目前 UDTF 只支持返回**多行单列**。
 
 ```SQL
 CREATE TABLE FUNCTION MY_UDF_SPLIT(string)
