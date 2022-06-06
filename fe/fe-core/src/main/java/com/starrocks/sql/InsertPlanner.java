@@ -142,6 +142,11 @@ public class InsertPlanner {
         if (insertStmt.getTargetTable() instanceof OlapTable) {
             dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
                     insertStmt.getTargetPartitionIds());
+            // At present, we only support dop=1 for olap table sink.
+            // because tablet writing needs to know the number of senders in advance
+            // and guaranteed order of data writing
+            // It can be parallel only in some scenes, for easy use 1 dop now.
+            execPlan.getFragments().get(0).setPipelineDop(1);
         } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
             dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
         } else {

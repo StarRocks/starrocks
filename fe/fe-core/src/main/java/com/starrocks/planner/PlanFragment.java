@@ -245,6 +245,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return pipelineDop;
     }
 
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
         root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
         if (root instanceof RuntimeFilterBuildNode) {

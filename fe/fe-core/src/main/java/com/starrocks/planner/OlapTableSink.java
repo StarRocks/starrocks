@@ -369,5 +369,8 @@ public class OlapTableSink extends DataSink {
         return nodesInfo;
     }
 
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }
 
