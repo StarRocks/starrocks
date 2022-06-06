@@ -576,24 +576,7 @@ public class RoutineLoadManager implements Writable {
         // NOTE: we use the origin statement to get the RoutineLoadDesc
         RoutineLoadDesc routineLoadDesc = null;
         if (log.getOriginStatement() != null) {
-            long sqlMode;
-            if (job.getSessionVariables() != null && job.getSessionVariables().containsKey(SessionVariable.SQL_MODE)) {
-                sqlMode = Long.parseLong(job.getSessionVariables().get(SessionVariable.SQL_MODE));
-            } else {
-                sqlMode = SqlModeHelper.MODE_DEFAULT;
-            }
-            try {
-                SqlParser parser = new SqlParser(
-                        new SqlScanner(new StringReader(log.getOriginStatement().originStmt), sqlMode));
-                AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) SqlParserUtils.getStmt(
-                        parser, log.getOriginStatement().idx);
-                if (stmt.getLoadPropertyList() != null) {
-                    routineLoadDesc = CreateRoutineLoadStmt.buildLoadDesc(stmt.getLoadPropertyList());
-                }
-            } catch (Exception e) {
-                throw new IOException("error happens when parsing alter routine load stmt: "
-                        + log.getOriginStatement().originStmt, e);
-            }
+            routineLoadDesc = job.getLoadDesc(log.getOriginStatement(), job.getSessionVariables());
         }
         job.modifyJob(routineLoadDesc, log.getJobProperties(),
                 log.getDataSourceProperties(), log.getOriginStatement(), true);

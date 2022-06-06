@@ -1495,22 +1495,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }
 
-        // parse the origin stmt to get routine load desc
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt),
-                Long.valueOf(sessionVariables.get(SessionVariable.SQL_MODE))));
-        try {
-            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
-            if (stmt instanceof CreateRoutineLoadStmt) {
-                setRoutineLoadDesc(CreateRoutineLoadStmt.
-                        buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList()));
-            } else if (stmt instanceof AlterRoutineLoadStmt) {
-                setRoutineLoadDesc(CreateRoutineLoadStmt.
-                        buildLoadDesc(((AlterRoutineLoadStmt) stmt).getLoadPropertyList()));
-            }
-
-        } catch (Exception e) {
-            throw new IOException("error happens when parsing create routine load stmt: " + origStmt, e);
-        }
+        setRoutineLoadDesc(getLoadDesc(origStmt, sessionVariables));
     }
 
     public void modifyJob(RoutineLoadDesc routineLoadDesc,
@@ -1529,7 +1514,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (dataSourceProperties != null) {
                 modifyDataSourceProperties(dataSourceProperties);
             }
-            origStmt = originStatement;
+            mergeLoadDescToOriginStatement(routineLoadDesc);
             if (!isReplay) {
                 AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
                         jobProperties, dataSourceProperties, originStatement);
@@ -1537,6 +1522,63 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             }
         } finally {
             writeUnlock();
+        }
+    }
+
+    private void mergeLoadDescToOriginStatement(RoutineLoadDesc routineLoadDesc) throws DdlException {
+        RoutineLoadDesc originLoadDesc = null;
+        try {
+            originLoadDesc = getLoadDesc(origStmt, sessionVariables);
+        } catch (IOException ioe) {
+            LOG.warn("get load desc from origStmt failed, origStmt: {}, stmtIndex: {}",
+                    origStmt.originStmt, origStmt.idx, ioe);
+            throw new DdlException("get load desc from origStmt failed");
+        }
+        if (routineLoadDesc.getColumnSeparator() != null) {
+            originLoadDesc.setColumnSeparator(routineLoadDesc.getColumnSeparator());
+        }
+        if (routineLoadDesc.getRowDelimiter() != null) {
+            originLoadDesc.setRowDelimiter(routineLoadDesc.getRowDelimiter());
+        }
+        if (routineLoadDesc.getColumnsInfo() != null) {
+            originLoadDesc.setColumnsInfo(routineLoadDesc.getColumnsInfo());
+        }
+        if (routineLoadDesc.getWherePredicate() != null) {
+            originLoadDesc.setWherePredicate(routineLoadDesc.getWherePredicate());
+        }
+        if (routineLoadDesc.getPartitionNames() != null) {
+            originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
+        }
+
+        // we use sql to persist the load properties, so we just put the load properties to sql.
+        String sql = "CREATE ROUTINE LOAD job " + originLoadDesc.toSql() + " FROM KAFKA () PROPERTIES ()";
+        origStmt = new OriginStatement(sql, 0);
+    }
+
+    public RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables)
+            throws IOException {
+        long sqlMode;
+        if (sessionVariables != null && sessionVariables.containsKey(SessionVariable.SQL_MODE)) {
+            sqlMode = Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE));
+        } else {
+            sqlMode = SqlModeHelper.MODE_DEFAULT;
+        }
+
+        // parse the origin stmt to get routine load desc
+        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt), sqlMode));
+        try {
+            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
+            if (stmt instanceof CreateRoutineLoadStmt) {
+                return CreateRoutineLoadStmt.
+                        buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList());
+            } else if (stmt instanceof AlterRoutineLoadStmt) {
+                return CreateRoutineLoadStmt.
+                        buildLoadDesc(((AlterRoutineLoadStmt) stmt).getLoadPropertyList());
+            } else {
+                throw new IOException("stmt is neither CreateRoutineLoadStmt nor AlterRoutineLoadStmt");
+            }
+        } catch (Exception e) {
+            throw new IOException("error happens when parsing create routine load stmt: " + origStmt, e);
         }
     }
 
