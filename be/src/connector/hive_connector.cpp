@@ -254,7 +254,31 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
-    if (format == THdfsFileFormat::PARQUET) {
+    if (dynamic_cast<const HudiTableDescriptor*>(_tuple_desc->table_desc()) && scan_range.hudi_mor_table) {
+        const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
+        auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
+        std::string partition_full_path = partition_desc->location();
+        vectorized::HuiMORScannerContext hudiContext;
+        hudiContext.base_path = hudi_table->get_base_path();
+        hudiContext.hive_column_names = hudi_table->get_hive_column_names();
+        hudiContext.hive_column_types = hudi_table->get_hive_column_types();
+        for (auto slot : _tuple_desc->slots()) {
+            hudiContext.required_fields.push_back(slot->col_name());
+        }
+        hudiContext.instant_time = hudi_table->get_instant_time();
+        for (const std::string& log : scan_range.hudi_logs) {
+            hudiContext.delta_log_paths.push_back(partition_full_path.append("/").append(log));
+        }
+        if (scan_range.relative_path.empty()) {
+            hudiContext.data_file_path = "";
+        } else {
+            hudiContext.data_file_path = partition_full_path.append("/").append(scan_range.relative_path);
+        }
+        hudiContext.data_file_lenth = scan_range.file_length;
+        hudiContext.input_format = hudi_table->get_input_format();
+        hudiContext.serde_lib = hudi_table->get_serde_lib();
+        scanner = _pool.add(new HudiMORScanner(hudiContext));
+    } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
         scanner = _pool.add(new HdfsOrcScanner());

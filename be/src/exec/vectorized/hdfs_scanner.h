@@ -184,7 +184,7 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status open(RuntimeState* runtime_state);
+    virtual Status open(RuntimeState* runtime_state);
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
@@ -231,10 +231,8 @@ public:
     uint64_t exit_pending_queue();
 
 private:
-    bool _opened = false;
     std::atomic<bool> _closed = false;
     bool _keep_priority = false;
-    Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 
@@ -255,6 +253,9 @@ protected:
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
+    bool _opened = false;
+
+    Status _build_scanner_context();
 };
 
 } // namespace starrocks::vectorized
