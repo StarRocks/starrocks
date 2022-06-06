@@ -218,8 +218,8 @@ public:
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_worker(int worker_id);
     bool should_yield_driver_worker(int worker_id, WorkGroupPtr running_wg);
 
-    std::shared_ptr<WorkGroupPtrSet> get_owners_of_scan_worker(int worker_id);
-    bool get_owners_of_scan_worker(int worker_id, WorkGroupPtr running_wg);
+    std::shared_ptr<WorkGroupPtrSet> get_owners_of_scan_worker(ScanExecutorType type, int worker_id);
+    bool get_owners_of_scan_worker(ScanExecutorType type, int worker_id, WorkGroupPtr running_wg);
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
@@ -244,6 +244,25 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<WorkerOwnerManager> _hdfs_scan_worker_owner_manager;
+
+    std::once_flag init_metrics_once_flag;
+    std::unordered_map<std::string, int128_t> _wg_metrics;
+
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_total_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
+
+    void add_metrics(const WorkGroupPtr& wg);
+    void update_metrics_unlocked();
+>>>>>>> 79538d49c ([BugFix] fix #6782: make hdfs scan use individual WorkgroupOwner (#6864))
 };
 
 class DefaultWorkGroupInitialization {

@@ -32,6 +32,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -141,9 +142,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
 
+<<<<<<< HEAD
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? std::thread::hardware_concurrency()
                                  : config::pipeline_scan_thread_pool_thread_num;
+=======
+    int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+    CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+>>>>>>> 79538d49c ([BugFix] fix #6782: make hdfs scan use individual WorkgroupOwner (#6864))
 
     _pipeline_scan_io_thread_pool =
             new PriorityThreadPool("pip_scan_io", // pipeline scan io
@@ -154,9 +160,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_threads(num_io_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+<<<<<<< HEAD
                             .build(&scan_worker_thread_pool));
     _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
     _scan_executor->initialize(num_io_threads);
+=======
+                            .build(&hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor =
+            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
+    _hdfs_scan_executor->initialize(hdfs_num_io_threads);
+>>>>>>> 79538d49c ([BugFix] fix #6782: make hdfs scan use individual WorkgroupOwner (#6864))
 
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
@@ -189,7 +202,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&wg_driver_executor_thread_pool));
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
+<<<<<<< HEAD
     _wg_driver_executor->initialize(max_thread_num);
+=======
+    _wg_driver_executor->initialize(_max_executor_threads);
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+>>>>>>> 79538d49c ([BugFix] fix #6782: make hdfs scan use individual WorkgroupOwner (#6864))
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -210,10 +228,38 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
     _result_mgr->init();
+<<<<<<< HEAD
     Status status = _load_path_mgr->init();
     if (!status.ok()) {
         LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
         exit(-1);
+=======
+    // it means acting as compute node while store_path is empty. some threads are not needed for that case.
+    if (!store_paths.empty()) {
+        int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                     ? std::thread::hardware_concurrency()
+                                     : config::pipeline_scan_thread_pool_thread_num;
+
+        _pipeline_scan_io_thread_pool =
+                new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                       num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+        std::unique_ptr<ThreadPool> scan_worker_thread_pool;
+        RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
+                                .set_min_threads(0)
+                                .set_max_threads(num_io_threads)
+                                .set_max_queue_size(1000)
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                .build(&scan_worker_thread_pool));
+        _scan_executor =
+                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
+        _scan_executor->initialize(num_io_threads);
+
+        Status status = _load_path_mgr->init();
+        if (!status.ok()) {
+            LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+            exit(-1);
+        }
+>>>>>>> 79538d49c ([BugFix] fix #6782: make hdfs scan use individual WorkgroupOwner (#6864))
     }
     _broker_mgr->init();
     _small_file_mgr->init();
@@ -295,7 +341,6 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     _init_storage_page_cache();
     return Status::OK();
 }

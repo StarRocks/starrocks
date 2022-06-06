@@ -388,7 +388,8 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeOlapScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }
