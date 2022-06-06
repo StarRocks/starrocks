@@ -29,8 +29,6 @@ import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -45,14 +43,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
@@ -63,7 +58,6 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -576,7 +570,8 @@ public class RoutineLoadManager implements Writable {
         // NOTE: we use the origin statement to get the RoutineLoadDesc
         RoutineLoadDesc routineLoadDesc = null;
         if (log.getOriginStatement() != null) {
-            routineLoadDesc = job.getLoadDesc(log.getOriginStatement(), job.getSessionVariables());
+            routineLoadDesc = CreateRoutineLoadStmt.getLoadDesc(
+                    log.getOriginStatement(), job.getSessionVariables());
         }
         job.modifyJob(routineLoadDesc, log.getJobProperties(),
                 log.getDataSourceProperties(), log.getOriginStatement(), true);

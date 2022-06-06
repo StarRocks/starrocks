@@ -27,12 +27,14 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
@@ -345,5 +347,143 @@ public class RoutineLoadJobTest {
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
+    }
+
+    @Test
+    public void testMergeLoadDescToOriginStatement() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        String originStmt = "CREATE ROUTINE LOAD job ON tbl " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
+
+        // alter columns terminator
+        RoutineLoadDesc loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "COLUMNS TERMINATED BY ';'", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';' " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter rows terminator
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "ROWS TERMINATED BY '\n'", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n' " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter columns
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "COLUMNS(`a`, `b`, `c`=1)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c` = 1) " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter partition
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c` = 1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`) " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter where
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "WHERE a = 1", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c` = 1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter columns terminator again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "COLUMNS TERMINATED BY '\t'", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`a`, `b`, `c` = 1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter rows terminator again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "ROWS TERMINATED BY 'a'", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`, `b`, `c` = 1), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter columns again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "COLUMNS(`a`)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`), " +
+                "TEMPORARY PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+        // alter partition again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        " PARTITION(`p1`, `p2`)", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`), " +
+                "PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter where again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "WHERE a = 5", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`), " +
+                "PARTITION(`p1`, `p2`), " +
+                "WHERE `a` = 5 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
     }
 }

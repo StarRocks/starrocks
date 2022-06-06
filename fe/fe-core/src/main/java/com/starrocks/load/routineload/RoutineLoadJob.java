@@ -1225,6 +1225,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         this.origStmt = origStmt;
     }
 
+    public OriginStatement getOrigStmt() {
+        return origStmt;
+    }
+
     // check the correctness of commit info
     protected abstract boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                                TransactionState txnState,
@@ -1495,7 +1499,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }
 
-        setRoutineLoadDesc(getLoadDesc(origStmt, sessionVariables));
+        setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
     }
 
     public void modifyJob(RoutineLoadDesc routineLoadDesc,
@@ -1525,14 +1529,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
-    private void mergeLoadDescToOriginStatement(RoutineLoadDesc routineLoadDesc) throws DdlException {
-        RoutineLoadDesc originLoadDesc = null;
-        try {
-            originLoadDesc = getLoadDesc(origStmt, sessionVariables);
-        } catch (IOException ioe) {
-            LOG.warn("get load desc from origStmt failed, origStmt: {}, stmtIndex: {}",
-                    origStmt.originStmt, origStmt.idx, ioe);
-            throw new DdlException("get load desc from origStmt failed");
+    public void mergeLoadDescToOriginStatement(RoutineLoadDesc routineLoadDesc) {
+        if (origStmt == null) {
+            return;
+        }
+
+        RoutineLoadDesc originLoadDesc = CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables);
+        if (originLoadDesc == null) {
+            originLoadDesc = new RoutineLoadDesc();
         }
         if (routineLoadDesc.getColumnSeparator() != null) {
             originLoadDesc.setColumnSeparator(routineLoadDesc.getColumnSeparator());
@@ -1551,7 +1555,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
-        String sql = "CREATE ROUTINE LOAD job " + originLoadDesc.toSql() + " FROM KAFKA () PROPERTIES ()";
+        String sql = "CREATE ROUTINE LOAD job ON tbl "
+                + originLoadDesc.toSql()
+                + " PROPERTIES (\"desired_concurrent_number\"=\"1\")"
+                + " FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatement(sql, 0);
     }
 
@@ -1578,7 +1586,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 throw new IOException("stmt is neither CreateRoutineLoadStmt nor AlterRoutineLoadStmt");
             }
         } catch (Exception e) {
-            throw new IOException("error happens when parsing create routine load stmt: " + origStmt, e);
+            LOG.warn("error happens when parsing create/alter routine load stmt: " + origStmt.originStmt, e);
+            return null;
         }
     }
 

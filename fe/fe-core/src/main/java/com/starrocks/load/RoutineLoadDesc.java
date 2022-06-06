@@ -28,7 +28,9 @@ import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RowDelimiter;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class RoutineLoadDesc {
     private ColumnSeparator columnSeparator;
@@ -37,6 +39,8 @@ public class RoutineLoadDesc {
     private ImportWhereStmt wherePredicate;
     // nullable
     private PartitionNames partitionNames;
+
+    public RoutineLoadDesc() {}
 
     public RoutineLoadDesc(ColumnSeparator columnSeparator, RowDelimiter rowDelimiter, ImportColumnsStmt columnsInfo,
                            ImportWhereStmt wherePredicate, PartitionNames partitionNames) {
@@ -89,30 +93,52 @@ public class RoutineLoadDesc {
     }
 
     public String toSql() {
-        StringBuilder sb = new StringBuilder();
+        List<String> subSQLs = new ArrayList<>();
         if (columnSeparator != null) {
-            sb.append("COLUMNS TERMINATED BY ").append(columnSeparator.toSql());
+            subSQLs.add("COLUMNS TERMINATED BY " + columnSeparator.toSql());
         }
         if (rowDelimiter != null) {
-            sb.append("ROWS TERMINATED BY ").append(rowDelimiter.toSql());
+            subSQLs.add("ROWS TERMINATED BY " + rowDelimiter.toSql());
         }
         if (columnsInfo != null) {
-            sb.append("COLUMNS (");
-            List<ImportColumnDesc> columns = columnsInfo.getColumns();
-            for (int i = 0; i < columns.size(); i++) {
-                sb.append(columns.get(i).toString());
-                if (i < columns.size() - 1) {
-                    sb.append(", ");
-                }
-            }
-            sb.append(")");
+            String subSQL = "COLUMNS(" +
+                    columnsInfo.getColumns().stream().map(this::columnToString)
+                            .collect(Collectors.joining(", ")) +
+                    ")";
+            subSQLs.add(subSQL);
         }
         if (partitionNames != null) {
-            sb.append(partitionNames.toSql());
+            String subSQL = null;
+            if (partitionNames.isTemp()) {
+                subSQL = "TEMPORARY PARTITION";
+            } else {
+                subSQL = "PARTITION";
+            }
+            subSQL += "(" + partitionNames.getPartitionNames().stream().map(this::pack)
+                    .collect(Collectors.joining(", "))
+                    + ")";
+            subSQLs.add(subSQL);
         }
         if (wherePredicate != null) {
-            sb.append("WHERE ").append(wherePredicate.getExpr().toSql());
+            subSQLs.add("WHERE " + wherePredicate.getExpr().toSql());
         }
-        return sb.toString();
+        return String.join(", ", subSQLs);
+    }
+
+    public String pack(String str) {
+        return "`" + str + "`";
+    }
+
+    public String columnToString(ImportColumnDesc desc) {
+        String str = pack(desc.getColumnName());
+        if (desc.getExpr() != null) {
+            str += " = " + desc.getExpr().toSql();
+        }
+        return str;
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 }
