@@ -23,7 +23,7 @@ public class WorkGroup implements Writable {
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
     public static final String SOURCE_IP = "source_ip";
-    public static final String DATABASES = "database";
+    public static final String DATABASES = "db";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";

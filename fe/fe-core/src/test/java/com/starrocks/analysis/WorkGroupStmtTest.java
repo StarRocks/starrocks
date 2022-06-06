@@ -101,7 +101,7 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg5Sql = "create resource group rg5\n" +
             "to\n" +
-            "     (`database`='db1')\n" +
+            "     (`db`='db1')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '25',\n" +
             "    'mem_limit' = '80%',\n" +
@@ -173,7 +173,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -418,7 +418,7 @@ public class WorkGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')\n" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
         Assert.assertEquals(result, expect);
@@ -473,7 +473,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
