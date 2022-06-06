@@ -1,17 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#pragma once
-
 #include "publish_version.h"
 
 #include <bvar/bvar.h>
 
+#include "fmt/format.h"
 #include "gutil/strings/join.h"
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "util/monotime.h"
+#include "storage/tablet_manager.h"
+#include "storage/txn_manager.h"
+#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -89,7 +91,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                               << " rowset:" << task.rowset->rowset_id();
                 }
-                task.version = tablet->max_continuous_version_from_beginning().second;
+                task.version = tablet->max_continuous_version();
             });
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
