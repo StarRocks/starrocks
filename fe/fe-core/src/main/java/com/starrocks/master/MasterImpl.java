@@ -127,7 +127,6 @@ import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -139,7 +138,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MasterImpl {
@@ -1252,28 +1250,6 @@ public class MasterImpl {
         return response;
     }
 
-    List<Long> getTableIdsFromCommitInfos(Database db, List<TabletCommitInfo> tabletCommitInfos) {
-        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        db.readLock();
-        try {
-            Set<Long> tableIdSets = Sets.newHashSet();
-            List<Long> tabletIds = tabletCommitInfos.stream().map(
-                    TabletCommitInfo::getTabletId).collect(Collectors.toList());
-            List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
-            for (int i = 0; i < tabletMetaList.size(); i++) {
-                TabletMeta tabletMeta = tabletMetaList.get(i);
-                if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                    continue;
-                }
-                long tableId = tabletMeta.getTableId();
-                tableIdSets.add(tableId);
-            }
-            return tableIdSets.stream().collect(Collectors.toList());
-        } finally {
-            db.readUnlock();
-        }
-    }
-
     public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
         TCommitRemoteTxnResponse response = new TCommitRemoteTxnResponse();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -1316,7 +1292,6 @@ public class MasterImpl {
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
             List<TabletCommitInfo> tabletCommitInfos = TabletCommitInfo.fromThrift(request.getCommit_infos());
-            List<Long> tableIdList = getTableIdsFromCommitInfos(db, tabletCommitInfos);
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),

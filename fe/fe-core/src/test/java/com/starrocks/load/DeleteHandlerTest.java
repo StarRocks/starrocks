@@ -23,6 +23,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.DeleteJob.DeleteState;
+import com.starrocks.load.lock.LockManager;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -46,11 +47,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -82,6 +78,8 @@ public class DeleteHandlerTest {
     @Mocked
     private AgentTaskExecutor executor;
 
+    private LockManager lockManager;
+
     private Database db;
     private Auth auth;
 
@@ -100,6 +98,7 @@ public class DeleteHandlerTest {
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
         analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        lockManager = new LockManager();
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -151,6 +150,10 @@ public class DeleteHandlerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
             }
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());

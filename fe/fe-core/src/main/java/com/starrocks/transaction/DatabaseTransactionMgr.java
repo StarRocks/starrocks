@@ -356,7 +356,6 @@ public class DatabaseTransactionMgr {
                 throw new LockException(stringBuilder.toString());
             }
             transactionState.setLocks(locks);
-            LOG.info("acquire locks size:{}", locks.size());
             unprotectUpsertTransactionState(transactionState, false);
 
             if (MetricRepo.isInit) {
