@@ -3,19 +3,25 @@
 package com.starrocks.load.lock;
 
 public class Lock {
-    private LockTarget lockTarget;
+    private Long[] pathIds;
     private LockMode lockMode;
+    private long lockContextId;
 
-    public Lock(LockTarget lockTarget, LockMode lockMode) {
-        this.lockTarget = lockTarget;
+    public Lock(Long[] pathIds, LockMode lockMode, long lockContextId) {
+        this.pathIds = pathIds;
         this.lockMode = lockMode;
-    }
-
-    public LockTarget getLockTarget() {
-        return lockTarget;
+        this.lockContextId = lockContextId;
     }
 
     public LockMode getLockMode() {
         return lockMode;
+    }
+
+    public Long[] getPathIds() {
+        return pathIds;
+    }
+
+    public long getLockContextId() {
+        return lockContextId;
     }
 }

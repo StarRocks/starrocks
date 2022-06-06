@@ -53,10 +53,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.lock.Lock;
+import com.starrocks.load.lock.LockContext;
 import com.starrocks.load.lock.LockException;
 import com.starrocks.load.lock.LockMode;
 import com.starrocks.load.lock.LockTarget;
-import com.starrocks.load.lock.LockTargetDesc;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -259,10 +259,10 @@ public class DatabaseTransactionMgr {
         info.add(txnState.getErrMsg());
     }
 
-    public List<LockTargetDesc> getLockTargetDesc(long dbId, List<Long> tableIds,
+    public List<LockTarget> getLockTargetDesc(long dbId, List<Long> tableIds,
                                                   Map<Long, List<Long>> tablePartitonIds,
-                                                  LockTarget.TargetContext targetContext) {
-        List<LockTargetDesc> lockTargetDescs = Lists.newArrayList();
+                                                  LockContext lockContext) {
+        List<LockTarget> lockTargets = Lists.newArrayList();
         for (long tableId : tableIds) {
             if (tablePartitonIds.containsKey(tableId)) {
                 List<Long> tablePartitionList = tablePartitonIds.get(tableId);
@@ -271,19 +271,18 @@ public class DatabaseTransactionMgr {
                     pathIds[0] = dbId;
                     pathIds[1] = tableId;
                     pathIds[2] = pid;
-                    LockTarget lockTarget = new LockTarget(pathIds, targetContext);
-
-                    lockTargetDescs.add(new LockTargetDesc(lockTarget, targetContext.getLockMode()));
+                    LockTarget lockTarget = new LockTarget(pathIds, lockContext);
+                    lockTargets.add(lockTarget);
                 }
             } else {
                 Long[] pathIds = new Long[2];
                 pathIds[0] = dbId;
                 pathIds[1] = tableId;
-                LockTarget lockTarget = new LockTarget(pathIds, targetContext);
-                lockTargetDescs.add(new LockTargetDesc(lockTarget, targetContext.getLockMode()));
+                LockTarget lockTarget = new LockTarget(pathIds, lockContext);
+                lockTargets.add(lockTarget);
             }
         }
-        return lockTargetDescs;
+        return lockTargets;
     }
 
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
@@ -343,10 +342,10 @@ public class DatabaseTransactionMgr {
                 transactionState.setOriginalTargetPartitions(partitionMap);
             }
             LockMode lockMode = isExclusive ? LockMode.EXCLUSIVE : LockMode.SHARED;
-            LockTarget.TargetContext targetContext = new LockTarget.TargetContext(tid, lockMode,
+            LockContext lockContext = new LockContext(tid, lockMode,
                     transactionState.getPrepareTime(), sourceType);
-            List<LockTargetDesc> lockTargetDescs = getLockTargetDesc(dbId, tableIdList, partitionMap, targetContext);
-            List<Lock> locks = globalStateMgr.getLockManager().tryLock(lockTargetDescs);
+            List<LockTarget> lockTargets = getLockTargetDesc(dbId, tableIdList, partitionMap, lockContext);
+            List<Lock> locks = globalStateMgr.getLockManager().tryLock(lockTargets);
             if (locks == null) {
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append("lock failed when load.");
@@ -1583,24 +1582,23 @@ public class DatabaseTransactionMgr {
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_OVERWRITE) {
                 // just process source types except INSERT_OVERWRITE
                 // because INSERT_OVERWRITE will failover
-                LockTarget.TargetContext targetContext = new LockTarget.TargetContext(transactionState.getTransactionId(),
+                LockContext lockContext = new LockContext(transactionState.getTransactionId(),
                         LockMode.SHARED, transactionState.getPrepareTime(), transactionState.getSourceType());
-                List<LockTargetDesc> lockTargetDescs =
+                List<LockTarget> LockTargets =
                         Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
                 for (long tableId : transactionState.getTableIdList()) {
                     Long[] pathIds = new Long[2];
                     pathIds[0] = transactionState.getDbId();
                     pathIds[1] = tableId;
-                    LockTarget lockTarget = new LockTarget(pathIds, targetContext);
-                    LockTargetDesc targetDesc = new LockTargetDesc(lockTarget, targetContext.getLockMode());
-                    lockTargetDescs.add(targetDesc);
+                    LockTarget lockTarget = new LockTarget(pathIds, lockContext);
+                    LockTargets.add(lockTarget);
                 }
-                List<Lock> locks = GlobalStateMgr.getCurrentState().getLockManager().tryLock(lockTargetDescs);
+                List<Lock> locks = GlobalStateMgr.getCurrentState().getLockManager().tryLock(LockTargets);
                 if (locks == null) {
                     // impossible to reach here, just add log
                     String msg = String.format("acquire locks failed for txnId:{}, lock targets:{}",
                             transactionState.getTransactionId(),
-                            lockTargetDescs.stream().map(desc -> desc.toString()).collect(Collectors.joining(",")));
+                            LockTargets.stream().map(target -> target.getName()).collect(Collectors.joining(",")));
                     LOG.warn(msg);
                     throw new LockException(msg);
                 }

@@ -67,6 +67,14 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
         children.clear();
     }
 
+    public boolean hasChildren() {
+        return !children.isEmpty();
+    }
+
+    public void reomveChild(NodeType n) {
+        children.remove(n);
+    }
+
     /**
      * Count the total number of nodes in this tree. Leaf node will return 1.
      * Non-leaf node will include all its children.

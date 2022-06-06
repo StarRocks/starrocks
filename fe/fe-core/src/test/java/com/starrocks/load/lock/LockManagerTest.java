@@ -20,128 +20,123 @@ public class LockManagerTest {
 
     @Test
     public void testDatabase() {
-        LockTarget lockTarget = new LockTarget();
-        Assert.assertEquals(null, lockTarget.getPathIds());
-        Assert.assertEquals(null, lockTarget.getTargetContext());
-
         Long[] pathIds = new Long[1];
         pathIds[0] = 10L;
 
-        LockTarget.TargetContext targetContext = new LockTarget.TargetContext(100L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget1 = new LockTarget(pathIds, targetContext);
-        Lock lock = lockManager.tryLock(lockTarget1, LockMode.SHARED);
+        LockContext lockContext = new LockContext(100L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget1 = new LockTarget(pathIds, lockContext);
+        Lock lock = lockManager.tryLock(lockTarget1);
         Assert.assertTrue(lock != null);
+        Assert.assertEquals(pathIds, lock.getPathIds());
+        Assert.assertEquals(100L, lock.getLockContextId());
+        Assert.assertEquals(LockMode.SHARED, lock.getLockMode());
 
-        LockTarget.TargetContext targetContextEx = new LockTarget.TargetContext(101L, LockMode.EXCLUSIVE,
+        LockContext lockContextEx = new LockContext(101L, LockMode.EXCLUSIVE,
                 System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget2 = new LockTarget(pathIds, targetContextEx);
-        Lock lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        LockTarget lockTarget2 = new LockTarget(pathIds, lockContextEx);
+        Lock lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 == null);
 
         lockManager.unlock(lock);
-        lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 != null);
+        Assert.assertEquals(pathIds, lock2.getPathIds());
+        Assert.assertEquals(101L, lock2.getLockContextId());
+        Assert.assertEquals(LockMode.EXCLUSIVE, lock2.getLockMode());
     }
 
     @Test
     public void testTable() {
-        LockTarget lockTarget = new LockTarget();
-        Assert.assertTrue(lockTarget.getPathIds() == null);
-        Assert.assertEquals(null, lockTarget.getTargetContext());
-
         Long[] pathIds = new Long[2];
         pathIds[0] = 10L;
         pathIds[1] = 11L;
 
-        LockTarget.TargetContext targetContext = new LockTarget.TargetContext(100L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget1 = new LockTarget(pathIds, targetContext);
-        Lock lock = lockManager.tryLock(lockTarget1, LockMode.SHARED);
+        LockContext lockContext = new LockContext(100L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget1 = new LockTarget(pathIds, lockContext);
+        Lock lock = lockManager.tryLock(lockTarget1);
         Assert.assertTrue(lock != null);
         Assert.assertEquals(LockMode.SHARED, lock.getLockMode());
 
-        LockTarget.TargetContext targetContextEx = new LockTarget.TargetContext(101L, LockMode.EXCLUSIVE,
+        LockContext lockContextEx = new LockContext(101L, LockMode.EXCLUSIVE,
                 System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget2 = new LockTarget(pathIds, targetContextEx);
-        Lock lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        LockTarget lockTarget2 = new LockTarget(pathIds, lockContextEx);
+        Lock lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 == null);
 
-        LockTarget.TargetContext targetContextShared = new LockTarget.TargetContext(102L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget3 = new LockTarget(pathIds, targetContextShared);
-        Lock lock3 = lockManager.tryLock(lockTarget3, LockMode.SHARED);
+        LockContext lockContextShared = new LockContext(102L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget3 = new LockTarget(pathIds, lockContextShared);
+        Lock lock3 = lockManager.tryLock(lockTarget3);
         Assert.assertTrue(lock3 != null);
         Assert.assertEquals(LockMode.SHARED, lock3.getLockMode());
 
         List<Lock> locks = Lists.newArrayList();
         for (int i = 0; i < 10; i++) {
-            LockTarget.TargetContext targetContextTmp = new LockTarget.TargetContext(1000L + i, LockMode.SHARED,
-                    System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-            LockTarget lockTargetTmp = new LockTarget(pathIds, targetContextTmp);
-            Lock lockTmp = lockManager.tryLock(lockTargetTmp, LockMode.SHARED);
+            LockContext lockContextTmp = new LockContext(1000L + i, LockMode.SHARED,
+                    System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+            LockTarget lockTargetTmp = new LockTarget(pathIds, lockContextTmp);
+            Lock lockTmp = lockManager.tryLock(lockTargetTmp);
             Assert.assertTrue(lockTmp != null);
             Assert.assertEquals(LockMode.SHARED, lockTmp.getLockMode());
             locks.add(lockTmp);
         }
         lockManager.unlock(locks);
 
-        List<LockTargetDesc> targetDescs = Lists.newArrayList();
+        List<LockTarget> targets = Lists.newArrayList();
         for (int i = 0; i < 10; i++) {
-            LockTarget.TargetContext targetContextTmp = new LockTarget.TargetContext(1000L + i, LockMode.SHARED,
-                    System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-            LockTarget lockTargetTmp = new LockTarget(pathIds, targetContextTmp);
-            LockTargetDesc targetDesc = new LockTargetDesc(lockTargetTmp, LockMode.SHARED);
-            targetDescs.add(targetDesc);
+            LockContext lockContextTmp = new LockContext(1000L + i, LockMode.SHARED,
+                    System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+            LockTarget lockTargetTmp = new LockTarget(pathIds, lockContextTmp);
+            targets.add(lockTargetTmp);
         }
-        List<Lock> batchLocks = lockManager.tryLock(targetDescs);
+        List<Lock> batchLocks = lockManager.tryLock(targets);
         Assert.assertTrue(batchLocks != null);
         Assert.assertEquals(10, batchLocks.size());
         lockManager.unlock(batchLocks);
 
-        List<LockTargetDesc> targetDescs2 = Lists.newArrayList();
+        List<LockTarget> target2 = Lists.newArrayList();
         for (int i = 0; i < 10; i++) {
             Long[] pathIdsTmp = new Long[2];
             pathIdsTmp[0] = 10000L;
             pathIdsTmp[1] = Long.valueOf(10 - i);
             if (i < 5) {
-                LockTarget.TargetContext targetContextTmp = new LockTarget.TargetContext(1000L + i, LockMode.SHARED,
-                        System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-                LockTarget lockTargetTmp = new LockTarget(pathIdsTmp, targetContextTmp);
-                LockTargetDesc targetDesc = new LockTargetDesc(lockTargetTmp, LockMode.SHARED);
-                targetDescs2.add(targetDesc);
+                LockContext lockContextTmp = new LockContext(1000L + i, LockMode.SHARED,
+                        System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+                LockTarget lockTargetTmp = new LockTarget(pathIdsTmp, lockContextTmp);
+                target2.add(lockTargetTmp);
             } else {
-                LockTarget.TargetContext targetContextTmp = new LockTarget.TargetContext(1000L + i, LockMode.EXCLUSIVE,
+                LockContext lockContextTmp = new LockContext(1000L + i, LockMode.EXCLUSIVE,
                         System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-                LockTarget lockTargetTmp = new LockTarget(pathIdsTmp, targetContextTmp);
-                LockTargetDesc targetDesc = new LockTargetDesc(lockTargetTmp, LockMode.EXCLUSIVE);
-                targetDescs2.add(targetDesc);
+                LockTarget lockTargetTmp = new LockTarget(pathIdsTmp, lockContextTmp);
+                target2.add(lockTargetTmp);
             }
         }
         // locks will be sorted
-        List<Lock> batchLocks2 = lockManager.tryLock(targetDescs2);
+        List<Lock> batchLocks2 = lockManager.tryLock(target2);
         Assert.assertTrue(batchLocks2 != null);
         Assert.assertEquals(10, batchLocks2.size());
         Assert.assertEquals(LockMode.EXCLUSIVE, batchLocks2.get(0).getLockMode());
         Lock tmpLock = batchLocks2.get(0);
-        long tableId = tmpLock.getLockTarget().getPathIds()[1];
+        long tableId = tmpLock.getPathIds()[1];
         Assert.assertEquals(1L, tableId);
         Assert.assertEquals(LockMode.SHARED, batchLocks2.get(5).getLockMode());
         lockManager.unlock(batchLocks2);
 
         lockManager.unlock(lock);
-        lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 == null);
         lockManager.unlock(lock3);
-        lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 != null);
 
-        lock = lockManager.tryLock(lockTarget1, LockMode.SHARED);
+        lock = lockManager.tryLock(lockTarget1);
         Assert.assertTrue(lock == null);
 
         lockManager.unlock(lock2);
 
-        lock = lockManager.tryLock(lockTarget1, LockMode.SHARED);
+        lock = lockManager.tryLock(lockTarget1);
         Assert.assertTrue(lock != null);
     }
 
@@ -152,43 +147,48 @@ public class LockManagerTest {
         pathIds[1] = 11L;
         pathIds[2] = 12L;
 
-        LockTarget.TargetContext targetContext = new LockTarget.TargetContext(100L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget1 = new LockTarget(pathIds, targetContext);
-        Lock lock = lockManager.tryLock(lockTarget1, LockMode.SHARED);
+        LockContext lockContext = new LockContext(100L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget1 = new LockTarget(pathIds, lockContext);
+        Lock lock = lockManager.tryLock(lockTarget1);
         Assert.assertTrue(lock != null);
 
         Long[] pathIds2 = new Long[2];
         pathIds2[0] = 10L;
         pathIds2[1] = 11L;
-        LockTarget.TargetContext targetContext2 = new LockTarget.TargetContext(100L, LockMode.EXCLUSIVE,
+        LockContext lockContext2 = new LockContext(101L, LockMode.EXCLUSIVE,
                 System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget2 = new LockTarget(pathIds2, targetContext2);
-        Lock lock2 = lockManager.tryLock(lockTarget2, LockMode.EXCLUSIVE);
+        LockTarget lockTarget2 = new LockTarget(pathIds2, lockContext2);
+        Lock lock2 = lockManager.tryLock(lockTarget2);
         Assert.assertTrue(lock2 == null);
 
-        LockTarget.TargetContext targetContext5 = new LockTarget.TargetContext(100L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget5 = new LockTarget(pathIds2, targetContext5);
-        Lock lock5 = lockManager.tryLock(lockTarget5, LockMode.SHARED);
+        LockContext lockContext5 = new LockContext(102L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget5 = new LockTarget(pathIds2, lockContext5);
+        Lock lock5 = lockManager.tryLock(lockTarget5);
         Assert.assertTrue(lock5 != null);
 
         lockManager.unlock(lock);
 
-        LockTarget.TargetContext targetContext3 = new LockTarget.TargetContext(100L, LockMode.EXCLUSIVE,
+        LockContext lockContext3 = new LockContext(103L, LockMode.EXCLUSIVE,
                 System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget3 = new LockTarget(pathIds, targetContext3);
-        Lock lock3 = lockManager.tryLock(lockTarget3, LockMode.EXCLUSIVE);
+        LockTarget lockTarget3 = new LockTarget(pathIds, lockContext3);
+        // parent has locks, the request to child for exclusive lock will fail.
+        Lock lock3 = lockManager.tryLock(lockTarget3);
+        Assert.assertTrue(lock3 == null);
+
+        lockManager.unlock(lock5);
+        lock3 = lockManager.tryLock(lockTarget3);
         Assert.assertTrue(lock3 != null);
 
-
-        LockTarget.TargetContext targetContext4 = new LockTarget.TargetContext(100L, LockMode.SHARED,
-                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_OVERWRITE);
-        LockTarget lockTarget4 = new LockTarget(pathIds2, targetContext4);
-        Lock lock4 = lockManager.tryLock(lockTarget4, LockMode.SHARED);
+        LockContext lockContext4 = new LockContext(104L, LockMode.SHARED,
+                System.currentTimeMillis(), TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        LockTarget lockTarget4 = new LockTarget(pathIds2, lockContext4);
+        // the child has been exclusive locked.
+        Lock lock4 = lockManager.tryLock(lockTarget4);
         Assert.assertTrue(lock4 == null);
         lockManager.unlock(lock3);
-        lock4 = lockManager.tryLock(lockTarget4, LockMode.SHARED);
+        lock4 = lockManager.tryLock(lockTarget4);
         Assert.assertTrue(lock4 != null);
     }
 }
