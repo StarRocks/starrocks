@@ -34,7 +34,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
-import com.starrocks.planner.CrossJoinNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.EmptySetNode;
@@ -52,6 +51,7 @@ import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
+import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
@@ -101,6 +101,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -1639,9 +1640,15 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
+
+        public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
+        }
+
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
                                                OptExpression optExpr, ExecPlan context) {
-
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
@@ -1653,12 +1660,13 @@ public class PlanFragmentBuilder {
                     rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
 
+                /*
             if (node.getJoinType().isCrossJoin() ||
-                    (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
-                CrossJoinNode joinNode = new CrossJoinNode(context.getNextNodeId(),
+                (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
+                NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                         leftFragment.getPlanRoot(),
                         rightFragment.getPlanRoot(),
-                        null);
+                        null, node.getJoinType(), Utils.extractConjuncts(node.getOnPredicate()));
 
                 joinNode.setLimit(node.getLimit());
                 joinNode.computeStatistics(optExpr.getStatistics());
@@ -1699,7 +1707,8 @@ public class PlanFragmentBuilder {
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
-            } else {
+                 */
+            {
                 JoinOperator joinOperator = node.getJoinType();
 
                 PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
@@ -1796,6 +1805,11 @@ public class PlanFragmentBuilder {
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                             joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+                } else if (node instanceof PhysicalNestLoopJoinOperator) {
+                    joinNode = new NestLoopJoinNode(
+                            context.getNextNodeId(),
+                            leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
+                            joinOperator, conjuncts);
                 } else {
                     joinNode = new MergeJoinNode(
                             context.getNextNodeId(),

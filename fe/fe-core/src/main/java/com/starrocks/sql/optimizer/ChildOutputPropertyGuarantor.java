@@ -244,6 +244,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return visitPhysicalJoin(node, context);
     }
 
+//    @Override
+//    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
+//        return visitPhysicalJoin(node, context);
+//    }
+
     public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
 

@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -387,6 +388,11 @@ public class OptimizerTraceUtil {
         @Override
         public String visitPhysicalHashJoin(PhysicalHashJoinOperator node, Void context) {
             return super.visitPhysicalHashJoin(node, context);
+        }
+
+        @Override
+        public String visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, Void context) {
+            return node.toString();
         }
 
         @Override

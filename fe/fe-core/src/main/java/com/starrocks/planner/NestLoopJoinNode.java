@@ -21,25 +21,20 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TCrossJoinNode;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,8 +43,8 @@ import java.util.List;
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
-public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
-    private static final Logger LOG = LogManager.getLogger(CrossJoinNode.class);
+public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode {
+    private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
     // Default per-host memory requirement used if no valid stats are available.
     // TODO: Come up with a more useful heuristic (e.g., based on scanned partitions).
@@ -66,8 +61,10 @@ public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
         buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
-    public CrossJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef) {
-        super(id, "CROSS JOIN");
+    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
+                            JoinOperator joinOp,
+                            List<Expr> joinConjuncts) {
+        super("NESTLOOP JOIN", id, outer, inner, joinOp, Lists.newArrayList(), joinConjuncts);
         innerRef_ = innerRef;
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
@@ -85,59 +82,14 @@ public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
-        if (getChild(0).cardinality == -1 || getChild(1).cardinality == -1) {
-            cardinality = -1;
-        } else {
-            cardinality = getChild(0).cardinality * getChild(1).cardinality;
-            if (computeSelectivity() != -1) {
-                cardinality = Math.round(((double) cardinality) * computeSelectivity());
-            }
-        }
-        if (cardinality < -1) {
-            cardinality = Long.MAX_VALUE;
-        }
-        LOG.debug("stats CrossJoin: cardinality={}", Long.toString(cardinality));
-    }
-
-    @Override
-    protected String debugString() {
-        return MoreObjects.toStringHelper(this).addValue(super.debugString()).toString();
-    }
-
-    @Override
     protected void toThrift(TPlanNode msg) {
+        // TODO(mofei) change to nestloop join
         msg.node_type = TPlanNodeType.CROSS_JOIN_NODE;
         msg.cross_join_node = new TCrossJoinNode();
         if (!buildRuntimeFilters.isEmpty()) {
             msg.cross_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
-    }
-
-    @Override
-    protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
-        StringBuilder output = new StringBuilder().append(detailPrefix).append("cross join:").append("\n");
-        if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("predicates: ").append(getExplainString(conjuncts) + "\n");
-        } else {
-            output.append(detailPrefix).append("predicates is NULL.\n");
-        }
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        String explain = super.getNodeVerboseExplain(detailPrefix);
-        StringBuilder output = new StringBuilder(explain);
-        if (!buildRuntimeFilters.isEmpty()) {
-            output.append(detailPrefix).append("build runtime filters:\n");
-            for (RuntimeFilterDescription rf : buildRuntimeFilters) {
-                output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
-            }
-        }
-        return output.toString();
     }
 
     @Override
@@ -179,13 +131,4 @@ public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
         }
     }
 
-    @Override
-    public int getNumInstances() {
-        return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
-    }
 }

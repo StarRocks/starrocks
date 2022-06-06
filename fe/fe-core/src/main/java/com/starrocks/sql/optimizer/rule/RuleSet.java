@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
@@ -333,9 +334,14 @@ public class RuleSet {
         this.implementRules.add(MergeJoinImplementationRule.getInstance());
     }
 
+    public void addNestLoopJoinImplementationRule() {
+        this.implementRules.add(NestLoopJoinImplementationRule.getInstance());
+    }
+
     public void addAutoJoinImplementationRule() {
         this.implementRules.add(HashJoinImplementationRule.getInstance());
         this.implementRules.add(MergeJoinImplementationRule.getInstance());
+        this.implementRules.add(NestLoopJoinImplementationRule.getInstance());
     }
 
 }
