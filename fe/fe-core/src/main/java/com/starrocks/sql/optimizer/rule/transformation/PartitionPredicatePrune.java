@@ -90,7 +90,7 @@ public class PartitionPredicatePrune extends TransformationRule {
             }
 
             predicateRangeMap.clear();
-            ColumnFilterConverter.convertColumnFilter(predicate, predicateRangeMap);
+            ColumnFilterConverter.convertColumnFilter(predicate, predicateRangeMap, table);
 
             if (predicateRangeMap.isEmpty()) {
                 continue;
