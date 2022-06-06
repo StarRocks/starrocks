@@ -37,7 +37,7 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
             db_params.__set_user_ip(*(_param->user_ip));
         }
     }
-
+    db_params.__set_filter_type("TASK");
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
     } else {

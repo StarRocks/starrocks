@@ -155,6 +155,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -209,6 +210,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             dbs.add(fullName);
+        }
+        if (params.isSetFilter_type()) {
+            if ("TASK".equals(params.filter_type)) {
+                Set<String> taskDbs = GlobalStateMgr.getCurrentState().getTaskManager().listTaskDb();
+                dbs = dbs.stream().filter(taskDbs::contains).collect(Collectors.toList());
+            } else if ("TASK_RUN".equals(params.filter_type)) {
+                Set<String> taskDbs = GlobalStateMgr.getCurrentState().getTaskManager().listTaskRunDb();
+                dbs = dbs.stream().filter(taskDbs::contains).collect(Collectors.toList());
+            }
         }
         result.setDbs(dbs);
         return result;
