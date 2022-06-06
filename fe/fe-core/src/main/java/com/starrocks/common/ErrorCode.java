@@ -257,7 +257,7 @@ public enum ErrorCode {
             "set config failed: %s"),
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
             "Query cancelled by crash of backends."),
-    ERROR_NO_WG_ERROR(5077, new byte[] {'4', '2', '0', '0', '0'},
+    ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown workgroup '%s' ");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
