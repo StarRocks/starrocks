@@ -281,4 +281,9 @@ public class BDBHA implements HAProtocol {
             }
         }
     }
+
+    public synchronized void updateFrontendHostAndPort(String nodeName, String newHostName, int newPort) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        replicationGroupAdmin.updateAddress(nodeName, newHostName, newPort);
+    }
 }
