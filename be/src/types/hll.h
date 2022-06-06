@@ -32,23 +32,12 @@
 #include "gutil/macros.h"
 #include "runtime/memory/chunk.h"
 #include "runtime/memory/chunk_allocator.h"
+#include "types/constexpr.h"
 #include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
 class Slice;
-
-const static int HLL_COLUMN_PRECISION = 14;
-const static int HLL_ZERO_COUNT_BITS = (64 - HLL_COLUMN_PRECISION);
-const static int HLL_EXPLICLIT_INT64_NUM = 160;
-const static int HLL_SPARSE_THRESHOLD = 4096;
-const static int HLL_REGISTERS_COUNT = 16 * 1024;
-// maximum size in byte of serialized HLL: type(1) + registers (2^14)
-const static int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;
-
-// 1 for type; 1 for hash values count; 8 for hash value
-const static int HLL_SINGLE_VALUE_SIZE = 10;
-const static int HLL_EMPTY_SIZE = 1;
 
 // Hyperloglog distinct estimate algorithm.
 // See these papers for more details.
