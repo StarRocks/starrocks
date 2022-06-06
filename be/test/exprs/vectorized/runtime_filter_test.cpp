@@ -414,32 +414,55 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
         ASSERT_EQ(true_count, true_count2);
     }
     {
-        auto negative_column = gen_random_binary_column(alphabet1, 100, num_rows);
-        running_ctx.selection.assign(num_rows, 1);
+        size_t negative_num_rows = 100;
+        auto negative_column = gen_random_binary_column(alphabet1, 100, negative_num_rows);
+        running_ctx.selection.assign(negative_num_rows, 1);
         auto true_count = grf.evaluate(negative_column.get(), &running_ctx);
-        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
-        ASSERT_LE((double)true_count / num_rows, 0.5);
+        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), negative_num_rows);
+        ASSERT_LE((double)true_count / negative_num_rows, 0.5);
         ASSERT_EQ(true_count, true_count2);
     }
 }
-void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
-                              std::vector<int> bucketseq_to_partition) {
+void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
+                                                std::vector<int> bucketseq_to_partition,
+                                                TRuntimeFilterBuildJoinMode::type mode) {
     auto part_by_func = [num_rows, num_partitions, num_buckets, &bucketseq_to_partition](
                                 BinaryColumn* column, std::vector<uint32_t>& hash_values,
                                 std::vector<size_t>& num_rows_per_partitions) {
         hash_values.assign(num_rows, 0);
         column->crc32_hash(hash_values.data(), 0, num_rows);
+        std::vector<size_t> num_rows_per_bucket(num_buckets, 0);
         for (auto i = 0; i < num_rows; ++i) {
             hash_values[i] %= num_buckets;
+            ++num_rows_per_bucket[hash_values[i]];
             hash_values[i] = bucketseq_to_partition[hash_values[i]];
             ++num_rows_per_partitions[hash_values[i]];
         }
+        static constexpr uint32_t BUCKET_ABSENT = 2147483647;
+        for (auto b = 0; b < num_buckets; ++b) {
+            if (num_rows_per_bucket[b] == 0) {
+                bucketseq_to_partition[b] = BUCKET_ABSENT;
+            }
+        }
     };
-    auto grf_config_func = [&bucketseq_to_partition](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
-        grf->set_join_mode(TRuntimeFilterBuildJoinMode::COLOCATE);
+    auto grf_config_func = [&bucketseq_to_partition, &mode](JoinRuntimeFilter* grf,
+                                                            JoinRuntimeFilter::RunningContext* ctx) {
+        grf->set_join_mode(mode);
         ctx->bucketseq_to_partition = &bucketseq_to_partition;
     };
     test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func);
+}
+
+void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
+                              std::vector<int> bucketseq_to_partition) {
+    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, bucketseq_to_partition,
+                                               TRuntimeFilterBuildJoinMode::COLOCATE);
+}
+
+void test_bucket_shuffle_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
+                                    std::vector<int> bucketseq_to_partition) {
+    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, bucketseq_to_partition,
+                                               TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET);
 }
 
 TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter1) {
@@ -452,6 +475,14 @@ TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter2) {
 
 TEST_F(RuntimeFilterTest, TestColocateRuntimeFilter3) {
     test_colocate_grf_helper(100, 1, 7, {0, 0, 0, 0, 0, 0, 0});
+}
+
+TEST_F(RuntimeFilterTest, TestColocateRuntimeFilterWithBucketAbsent1) {
+    test_colocate_grf_helper(3, 1, 7, {0, 0, 0, 0, 0, 0, 0});
+}
+
+TEST_F(RuntimeFilterTest, TestColocateRuntimeFilterWithBucketAbsent2) {
+    test_colocate_grf_helper(3, 3, 4, {0, 1, 2, 0});
 }
 
 void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions,
@@ -516,15 +547,23 @@ void test_local_hash_bucket_grf_helper(size_t num_rows, size_t num_partitions) {
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter1) {
-    test_local_hash_bucket_grf_helper(100, 1);
+    test_bucket_shuffle_grf_helper(100, 3, 6, {1, 1, 0, 0, 2, 2});
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter2) {
-    test_local_hash_bucket_grf_helper(100, 3);
+    test_bucket_shuffle_grf_helper(100, 3, 7, {0, 1, 2, 0, 1, 2, 1});
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter3) {
-    test_local_hash_bucket_grf_helper(100, 5);
+    test_bucket_shuffle_grf_helper(100, 1, 7, {0, 0, 0, 0, 0, 0, 0});
+}
+
+TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilterWithBucketAbsent1) {
+    test_bucket_shuffle_grf_helper(3, 1, 7, {0, 0, 0, 0, 0, 0, 0});
+}
+
+TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilterWithBucketAbsent2) {
+    test_bucket_shuffle_grf_helper(3, 3, 4, {0, 1, 2, 0});
 }
 
 } // namespace vectorized

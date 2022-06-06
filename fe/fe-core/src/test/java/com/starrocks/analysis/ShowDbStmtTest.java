@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
@@ -30,7 +31,9 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
@@ -112,7 +115,7 @@ public class ShowDbStmtTest {
         };
 
         ctx.setConnectScheduler(scheduler);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
         ctx.setCluster("testCluster");
 
@@ -152,4 +155,12 @@ public class ShowDbStmtTest {
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
     }
+
+    @Test
+    public void testShowSchemas() throws Exception {
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+        String showSQL = "show schemas";
+        ShowDbStmt showDbStmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
+    }
+
 }

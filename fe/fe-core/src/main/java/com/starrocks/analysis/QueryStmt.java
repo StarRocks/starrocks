@@ -119,40 +119,6 @@ public abstract class QueryStmt extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
-    /**
-     * If the query stmt belongs to CreateMaterializedViewStmt,
-     * such as
-     * `CREATE MATERIALIZED VIEW mv AS SELECT bitmap_union(to_bitmap(k1)) from table`
-     * query stmt will not be rewrite by MVRewriter.
-     * The `bitmap_union(to_bitmap(k1))` is the definition of the mv column rather then a expr.
-     * So `forbiddenMVRewrite` will be set to true to protect the definition of the mv column from being overwritten.
-     * <p>
-     * In other query case, `forbiddenMVRewrite` is always false.
-     */
-    private boolean forbiddenMVRewrite = false;
-
-    /**
-     * If the tuple id in `disableMVRewriteTupleIds`, the expr which belongs to this tuple will not be MVRewritten.
-     * Initially this set is an empty set.
-     * When the scan node is unable to match any index in selecting the materialized view,
-     * the tuple is added to this set.
-     * The query will be re-executed, and this tuple will not be mv rewritten.
-     * For example:
-     * TableA: (k1 int, k2 int, k3 int)
-     * MV: (k1 int, mv_bitmap_union_k2 bitmap bitmap_union)
-     * Query: select k3, bitmap_union(to_bitmap(k2)) from TableA
-     * First analyze: MV rewriter enable and this set is empty
-     * select k3, bitmap_union(mv_bitmap_union_k2) from TableA
-     * SingleNodePlanner: could not select any index for TableA
-     * Add table to disableMVRewriteTupleIds.
-     * `disableMVRewriteTupleIds` = {TableA}
-     * Re-executed:
-     * Second analyze: MV rewrite disable in table and use origin stmt.
-     * select k3, bitmap_union(to_bitmap(k2)) from TableA
-     * SingleNodePlanner: base index selected
-     */
-    private Set<TupleId> disableTuplesMVRewriter = Sets.newHashSet();
-
     QueryStmt(ArrayList<OrderByElement> orderByElements, LimitElement limitElement) {
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -500,10 +466,6 @@ public abstract class QueryStmt extends StatementBase {
         return limitElement;
     }
 
-    public SortInfo getSortInfo() {
-        return sortInfo;
-    }
-
     public ArrayList<Expr> getResultExprs() {
         return resultExprs;
     }
@@ -514,10 +476,6 @@ public abstract class QueryStmt extends StatementBase {
      */
     public void substituteResultExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
         resultExprs = Expr.substituteList(resultExprs, smap, analyzer, true);
-    }
-
-    public void forbiddenMVRewrite() {
-        this.forbiddenMVRewrite = true;
     }
 
     /**
@@ -625,10 +583,6 @@ public abstract class QueryStmt extends StatementBase {
 
     public void setOutFileClause(OutFileClause outFileClause) {
         this.outFileClause = outFileClause;
-    }
-
-    public OutFileClause getOutFileClause() {
-        return outFileClause;
     }
 
     public boolean hasOutFileClause() {

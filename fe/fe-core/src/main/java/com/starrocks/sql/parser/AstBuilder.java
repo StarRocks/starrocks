@@ -67,6 +67,8 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
@@ -81,7 +83,6 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -116,7 +117,6 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -143,6 +143,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -161,6 +162,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.parser.StarRocksParser.ModifyBackendHostClauseContext;
+import com.starrocks.sql.parser.StarRocksParser.ModifyFrontendHostClauseContext;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -339,6 +342,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowTableStatusStmt(dbName == null ? null : dbName.toString(), pattern, where);
     }
 
+    @Override
+    public ParseNode visitRefreshTableStatement(StarRocksParser.RefreshTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<String> partitionNames = null;
+        if (context.string() != null) {
+            partitionNames = context.string().stream()
+                    .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        }
+        return new RefreshTableStmt(targetTableName, partitionNames);
+    }
+
     // ------------------------------------------- View Statement ------------------------------------------------------
 
     @Override
@@ -419,9 +434,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateMaterializedViewStatement(
             StarRocksParser.CreateMaterializedViewStatementContext context) {
-        if (!Config.enable_experimental_mv) {
-            throw new ParsingException("The experimental mv is disabled");
-        }
         boolean ifNotExist = context.IF() != null;
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
@@ -452,13 +464,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new IllegalArgumentException(
                         "Distribution by is not supported by SYNC refresh type in materialized view");
             }
-            String sql = AST2SQL.toString(queryStatement);
-            StatementBase statement = SqlParser.parseWithOldParser(sql, sqlMode, 0);
-            if (!(statement instanceof SelectStmt)) {
-                throw new IllegalArgumentException("Materialized view query statement only support select");
-            }
-            // old mv stmt dbname form base table
-            return new CreateMaterializedViewStmt(tableName.getTbl(), (SelectStmt) statement, properties);
+            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+        }
+        if (!Config.enable_experimental_mv) {
+            throw new ParsingException("The experimental mv is disabled");
         }
         // process partition
         ExpressionPartitionDesc expressionPartitionDesc = null;
@@ -608,6 +617,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitModifyBackendHostClause(ModifyBackendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1));
+    }
+
+    @Override
     public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         if (context.FOLLOWER() != null) {
@@ -631,6 +647,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
+    }
+
+    @Override
+    public ParseNode visitModifyFrontendHostClause(ModifyFrontendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------

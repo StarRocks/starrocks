@@ -1,4 +1,3 @@
-
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -10,12 +9,12 @@
 #include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
-#include "runtime/date_value.hpp"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
+#include "types/date_value.hpp"
 
 namespace starrocks {
 namespace vectorized {

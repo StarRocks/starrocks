@@ -4,13 +4,12 @@
 
 #include <memory>
 
-#include "storage/tablet_schema.h"
+#include "gen_cpp/starlake.pb.h"
 
 namespace starrocks::lake {
 
-// TODO:
-class TabletMetadata {
-public:
-};
+using TabletMetadata = TabletMetadataPB;
+using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
+using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
 } // namespace starrocks::lake

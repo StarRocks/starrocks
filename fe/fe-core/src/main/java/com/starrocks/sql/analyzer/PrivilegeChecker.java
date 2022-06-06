@@ -32,6 +32,8 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Map;
 
@@ -275,6 +277,21 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
+            TableName tableName = statement.getTableName();
+            MetaUtils.normalizationTableName(context, tableName);
+            if (!checkTblPriv(ConnectContext.get(), tableName.getCatalog(),
+                    tableName.getDb(), tableName.getTbl(), PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                        "REFRESH EXTERNAL TABLE",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tableName.getTbl());
             }
             return null;
         }

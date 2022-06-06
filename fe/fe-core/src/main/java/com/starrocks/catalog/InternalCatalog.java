@@ -2,15 +2,13 @@
 
 package com.starrocks.catalog;
 
+import java.util.Map;
+
 public class InternalCatalog extends Catalog {
-    public static final String DEFAULT_INTERNAL_CATALOG_NAME = "default";
+    public static final String DEFAULT_INTERNAL_CATALOG_NAME = "default_catalog";
 
-    public InternalCatalog() {
-        super(DEFAULT_INTERNAL_CATALOG_NAME, "");
-    }
-
-    public InternalCatalog(String comment) {
-        super(DEFAULT_INTERNAL_CATALOG_NAME, comment);
+    public InternalCatalog(String name, Map<String, String> config, String comment) {
+        super(DEFAULT_INTERNAL_CATALOG_NAME, config, comment);
     }
 
 }

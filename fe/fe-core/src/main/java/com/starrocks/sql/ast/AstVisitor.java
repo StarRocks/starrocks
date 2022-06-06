@@ -22,6 +22,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -45,6 +46,8 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
@@ -146,8 +149,16 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
+    }
+
+    public R visitRefreshTableStatement(RefreshTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
@@ -248,6 +259,14 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
         return visitNode(clause, context);
     }
 

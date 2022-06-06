@@ -67,6 +67,7 @@ public:
     Status write(const std::vector<RowSourceMask>& source_masks);
     StatusOr<bool> has_remaining();
     bool has_same_source(uint16_t source, size_t count) const;
+    size_t max_same_source_count(uint16_t source, size_t upper_bound) const;
 
     RowSourceMask current() const { return RowSourceMask(_mask_column->get(_current_index).get_uint16()); }
     void advance() { ++_current_index; }

@@ -102,12 +102,14 @@ public class StarRocksFE {
 
             LOG.info("StarRocks FE starting...");
 
-            FrontendOptions.init();
+            FrontendOptions.init(args);
             ExecuteEnv.setup();
 
             // init globalStateMgr and wait it be ready
             GlobalStateMgr.getCurrentState().initialize(args);
             GlobalStateMgr.getCurrentState().waitForReady();
+
+            FrontendOptions.saveStartType();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -163,6 +165,7 @@ public class StarRocksFE {
     private static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
+        options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");

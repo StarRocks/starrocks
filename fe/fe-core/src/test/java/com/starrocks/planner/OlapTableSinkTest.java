@@ -41,10 +41,10 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.StarOSAgent;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -194,8 +194,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithStarOSTablet(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent,
-                                                   @Mocked SystemInfoService systemInfoService) {
+    public void testCreateLocationWithLakeTablet(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent,
+                                                 @Mocked SystemInfoService systemInfoService) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -212,8 +212,8 @@ public class OlapTableSinkTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
-        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+        Tablet tablet1 = new LakeTablet(tablet1Id, 0L);
+        Tablet tablet2 = new LakeTablet(tablet2Id, 1L);
 
         // Partition info and distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));

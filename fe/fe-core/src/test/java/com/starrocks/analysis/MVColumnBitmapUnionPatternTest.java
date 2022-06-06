@@ -140,12 +140,6 @@ public class MVColumnBitmapUnionPatternTest {
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         slotRef1.setType(Type.BITMAP);
         slotRef1.setDesc(desc);
-        new Expectations() {
-            {
-                desc.getColumn();
-                result = column;
-            }
-        };
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         Assert.assertTrue(pattern.match(expr));
     }

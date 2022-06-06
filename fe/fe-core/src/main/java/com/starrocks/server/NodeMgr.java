@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -513,6 +514,11 @@ public class NodeMgr {
                     System.exit(-1);
                 }
                 helpers = args[i + 1];
+                if (!helpers.contains(":")) {
+                    System.out.print("helper's format seems was wrong [" + helpers + "]");
+                    System.out.println(", eg. host:port,host:port");
+                    System.exit(-1);
+                }
                 break;
             }
         }
@@ -671,6 +677,35 @@ public class NodeMgr {
             unlock();
         }
     }
+    
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException { 
+        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
+        String fqdn = modifyFrontendAddressClause.getDestHost();
+        if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.MASTER) {
+            throw new DdlException("can not modify current master node.");
+        }
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            Frontend preUpdateFe = getFeByHost(toBeModifyHost);
+            if (preUpdateFe == null) {
+                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
+            }
+            // step 1 update the fe information stored in bdb
+            BDBHA bdbha = (BDBHA) stateMgr.getHaProtocol();
+            bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
+            // step 2 update the fe information stored in memory
+            preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
+            frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
+            
+            // editLog
+            stateMgr.getEditLog().logUpdateFrontend(preUpdateFe);
+            LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
+        } finally {
+            unlock();
+        }
+    }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
         if (host.equals(selfNode.first) && port == selfNode.second && stateMgr.getFeType() == FrontendNodeType.MASTER) {
@@ -736,6 +771,22 @@ public class NodeMgr {
         }
     }
 
+    public void replayUpdateFrontend(Frontend frontend) {
+        tryLock(true);
+        try {
+            Frontend fe = frontends.get(frontend.getNodeName());
+            if (fe == null) {
+                LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
+                return;
+            }
+            fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
+            frontends.put(fe.getNodeName(), fe);
+            LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
+        } finally {
+            unlock();
+        }
+    }
+
     public void replayDropFrontend(Frontend frontend) {
         tryLock(true);
         try {
@@ -763,9 +814,24 @@ public class NodeMgr {
         return null;
     }
 
-    public Frontend getFeByHost(String host) {
+    public Frontend getFeByHost(String ipOrFqdn) {
+        // This host could be Ip, or fqdn
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(ipOrFqdn);
+        } catch (UnknownHostException e) {
+            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            return null;
+        }
         for (Frontend fe : frontends.values()) {
-            if (fe.getHost().equals(host)) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(fe.getHost());
+            } catch (UnknownHostException e) {
+                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                continue;
+            }
+            if (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second)) {
                 return fe;
             }
         }

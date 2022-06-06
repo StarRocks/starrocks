@@ -768,15 +768,11 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testRefreshSync() {
+    public void testRefreshSync() throws Exception {
         String sql = "create materialized view mv1 " +
                 "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            assertEquals(e.getMessage(), "Unsupported refresh type: sync");
-        }
+                "as select k2 from tbl1 group by k2;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
@@ -808,7 +804,7 @@ public class CreateMaterializedViewTest {
     @Test
     public void testNoRefresh() {
         String sql = "create materialized view mv1 " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
+                "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             assertTrue(statementBase instanceof CreateMaterializedViewStmt);
@@ -820,7 +816,7 @@ public class CreateMaterializedViewTest {
     @Test
     public void testNoRefreshNoSelectStmt() {
         String sql = "create materialized view mv1 " +
-                "as select t1.k1 ss, t1.k2 from tbl1 t1 union select * from tbl2 group by ss;";
+                "as select t1.k1 ss, t1.k2 from tbl1 t1 union select k1, k2 from tbl1 group by tbl1.k1, tbl1.k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             assertTrue(statementBase instanceof CreateMaterializedViewStmt);

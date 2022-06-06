@@ -24,6 +24,7 @@ statement
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
+    | refreshTableStatement                                                                 #refreshTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -126,6 +127,10 @@ showTableStatusStatement
     : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+refreshTableStatement
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -201,8 +206,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -225,12 +232,20 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
 
 dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -300,6 +315,7 @@ classifier
 
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showVariablesStatement

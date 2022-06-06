@@ -30,6 +30,7 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -64,6 +65,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
@@ -319,6 +321,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_FRONTEND:
             case OperationType.OP_ADD_FIRST_FRONTEND:
+            case OperationType.OP_UPDATE_FRONTEND:
             case OperationType.OP_REMOVE_FRONTEND: {
                 data = new Frontend();
                 ((Frontend) data).readFields(in);
@@ -622,6 +625,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REVOKE_IMPERSONATE: {
                 data = ImpersonatePrivInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_CATALOG: {
+                data = Catalog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_CATALOG: {
+                data = DropCatalogLog.read(in);
                 isRead = true;
                 break;
             }
