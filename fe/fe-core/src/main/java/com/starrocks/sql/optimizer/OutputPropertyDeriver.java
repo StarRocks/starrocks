@@ -354,12 +354,14 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-        return requirements;
+        Preconditions.checkState(childrenOutputProperties.size() == 2);
+        return childrenOutputProperties.get(1);
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
-        return requirements;
+        Preconditions.checkState(childrenOutputProperties.size() == 1);
+        return childrenOutputProperties.get(0);
     }
 
     @Override
