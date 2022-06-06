@@ -452,8 +452,6 @@ FROM test_basic;
 
 执行如下命令，在 StarRocks 中创建 UDTF 函数。
 
-> 目前 UDTF 只支持返回**多行单列**。
-
 ```SQL
 CREATE TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
