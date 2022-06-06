@@ -1,8 +1,10 @@
 package com.starrocks.catalog;
 
 import com.staros.client.StarClient;
+import com.staros.client.StarClientException;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -51,7 +53,7 @@ public class StarOSAgentTest {
     }
 
      @Test
-    public void TestAddWorker() throws Exception {
+    public void testAddWorker() throws Exception {
          new Expectations() {
              {
                  client.addWorker(1, "127.0.0.1:8090");
@@ -64,5 +66,44 @@ public class StarOSAgentTest {
         starosAgent.setServiceId(1);
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
+    }
+
+    @Test
+    public void testRegisterAndBootStrapServiceException() throws Exception {
+        new Expectations() {
+            {
+                client.registerService("starrocks");
+                minTimes = 0;
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                        "service already exists!");
+            }
+        };
+        starosAgent.registerAndBootstrapService("123");
+
+        new Expectations() {
+            {
+                client.bootstrapService("starrocks", "123");
+                minTimes = 0;
+                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
+                        "connect server failed");
+            }
+        };
+        starosAgent.registerAndBootstrapService("123");
+    }
+
+    @Test
+    public void testAddWorkerException() throws Exception  {
+        new Expectations() {
+            {
+                client.addWorker(1, "127.0.0.1:8090");
+                minTimes = 0;
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                        "worker already exists");
+            }
+        };
+
+        String workerHost = "127.0.0.1:8090";
+        starosAgent.setServiceId(1);
+        starosAgent.addWorker(5, workerHost);
     }
 }
