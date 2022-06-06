@@ -29,9 +29,11 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -274,11 +276,18 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 throw new SemanticException("Materialized view query statement only support select");
             }
 
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
             }
-            statement.setBaseIndexName(tables.entrySet().iterator().next().getValue().getName());
+            Table table = tables.entrySet().iterator().next().getValue();
+            if (table instanceof View) {
+                // Only in order to make the error message keep compatibility
+                throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
+            } else if (!(table instanceof OlapTable)) {
+                throw new SemanticException("The materialized view only support olap table.");
+            }
+            statement.setBaseIndexName(table.getName());
             statement.setDBName(context.getDatabase());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
