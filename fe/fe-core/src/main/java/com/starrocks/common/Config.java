@@ -1072,6 +1072,12 @@ public class Config extends ConfigBase {
     public static long routine_load_task_timeout_second = 15;
 
     /**
+     * kafka util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_kafka_timeout_second = 12;
+
+    /**
      * it can't auto-resume routine load job as long as one of the backends is down
      */
     @ConfField(mutable = true)
@@ -1450,7 +1456,7 @@ public class Config extends ConfigBase {
 
     /**
      * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets, such as storage medium is S3.
+     * Set true if using StarOS to manage tablets for StarRocks lake table.
      */
     @ConfField
     public static boolean use_staros = false;

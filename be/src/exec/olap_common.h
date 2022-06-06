@@ -37,12 +37,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/string_value.hpp"
-#include "runtime/timestamp_value.h"
 #include "storage/tuple.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 #include "util/slice.h"
 
 namespace starrocks {

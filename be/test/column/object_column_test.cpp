@@ -27,7 +27,7 @@
 #include "column/const_column.h"
 #include "exprs/vectorized/percentile_functions.h"
 #include "runtime/types.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "util/percentile_value.h"
 
 namespace starrocks::vectorized {

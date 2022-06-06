@@ -43,7 +43,7 @@ public class ShowCatalogsStmtTest {
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
 
         ctx = new ConnectContext(null);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
     }
 
     @Test

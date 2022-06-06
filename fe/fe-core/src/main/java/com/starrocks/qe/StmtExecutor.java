@@ -301,7 +301,8 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewPlanner(parsedStmt)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) ||
+                    StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
@@ -357,7 +358,6 @@ public class StmtExecutor {
             if (context.getIsLastStmt()) {
                 addRunningQueryDetail();
             }
-
 
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
@@ -929,7 +929,12 @@ public class StmtExecutor {
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
-                sendShowResult(resultSet);
+                if (isProxy) {
+                    proxyResultSet = resultSet;
+                    context.getState().setEof();
+                } else {
+                    sendShowResult(resultSet);
+                }
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {

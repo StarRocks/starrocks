@@ -180,7 +180,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
-            ctx.setCatalog(GlobalStateMgr.getCurrentState());
+            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
             ctx.setThreadLocalInfo();
 
@@ -212,7 +212,7 @@ public class WebBaseAction extends BaseAction {
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
-                ctx.setCatalog(GlobalStateMgr.getCurrentState());
+                ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
                 ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
                 ctx.setThreadLocalInfo();
                 return true;

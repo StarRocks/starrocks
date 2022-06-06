@@ -716,6 +716,7 @@ struct TRefreshTableRequest {
   1: optional string db_name
   2: optional string table_name
   3: optional list<string> partitions
+  4: optional string catalog_name
 }
 
 struct TRefreshTableResponse {

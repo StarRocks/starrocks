@@ -1,8 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog;
+package com.starrocks.catalog.lake;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -14,11 +16,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * This class represents the cloud olap tablet related metadata.
- * StarOSTablet is based on cloud object storage.
+ * This class represents the StarRocks lake tablet related metadata.
+ * LakeTablet is based on cloud object storage, such as S3, OSS.
  * Data replicas are managed by object storage and compute replicas are managed by StarOS through Shard.
  */
-public class StarOSTablet extends Tablet {
+public class LakeTablet extends Tablet {
     private static final String JSON_KEY_SHARD_ID = "shardId";
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
@@ -30,7 +32,7 @@ public class StarOSTablet extends Tablet {
     @SerializedName(value = JSON_KEY_ROW_COUNT)
     private long rowCount = 0L;
 
-    public StarOSTablet(long id, long shardId) {
+    public LakeTablet(long id, long shardId) {
         super(id);
         this.shardId = shardId;
     }
@@ -87,8 +89,8 @@ public class StarOSTablet extends Tablet {
         Text.writeString(out, json);
     }
 
-    public static StarOSTablet read(DataInput in) throws IOException {
+    public static LakeTablet read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StarOSTablet.class);
+        return GsonUtils.GSON.fromJson(json, LakeTablet.class);
     }
 }

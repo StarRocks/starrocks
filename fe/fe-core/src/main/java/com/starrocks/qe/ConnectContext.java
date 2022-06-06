@@ -239,8 +239,7 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
-    // TODO @caneGuy rename to setGlobalStateMgr
-    public void setCatalog(GlobalStateMgr globalStateMgr) {
+    public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
 

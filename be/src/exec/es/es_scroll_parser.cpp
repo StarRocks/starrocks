@@ -9,7 +9,7 @@
 #include "common/config.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "runtime/timestamp_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::vectorized {
 

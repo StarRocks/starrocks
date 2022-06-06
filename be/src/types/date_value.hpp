@@ -2,8 +2,8 @@
 
 #pragma once
 
-#include "runtime/date_value.h"
-#include "runtime/timestamp_value.h"
+#include "types/date_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::vectorized {
 inline DateValue::operator TimestampValue() const {

@@ -41,13 +41,20 @@ public:
             : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
     ~StreamLoadPipe() override = default;
 
-    Status append_and_flush(const char* data, size_t size) {
-        RETURN_IF_ERROR(append(data, size));
-        if (_write_buf != nullptr) {
-            ByteBufferPtr buf;
-            std::swap(buf, _write_buf);
-            buf->flip();
-            return _append(buf);
+    Status append(ByteBufferPtr&& buf) {
+        if (buf != nullptr && buf->has_remaining()) {
+            std::unique_lock<std::mutex> l(_lock);
+            // if _buf_queue is empty, we append this buf without size check
+            _put_cond.wait(l, [&]() {
+                return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+            });
+
+            if (_cancelled) {
+                return _err_st;
+            }
+            _buffered_bytes += buf->remaining();
+            _buf_queue.emplace_back(std::move(buf));
+            _get_cond.notify_one();
         }
         return Status::OK();
     }
@@ -86,11 +93,10 @@ public:
     * buf_sz: the actual size of data to return.
     * padding: the extra space reserved in the buffer capacity.
     */
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) {
+    StatusOr<ByteBufferPtr> read() {
         std::unique_lock<std::mutex> l(_lock);
-        while (!_cancelled && !_finished && _buf_queue.empty()) {
-            _get_cond.wait(l);
-        }
+        _get_cond.wait(l, [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
+
         // cancelled
         if (_cancelled) {
             return _err_st;
@@ -99,23 +105,13 @@ public:
         // finished
         if (_buf_queue.empty()) {
             DCHECK(_finished);
-            *buf_sz = 0;
-            return Status::OK();
+            return Status::EndOfFile("all data has been read");
         }
-        auto raw = _buf_queue.front();
-        auto raw_sz = raw->remaining();
-
-        if (*buf_cap < raw_sz + padding) {
-            buf->reset(new uint8_t[raw_sz + padding]);
-            *buf_cap = raw_sz + padding;
-        }
-        raw->get_bytes((char*)(buf->get()), raw_sz);
-        *buf_sz = raw_sz;
-
+        auto buf = std::move(_buf_queue.front());
         _buf_queue.pop_front();
-        _buffered_bytes -= raw->limit;
+        _buffered_bytes -= buf->limit;
         _put_cond.notify_one();
-        return Status::OK();
+        return buf;
     }
 
     Status read(uint8_t* data, size_t* data_size, bool* eof) {
@@ -123,9 +119,8 @@ public:
         while (bytes_read < *data_size) {
             if (_read_buf == nullptr || !_read_buf->has_remaining()) {
                 std::unique_lock<std::mutex> l(_lock);
-                while (!_cancelled && !_finished && _buf_queue.empty()) {
-                    _get_cond.wait(l);
-                }
+                _get_cond.wait(l, [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
+
                 // cancelled
                 if (_cancelled) {
                     return _err_st;
@@ -190,9 +185,10 @@ private:
         if (buf != nullptr && buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check
-            while (!_cancelled && !_buf_queue.empty() && _buffered_bytes + buf->remaining() > _max_buffered_bytes) {
-                _put_cond.wait(l);
-            }
+            _put_cond.wait(l, [&]() {
+                return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+            });
+
             if (_cancelled) {
                 return _err_st;
             }

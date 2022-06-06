@@ -283,7 +283,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
-            TableName tableName = statement.getTbl();
+            TableName tableName = statement.getTableName();
             MetaUtils.normalizationTableName(context, tableName);
             if (!checkTblPriv(ConnectContext.get(), tableName.getCatalog(),
                     tableName.getDb(), tableName.getTbl(), PrivPredicate.ALTER)) {
