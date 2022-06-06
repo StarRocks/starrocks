@@ -31,7 +31,6 @@ import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
-import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -112,45 +111,6 @@ public class ScalarType extends Type implements Cloneable {
         ScalarType res = STATIC_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
-    }
-
-    /**
-     * Create type from parser, needs to infer type from simple name
-     */
-    public static ScalarType createTypeFromParser(String typeName, Integer length, Integer precision, Integer scale) {
-        if (length != null) {
-            if (StringUtils.startsWithIgnoreCase(typeName, "VARCHAR")) {
-                return createVarchar(length);
-            } else if (StringUtils.startsWithIgnoreCase(typeName, "CHAR")) {
-                return createCharType(length);
-            } else if ("STRING".equalsIgnoreCase(typeName)) {
-                return DEFAULT_STRING;
-            }
-        } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL")) {
-            if ("DECIMAL".equalsIgnoreCase(typeName)) {
-                if (precision != null) {
-                    return ScalarType.createUnifiedDecimalType(precision, scale);
-                } else {
-                    return ScalarType.createUnifiedDecimalType(10, 0);
-                }
-            } else if ("DECIMALV2".equalsIgnoreCase(typeName)) {
-                if (precision != null) {
-                    return ScalarType.createDecimalV2Type(precision, scale);
-                } else {
-                    return ScalarType.createDecimalV2Type();
-                }
-            }
-            PrimitiveType primitive = createType(typeName).getPrimitiveType();
-            if (precision == null || scale == null) {
-                return ScalarType.createDecimalV3Type(primitive);
-            } else {
-                return ScalarType.createDecimalV3Type(primitive, precision, scale);
-            }
-        } else {
-            return createType(typeName);
-        }
-
-        throw new IllegalArgumentException("Unsupported type: " + typeName);
     }
 
     public static ScalarType createCharType(int len) {

@@ -240,7 +240,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.engineDesc() == null ? "olap" :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 context.charsetDesc() == null ? "utf8" :
-                        ((Identifier) visit(context.charsetDesc().identifier())).getValue(),
+                        ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
@@ -2075,10 +2075,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
         } else if (context.PASSWORD() != null) {
             return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(context.string().getText())));
-        } else if (context.BITMAP_UNION() != null) {
-            return new FunctionCallExpr("bitmap_union", visit(context.expression(), Expr.class));
-        } else if (context.HLL_UNION() != null) {
-            return new FunctionCallExpr("hll_union", visit(context.expression(), Expr.class));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
@@ -2407,8 +2403,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSingleRangePartition(StarRocksParser.SingleRangePartitionContext context) {
         PartitionKeyDesc partitionKeyDesc = (PartitionKeyDesc) visit(context.partitionKeyDesc());
         boolean ifNotExists = context.IF() != null;
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
         return new SingleRangePartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
-                partitionKeyDesc, null);
+                partitionKeyDesc, properties);
     }
 
     @Override
@@ -2740,12 +2744,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
-        } else if (context.DECIMAL32() != null) {
-            return getDecimalType(context, PrimitiveType.DECIMAL32);
-        } else if (context.DECIMAL64() != null) {
-            return getDecimalType(context, PrimitiveType.DECIMAL64);
-        } else if (context.DECIMAL128() != null) {
-            return getDecimalType(context, PrimitiveType.DECIMAL128);
+        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
+            return getDecimalType(context, PrimitiveType.valueOf(context.children.get(0).getText()));
         } else if (context.DECIMALV2() != null) {
             if (precision != null) {
                 if (scale != null) {

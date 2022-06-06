@@ -126,7 +126,7 @@ engineDesc
     ;
 
 charsetDesc
-    : (DEFAULT)? CHARSET (EQ)? identifier
+    : DEFAULT? CHARSET EQ? identifierOrString
     ;
 
 
@@ -708,8 +708,6 @@ specialFunctionExpression
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
     | PASSWORD '(' string ')'
-    | BITMAP_UNION '(' expression ')'
-    | HLL_UNION '(' expression ')'
     ;
 
 windowFunction
@@ -783,7 +781,7 @@ rangePartitionDesc
     ;
 
 singleRangePartition
-    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc propertyList?
     ;
 
 multiRangePartition
