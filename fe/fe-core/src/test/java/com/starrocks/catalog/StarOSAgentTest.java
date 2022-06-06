@@ -69,26 +69,39 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testRegisterAndBootStrapServiceException() throws Exception {
+    public void testRegisterServiceException() throws Exception {
         new Expectations() {
             {
                 client.registerService("starrocks");
                 minTimes = 0;
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
+
+                client.bootstrapService("starrocks", "123");
+                minTimes = 0;
+                result = 3;
             }
         };
         starosAgent.registerAndBootstrapService("123");
+        Assert.assertEquals(3, starosAgent.getServiceIdforTest());
+    }
 
+    @Test
+    public void testBootstrapServiceException() throws Exception {
         new Expectations() {
             {
                 client.bootstrapService("starrocks", "123");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
-                        "connect server failed");
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                        "service already exists!");
+
+                client.getServiceInfo("123").getServiceId();
+                minTimes = 0;
+                result = 4;
             }
         };
         starosAgent.registerAndBootstrapService("123");
+        Assert.assertEquals(4, starosAgent.getServiceIdforTest());
     }
 
     @Test
@@ -99,11 +112,16 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "worker already exists");
+
+                client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
+                minTimes = 0;
+                result = 6;
             }
         };
 
         String workerHost = "127.0.0.1:8090";
         starosAgent.setServiceId(1);
         starosAgent.addWorker(5, workerHost);
+        Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
     }
 }
