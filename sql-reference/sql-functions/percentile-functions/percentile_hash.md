@@ -1,4 +1,4 @@
-# perecentile_hash
+# percentile_hash
 
 ## 功能
 
