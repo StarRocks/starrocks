@@ -34,6 +34,8 @@ public:
                                   MemPool* mem_pool) const;
 
 private:
+    friend class SchemaChangeTest;
+
     virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                                  MemPool* mem_pool) const = 0;
 };
