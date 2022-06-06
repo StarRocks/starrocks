@@ -105,11 +105,6 @@ public:
     }
 
     template <typename T>
-    std::add_pointer_t<std::add_const_t<T>> get_if() const {
-        return std::get_if<std::remove_const_t<T>>(&_value);
-    }
-
-    template <typename T>
     void set(T value) {
         if constexpr (std::is_same_v<DateValue, T>) {
             _value = value.julian();
@@ -121,21 +116,6 @@ public:
             _value = (std::make_signed_t<T>)value;
         } else {
             _value = value;
-        }
-    }
-
-    template <typename T>
-    void move_in(T&& value) {
-        if constexpr (std::is_same_v<DateValue, T>) {
-            _value = value.julian();
-        } else if constexpr (std::is_same_v<TimestampValue, T>) {
-            _value = value.timestamp();
-        } else if constexpr (std::is_same_v<bool, T>) {
-            _value = (int8_t)value;
-        } else if constexpr (std::is_unsigned_v<T>) {
-            _value = (std::make_signed_t<T>)value;
-        } else {
-            _value = std::move(value);
         }
     }
 
