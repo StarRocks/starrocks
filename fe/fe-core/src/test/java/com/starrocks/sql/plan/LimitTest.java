@@ -663,4 +663,86 @@ public class LimitTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0");
     }
+
+    @Test
+    public void testSubqueryLimit() throws Exception {
+        String sql = "SELECT \n" +
+                "  `s0`.`S_NATIONKEY`, \n" +
+                "  `s0`.`S_NAME`, \n" +
+                "  `s0`.`S_ADDRESS` \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      `S_NAME`, \n" +
+                "      `S_ADDRESS`, \n" +
+                "      `S_NATIONKEY` \n" +
+                "    FROM \n" +
+                "      `supplier` \n" +
+                "    GROUP BY \n" +
+                "      `S_NAME`, \n" +
+                "      `S_ADDRESS`, \n" +
+                "      `S_NATIONKEY`\n" +
+                "  ) AS `s0`, \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      * \n" +
+                "    FROM \n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          `S_SUPPKEY`, \n" +
+                "          `S_NAME`, \n" +
+                "          `S_ADDRESS`, \n" +
+                "          `S_NATIONKEY`, \n" +
+                "          `S_PHONE`, \n" +
+                "          `S_ACCTBAL`, \n" +
+                "          `S_COMMENT` \n" +
+                "        FROM \n" +
+                "          `supplier` \n" +
+                "        ORDER BY \n" +
+                "          `S_NATIONKEY` IS NULL, \n" +
+                "          `S_NATIONKEY` \n" +
+                "        LIMIT \n" +
+                "          15 OFFSET 6\n" +
+                "      ) AS `t0`\n" +
+                "  ) AS `t1` \n" +
+                "LIMIT \n" +
+                "  61202;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:MERGING-EXCHANGE\n" +
+                "     offset: 6\n" +
+                "     limit: 15");
+        assertContains(plan, "4:TOP-N\n" +
+                "  |  order by: <slot 17> 17: expr ASC, <slot 12> 12: S_NATIONKEY ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 21");
+
+        sql = "SELECT \n" +
+                "      * \n" +
+                "    FROM \n" +
+                "      (\n" +
+                "        SELECT \n" +
+                "          `S_SUPPKEY`, \n" +
+                "          `S_NAME`, \n" +
+                "          `S_ADDRESS`, \n" +
+                "          `S_NATIONKEY`, \n" +
+                "          `S_PHONE`, \n" +
+                "          `S_ACCTBAL`, \n" +
+                "          `S_COMMENT` \n" +
+                "        FROM \n" +
+                "          `supplier` \n" +
+                "        ORDER BY \n" +
+                "          `S_NATIONKEY` IS NULL, \n" +
+                "          `S_NATIONKEY` \n" +
+                "        LIMIT \n" +
+                "          15 OFFSET 6\n" +
+                "      ) AS `t0` limit 100";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:TOP-N\n" +
+                "  |  order by: <slot 9> 9: expr ASC, <slot 4> 4: S_NATIONKEY ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 21");
+        assertContains(plan, "3:MERGING-EXCHANGE\n" +
+                "     offset: 6\n" +
+                "     limit: 15");
+    }
 }
