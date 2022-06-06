@@ -38,6 +38,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -141,8 +142,16 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return true;
     }
 
+    public TableRef getTblRef() {
+        return tblRef;
+    }
+
     public String getDbName() {
         return tblRef.getName().getDb();
+    }
+
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
     }
 
     public String getTblName() {
@@ -153,12 +162,28 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return partitions;
     }
 
+    public void setPartitions(List<String> partitions) {
+        this.partitions = partitions;
+    }
+
     public Operator getOp() {
         return op;
     }
 
+    public void setOp(Operator op) {
+        this.op = op;
+    }
+
     public ReplicaStatus getStatusFilter() {
         return statusFilter;
+    }
+
+    public void setStatusFilter(ReplicaStatus statusFilter) {
+        this.statusFilter = statusFilter;
+    }
+
+    public Expr getWhere() {
+        return where;
     }
 
     @Override
@@ -177,5 +202,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         } else {
             return RedirectStatus.NO_FORWARD;
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminShowReplicaStatusStatement(this, context);
     }
 }
