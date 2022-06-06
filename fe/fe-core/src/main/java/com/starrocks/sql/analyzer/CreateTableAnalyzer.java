@@ -88,11 +88,11 @@ public class CreateTableAnalyzer {
         try {
             CharsetType.valueOf(charsetName.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new SemanticException("Unknown charset name: " + charsetName);
+            throw new SemanticException("Unknown charset name: %s", charsetName);
         }
         // be is not supported yet,so Display unsupported information to the user
         if (!charsetName.equalsIgnoreCase(DEFAULT_CHARSET_NAME)) {
-            throw new SemanticException("charset name " + charsetName + " is not supported yet");
+            throw new SemanticException("charset name %s is not supported yet", charsetName);
         }
         return charsetName;
     }
@@ -161,8 +161,8 @@ public class CreateTableAnalyzer {
                     // The OLAP table must has at least one short key and the float and double should not be short key.
                     // So the float and double could not be the first column in OLAP table.
                     if (keysColumnNames.isEmpty()) {
-                        throw new SemanticException(
-                                "Data type of first column cannot be " + columnDefs.get(0).getType());
+                        throw new SemanticException("Data type of first column cannot be %s",
+                                columnDefs.get(0).getType());
                     }
                     keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
                 }
@@ -187,12 +187,12 @@ public class CreateTableAnalyzer {
         } else {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
-                throw new SemanticException("Create " + engineName + " table should not contain keys desc");
+                throw new SemanticException("Create %s table should not contain keys desc", engineName);
             }
 
             for (ColumnDef columnDef : columnDefs) {
                 if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
-                    throw new SemanticException(engineName + " external table don't support complex type");
+                    throw new SemanticException("%s external table don't support complex type", engineName);
                 }
                 columnDef.setIsKey(true);
             }
@@ -236,7 +236,7 @@ public class CreateTableAnalyzer {
         }
 
         if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals(DEFAULT_ENGINE_NAME)) {
-            throw new SemanticException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: " +
+            throw new SemanticException("The size of a row (%d) exceed the maximal row size: %d", rowLengthBytes,
                     Config.max_layout_length_per_row);
         }
 
@@ -287,8 +287,8 @@ public class CreateTableAnalyzer {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
             } else {
                 if (partitionDesc != null || distributionDesc != null) {
-                    throw new SemanticException("Create " + engineName
-                            + " table should not contain partition or distribution desc");
+                    throw new SemanticException("Create %s table should not contain partition or distribution desc",
+                            engineName);
                 }
             }
         }
@@ -325,8 +325,8 @@ public class CreateTableAnalyzer {
                         }
                     }
                     if (!found) {
-                        throw new SemanticException("BITMAP column does not exist in table. invalid column: "
-                                + indexColName);
+                        throw new SemanticException("BITMAP column does not exist in table. invalid column: %s",
+                                indexColName);
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
