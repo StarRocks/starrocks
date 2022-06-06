@@ -446,6 +446,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_UPDATE_FRONTEND: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.replayUpdateFrontend(fe);
+                    break;
+                }
                 case OperationType.OP_CREATE_USER: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
                     globalStateMgr.getAuth().replayCreateUser(privInfo);
@@ -1115,6 +1120,10 @@ public class EditLog {
 
     public void logRemoveFrontend(Frontend fe) {
         logEdit(OperationType.OP_REMOVE_FRONTEND, fe);
+    }
+
+    public void logUpdateFrontend(Frontend fe) {
+        logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
     }
 
     public void logFinishDelete(DeleteInfo info) {
