@@ -12,6 +12,8 @@ namespace starrocks::lake {
 // GroupAssigner is used to assign a storage directory for a tablet.
 class GroupAssigner {
 public:
+    virtual ~GroupAssigner() = default;
+
     // Given a tablet id return the URI of its associated storage group.
     //
     // A storage group is just a directory on filesystem or a common prefix
