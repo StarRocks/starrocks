@@ -49,39 +49,22 @@ class Roaring64Map;
 class BitmapValue {
 public:
     // Construct an empty bitmap.
-    BitmapValue(){};
+    BitmapValue();
 
     BitmapValue(const BitmapValue& other);
     BitmapValue& operator=(const BitmapValue& other);
 
-    BitmapValue(BitmapValue&& other) noexcept
-            : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
-        other._sv = 0;
-        other._type = EMPTY;
-    }
+    BitmapValue(BitmapValue&& other) noexcept;
 
-    BitmapValue& operator=(BitmapValue&& other) noexcept {
-        if (this != &other) {
-            this->_bitmap = std::move(other._bitmap);
-            this->_set = std::move(other._set);
-            this->_sv = other._sv;
-            this->_type = other._type;
-            other._sv = 0;
-            other._type = EMPTY;
-        }
-        return *this;
-    }
+    BitmapValue& operator=(BitmapValue&& other) noexcept;
 
     // Construct a bitmap with one element.
-    explicit BitmapValue(uint64_t value) : _sv(value), _type(SINGLE) {}
+    explicit BitmapValue(uint64_t value);
 
     // Construct a bitmap from serialized data.
-    explicit BitmapValue(const char* src) {
-        bool res = deserialize(src);
-        DCHECK(res);
-    }
+    explicit BitmapValue(const char* src);
 
-    explicit BitmapValue(const Slice& src) { deserialize(src.data); }
+    explicit BitmapValue(const Slice& src);
 
     // Construct a bitmap from given elements.
     explicit BitmapValue(const std::vector<uint64_t>& bits);
@@ -160,7 +143,7 @@ private:
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
-    std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set = nullptr;
+    std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
 };
