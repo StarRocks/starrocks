@@ -30,10 +30,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
@@ -42,8 +45,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -57,6 +64,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -167,6 +175,47 @@ public class SystemInfoService {
 
         // backends is changed, regenerated tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
+    }
+
+    public ShowResultSet modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+        String willBeModifiedHost = modifyBackendAddressClause.getSrcHost();
+        String fqdn = modifyBackendAddressClause.getDestHost();
+        List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
+        if (null == candidateBackends || candidateBackends.size() == 0) {
+            throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
+        }
+        
+        // update idToBackend
+        Backend preUpdateBackend = candidateBackends.get(0);
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        Backend updateBackend = copiedBackends.get(preUpdateBackend.getId());
+        updateBackend.setHost(fqdn);
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
+
+        // Message
+        StringBuffer formatSb = new StringBuffer();
+        String opMessage;
+        formatSb.append("%s:%d's host has been modified to %s");
+        if (candidateBackends.size() >= 2) {
+            formatSb.append("\nplease exectue %d times, to modify the remaining backends\n");
+            for (int i = 1; i < candidateBackends.size(); i++) {
+                Backend be = candidateBackends.get(i);
+                formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
+            }
+            opMessage = String.format(
+                formatSb.toString(), willBeModifiedHost, 
+                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+        } else {
+            opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
+        }
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        List<List<String>> messageResult = new ArrayList<>();
+        messageResult.add(Arrays.asList(opMessage));
+        return new ShowResultSet(builder.build(), messageResult);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -307,13 +356,41 @@ public class SystemInfoService {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
+
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            return null;
+        }
+
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         for (Backend backend : idToBackend.values()) {
-            if (backend.getHost().equals(host) && backend.getBePort() == bePort) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
+            } catch (UnknownHostException e) {
+                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                continue;
+            }
+            boolean hostOk = (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second));
+            if (hostOk && (backend.getBePort() == bePort)) {
                 return backend;
             }
         }
         return null;
+    }
+
+    public List<Backend> getBackendOnlyWithHost(String host) {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        List<Backend> resultBackends = new ArrayList<>();
+        for (Backend backend : idToBackend.values()) {
+            if (backend.getHost().equals(host)) {
+                resultBackends.add(backend);
+            }
+        }
+        return resultBackends;
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
@@ -663,7 +740,7 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host)) {
+            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
@@ -747,6 +824,7 @@ public class SystemInfoService {
             return;
         }
         memoryBe.setBePort(be.getBePort());
+        memoryBe.setHost(be.getHost());
         memoryBe.setAlive(be.isAlive());
         memoryBe.setDecommissioned(be.isDecommissioned());
         memoryBe.setHttpPort(be.getHttpPort());
