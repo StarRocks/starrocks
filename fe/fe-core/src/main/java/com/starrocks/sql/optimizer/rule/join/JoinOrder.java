@@ -309,6 +309,7 @@ public abstract class JoinOrder {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expression.entrySet()) {
             resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
         }
+        resultMap.putAll(projection);
 
         Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
         exprInfo.expr = OptExpression.create(
