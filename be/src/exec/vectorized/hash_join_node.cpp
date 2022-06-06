@@ -983,8 +983,6 @@ std::string HashJoinNode::_get_join_type_str(TJoinOp::type join_type) {
         return "FullOuterJoin";
     case TJoinOp::CROSS_JOIN:
         return "CrossJoin";
-    case TJoinOp::MERGE_JOIN:
-        return "MergeJoin";
     case TJoinOp::RIGHT_SEMI_JOIN:
         return "RightSemiJoin";
     case TJoinOp::LEFT_ANTI_JOIN:
