@@ -281,6 +281,10 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./gutil/sysinfo-test.cc
         )
+
+if ("${USE_STAROS}" STREQUAL "ON")
+        list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 

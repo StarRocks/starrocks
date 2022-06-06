@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/hll.h"
+#include "types/hll.h"
 
 #ifdef __x86_64__
 #include <immintrin.h>
@@ -32,6 +32,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/string_value.h"
 #include "util/coding.h"
+#include "util/phmap/phmap.h"
 
 using std::map;
 using std::nothrow;
@@ -39,6 +40,78 @@ using std::string;
 using std::stringstream;
 
 namespace starrocks {
+
+std::string HyperLogLog::empty() {
+    static HyperLogLog hll;
+    std::string buf;
+    buf.resize(HLL_EMPTY_SIZE);
+    hll.serialize((uint8_t*)buf.c_str());
+    return buf;
+}
+
+HyperLogLog::HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
+    if (_registers.data != nullptr) {
+        ChunkAllocator::instance()->free(_registers);
+        _registers.data = nullptr;
+    }
+
+    if (other._registers.data != nullptr) {
+        ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        DCHECK_NE(_registers.data, nullptr);
+        DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
+        memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
+    }
+}
+
+HyperLogLog& HyperLogLog::operator=(const HyperLogLog& other) {
+    if (this != &other) {
+        this->_type = other._type;
+        this->_hash_set = other._hash_set;
+
+        if (_registers.data != nullptr) {
+            ChunkAllocator::instance()->free(_registers);
+            _registers.data = nullptr;
+        }
+
+        if (other._registers.data != nullptr) {
+            ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+            DCHECK_NE(_registers.data, nullptr);
+            DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
+            memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
+        }
+    }
+    return *this;
+}
+
+HyperLogLog::HyperLogLog(HyperLogLog&& other) noexcept : _type(other._type), _hash_set(std::move(other._hash_set)) {
+    if (_registers.data != nullptr) {
+        ChunkAllocator::instance()->free(_registers);
+    }
+    _registers = other._registers;
+
+    other._type = HLL_DATA_EMPTY;
+    other._registers.data = nullptr;
+}
+
+HyperLogLog& HyperLogLog::operator=(HyperLogLog&& other) noexcept {
+    if (this != &other) {
+        this->_type = other._type;
+        this->_hash_set = std::move(other._hash_set);
+
+        if (_registers.data != nullptr) {
+            ChunkAllocator::instance()->free(_registers);
+        }
+        _registers = other._registers;
+
+        other._type = HLL_DATA_EMPTY;
+        other._registers.data = nullptr;
+    }
+    return *this;
+}
+
+HyperLogLog::HyperLogLog(uint64_t hash_value) : _type(HLL_DATA_EXPLICIT) {
+    _hash_set.emplace(hash_value);
+}
 
 HyperLogLog::HyperLogLog(const Slice& src) {
     // When deserialize return false, we make this object a empty
@@ -408,6 +481,11 @@ std::string HyperLogLog::to_string() const {
     default:
         return {};
     }
+}
+
+void HyperLogLog::clear() {
+    _type = HLL_DATA_EMPTY;
+    _hash_set.clear();
 }
 
 void HyperLogLog::_merge_registers(uint8_t* other_registers) {

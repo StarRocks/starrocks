@@ -36,6 +36,10 @@ set(EXEC_FILES
     fs_util.cpp
     )
 
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
+
 add_library(FileSystem STATIC
     ${EXEC_FILES}
 )

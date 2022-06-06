@@ -4,11 +4,11 @@
 
 #include <variant>
 
-#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
-#include "runtime/timestamp_value.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 #include "util/int96.h"
 #include "util/json.h"
 #include "util/percentile_value.h"

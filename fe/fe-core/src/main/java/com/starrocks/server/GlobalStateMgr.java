@@ -66,6 +66,7 @@ import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
@@ -73,6 +74,7 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
@@ -202,6 +204,7 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
@@ -1143,6 +1146,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = catalogMgr.loadCatalogs(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1373,6 +1378,8 @@ public class GlobalStateMgr {
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -1735,6 +1742,10 @@ public class GlobalStateMgr {
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
         nodeMgr.addFrontend(role, host, editLogPort);
+    }
+
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
+        nodeMgr.modifyFrontendHost(modifyFrontendAddressClause);
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
@@ -2143,6 +2154,10 @@ public class GlobalStateMgr {
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
             sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
+            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
+            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
+                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
+            }
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
@@ -2256,6 +2271,10 @@ public class GlobalStateMgr {
 
     public void replayAddFrontend(Frontend fe) {
         nodeMgr.replayAddFrontend(fe);
+    }
+
+    public void replayUpdateFrontend(Frontend frontend) {
+        nodeMgr.replayUpdateFrontend(frontend);
     }
 
     public void replayDropFrontend(Frontend frontend) {
@@ -2715,8 +2734,8 @@ public class GlobalStateMgr {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public void alterCluster(AlterSystemStmt stmt) throws UserException {
-        this.alter.processAlterCluster(stmt);
+    public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
+        return this.alter.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
@@ -2818,7 +2837,7 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
-        refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
+        refreshExternalTable(stmt.getTableName(), stmt.getPartitions());
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
@@ -2828,7 +2847,7 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                    stmt.getDbName(), stmt.getTableName(), stmt.getPartitions()));
+                    stmt.getTableName(), stmt.getPartitions()));
         }
 
         String errMsg = "";
@@ -2851,14 +2870,15 @@ public class GlobalStateMgr {
         }
     }
 
-    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
+    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
                                                 List<String> partitions) {
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
                 + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
-            request.setDb_name(dbName);
-            request.setTable_name(tableName);
+            request.setCatalog_name(tableName.getCatalog());
+            request.setDb_name(tableName.getDb());
+            request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
@@ -2879,15 +2899,18 @@ public class GlobalStateMgr {
         return task;
     }
 
-    public void refreshExternalTable(String dbName, String tableName, List<String> partitions) throws DdlException {
-        Database db = getDb(dbName);
+    public void refreshExternalTable(TableName tableName, List<String> partitions) throws DdlException {
+        String catalogName = tableName.getCatalog();
+        String dbName = tableName.getDb();
+        String tblName = tableName.getTbl();
+        Database db = metadataMgr.getDb(catalogName, tableName.getDb());
         if (db == null) {
-            throw new DdlException("db: " + dbName + " not exists");
+            throw new DdlException("db: " + tableName.getDb() + " not exists");
         }
         HiveMetaStoreTable table;
         db.readLock();
         try {
-            Table tbl = db.getTable(tableName);
+            Table tbl = metadataMgr.getTable(catalogName, dbName, tblName);
             if (tbl == null || !(tbl instanceof HiveMetaStoreTable)) {
                 throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
@@ -2899,7 +2922,7 @@ public class GlobalStateMgr {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache(dbName, tableName);
+            table.refreshTableCache(dbName, tblName);
         }
     }
 

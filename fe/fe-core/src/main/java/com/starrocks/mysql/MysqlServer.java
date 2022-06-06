@@ -115,7 +115,7 @@ public class MysqlServer {
                     // submit this context to scheduler
                     ConnectContext context = new ConnectContext(clientChannel);
                     // Set globalStateMgr here.
-                    context.setCatalog(GlobalStateMgr.getCurrentState());
+                    context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
                     if (!scheduler.submit(context)) {
                         LOG.warn("Submit one connect request failed. Client=" + clientChannel.toString());
                         // clear up context

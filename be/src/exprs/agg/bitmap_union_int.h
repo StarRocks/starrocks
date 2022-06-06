@@ -7,7 +7,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
-#include "util/bitmap_value.h"
+#include "types/bitmap_value.h"
 
 namespace starrocks::vectorized {
 

@@ -131,7 +131,7 @@ public class HiveMetaCacheTest {
     @Test
     public void testAddPartitionByEvent() throws Exception {
         HiveMetaClient metaClient = new MockedHiveMetaClient();
-        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
+        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10), "resource");
         ImmutableMap<PartitionKey, Long> partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
@@ -156,7 +156,7 @@ public class HiveMetaCacheTest {
     @Test
     public void testAlterPartitionByEvent() throws Exception {
         HiveMetaClient metaClient = new MockedHiveMetaClient();
-        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
+        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10), "resource");
         HivePartitionStats partitionStats = metaCache.getPartitionStats(hmsTable,
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(10000L, partitionStats.getNumRows());
@@ -202,7 +202,7 @@ public class HiveMetaCacheTest {
     @Test
     public void testDropPartitionByEvent() throws Exception {
         HiveMetaClient metaClient = new MockedHiveMetaClient();
-        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
+        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10), "resource");
         ImmutableMap<PartitionKey, Long> partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
@@ -227,7 +227,7 @@ public class HiveMetaCacheTest {
     @Test
     public void clearCache() throws Exception {
         HiveMetaClient metaClient = new MockedHiveMetaClient();
-        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
+        HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10), "resource");
 
         metaCache.getPartitionKeys(hmsTable);
         metaCache.getPartition(hmsTable,

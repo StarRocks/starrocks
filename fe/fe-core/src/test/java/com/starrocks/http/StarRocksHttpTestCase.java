@@ -326,11 +326,11 @@ abstract public class StarRocksHttpTestCase {
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
 
-                    globalStateMgr.getMetadataMgr().getDb("default", "default_cluster:testDb");
+                    globalStateMgr.getMetadataMgr().getDb("default_catalog", "default_cluster:testDb");
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getMetadataMgr().getTable("default", "default_cluster:testDb", "testTbl");
+                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "default_cluster:testDb", "testTbl");
                     minTimes = 0;
                     result = table;
                 }

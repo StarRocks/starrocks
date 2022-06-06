@@ -131,8 +131,10 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
 
 StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
     auto& chunks_sorter = _chunks_sorters[_sorter_index];
-    vectorized::ChunkPtr chunk;
-    if (chunks_sorter->pull_chunk(&chunk)) {
+    vectorized::ChunkPtr chunk = nullptr;
+    bool eos = false;
+    RETURN_IF_ERROR(chunks_sorter->get_next(&chunk, &eos));
+    if (eos) {
         // Current sorter has no output, try to get chunk from next sorter
         _sorter_index++;
     }

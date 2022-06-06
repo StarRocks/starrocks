@@ -55,7 +55,7 @@ public:
         return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
     }
 
-    ChunkPtr pull_chunk();
+    StatusOr<ChunkPtr> pull_chunk();
 
 private:
     Status _merge_inputs();
