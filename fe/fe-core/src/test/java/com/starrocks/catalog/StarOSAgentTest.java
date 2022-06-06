@@ -4,11 +4,9 @@ import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.internal.runners.statements.ExpectException;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -36,36 +34,6 @@ public class StarOSAgentTest {
         };
         starosAgent.registerAndBootstrapService("123");
         Assert.assertEquals(1, starosAgent.getServiceId());
-    }
-
-    @Test
-    public void testGetServiceId() throws Exception {
-        new Expectations() {
-            {
-                client.getServiceInfo("123").getServiceId();
-                minTimes = 0;
-                result = 2;
-            }
-        };
-
-        starosAgent.getServiceId("123");
-        Assert.assertEquals(2, starosAgent.getServiceId());
-    }
-
-     @Test
-    public void testAddWorker() throws Exception {
-         new Expectations() {
-             {
-                 client.addWorker(1, "127.0.0.1:8090");
-                 minTimes = 0;
-                 result = 10;
-             }
-         };
-
-        String workerHost = "127.0.0.1:8090";
-        starosAgent.setServiceId(1);
-        starosAgent.addWorker(5, workerHost);
-        Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
     }
 
     @Test
@@ -103,6 +71,37 @@ public class StarOSAgentTest {
         starosAgent.registerAndBootstrapService("123");
         Assert.assertEquals(4, starosAgent.getServiceId());
     }
+
+    @Test
+    public void testGetServiceId() throws Exception {
+        new Expectations() {
+            {
+                client.getServiceInfo("123").getServiceId();
+                minTimes = 0;
+                result = 2;
+            }
+        };
+
+        starosAgent.getServiceId("123");
+        Assert.assertEquals(2, starosAgent.getServiceId());
+    }
+
+    @Test
+    public void testAddWorker() throws Exception {
+         new Expectations() {
+             {
+                 client.addWorker(1, "127.0.0.1:8090");
+                 minTimes = 0;
+                 result = 10;
+             }
+         };
+
+        String workerHost = "127.0.0.1:8090";
+        starosAgent.setServiceId(1);
+        starosAgent.addWorker(5, workerHost);
+        Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
+    }
+
 
     @Test
     public void testAddWorkerException() throws Exception  {
