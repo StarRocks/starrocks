@@ -1,5 +1,24 @@
 # StarRocks version 2.2
 
+## 2.2.1
+
+发布日期： 2022 年 6 月 02 日
+
+### 功能优化
+
+- 通过重构部分热点代码和降低锁粒度优化导入性能，减少长尾延迟。 [#6641](https://github.com/StarRocks/starrocks/pull/6641)
+- 在 FE 的审计日志中添加每个查询所消耗部署 BE 机器的 CPU 和内存信息。 [#6208](https://github.com/StarRocks/starrocks/pull/6208) [#6209](https://github.com/StarRocks/starrocks/pull/6209)
+- 支持在主键模型表和更新模型表中使用 JSON 数据类型。 [#6544](https://github.com/StarRocks/starrocks/pull/6544)
+- 通过降低锁粒度和 BE 汇报 (report) 请求去重减少 FE 负荷，优化部署大量 BE 时的汇报性能并解决大规模集群中 Routine Load 任务卡住的问题。 [#6293](https://github.com/StarRocks/starrocks/pull/6293)
+
+### 修复 Bug
+
+修复了如下 Bug：
+
+- 修复 SHOW FULL TABLES FROM DatabaseName 语句中转义字符解析报错的问题。 [#6559](https://github.com/StarRocks/starrocks/issues/6559)
+- FE 磁盘空间占用过快的问题（通过回滚 BDBJE 版本修复该bug）。[#6708](https://github.com/StarRocks/starrocks/pull/6708)
+- 修复启用列式扫描 (`enable_docvalue_scan=true`) 后，因返回的数据中没有相关字段导致 BE 宕机的问题。[#6600](https://github.com/StarRocks/starrocks/pull/6600)
+
 ## 2.2.0
 
 发布日期： 2022 年 5 月 22 日
