@@ -105,7 +105,7 @@ public:
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     virtual Status done(RuntimeState* state) = 0;
     // get_next only works after done().
-    virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
+    virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     // Return sorted data in multiple runs(Avoid merge them into a big chunk)
     virtual SortedRuns get_sorted_runs() = 0;
@@ -116,10 +116,6 @@ public:
     Status finish(RuntimeState* state);
 
     bool sink_complete();
-
-    // Pull chunk version for pipeline.
-    // Return false if there is no more chunks
-    virtual bool pull_chunk(ChunkPtr* chunk) = 0;
 
     virtual int64_t mem_usage() const = 0;
 

@@ -85,18 +85,20 @@ Status ChunksSorterTopn::done(RuntimeState* state) {
     return Status::OK();
 }
 
-void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
+Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     ScopedTimer<MonotonicStopWatch> timer(_output_timer);
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
         *eos = true;
-        return;
+        return Status::OK();
     }
     *eos = false;
     size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
+    (*chunk)->downgrade();
     _next_output_row += count;
+    return Status::OK();
 }
 
 SortedRuns ChunksSorterTopn::get_sorted_runs() {
@@ -105,28 +107,6 @@ SortedRuns ChunksSorterTopn::get_sorted_runs() {
 
 size_t ChunksSorterTopn::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
-}
-
-/*
- * _next_output_row index the next row we need to get, 
- * In this case, The actual data is _merged_segment.chunk, 
- * so we use _next_output_row to get datas from _merged_segment.chunk, 
- * and copy it in chunk as output.
- */
-bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
-    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
-        *chunk = nullptr;
-        return true;
-    }
-    size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
-    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
-    (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
-    _next_output_row += count;
-
-    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
-        return true;
-    }
-    return false;
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
@@ -434,11 +414,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, rows_to_keep, sorted_size, second_size,
                                            new_permutation.second));
     }
-
-    if (big_chunk->reach_capacity_limit()) {
-        LOG(WARNING) << "TopN sort encounter big chunk overflow";
-        return Status::InternalError(fmt::format("TopN sort encounter big chunk overflow"));
-    }
+    RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
 
     DataSegment merged_segment;
     merged_segment.init(_sort_exprs, big_chunk);
@@ -477,11 +453,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     new_permutation.resize(rows_to_keep);
     append_by_permutation(big_chunk.get(), chunks, new_permutation);
 
-    if (big_chunk->reach_capacity_limit()) {
-        LOG(WARNING) << "TopN sort encounter big chunk overflow";
-        return Status::InternalError("TopN sort encounter big chunk overflow");
-    }
-
+    RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
     _merged_segment.init(_sort_exprs, big_chunk);
 
     return Status::OK();

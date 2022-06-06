@@ -18,6 +18,7 @@
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "testutil/assert.h"
 #include "util/json.h"
 
 namespace starrocks::vectorized {
@@ -191,6 +192,20 @@ static Permutation make_permutation(int len) {
     return perm;
 }
 
+static std::vector<ChunkPtr> consume_pages_from_sorter(ChunksSorter& sorter) {
+    std::vector<ChunkPtr> result;
+
+    bool eos = false;
+    while (!eos) {
+        ChunkPtr chunk;
+        sorter.get_next(&chunk, &eos);
+        if (chunk) {
+            result.push_back(chunk);
+        }
+    }
+    return result;
+}
+
 static ChunkPtr consume_page_from_sorter(ChunksSorter& sorter) {
     ChunkPtr res;
     bool eos = false;
@@ -240,6 +255,42 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 
     clear_sort_exprs(sort_exprs);
 }
+
+// NOTE: this test case runs too slow
+// TEST_F(ChunksSorterTest, full_sort_chunk_overflow) {
+//     std::vector<bool> is_asc{true};
+//     std::vector<bool> is_null_first{true};
+//     auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+//     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
+//     DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+
+//     std::string big_string(1024, 'a');
+//     ColumnPtr big_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+//     for (int i = 0; i < 1024; i++) {
+//         big_column->append_datum(Datum(Slice(big_string)));
+//     }
+//     Columns columns{big_column};
+//     Chunk::SlotHashMap slots;
+//     slots[0] = 0;
+//     ChunkPtr big_chunk = std::make_shared<Chunk>(columns, slots);
+//     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+
+//     // Update until overflow
+//     size_t total_bytes = 0;
+//     while (total_bytes < Column::MAX_CAPACITY_LIMIT) {
+//         total_bytes += big_column->byte_size();
+//         std::cerr << "total bytes: " << total_bytes << std::endl;
+//         sorter.update(_runtime_state.get(), big_chunk);
+//     }
+//     ASSERT_OK(sorter.done(_runtime_state.get()));
+//     std::vector<ChunkPtr> output = consume_pages_from_sorter(sorter);
+//     size_t output_bytes = 0;
+//     for (auto& output_chunk : output) {
+//         ASSERT_TRUE(output_chunk->has_large_column());
+//         output_bytes += output_chunk->get_column_by_index(0)->byte_size();
+//     }
+//     ASSERT_EQ(total_bytes, output_bytes);
+// }
 
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {
