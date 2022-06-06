@@ -44,17 +44,16 @@ Status GeneralTabletWriter::finish() {
 }
 
 void GeneralTabletWriter::close() {
-    if (!_finished) {
+    if (!_finished && !_files.empty()) {
         // Delete files
         auto group = _tablet.group();
         auto maybe_fs = FileSystem::CreateSharedFromString(group);
-        if (!maybe_fs.ok()) {
-            return;
-        }
-        auto fs = std::move(maybe_fs).value();
-        for (const auto& name : _files) {
-            auto path = fmt::format("{}/{}", group, name);
-            (void)fs->delete_file(path);
+        if (maybe_fs.ok()) {
+            auto fs = std::move(maybe_fs).value();
+            for (const auto& name : _files) {
+                auto path = fmt::format("{}/{}", group, name);
+                (void)fs->delete_file(path);
+            }
         }
     }
     std::vector<std::string> tmp;
