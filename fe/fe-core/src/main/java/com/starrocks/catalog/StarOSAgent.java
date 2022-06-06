@@ -48,7 +48,7 @@ public class StarOSAgent {
     }
 
     // for ut only
-    public long getServiceIdforTest() {
+    public long getServiceId() {
         return serviceId;
     }
 
@@ -145,6 +145,6 @@ public class StarOSAgent {
 
         workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);
-        LOG.info("add worker {} succ, backendId is {}", workerId, backendId);
+        LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 }

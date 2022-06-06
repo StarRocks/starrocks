@@ -35,7 +35,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(1, starosAgent.getServiceIdforTest());
+        Assert.assertEquals(1, starosAgent.getServiceId());
     }
 
     @Test
@@ -49,7 +49,7 @@ public class StarOSAgentTest {
         };
 
         starosAgent.getServiceId("123");
-        Assert.assertEquals(2, starosAgent.getServiceIdforTest());
+        Assert.assertEquals(2, starosAgent.getServiceId());
     }
 
      @Test
@@ -83,7 +83,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(3, starosAgent.getServiceIdforTest());
+        Assert.assertEquals(3, starosAgent.getServiceId());
     }
 
     @Test
@@ -101,7 +101,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(4, starosAgent.getServiceIdforTest());
+        Assert.assertEquals(4, starosAgent.getServiceId());
     }
 
     @Test

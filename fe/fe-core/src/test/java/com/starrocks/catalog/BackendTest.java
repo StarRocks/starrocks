@@ -85,7 +85,6 @@ public class BackendTest {
         // set new port
         int newBePort = 31235;
         int newHttpPort = 31237;
-        int newStarletPort = 31239;
         backend.updateOnce(newBePort, newHttpPort, beRpcPort);
         Assert.assertEquals(newBePort, backend.getBePort());
 
@@ -231,7 +230,7 @@ public class BackendTest {
     }
 
     @Test
-    public void testHearbeatOk() throws Exception {
+    public void testHeartbeatOk() throws Exception {
         Backend be = new Backend();
         BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
                 System.currentTimeMillis(), "1.0", 64);
