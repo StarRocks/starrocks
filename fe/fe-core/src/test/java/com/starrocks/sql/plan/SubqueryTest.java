@@ -163,7 +163,7 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
+        expectedEx.expectMessage("Column '`test`.`t2`.`v7`' cannot be resolved");
         getFragmentPlan(sql);
     }
 

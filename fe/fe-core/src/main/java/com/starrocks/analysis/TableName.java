@@ -180,7 +180,12 @@ public class TableName implements Writable {
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         if (db != null) {
-            stringBuilder.append("`").append(db).append("`.");
+            String dbName = ClusterNamespace.getNameFromFullName(db);
+            if (dbName == null) {
+                stringBuilder.append("`").append(db).append("`.");
+            } else {
+                stringBuilder.append("`").append(dbName).append("`.");
+            }
         }
         stringBuilder.append("`").append(tbl).append("`");
         return stringBuilder.toString();
