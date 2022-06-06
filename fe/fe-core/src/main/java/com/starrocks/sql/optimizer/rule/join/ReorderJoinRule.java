@@ -224,7 +224,6 @@ public class ReorderJoinRule extends Rule {
                     newOutputColumns.union(id);
                 }
             }
-            requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
             if (joinOperator.getProjection() == null && !newOutputColumns.isEmpty()) {
@@ -237,9 +236,10 @@ public class ReorderJoinRule extends Rule {
                         .build();
             } else if (joinOperator.getProjection() != null) {
                 Preconditions.checkState(
-                        joinOperator.getProjection().getColumnRefMap().size() >= newOutputColumns.cardinality());
+                        newOutputColumns.cardinality() >= joinOperator.getProjection().getColumnRefMap().size());
             }
 
+            requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
             requireColumns.union(newOutputColumns);
             OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
             OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
