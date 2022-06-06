@@ -161,7 +161,8 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeHdfsScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }
