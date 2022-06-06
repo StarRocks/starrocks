@@ -183,7 +183,7 @@ SELECT MY_UDF_JSON_GET('{"key":"{\\"in\\":2}"}', '$.key.in');
 
 1. 编写  UDAF 的代码，示例如下。
 
-   本文以 `MY_SUM_INT`  函数为例进行说明。与内置函数`SUM`（返回值为 BIGINT 类型）区别在于，`SUMINT`  函数支持传入参数和返回参数的类型为 INT。
+   本文以 `MY_SUM_INT`  函数为例进行说明。与内置函数`SUM`（返回值为 BIGINT 类型）区别在于，`MY_SUM_INT`  函数支持传入参数和返回参数的类型为 INT。
 
     ```Java
     package com.starrocks.udf.sample;
