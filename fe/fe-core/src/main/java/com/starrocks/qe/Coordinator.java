@@ -1797,8 +1797,8 @@ public class Coordinator {
 
             for (int j = 0; !found && j < profile.getChildList().size(); j++) {
                 RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
-                // TODO(hcf) The root cause is not found yet, work around by now
                 if (pipelineProfile.getChildList().isEmpty()) {
+                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
                     continue;
                 }
                 RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
