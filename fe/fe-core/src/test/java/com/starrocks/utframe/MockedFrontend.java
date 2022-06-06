@@ -270,7 +270,7 @@ public class MockedFrontend {
 
     private void waitForCatalogReady() throws FeStartException {
         int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 15) {
+        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
             try {
                 tryCount ++;
                 Thread.sleep(1000);
