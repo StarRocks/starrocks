@@ -52,6 +52,24 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
+                        "                        `k1` date,\n" +
+                        "                        `v2` datetime MAX,\n" +
+                        "                        `v3` char(20) MIN,\n" +
+                        "                        `v4` tinyint SUM,\n" +
+                        "                        `v8` tinyint SUM,\n" +
+                        "                        `v5` HLL HLL_UNION,\n" +
+                        "                        `v6` BITMAP BITMAP_UNION,\n" +
+                        "                        `v7` PERCENTILE PERCENTILE_UNION\n" +
+                        "                    ) ENGINE=OLAP\n" +
+                        "                    AGGREGATE KEY(`k1`)\n" +
+                        "                    COMMENT \"OLAP\"\n" +
+                        "                    DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                        "                    PROPERTIES (\n" +
+                        "                        \"replication_num\" = \"1\",\n" +
+                        "                        \"storage_format\" = \"v2\"\n" +
+                        "                    );")
+                .withView("CREATE VIEW v1 AS SELECT * FROM aggregate_table_with_null;")
                 .withTable("CREATE TABLE test.tbl2\n" +
                         "(\n" +
                         "    k1 date,\n" +
@@ -932,5 +950,36 @@ public class CreateMaterializedViewTest {
         }
     }
 
+    @Test
+    public void testCreateMVWithHll() throws Exception {
+        String sql = "CREATE MATERIALIZED VIEW mv_function\n" +
+                "                             AS SELECT\n" +
+                "                               k1,\n" +
+                "                               MAX(v2),\n" +
+                "                               MIN(v3),\n" +
+                "                               SUM(v4),\n" +
+                "                               HLL_UNION(v5),\n" +
+                "                               BITMAP_UNION(v6),\n" +
+                "                               PERCENTILE_UNION(v7)\n" +
+                "                             FROM test.aggregate_table_with_null GROUP BY k1\n" +
+                "                             ORDER BY k1 DESC";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
+    @Test
+    public void testCreateMVBaseOnView() throws Exception {
+        String sql = "CREATE MATERIALIZED VIEW mv1\n" +
+                "                                                  AS\n" +
+                "                                                  SELECT\n" +
+                "                                                    k1,\n" +
+                "                                                    v2\n" +
+                "                                                  FROM test.v1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Do not support alter non-OLAP table[v1]");
+        }
+    }
 }
 
