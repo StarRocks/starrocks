@@ -82,7 +82,7 @@ public class TabletMeta {
         this.storageMedium = storageMedium;
     }
 
-    // Remove this after LakeTable is merged.
+    // TODO: Remove this after LakeTable is merged.
     public boolean isUseStarOS() {
         return false;
     }

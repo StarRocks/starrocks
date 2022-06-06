@@ -195,7 +195,7 @@ public class Partition extends MetaObject implements Writable {
         return distributionInfo;
     }
 
-    // Remove this after LakeTable is merged.
+    // TODO: Remove this after LakeTable is merged.
     public boolean isUseStarOS() {
         return false;
     }
