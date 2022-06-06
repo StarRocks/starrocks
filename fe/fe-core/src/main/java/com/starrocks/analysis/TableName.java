@@ -179,7 +179,7 @@ public class TableName implements Writable {
 
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
-        if (catalog != null) {
+        if (catalog != null && !CatalogMgr.isInternalCatalog(catalog)) {
             stringBuilder.append("`").append(catalog).append("`.");
         }
         if (db != null) {
