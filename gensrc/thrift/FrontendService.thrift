@@ -318,8 +318,8 @@ struct TGetTablesParams {
 
 struct TTableStatus {
     1: required string name
-    2: required string type
-    3: required string comment
+    2: optional string type
+    3: optional string comment
     4: optional string engine
     5: optional i64 last_check_time
     6: optional i64 create_time
