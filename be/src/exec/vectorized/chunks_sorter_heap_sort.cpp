@@ -122,34 +122,20 @@ Status ChunksSorterHeapSort::done(RuntimeState* state) {
     return Status::OK();
 }
 
-void ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
+Status ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     ScopedTimer<MonotonicStopWatch> timer(_output_timer);
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
         *eos = true;
-        return;
+        return Status::OK();
     }
     *eos = false;
     size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
-}
 
-bool ChunksSorterHeapSort::pull_chunk(ChunkPtr* chunk) {
-    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
-        *chunk = nullptr;
-        return true;
-    }
-    size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
-    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
-    (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
-    _next_output_row += count;
-
-    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
-        return true;
-    }
-    return false;
+    return Status::OK();
 }
 
 template <PrimitiveType TYPE>

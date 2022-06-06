@@ -45,7 +45,7 @@ public class IcebergUtil {
         IcebergCatalogType catalogType = table.getCatalogType();
         switch (catalogType) {
             case HIVE_CATALOG:
-                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris());
+                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris(), table.getIcebergProperties());
             case CUSTOM_CATALOG:
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
@@ -57,9 +57,9 @@ public class IcebergUtil {
     /**
      * Returns the corresponding hive catalog implementation.
      */
-    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
+    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris, Map<String, String> icebergProperties)
             throws StarRocksIcebergException {
-        return IcebergHiveCatalog.getInstance(metastoreUris);
+        return IcebergHiveCatalog.getInstance(metastoreUris, icebergProperties);
     }
 
     /**

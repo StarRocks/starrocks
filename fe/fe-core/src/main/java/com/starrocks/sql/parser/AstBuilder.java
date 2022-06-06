@@ -11,6 +11,9 @@ import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -71,6 +74,8 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
@@ -102,6 +107,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
@@ -169,6 +175,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.parser.StarRocksParser.ModifyBackendHostClauseContext;
+import com.starrocks.sql.parser.StarRocksParser.ModifyFrontendHostClauseContext;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -782,6 +790,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitModifyBackendHostClause(ModifyBackendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1));
+    }
+
+    @Override
     public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         if (context.FOLLOWER() != null) {
@@ -805,6 +820,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
+    }
+
+    @Override
+    public ParseNode visitModifyFrontendHostClause(ModifyFrontendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -1568,6 +1590,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
+    public ParseNode visitAdminShowConfig(StarRocksParser.AdminShowConfigContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue());
+        }
+        return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaDistribution(StarRocksParser.AdminShowReplicaDistributionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaStatus(StarRocksParser.AdminShowReplicaStatusContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
     }
 
     @Override

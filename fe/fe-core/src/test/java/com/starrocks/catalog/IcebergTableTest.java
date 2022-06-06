@@ -65,7 +65,7 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergHiveCatalog(String uris) {
+            public IcebergCatalog getIcebergHiveCatalog(String uris, Map<String, String> icebergProperties) {
                 return icebergCatalog;
             }
         };

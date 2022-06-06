@@ -3,6 +3,9 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -182,6 +185,9 @@ public class StatementPlanner {
                 || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof AdminShowConfigStmt
+                || statement instanceof AdminShowReplicaDistributionStmt
+                || statement instanceof AdminShowReplicaStatusStmt
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof AnalyzeStmt
@@ -203,6 +209,7 @@ public class StatementPlanner {
                 || statement instanceof GrantImpersonateStmt
                 || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RefreshTableStmt
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof RefreshTableStmt

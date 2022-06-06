@@ -58,6 +58,7 @@ Usage: $0 <options>
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --clean            clean and build target
+     --use-staros       build Backend with staros
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      -j                 build Backend parallel
@@ -82,6 +83,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
+  -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -98,6 +100,7 @@ BUILD_SPARK_DPP=
 CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
+USE_STAROS=OFF
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -129,6 +132,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
+            --use-staros) USE_STAROS=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -155,6 +159,7 @@ echo "Get params:
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
+    USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
 "
@@ -177,7 +182,6 @@ else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
-
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
     CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
@@ -192,14 +196,30 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
-    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+    if [ "${USE_STAROS}" == "ON"  ]; then
+      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
                     -DSTARROCKS_HOME=${STARROCKS_HOME} \
                     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                    -DUSE_STAROS=${USE_STAROS} \
+                    -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
+                    -Dabsl_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/absl \
+                    -DgRPC_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib/cmake/grpc \
+                    -Dstarlet_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/cmake ..
+    else
+      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+                    -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
+                    -DSTARROCKS_HOME=${STARROCKS_HOME} \
+                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
+                    -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+    fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
     ${BUILD_SYSTEM} install
 

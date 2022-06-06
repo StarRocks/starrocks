@@ -237,7 +237,10 @@ Status DeltaWriter::close() {
     case kClosed:
         return Status::OK();
     case kWriting:
-        auto st = _flush_memtable_async();
+        Status st = Status::OK();
+        if (_mem_table != nullptr) {
+            st = _flush_memtable_async();
+        }
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }

@@ -3,6 +3,9 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -47,6 +50,8 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
@@ -108,6 +113,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -125,6 +134,14 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -262,6 +279,14 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
         return visitNode(clause, context);
     }
 

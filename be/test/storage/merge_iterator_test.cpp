@@ -264,7 +264,6 @@ TEST_F(MergeIteratorTest, mask_merge) {
 }
 
 TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
-
     std::vector<int32_t> v1;
     std::vector<int32_t> v2;
     std::vector<int32_t> v3;
