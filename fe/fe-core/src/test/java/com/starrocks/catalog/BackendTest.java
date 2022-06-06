@@ -29,16 +29,11 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.*;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -89,8 +84,6 @@ public class BackendTest {
         int newStarletPort = 31239;
         backend.updateOnce(newBePort, newHttpPort, beRpcPort);
         Assert.assertEquals(newBePort, backend.getBePort());
-        backend.setStarletPort(starletPort);
-        Assert.assertEquals(newBePort, backend.getStarletPort());
 
         // check alive
         Assert.assertTrue(backend.isAlive());
