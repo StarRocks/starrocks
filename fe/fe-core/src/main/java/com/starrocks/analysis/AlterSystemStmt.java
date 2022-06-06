@@ -51,11 +51,13 @@ public class AlterSystemStmt extends DdlStmt {
 
         Preconditions.checkState((alterClause instanceof AddBackendClause)
                 || (alterClause instanceof DropBackendClause)
+                || (alterClause instanceof ModifyBackendAddressClause)
                 || (alterClause instanceof DecommissionBackendClause)
                 || (alterClause instanceof AddObserverClause)
                 || (alterClause instanceof DropObserverClause)
                 || (alterClause instanceof AddFollowerClause)
                 || (alterClause instanceof DropFollowerClause)
+                || (alterClause instanceof ModifyFrontendAddressClause)
                 || (alterClause instanceof ModifyBrokerClause)
                 || (alterClause instanceof AlterLoadErrorUrlClause));
 
@@ -87,6 +89,8 @@ public class AlterSystemStmt extends DdlStmt {
     private static boolean isNewAlterSystemClause(AlterClause clause) {
         return clause instanceof AddBackendClause
                 || clause instanceof DropBackendClause
-                || clause instanceof FrontendClause;
+                || clause instanceof ModifyBackendAddressClause
+                || clause instanceof ModifyFrontendAddressClause;
+
     }
 }
