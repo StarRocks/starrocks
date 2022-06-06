@@ -1548,9 +1548,6 @@ public class ShowExecutor {
     private void handleShowWorkGroup() throws AnalysisException {
         ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
         List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
-        if(showWorkGroupStmt.getName() != null && rows.isEmpty()){
-            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, showWorkGroupStmt.getName());
-        }
         resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 
