@@ -2,6 +2,8 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.ExternalCatalog;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -30,19 +32,18 @@ public class CreateCatalogTest {
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         String comment = "external catalog for hive";
-        CreateCatalogLog createCatalogLog =
-                new CreateCatalogLog("catalog_name", comment, properties);
-        createCatalogLog.write(out);
+        Catalog catalog = new ExternalCatalog("catalog_name", comment, properties);
+        catalog.write(out);
         out.flush();
         out.close();
 
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
-        CreateCatalogLog readCreateCatalogInfo = CreateCatalogLog.read(in);
-        Assert.assertEquals(readCreateCatalogInfo.getCatalogName(), "catalog_name");
-        Assert.assertEquals(readCreateCatalogInfo.getCatalogType(), "hive");
+        Catalog readCreateCatalogInfo = Catalog.read(in);
+        Assert.assertEquals(readCreateCatalogInfo.getName(), "catalog_name");
+        Assert.assertEquals(readCreateCatalogInfo.getType(), "hive");
         Assert.assertEquals(readCreateCatalogInfo.getComment(), "external catalog for hive");
-        Assert.assertEquals(readCreateCatalogInfo.getProperties(), properties);
+        Assert.assertEquals(readCreateCatalogInfo.getConfig(), properties);
         in.close();
     }
 }
