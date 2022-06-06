@@ -349,6 +349,9 @@ public:
     inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
+    bool in_pending_cancel_queue() const { return _in_pending_cancel_queue; }
+    void set_in_pending_cancel_queue(bool flag) { _in_pending_cancel_queue = flag; }
+
 private:
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -400,6 +403,8 @@ private:
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
+
+    bool _in_pending_cancel_queue = false;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
