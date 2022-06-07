@@ -1584,21 +1584,21 @@ public class DatabaseTransactionMgr {
                 // because INSERT_OVERWRITE will failover
                 LockContext lockContext = new LockContext(transactionState.getTransactionId(),
                         LockMode.SHARED, transactionState.getPrepareTime(), transactionState.getSourceType());
-                List<LockTarget> LockTargets =
+                List<LockTarget> lockTargets =
                         Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
                 for (long tableId : transactionState.getTableIdList()) {
                     Long[] pathIds = new Long[2];
                     pathIds[0] = transactionState.getDbId();
                     pathIds[1] = tableId;
                     LockTarget lockTarget = new LockTarget(pathIds, lockContext);
-                    LockTargets.add(lockTarget);
+                    lockTargets.add(lockTarget);
                 }
-                List<Lock> locks = GlobalStateMgr.getCurrentState().getLockManager().tryLock(LockTargets);
+                List<Lock> locks = GlobalStateMgr.getCurrentState().getLockManager().tryLock(lockTargets);
                 if (locks == null) {
                     // impossible to reach here, just add log
                     String msg = String.format("acquire locks failed for txnId:{}, lock targets:{}",
                             transactionState.getTransactionId(),
-                            LockTargets.stream().map(target -> target.getName()).collect(Collectors.joining(",")));
+                            lockTargets.stream().map(target -> target.getName()).collect(Collectors.joining(",")));
                     LOG.warn(msg);
                     throw new LockException(msg);
                 }
