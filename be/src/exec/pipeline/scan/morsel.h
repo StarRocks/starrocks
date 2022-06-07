@@ -9,6 +9,7 @@
 #include "storage/range.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
+#include "storage/tablet_reader_params.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -196,10 +197,10 @@ private:
     const int64_t _splitted_scan_rows;
 
     /// Key ranges passed to the storage layer.
-    // Possible values are "gt", "ge", "eq".
-    std::string _range_start_op = "";
-    // Possible values are "lt", "le".
-    std::string _range_end_op = "";
+    vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
+            vectorized::TabletReaderParams::RangeStartOperation::GT;
+    vectorized::TabletReaderParams::RangeEndOperation _range_end_op =
+            vectorized::TabletReaderParams::RangeEndOperation::LT;
     std::vector<OlapTuple> _range_start_key;
     std::vector<OlapTuple> _range_end_key;
 
@@ -270,10 +271,10 @@ private:
     const int64_t _splitted_scan_rows;
 
     /// Key ranges passed to the storage layer.
-    // Possible values are "gt", "ge", "eq".
-    std::string _range_start_op = "";
-    // Possible values are "lt", "le".
-    std::string _range_end_op = "";
+    vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
+            vectorized::TabletReaderParams::RangeStartOperation::GT;
+    vectorized::TabletReaderParams::RangeEndOperation _range_end_op =
+            vectorized::TabletReaderParams::RangeEndOperation::LT;
     std::vector<OlapTuple> _range_start_key;
     std::vector<OlapTuple> _range_end_key;
 

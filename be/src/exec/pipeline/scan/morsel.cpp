@@ -64,8 +64,10 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
             continue;
         }
 
-        _range_start_op = key_range->begin_include ? "ge" : "gt";
-        _range_end_op = key_range->end_include ? "le" : "lt";
+        _range_start_op = key_range->begin_include ? vectorized::TabletReaderParams::RangeStartOperation::GE
+                                                   : vectorized::TabletReaderParams::RangeStartOperation::GT;
+        _range_end_op = key_range->end_include ? vectorized::TabletReaderParams::RangeEndOperation::LE
+                                               : vectorized::TabletReaderParams::RangeEndOperation::LT;
 
         _range_start_key.emplace_back(key_range->begin_scan_range);
         _range_end_key.emplace_back(key_range->end_scan_range);
@@ -246,8 +248,10 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
             continue;
         }
 
-        _range_start_op = key_range->begin_include ? "ge" : "gt";
-        _range_end_op = key_range->end_include ? "le" : "lt";
+        _range_start_op = key_range->begin_include ? vectorized::TabletReaderParams::RangeStartOperation::GE
+                                                   : vectorized::TabletReaderParams::RangeStartOperation::GT;
+        _range_end_op = key_range->end_include ? vectorized::TabletReaderParams::RangeEndOperation::LE
+                                               : vectorized::TabletReaderParams::RangeEndOperation::LT;
 
         _range_start_key.emplace_back(key_range->begin_scan_range);
         _range_end_key.emplace_back(key_range->end_scan_range);
