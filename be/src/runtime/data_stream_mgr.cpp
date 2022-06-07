@@ -41,7 +41,7 @@ DataStreamMgr::DataStreamMgr() {
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
     uint32_t value = RawValue::get_hash_value(&fragment_instance_id.lo, TYPE_BIGINT, 0);
     value = RawValue::get_hash_value(&fragment_instance_id.hi, TYPE_BIGINT, value);
-    return value % BUCKET_NUM;
+    return value & BUCKET_NUM;
 }
 
 std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
