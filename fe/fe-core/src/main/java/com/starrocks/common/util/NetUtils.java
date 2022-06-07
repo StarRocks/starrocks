@@ -21,24 +21,20 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.Pair;
-import org.apache.commons.validator.routines.InetAddressValidator;
-
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
 public class NetUtils {
 
-    public static List<InetAddress> getHosts() {
+    public static void getHosts(List<InetAddress> hosts) {
         Enumeration<NetworkInterface> n = null;
-        List<InetAddress> hosts = new ArrayList<>();
+
         try {
             n = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e1) {
@@ -53,7 +49,6 @@ public class NetUtils {
                 hosts.add(addr);
             }
         }
-        return hosts;
     }
 
     public static boolean isPortUsing(String host, int port) throws UnknownHostException {
@@ -64,23 +59,5 @@ public class NetUtils {
             // do nothing
         }
         return flag;
-    }
-
-    public static Pair<String, String> getIpAndFqdnByHost(String host) throws UnknownHostException {
-
-        String ip = "";
-        String fqdn = "";
-        if (InetAddressValidator.getInstance().isValidInet4Address(host)) {
-            // ipOrFqdn is ip
-            ip = host;
-        } else {
-            // ipOrFqdn is fqdn
-            ip = InetAddress.getByName(host).getHostAddress();
-            if (null == ip) {
-                ip = "";
-            }
-            fqdn = host;
-        }
-        return new Pair<String, String>(ip, fqdn);
     }
 }
