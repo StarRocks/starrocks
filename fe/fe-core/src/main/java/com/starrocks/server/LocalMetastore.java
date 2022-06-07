@@ -1348,13 +1348,11 @@ public class LocalMetastore implements ConnectorMetadata {
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-            rollup.setUseStarOS(partitionInfo.isUseStarOS(partitionId));
             indexMap.put(indexId, rollup);
         }
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo);
-        partition.setPartitionInfo(partitionInfo);
 
         // version
         if (version != null) {

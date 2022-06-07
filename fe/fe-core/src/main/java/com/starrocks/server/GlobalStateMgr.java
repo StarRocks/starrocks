@@ -709,6 +709,11 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+    @VisibleForTesting
+    public void setMetadataMgr(MetadataMgr metadataMgr) {
+        this.metadataMgr = metadataMgr;
+    }
+
     public TaskManager getTaskManager() {
         return taskManager;
     }

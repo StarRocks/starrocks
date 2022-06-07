@@ -92,14 +92,6 @@ public class PartitionInfo implements Writable {
         idToDataProperty.put(partitionId, newDataProperty);
     }
 
-    public boolean isUseStarOS(long partitionId) {
-        DataProperty dataProperty = getDataProperty(partitionId);
-        if (dataProperty == null) {
-            return false;
-        }
-        return CatalogUtils.isUseStarOS(dataProperty.getStorageMedium());
-    }
-
     public int getQuorumNum(long partitionId) {
         return getReplicationNum(partitionId) / 2 + 1;
     }
