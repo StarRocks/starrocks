@@ -218,7 +218,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 Assert.fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function count(DISTINCT `default_cluster:test`.`t1`.`c_1_9`)",
+                Assert.assertEquals("Materialized view does not support distinct function count(DISTINCT `test`.`t1`.`c_1_9`)",
                         ex.getMessage());
             }
         }
@@ -230,7 +230,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 Assert.fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function sum(DISTINCT `default_cluster:test`.`t1`.`c_1_9`)",
+                Assert.assertEquals("Materialized view does not support distinct function sum(DISTINCT `test`.`t1`.`c_1_9`)",
                         ex.getMessage());
             }
         }
