@@ -201,7 +201,7 @@ public class AnalyzerUtils {
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = session.getDatabase();
             } else {
-                if (CatalogMgr.isInternalCatalog(session.getCurrentCatalog())) {
+                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                     dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
                 } else {
                     return;

@@ -2091,14 +2091,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SlotRef(null, identifier.getValue(), identifier.getValue());
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            if (qualifiedName.getParts().size() == 3) {
-                return new SlotRef(new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1)),
-                        qualifiedName.getParts().get(2),
-                        qualifiedName.getParts().get(2));
-            } else if (qualifiedName.getParts().size() == 2) {
-                return new SlotRef(new TableName(null, qualifiedName.getParts().get(0)),
-                        qualifiedName.getParts().get(1),
-                        qualifiedName.getParts().get(1));
+            List<String> parts = qualifiedName.getParts();
+            TableName tableName;
+            if (parts.size() == 4) {
+                tableName = new TableName(qualifiedName.getParts().get(0),
+                        qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
+                return new SlotRef(tableName, parts.get(3), parts.get(3));
+            } else if (parts.size() == 3) {
+                tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
+                return new SlotRef(tableName, parts.get(2), parts.get(2));
+            } else if (parts.size() == 2) {
+                tableName = new TableName(null, qualifiedName.getParts().get(0));
+                return new SlotRef(tableName, parts.get(1), parts.get(1));
             } else {
                 throw new ParsingException("Unqualified column reference " + qualifiedName);
             }
