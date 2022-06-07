@@ -6,8 +6,7 @@
 
 namespace starrocks {
 
-TypeInfoPtr get_decimal_type_info(FieldType type, int precision, int scale);
+TypeInfoPtr get_array_type_info(const TypeInfoPtr& item_type);
 
-std::string get_decimal_zone_map_string(TypeInfo* type_info, const char* value);
-
+const TypeInfoPtr& get_item_type_info(const TypeInfo* type_info);
 } // namespace starrocks

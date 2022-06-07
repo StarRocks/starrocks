@@ -27,6 +27,7 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
+#include "storage/array_type_info.h"
 #include "storage/collection.h"
 #include "storage/convert_helper.h"
 #include "storage/decimal12.h"
@@ -35,6 +36,7 @@
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
+#include "storage/type_traits.h"
 #include "storage/uint24.h"
 #include "types/date_value.hpp"
 #include "util/hash_util.hpp"
@@ -77,6 +79,82 @@ static Status convert_float_from_varchar(void* dest, const void* src) {
     unaligned_store<T>(dest, result);
     return Status::OK();
 }
+
+int TypeInfo::cmp(const Datum& left, const Datum& right) const {
+    if (left.is_null() || right.is_null()) {
+        return right.is_null() - left.is_null();
+    }
+    return _datum_cmp_impl(left, right);
+}
+
+class ScalarTypeInfo final : public TypeInfo {
+public:
+    bool equal(const void* left, const void* right) const override { return _equal(left, right); }
+
+    int cmp(const void* left, const void* right) const override { return _cmp(left, right); }
+
+    void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
+
+    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
+
+    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
+    // It is same with deep_copy() for all type except for HLL and OBJECT type
+    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
+        _copy_object(dest, src, mem_pool);
+    }
+
+    void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
+        _direct_copy(dest, src, mem_pool);
+    }
+
+    //convert and deep copy value from other type's source
+    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
+        return _convert_from(dest, src, src_type, mem_pool);
+    }
+
+    Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
+
+    std::string to_string(const void* src) const override { return _to_string(src); }
+
+    void set_to_max(void* buf) const override { _set_to_max(buf); }
+    void set_to_min(void* buf) const override { _set_to_min(buf); }
+
+    uint32_t hash_code(const void* data, uint32_t seed) const override { return _hash_code(data, seed); }
+    size_t size() const override { return _size; }
+
+    FieldType type() const override { return _field_type; }
+
+protected:
+    int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
+
+private:
+    bool (*_equal)(const void* left, const void* right);
+    int (*_cmp)(const void* left, const void* right);
+
+    void (*_shallow_copy)(void* dest, const void* src);
+    void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
+    void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
+    void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
+    Status (*_convert_from)(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool);
+
+    Status (*_from_string)(void* buf, const std::string& scan_key);
+    std::string (*_to_string)(const void* src);
+
+    void (*_set_to_max)(void* buf);
+    void (*_set_to_min)(void* buf);
+
+    uint32_t (*_hash_code)(const void* data, uint32_t seed);
+
+    // Datum based methods.
+    int (*_datum_cmp)(const Datum& left, const Datum& right);
+
+    const size_t _size;
+    const FieldType _field_type;
+
+    friend class ScalarTypeInfoResolver;
+    template <typename TypeTraitsClass>
+    ScalarTypeInfo(TypeTraitsClass t);
+};
 
 // ScalarTypeInfoImplBase
 // Base implementation for ScalarTypeInfo, use as default
@@ -254,7 +332,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
     if (type == OLAP_FIELD_TYPE_ARRAY) {
         const ColumnMetaPB& child = column_meta_pb.children_columns(0);
         TypeInfoPtr child_type_info = get_type_info(child);
-        type_info.reset(new ArrayTypeInfo(child_type_info));
+        type_info = get_array_type_info(child_type_info);
         return type_info;
     } else {
         return get_type_info(delegate_type(type));
@@ -266,7 +344,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
     if (col.type() == OLAP_FIELD_TYPE_ARRAY) {
         const TabletColumn& child = col.subcolumn(0);
         TypeInfoPtr child_type_info = get_type_info(child);
-        type_info.reset(new ArrayTypeInfo(child_type_info));
+        type_info = get_array_type_info(child_type_info);
         return type_info;
     } else {
         return get_type_info(col.type(), col.precision(), col.scale());
@@ -276,12 +354,9 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32) {
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(precision, scale);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL64) {
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(precision, scale);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL128) {
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(precision, scale);
+    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32 || field_type == OLAP_FIELD_TYPE_DECIMAL64 ||
+               field_type == OLAP_FIELD_TYPE_DECIMAL128) {
+        return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
     }
@@ -291,7 +366,7 @@ TypeInfoPtr get_type_info(const TypeInfo* type_info) {
     return get_type_info(type_info->type(), type_info->precision(), type_info->scale());
 }
 
-const ScalarTypeInfo* get_scalar_type_info(FieldType type) {
+const TypeInfo* get_scalar_type_info(FieldType type) {
     DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
 }
