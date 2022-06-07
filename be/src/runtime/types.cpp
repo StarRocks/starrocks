@@ -25,6 +25,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
+#include "storage/array_type_info.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -259,8 +260,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     bool is_array = false;
     if (ftype == OLAP_FIELD_TYPE_ARRAY) {
         is_array = true;
-        ArrayTypeInfo* array_type_info = down_cast<ArrayTypeInfo*>(type_info);
-        type_info = array_type_info->item_type_info().get();
+        type_info = get_item_type_info(type_info).get();
         ftype = type_info->type();
     }
 

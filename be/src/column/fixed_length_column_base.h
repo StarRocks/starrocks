@@ -2,10 +2,12 @@
 
 #pragma once
 
+#include <memory>
 #include <utility>
 
 #include "column/column.h"
 #include "column/datum.h"
+#include "common/statusor.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"

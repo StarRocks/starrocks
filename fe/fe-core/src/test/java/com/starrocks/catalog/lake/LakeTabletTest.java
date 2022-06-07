@@ -2,17 +2,8 @@
 
 package com.starrocks.catalog.lake;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSAgent;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -23,8 +14,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.util.List;
-import java.util.Map;
 
 public class LakeTabletTest {
     @Mocked
@@ -68,36 +57,4 @@ public class LakeTabletTest {
         file.delete();
     }
 
-    @Test
-    public void testGetBackend(@Mocked SystemInfoService systemInfoService) {
-        Map<Long, Backend> idToBackend = Maps.newHashMap();
-        long backendId = 1L;
-        idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getStarOSAgent();
-                result = new StarOSAgent();
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = ImmutableMap.copyOf(idToBackend);
-                systemInfoService.getBackendIdByHost(anyString);
-                result = backendId;
-            }
-        };
-
-        LakeTablet tablet = new LakeTablet(1L, 2L);
-        Assert.assertEquals(Sets.newHashSet(backendId), tablet.getBackendIds());
-        Assert.assertEquals(backendId, tablet.getPrimaryBackendId());
-        List<Replica> allQuerableReplicas = Lists.newArrayList();
-        List<Replica> localReplicas = Lists.newArrayList();
-        tablet.getQueryableReplicas(allQuerableReplicas, localReplicas, 0, backendId, 0);
-        Assert.assertEquals(1, allQuerableReplicas.size());
-        Assert.assertEquals(backendId, allQuerableReplicas.get(0).getBackendId());
-        Assert.assertEquals(1, localReplicas.size());
-        Assert.assertEquals(backendId, localReplicas.get(0).getBackendId());
-    }
 }

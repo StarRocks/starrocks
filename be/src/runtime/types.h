@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_TYPES_H
-#define STARROCKS_BE_RUNTIME_TYPES_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -30,8 +29,7 @@
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "runtime/primitive_type.h"
 #include "thrift/protocol/TDebugProtocol.h"
-#include "types/hll.h"
-#include "util/json.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
@@ -370,5 +368,3 @@ inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
 }
 
 } // namespace starrocks
-
-#endif
