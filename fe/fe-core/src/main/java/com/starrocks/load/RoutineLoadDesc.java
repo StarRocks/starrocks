@@ -125,7 +125,7 @@ public class RoutineLoadDesc {
         return String.join(", ", subSQLs);
     }
 
-    public String pack(String str) {
+    private String pack(String str) {
         return "`" + str + "`";
     }
 

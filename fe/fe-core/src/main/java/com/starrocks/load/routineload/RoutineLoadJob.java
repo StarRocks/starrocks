@@ -1554,11 +1554,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
         }
 
+        String tableName = null;
+        try {
+            tableName = getTableName();
+        } catch (Exception e) {
+            LOG.warn("get table name failed", e);
+            tableName = "unknown";
+        }
+
         // we use sql to persist the load properties, so we just put the load properties to sql.
-        String sql = "CREATE ROUTINE LOAD job ON tbl "
-                + originLoadDesc.toSql()
-                + " PROPERTIES (\"desired_concurrent_number\"=\"1\")"
-                + " FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+        String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
+                " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
+                name, tableName, originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatement(sql, 0);
     }

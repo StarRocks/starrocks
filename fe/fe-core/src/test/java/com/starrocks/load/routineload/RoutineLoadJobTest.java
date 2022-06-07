@@ -351,8 +351,9 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testMergeLoadDescToOriginStatement() throws Exception {
-        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        String originStmt = "CREATE ROUTINE LOAD job ON tbl " +
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                "default_cluster", 2L, 3L, "192.168.1.2:10000", "topic");
+        String originStmt = "CREATE ROUTINE LOAD job ON unknown " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
         routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
@@ -362,7 +363,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY ';'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
@@ -372,7 +373,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY '\n'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
@@ -383,7 +384,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`, `b`, `c`=1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1) " +
@@ -395,7 +396,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -408,7 +409,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 1", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -422,7 +423,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY '\t'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -436,7 +437,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY 'a'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -450,7 +451,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -463,7 +464,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         " PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -477,7 +478,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON tbl " +
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
