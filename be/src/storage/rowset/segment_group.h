@@ -64,6 +64,7 @@ private:
     ssize_t _ordinal;
 };
 
+// ShortKeyIndexDecoderGroup contains decoders for each segment of SegmentGroup.
 class ShortKeyIndexDecoderGroup {
 public:
     explicit ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments);
@@ -92,9 +93,11 @@ private:
     std::vector<ssize_t> _decoder_start_ordinals;
 };
 
+// SegmentGroup contains multiple non-overlapping segments incremented by the key columns.
+// It is used to perform binary search on the short keys of all the segments.
 class SegmentGroup {
 public:
-    SegmentGroup(std::vector<SegmentSharedPtr> segments);
+    SegmentGroup(std::vector<SegmentSharedPtr>&& segments);
 
     ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group.lower_bound(key); }
 
