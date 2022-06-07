@@ -24,15 +24,12 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -287,71 +284,6 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
-    }
-
-    private void checkOlapTableWithLakeTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table instanceof OlapTable);
-        OlapTable olapTable = (OlapTable) table;
-        for (Partition partition : olapTable.getAllPartitions()) {
-            Assert.assertTrue(partition.isUseStarOS());
-        }
-
-        boolean throwException = false;
-        try {
-            CatalogUtils.checkOlapTableHasStarOSPartition(fullDbName, tableName);
-        } catch (AnalysisException e) {
-            throwException = true;
-        }
-        Assert.assertTrue(throwException);
-    }
-
-    private void dropOlapTableWithLakeTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table != null);
-        db.dropTable(tableName);
-        table = db.getTable(tableName);
-        Assert.assertTrue(table == null);
-    }
-
-    @Test
-    public void testCreateOlapTableWithLakeTablet() throws DdlException {
-        Config.use_staros = true;
-
-        // normal
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                        "distributed by hash(key1) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithLakeTablet("test", "single_partition_duplicate_key");
-        dropOlapTableWithLakeTablet("test", "single_partition_duplicate_key");
-
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.multi_partition_aggregate_key (key1 date, key2 varchar(10), v bigint sum)\n" +
-                        "partition by range(key1)\n" +
-                        "(partition p1 values less than (\"2022-03-01\"),\n" +
-                        " partition p2 values less than (\"2022-04-01\"))\n" +
-                        "distributed by hash(key2) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithLakeTablet("test", "multi_partition_aggregate_key");
-        dropOlapTableWithLakeTablet("test", "multi_partition_aggregate_key");
-
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.multi_partition_unique_key (key1 int, key2 varchar(10), v bigint)\n" +
-                        "unique key (key1, key2)\n" +
-                        "partition by range(key1)\n" +
-                        "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\"))\n" +
-                        "distributed by hash(key2) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithLakeTablet("test", "multi_partition_unique_key");
-        dropOlapTableWithLakeTablet("test", "multi_partition_unique_key");
-
-        Config.use_staros = false;
     }
 
     @Test
