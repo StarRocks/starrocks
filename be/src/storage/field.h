@@ -238,21 +238,12 @@ public:
 
     std::string to_zone_map_string(const char* value) const {
         switch (type()) {
-        case OLAP_FIELD_TYPE_DECIMAL32: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        case OLAP_FIELD_TYPE_DECIMAL64: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        case OLAP_FIELD_TYPE_DECIMAL128: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        default: {
+        case OLAP_FIELD_TYPE_DECIMAL32:
+        case OLAP_FIELD_TYPE_DECIMAL64:
+        case OLAP_FIELD_TYPE_DECIMAL128:
+            return get_decimal_zone_map_string(type_info().get(), value);
+        default:
             return type_info()->to_string(value);
-        }
         }
     }
 
@@ -477,14 +468,9 @@ public:
                 return local;
             }
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(
-                                                 column.precision(), column.scale()));
+                return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
             }
@@ -510,14 +496,9 @@ public:
                 return local.release();
             }
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(
-                                                 column.precision(), column.scale()));
+                return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
             }

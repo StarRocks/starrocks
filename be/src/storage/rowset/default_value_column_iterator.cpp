@@ -21,6 +21,7 @@
 
 #include "storage/rowset/default_value_column_iterator.h"
 
+#include "column/column.h"
 #include "storage/column_block.h"
 #include "storage/range.h"
 #include "storage/types.h"

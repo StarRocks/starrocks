@@ -4,8 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks::vectorized {
 

@@ -11,6 +11,7 @@ import com.starrocks.catalog.KeysType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Materialized view is performed to materialize the results of query.
@@ -34,12 +35,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
-    private KeysType myKeyType = KeysType.DUP_KEYS;
+    private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
-    // if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
-    private boolean isReplay = false;
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
+    private Set<Long> baseTableIds;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
@@ -95,6 +95,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.expressionPartitionDesc = expressionPartitionDesc;
     }
 
+    public void setKeysType(KeysType keysType) {
+        this.keysType = keysType;
+    }
+
+    public KeysType getKeysType() {
+        return keysType;
+    }
+
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
     }
@@ -133,6 +141,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setMvColumnItems(List<Column> mvColumnItems) {
         this.mvColumnItems = mvColumnItems;
+    }
+
+    public Set<Long> getBaseTableIds() {
+        return baseTableIds;
+    }
+
+    public void setBaseTableIds(Set<Long> baseTableIds) {
+        this.baseTableIds = baseTableIds;
     }
 
     @Override

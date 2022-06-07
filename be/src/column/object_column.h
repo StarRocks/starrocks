@@ -8,6 +8,7 @@
 #include "column/datum.h"
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
+#include "types/hll.h"
 
 namespace starrocks::vectorized {
 

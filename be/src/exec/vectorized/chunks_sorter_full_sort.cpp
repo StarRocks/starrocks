@@ -92,7 +92,9 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     size_t chunk_size = _state->chunk_size();
     SortedRun& run = _merged_runs.front();
     *chunk = run.steal_chunk(chunk_size);
-    RETURN_IF_ERROR((*chunk)->downgrade());
+    if (*chunk != nullptr) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
     if (run.empty()) {
         _merged_runs.pop_front();
     }

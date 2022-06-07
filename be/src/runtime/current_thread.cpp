@@ -2,6 +2,7 @@
 
 #include "runtime/current_thread.h"
 
+#include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
@@ -14,6 +15,13 @@ CurrentThread::~CurrentThread() {
     }
     commit();
     tls_is_thread_status_init = false;
+}
+
+starrocks::MemTracker* CurrentThread::mem_tracker() {
+    if (UNLIKELY(tls_mem_tracker == nullptr)) {
+        tls_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
+    }
+    return tls_mem_tracker;
 }
 
 } // namespace starrocks

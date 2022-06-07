@@ -17,6 +17,9 @@ import java.util.Map;
 public class Catalog implements Writable {
     public static final String CATALOG_TYPE = "type";
 
+    // Reserved fields for later support operations such as rename
+    @SerializedName("id")
+    protected long id;
     @SerializedName(value = "name")
     protected String name;
     @SerializedName(value = "comment")
@@ -24,10 +27,15 @@ public class Catalog implements Writable {
     @SerializedName(value = "config")
     protected Map<String, String> config;
 
-    public Catalog(String name, Map<String, String> config, String comment) {
+    public Catalog(long id, String name, Map<String, String> config, String comment) {
+        this.id = id;
         this.name = name;
         this.config = config;
         this.comment = comment;
+    }
+
+    public long getId() {
+        return id;
     }
 
     public String getName() {

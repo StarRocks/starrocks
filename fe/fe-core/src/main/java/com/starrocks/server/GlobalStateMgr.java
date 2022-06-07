@@ -102,6 +102,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -548,7 +549,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        this.starOSAgent = new StarOSAgent();
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
@@ -2203,6 +2207,10 @@ public class GlobalStateMgr {
 
     public void replayCreateTable(String dbName, Table table) {
         localMetastore.replayCreateTable(dbName, table);
+    }
+
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        localMetastore.replayCreateMaterializedView(dbName, materializedView);
     }
 
     // Drop table
