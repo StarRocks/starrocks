@@ -22,8 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "gen_cpp/Types_types.h"
-
 namespace starrocks {
 
 class CIDR;
@@ -32,8 +30,6 @@ class BackendOptions {
 public:
     static bool init();
     static std::string get_localhost();
-    static TBackend get_localBackend();
-    static void set_localhost(const std::string& host);
 
 private:
     static bool analyze_priority_cidrs();
@@ -41,7 +37,6 @@ private:
 
     static std::string _s_localhost;
     static std::vector<CIDR> _s_priority_cidrs;
-    static TBackend _backend;
 
     BackendOptions(const BackendOptions&) = delete;
     const BackendOptions& operator=(const BackendOptions&) = delete;

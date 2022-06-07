@@ -34,7 +34,6 @@
 #include "storage/storage_engine.h"
 #include "storage/utils.h"
 #include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/thrift_server.h"
 
 using std::fstream;
@@ -80,52 +79,11 @@ Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
-            LOG(INFO) << master_info.backend_ip << " not equal to to backend localhost "
-                      << BackendOptions::get_localhost();
-            if (is_valid_ip(master_info.backend_ip)) {
-                LOG(WARNING) << "backend ip saved in master does not equal to backend local ip"
-                             << master_info.backend_ip << " vs. " << BackendOptions::get_localhost();
-                std::stringstream ss;
-                ss << "actual backend local ip: " << BackendOptions::get_localhost();
-                return Status::InternalError(ss.str());
-            }
-
-            std::string ip = hostname_to_ip(master_info.backend_ip);
-            if (ip.empty()) {
-                std::stringstream ss;
-                ss << "can not get ip from fqdn: " << master_info.backend_ip;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
-            }
-
-            std::vector<InetAddress> hosts;
-            Status status = get_hosts_v4(&hosts);
-            if (!status.ok() || hosts.empty()) {
-                std::stringstream ss;
-                ss << "the status was not ok when get_hosts_v4, error is " << status.get_error_msg();
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
-            }
-
-            bool set_new_localhost = false;
-
-            for (std::vector<InetAddress>::iterator addr_it = hosts.begin(); addr_it != hosts.end(); ++addr_it) {
-                if (addr_it->is_address_v4() && addr_it->get_host_address_v4() == ip) {
-                    BackendOptions::set_localhost(master_info.backend_ip);
-                    set_new_localhost = true;
-                    break;
-                }
-            }
-
-            if (!set_new_localhost) {
-                std::stringstream ss;
-                ss << "the host recorded in master is " << master_info.backend_ip
-                   << ", but we cannot found the local ip that mapped to that host." << BackendOptions::get_localhost();
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
-            }
-
-            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost();
+            LOG(WARNING) << "backend ip saved in master does not equal to backend local ip" << master_info.backend_ip
+                         << " vs. " << BackendOptions::get_localhost();
+            std::stringstream ss;
+            ss << "actual backend local ip: " << BackendOptions::get_localhost();
+            return Status::InternalError(ss.str());
         }
     }
 

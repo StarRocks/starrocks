@@ -36,7 +36,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AlterReplicaTask;
@@ -383,7 +382,7 @@ public abstract class AlterHandler extends MasterDaemon {
     /*
      * entry function. handle alter ops
      */
-    public abstract ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public abstract void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws UserException;
 
     /*
