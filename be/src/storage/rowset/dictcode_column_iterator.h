@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/column.h"
+#include "column/nullable_column.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"

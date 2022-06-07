@@ -263,6 +263,5 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
     }
 }
 
-}
-} // namespace starrocks::vectorized
-
+} // namespace vectorized
+} // namespace starrocks

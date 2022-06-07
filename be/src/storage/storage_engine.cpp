@@ -21,6 +21,8 @@
 
 #include "storage/storage_engine.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <csignal>
 #include <cstring>
