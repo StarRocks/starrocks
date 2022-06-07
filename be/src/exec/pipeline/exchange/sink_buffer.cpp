@@ -86,7 +86,7 @@ bool SinkBuffer::is_full() const {
     for (auto& [_, buffer] : _buffers) {
         buffer_size += buffer.size();
     }
-    bool is_full = buffer_size > max_buffer_size;
+    const bool is_full = buffer_size > max_buffer_size;
 
     int64_t last_full_timestamp = _last_full_timestamp;
     int64_t full_time = _full_time;
@@ -95,6 +95,8 @@ bool SinkBuffer::is_full() const {
         _last_full_timestamp.compare_exchange_weak(last_full_timestamp, MonotonicNanos());
     }
     if (!is_full && last_full_timestamp != -1) {
+        // The following two update operations cannot guarantee atomicity as a whole without lock
+        // But we can accept bias in estimatation
         _full_time.compare_exchange_weak(full_time, full_time + (MonotonicNanos() - last_full_timestamp));
         _last_full_timestamp.compare_exchange_weak(last_full_timestamp, -1);
     }
