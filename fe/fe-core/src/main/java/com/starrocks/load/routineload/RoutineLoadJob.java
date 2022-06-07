@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.Expr;
@@ -39,9 +38,6 @@ import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -59,7 +55,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.MetricRepo;
@@ -84,7 +79,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -1569,34 +1563,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 name, tableName, originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatement(sql, 0);
-    }
-
-    public RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables)
-            throws IOException {
-        long sqlMode;
-        if (sessionVariables != null && sessionVariables.containsKey(SessionVariable.SQL_MODE)) {
-            sqlMode = Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE));
-        } else {
-            sqlMode = SqlModeHelper.MODE_DEFAULT;
-        }
-
-        // parse the origin stmt to get routine load desc
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt), sqlMode));
-        try {
-            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
-            if (stmt instanceof CreateRoutineLoadStmt) {
-                return CreateRoutineLoadStmt.
-                        buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList());
-            } else if (stmt instanceof AlterRoutineLoadStmt) {
-                return CreateRoutineLoadStmt.
-                        buildLoadDesc(((AlterRoutineLoadStmt) stmt).getLoadPropertyList());
-            } else {
-                throw new IOException("stmt is neither CreateRoutineLoadStmt nor AlterRoutineLoadStmt");
-            }
-        } catch (Exception e) {
-            LOG.warn("error happens when parsing create/alter routine load stmt: " + origStmt.originStmt, e);
-            return null;
-        }
     }
 
     protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)
