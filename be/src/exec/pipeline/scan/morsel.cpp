@@ -286,7 +286,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     vectorized::ShortKeyOptionPtr _cur_range_upper = nullptr;
     bool need_more_blocks = true;
     while (!_cur_tablet_finished() &&      // One morsel only read data from one tablet.
-           (_cur_range_lower != nullptr || // Haven't found the _cur_range_lower different from _cur_range_lower.
+           (_cur_range_lower != nullptr || // Haven't found the _cur_range_upper different from _cur_range_lower.
             (need_more_blocks && num_taken_blocks < _sample_splitted_scan_blocks))) {
         auto& num_rest_blocks = _num_rest_blocks_per_seek_range[_range_idx];
 
@@ -298,7 +298,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
         if (num_taken_blocks < _sample_splitted_scan_blocks) {
             cur_num_taken_blocks = _sample_splitted_scan_blocks - num_taken_blocks;
         } else {
-            // If it has taken enough blocks but hasn't found the _cur_range_lower different from _cur_range_lower,
+            // If it has taken enough blocks but hasn't found the _cur_range_upper different from _cur_range_lower,
             // just take quarter of _sample_splitted_scan_blocks once.
             cur_num_taken_blocks = std::max<int64_t>(_sample_splitted_scan_blocks / 4, 1);
         }
