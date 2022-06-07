@@ -79,6 +79,11 @@ public class FrontendOptions {
             System.exit(-1);
         }
 
+        if (!Config.enable_fqdn_func) {
+            initAddrUseIp(hosts);
+            return;
+        }
+
         HostType specifiedHostType = HostType.NOT_SPECIFIED;
 
         for (int i = 0; i < args.length; i++) {

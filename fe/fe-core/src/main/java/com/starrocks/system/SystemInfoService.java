@@ -361,7 +361,7 @@ public class SystemInfoService {
         try {
             targetPair = NetUtils.getIpAndFqdnByHost(host);
         } catch (UnknownHostException e) {
-            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
             return null;
         }
 
@@ -371,7 +371,7 @@ public class SystemInfoService {
             try {
                 curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
             } catch (UnknownHostException e) {
-                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
                 continue;
             }
             boolean hostMatch = false;
