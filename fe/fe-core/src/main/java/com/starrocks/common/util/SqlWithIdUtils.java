@@ -51,7 +51,7 @@ public class SqlWithIdUtils {
 
     /**
      * decode sql which use database id and table id
-     *
+     * warning: table id must before db id e.g. <db 10001>.<table 10002>
      * @param sql
      * @return StatementBase
      */
