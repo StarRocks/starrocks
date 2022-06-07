@@ -199,7 +199,7 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
-            .registerTypeAdapterFactory(new PostProcessTypeAdapterFactory())
+            .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             .registerTypeAdapterFactory(columnTypeAdapterFactory)
             .registerTypeAdapterFactory(distributionInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(resourceTypeAdapterFactory)
@@ -416,9 +416,9 @@ public class GsonUtils {
         }
     }
 
-    public static class PostProcessTypeAdapterFactory implements TypeAdapterFactory {
+    public static class ProcessHookTypeAdapterFactory implements TypeAdapterFactory {
 
-        public PostProcessTypeAdapterFactory() {
+        public ProcessHookTypeAdapterFactory() {
         }
 
         @Override
