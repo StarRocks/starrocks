@@ -36,9 +36,7 @@ import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyBrokerClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -50,7 +48,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -130,10 +127,11 @@ public class SystemHandler extends AlterHandler {
 
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
+    public synchronized void process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
                                      OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
+
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
@@ -150,10 +148,6 @@ public class SystemHandler extends AlterHandler {
             }
             GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs(),
                     addBackendClause.isFree(), addBackendClause.getDestCluster());
-        } else if (alterClause instanceof ModifyBackendAddressClause) {
-            // update Backend Address
-            ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
@@ -183,10 +177,6 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AddFollowerClause) {
             AddFollowerClause clause = (AddFollowerClause) alterClause;
             GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
-        } else if (alterClause instanceof ModifyFrontendAddressClause) {
-            // update Frontend Address
-            ModifyFrontendAddressClause modifyFrontendAddressClause = (ModifyFrontendAddressClause) alterClause;
-            GlobalStateMgr.getCurrentState().modifyFrontendHost(modifyFrontendAddressClause);
         } else if (alterClause instanceof DropFollowerClause) {
             DropFollowerClause clause = (DropFollowerClause) alterClause;
             GlobalStateMgr.getCurrentState()
@@ -200,7 +190,6 @@ public class SystemHandler extends AlterHandler {
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }
-        return null;
     }
 
     private List<Backend> checkDecommission(DecommissionBackendClause decommissionBackendClause)

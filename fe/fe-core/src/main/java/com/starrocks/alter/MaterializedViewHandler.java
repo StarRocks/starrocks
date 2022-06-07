@@ -65,7 +65,6 @@ import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -1149,12 +1148,13 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     @Override
-    public ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException, MetaNotFoundException {
 
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
         }
+
         Optional<AlterClause> alterClauseOptional = alterClauses.stream().findAny();
         if (alterClauseOptional.isPresent()) {
             if (alterClauseOptional.get() instanceof AddRollupClause) {
@@ -1169,7 +1169,6 @@ public class MaterializedViewHandler extends AlterHandler {
                 Preconditions.checkState(false);
             }
         }
-        return null;
     }
 
     @Override
