@@ -148,11 +148,12 @@ public class StarOSAgent {
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 
-    public long getWorkerIdfromBackendId(long backendId) {
+    public long getWorkerIdByBackendId(long backendId) {
         long workerId = -1;
         for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
             if (entry.getValue() == backendId) {
                 workerId = entry.getKey();
+                break;
             }
         }
         return workerId;
