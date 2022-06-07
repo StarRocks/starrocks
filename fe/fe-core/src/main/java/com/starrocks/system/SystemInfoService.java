@@ -361,7 +361,7 @@ public class SystemInfoService {
         try {
             targetPair = NetUtils.getIpAndFqdnByHost(host);
         } catch (UnknownHostException e) {
-            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            LOG.info("failed to get right ip by fqdn {}", e.getMessage());
             return null;
         }
 
@@ -371,10 +371,15 @@ public class SystemInfoService {
             try {
                 curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
             } catch (UnknownHostException e) {
-                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                LOG.info("failed to get right ip by fqdn {}", e.getMessage());
                 continue;
             }
-            boolean hostOk = (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second));
+            boolean hostOk = false;
+            if (targetPair.second.equals("") && curPair.second.equals("")) {
+                hostOk = targetPair.first.equals(curPair.first);
+            } else {
+                hostOk = (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second));
+            }
             if (hostOk && (backend.getBePort() == bePort)) {
                 return backend;
             }
