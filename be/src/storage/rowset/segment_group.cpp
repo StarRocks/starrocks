@@ -9,12 +9,12 @@ ShortKeyIndexGroupIterator::ShortKeyIndexGroupIterator(const ShortKeyIndexDecode
         : _decoder_group(decoder_group), _ordinal(ordinal) {}
 
 bool ShortKeyIndexGroupIterator::valid() const {
-    return _ordinal >= 0 && _ordinal < _decoder_group.num_blocks();
+    return _ordinal >= 0 && _ordinal < _decoder_group->num_blocks();
 }
 
 Slice ShortKeyIndexGroupIterator::operator*() const {
     DCHECK(valid());
-    return _decoder_group.key(_ordinal);
+    return _decoder_group->key(_ordinal);
 }
 
 /// ShortKeyIndexDecoderGroup
