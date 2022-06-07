@@ -4,6 +4,7 @@
 
 #include <mutex>
 
+#include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"

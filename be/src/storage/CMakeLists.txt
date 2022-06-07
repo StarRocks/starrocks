@@ -113,6 +113,7 @@ add_library(Storage STATIC
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
+    chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp

@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "runtime/descriptors.h"
-#include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"

@@ -17,6 +17,8 @@
 #include "exec/vectorized/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
+#include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"

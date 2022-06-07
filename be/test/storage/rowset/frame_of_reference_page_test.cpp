@@ -25,6 +25,7 @@
 
 #include <memory>
 
+#include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"

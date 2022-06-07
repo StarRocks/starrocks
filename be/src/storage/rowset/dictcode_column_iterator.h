@@ -5,7 +5,9 @@
 #include <memory>
 
 #include "column/column.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/global_dict/dict_column.h"
+#include "runtime/global_dict/types.h"
 #include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"

@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exprs/expr_context.h"
+#include "runtime/global_dict/parser.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
