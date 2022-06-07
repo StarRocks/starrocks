@@ -32,7 +32,7 @@ public class AST2SQLTest {
             Assert.assertTrue(baseStmt instanceof CreateViewStmt);
             CreateViewStmt viewStmt = (CreateViewStmt) baseStmt;
             Assert.assertEquals(viewStmt.getInlineViewDef(),
-                    "SELECT `default_cluster:test`.`t0`.`v1` AS `v1` FROM `default_cluster:test`.`t0` WHERE (NOT FALSE) IS NULL");
+                    "SELECT `test`.`t0`.`v1` AS `v1` FROM `test`.`t0` WHERE (NOT FALSE) IS NULL");
         }
         {
             String sql;
@@ -47,7 +47,7 @@ public class AST2SQLTest {
             Assert.assertTrue(baseStmt instanceof CreateViewStmt);
             CreateViewStmt viewStmt = (CreateViewStmt) baseStmt;
             Assert.assertEquals(viewStmt.getInlineViewDef(),
-                    "SELECT `default_cluster:test`.`t0`.`v1` AS `v1` FROM `default_cluster:test`.`t0` WHERE (NOT FALSE) IS NOT NULL");
+                    "SELECT `test`.`t0`.`v1` AS `v1` FROM `test`.`t0` WHERE (NOT FALSE) IS NOT NULL");
         }
     }
 }
