@@ -80,6 +80,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+@Deprecated
 public class SchemaChangeJob extends AlterJob {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJob.class);
 
