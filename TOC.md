@@ -45,7 +45,6 @@
   + [Cost Based Optimizer](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [Configure a time zone](/using_starrocks/timezone.md)
-  + [File manager](/using_starrocks/File_manager.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -73,14 +72,11 @@
       + [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md)
       + [CANCEL DECOMMISSION](/sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE CLUSTER](/sql-reference/sql-statements/Administration/CREATE%20CLUSTER.md)
-      + [CREATE FILE](/sql-reference/sql-statements/Administration/CREATE%20FILE.md)
       + [DROP CLUSTER](/sql-reference/sql-statements/Administration/DROP%20CLUSTER.md)
-      + [DROP FILE](/sql-reference/sql-statements/Administration/DROP%20FILE.md)
       + [ENTER](/sql-reference/sql-statements/Administration/ENTER.md)
       + [INSTALL PLUGIN](/sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
       + [SHOW BACKENDS](/sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
-      + [SHOW FILE](/sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [SHOW FRONTENDS](/sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md)
       + [SHOW FULL COLUMNS](/sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](/sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
