@@ -51,12 +51,12 @@ public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("Cluster").add("IP").add("HostName").add("HeartbeatPort")
-            .add("BePort").add("HttpPort").add("BrpcPort").add("StarletPort").add("WorkerId")
-            .add("LastStartTime").add("LastHeartbeat").add("Alive").add("SystemDecommissioned")
-            .add("ClusterDecommissioned").add("TabletNum").add("DataUsedCapacity").add("AvailCapacity")
-            .add("TotalCapacity").add("UsedPct").add("MaxDiskUsedPct").add("ErrMsg").add("Version")
-            .add("Status").add("DataTotalCapacity").add("DataUsedPct").add("CpuCores").build();
+            .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
+            .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
+            .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
+            .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
+            .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
+            .add("DataUsedPct").add("CpuCores").add("StarletPort").add("WorkerId").build();
 
     private SystemInfoService clusterInfoService;
 
@@ -118,7 +118,6 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-
             backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
             if (Strings.isNullOrEmpty(clusterName)) {
@@ -126,11 +125,6 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add(String.valueOf(backend.getBePort()));
                 backendInfo.add(String.valueOf(backend.getHttpPort()));
                 backendInfo.add(String.valueOf(backend.getBrpcPort()));
-                if (Config.integrate_staros) {
-                    backendInfo.add(String.valueOf(backend.getStarletPort()));
-                    long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdfromBackendId(backendId);
-                    backendInfo.add(String.valueOf(workerId));
-                }
             }
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastUpdateMs()));
@@ -193,6 +187,11 @@ public class BackendsProcDir implements ProcDirInterface {
 
             // Num CPU cores
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+            if (Config.integrate_starmgr) {
+                backendInfo.add(String.valueOf(backend.getStarletPort()));
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdfromBackendId(backendId);
+                backendInfo.add(String.valueOf(workerId));
+            }
 
             comparableBackendInfos.add(backendInfo);
         }

@@ -649,7 +649,7 @@ public class Backend implements Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (Config.integrate_staros && this.starletPort != hbResponse.getStarletPort()) {
+            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
             }
