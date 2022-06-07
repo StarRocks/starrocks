@@ -242,6 +242,9 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             ss << "body exceed max size: " << max_body_bytes << ", limit: " << max_body_bytes;
             return Status::InternalError(ss.str());
         }
+
+        // allocate buffer in advance.
+        _buf = ByteBuffer::allocate(ctx->body_bytes);
     } else {
 #ifndef BE_TEST
         evhttp_connection_set_max_body_size(evhttp_request_get_connection(http_req->get_evhttp_request()),
