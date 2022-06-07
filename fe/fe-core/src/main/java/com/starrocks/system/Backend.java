@@ -256,10 +256,6 @@ public class Backend implements Writable {
         this.brpcPort = brpcPort;
     }
 
-    public void setHeartbeatPort(int heartbeatPort) {
-        this.heartbeatPort = heartbeatPort;
-    }
-
     public long getLastUpdateMs() {
         return this.lastUpdateMs;
     }
@@ -656,7 +652,6 @@ public class Backend implements Writable {
             if (Config.integrate_staros && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
-                LOG.info("starletPort in Backend.handleHbResponse is {}", this.starletPort);
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

@@ -259,6 +259,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
         seg_options.meta = options.meta;
     }
     seg_options.rowid_range_option = options.rowid_range_option;
+    seg_options.short_key_ranges = options.short_key_ranges;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.

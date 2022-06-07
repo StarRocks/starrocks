@@ -66,7 +66,6 @@ import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
@@ -204,7 +203,6 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
@@ -1749,10 +1747,6 @@ public class GlobalStateMgr {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
 
-    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        nodeMgr.modifyFrontendHost(modifyFrontendAddressClause);
-    }
-
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
         nodeMgr.dropFrontend(role, host, port);
     }
@@ -2278,10 +2272,6 @@ public class GlobalStateMgr {
         nodeMgr.replayAddFrontend(fe);
     }
 
-    public void replayUpdateFrontend(Frontend frontend) {
-        nodeMgr.replayUpdateFrontend(frontend);
-    }
-
     public void replayDropFrontend(Frontend frontend) {
         nodeMgr.replayDropFrontend(frontend);
     }
@@ -2739,8 +2729,8 @@ public class GlobalStateMgr {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
-        return this.alter.processAlterCluster(stmt);
+    public void alterCluster(AlterSystemStmt stmt) throws UserException {
+        this.alter.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {

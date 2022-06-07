@@ -8,8 +8,8 @@ import java.util.Map;
 
 public class ExternalCatalog extends Catalog {
 
-    public ExternalCatalog(String name, String comment, Map<String, String> config) {
-        super(name, config, comment);
+    public ExternalCatalog(long id, String name, String comment, Map<String, String> config) {
+        super(id, name, config, comment);
         Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }
 }
