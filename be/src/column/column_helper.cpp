@@ -13,6 +13,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
+#include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/phmap/phmap.h"
