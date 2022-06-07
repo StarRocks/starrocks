@@ -2369,7 +2369,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2408,7 +2408,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2447,7 +2447,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2486,7 +2486,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2525,7 +2525,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2564,7 +2564,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2603,7 +2603,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2642,7 +2642,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
