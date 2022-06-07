@@ -167,7 +167,7 @@ void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     const std::string FILE_NAME_SIZE_DELIMETER = "|";
 
     // Get 'type' parameter
-    const std::string& type = req->param(TYPE_PARAMETER);
+    const std::string& type = req->param("type");
 
     std::stringstream result;
     for (const std::string& file_name : files) {
@@ -187,7 +187,8 @@ void do_dir_response(const std::string& dir_path, HttpRequest* req) {
         } else if (type.empty()) {
             result << file_name << FILE_DELIMETER_IN_DIR_RESPONSE;
         } else {
-            HttpChannel::send_error("unknown type \"" + type + "\"", HttpStatus::INTERNAL_SERVER_ERROR);
+            LOG(WARNING) << "unknown type \"" + type + "\".";
+            HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);
             return;
         }
     }

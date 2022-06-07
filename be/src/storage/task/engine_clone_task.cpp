@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_clone_task.h"
 
+#include <fmt/format.h>
 #include <sys/stat.h>
 
 #include <filesystem>
@@ -42,8 +43,8 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
-#include "util/thrift_rpc_helper.h"
 #include "util/string_parser.hpp"
+#include "util/thrift_rpc_helper.h"
 
 using std::set;
 using std::stringstream;
@@ -458,12 +459,13 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         for (auto file_str : strings::Split(file_list_str, FILE_DELIMETER_IN_DIR_RESPONSE, strings::SkipWhitespace())) {
             std::vector<string> list = strings::Split(file_str, FILE_NAME_SIZE_DELIMETER);
             if (list.size() != 2) {
-                return Status::InternalError(fmt::format("invalid directory entry {}", file_str));
+                return Status::InternalError(fmt::format("invalid directory entry {}", file_str.as_string()));
             }
 
             StringParser::ParseResult result;
             std::string& file_size_str = list[1];
-            int64_t file_size = StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size() - 1, &result);
+            int64_t file_size =
+                    StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size() - 1, &result);
             if (result != StringParser::PARSE_SUCCESS || file_size < 0) {
                 return Status::InternalError("wrong file size.");
             }

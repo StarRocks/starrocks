@@ -43,7 +43,6 @@
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
-const std::string TYPE_PARAMETER = "type";
 const std::string DB_PARAMETER = "db";
 const std::string LABEL_PARAMETER = "label";
 const std::string TOKEN_PARAMETER = "token";
