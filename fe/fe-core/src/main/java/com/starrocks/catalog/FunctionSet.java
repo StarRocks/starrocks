@@ -815,6 +815,8 @@ public class FunctionSet {
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
+            // null/char/time is handled through type promotion
+            // We do not support array/json/pseudo type now
             if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
                 continue;
             }
