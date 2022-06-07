@@ -8,6 +8,7 @@
 #include "util/json.h"
 #include "util/mysql_row_buffer.h"
 #include "util/percentile_value.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 

@@ -24,15 +24,12 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -287,35 +284,6 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
-    }
-
-    private void checkOlapTableWithLakeTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table instanceof OlapTable);
-        OlapTable olapTable = (OlapTable) table;
-        for (Partition partition : olapTable.getAllPartitions()) {
-            Assert.assertTrue(partition.isUseStarOS());
-        }
-
-        boolean throwException = false;
-        try {
-            CatalogUtils.checkOlapTableHasStarOSPartition(fullDbName, tableName);
-        } catch (AnalysisException e) {
-            throwException = true;
-        }
-        Assert.assertTrue(throwException);
-    }
-
-    private void dropOlapTableWithLakeTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table != null);
-        db.dropTable(tableName);
-        table = db.getTable(tableName);
-        Assert.assertTrue(table == null);
     }
 
     @Test
