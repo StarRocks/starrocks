@@ -61,6 +61,8 @@ public:
     MorselQueue* morsel_queue_of_source_operator(const SourceOperatorFactory* source_op);
 
 private:
+    static constexpr int kLocalExchangeBufferChunks = 8;
+
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
 

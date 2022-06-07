@@ -289,7 +289,7 @@ Status HashJoinNode::open(RuntimeState* state) {
 
     if (_ht.get_row_count() > 0) {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _ht.get_key_columns().size() == 1 &&
-            _has_null(_ht.get_key_columns()[0])) {
+            _has_null(_ht.get_key_columns()[0]) && _other_join_conjunct_ctxs.empty()) {
             // The current implementation of HashTable will reserve a row for judging the end of the linked list.
             // When performing expression calculations (such as cast string to int),
             // it is possible that this reserved row will generate Null,
@@ -983,8 +983,6 @@ std::string HashJoinNode::_get_join_type_str(TJoinOp::type join_type) {
         return "FullOuterJoin";
     case TJoinOp::CROSS_JOIN:
         return "CrossJoin";
-    case TJoinOp::MERGE_JOIN:
-        return "MergeJoin";
     case TJoinOp::RIGHT_SEMI_JOIN:
         return "RightSemiJoin";
     case TJoinOp::LEFT_ANTI_JOIN:

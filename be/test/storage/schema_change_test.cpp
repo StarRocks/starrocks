@@ -149,11 +149,7 @@ class SchemaChangeTest : public testing::Test {
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
 
-        if constexpr (std::is_same_v<T, JsonValue*>) {
-            EXPECT_EQ(*expect_val, dst_datum.get<JsonValue>());
-        } else {
-            EXPECT_EQ(expect_val, dst_datum.get<T>());
-        }
+        EXPECT_EQ(expect_val, dst_datum.get<T>());
     }
 
     SchemaChange* _sc_procedure;
@@ -746,17 +742,38 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_json) {
+    auto mem_pool = std::make_unique<MemPool>();
     std::vector<std::string> test_cases = {"{\"a\": 1}", "null", "[1,2,3]"};
     for (auto json_str : test_cases) {
-        JsonValue json = JsonValue::parse(json_str).value();
-        test_convert_from_varchar(OLAP_FIELD_TYPE_JSON, 16, json_str, &json);
+        JsonValue expected = JsonValue::parse(json_str).value();
+
+        BinaryColumn::Ptr src_column = BinaryColumn::create();
+        JsonColumn::Ptr dst_column = JsonColumn::create();
+        src_column->append(json_str);
+
+        auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON);
+        TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+        TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_JSON);
+        Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(*dst_column->get_object(0), expected);
     }
 }
 
 TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     std::string json_str = "{\"a\": 1}";
     JsonValue json = JsonValue::parse(json_str).value();
-    test_convert_to_varchar(OLAP_FIELD_TYPE_JSON, 16, &json, json_str);
+    JsonColumn::Ptr src_column = JsonColumn::create();
+    BinaryColumn::Ptr dst_column = BinaryColumn::create();
+    src_column->append(&json);
+
+    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR);
+    auto mem_pool = std::make_unique<MemPool>();
+    TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_JSON);
+    TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(dst_column->get_slice(0), json_str);
 }
 
 } // namespace starrocks::vectorized

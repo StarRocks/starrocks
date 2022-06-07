@@ -325,6 +325,10 @@ public:
     }
 
     bool test_data_with_hash(CppType value, const uint32_t shuffle_hash) const {
+        static constexpr uint32_t BUCKET_ABSENT = 2147483647;
+        if (shuffle_hash == BUCKET_ABSENT) {
+            return false;
+        }
         if constexpr (!IsSlice<CppType>) {
             if (value < _min || value > _max) {
                 return false;
@@ -367,11 +371,7 @@ public:
             compute_hash(&Column::fnv_hash, _num_hash_partitions);
             break;
         }
-        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET: {
-            hash_values.assign(num_rows, 0);
-            compute_hash(&Column::crc32_hash, _num_hash_partitions);
-            break;
-        }
+        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
         case TRuntimeFilterBuildJoinMode::COLOCATE: {
             hash_values.assign(num_rows, 0);
             // shuffle-aware grf is partitioned into multiple parts the number of whom equals to the number of

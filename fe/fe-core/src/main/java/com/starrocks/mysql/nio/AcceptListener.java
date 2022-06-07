@@ -55,7 +55,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
             NConnectContext context = new NConnectContext(connection);
-            context.setCatalog(GlobalStateMgr.getCurrentState());
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             connectScheduler.submit(context);
 
             try {

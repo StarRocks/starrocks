@@ -491,6 +491,9 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
+// kafka reqeust timeout
+CONF_Int32(routine_load_kafka_timeout_second, "10");
+
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
@@ -734,6 +737,11 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
+
+#ifdef USE_STAROS
+CONF_String(starmgr_addr, "");
+CONF_Int32(starlet_port, "9070");
+#endif
 
 } // namespace config
 

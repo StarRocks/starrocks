@@ -12,10 +12,10 @@
 
 #include "common/status.h"
 #include "formats/csv/output_stream.h"
-#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/time_types.h"
-#include "runtime/timestamp_value.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 

@@ -528,7 +528,7 @@ public class ConnectProcessor {
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.getState().reset();
         if (request.isSetCluster()) {
             ctx.setCluster(request.cluster);

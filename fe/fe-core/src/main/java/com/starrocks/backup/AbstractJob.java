@@ -132,7 +132,7 @@ public abstract class AbstractJob implements Writable {
         return timeoutMs;
     }
 
-    public void setCatalog(GlobalStateMgr globalStateMgr) {
+    public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
 

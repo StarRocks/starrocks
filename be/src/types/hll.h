@@ -23,8 +23,7 @@
 
 #include <cmath>
 #include <cstdio>
-#include <map>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,7 +32,7 @@
 #include "gutil/macros.h"
 #include "runtime/memory/chunk.h"
 #include "runtime/memory/chunk_allocator.h"
-#include "util/phmap/phmap.h"
+#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -89,68 +88,15 @@ enum HllDataType {
 class HyperLogLog {
 public:
     HyperLogLog() = default;
+    HyperLogLog(const HyperLogLog& other);
 
-    HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
-        if (_registers.data != nullptr) {
-            ChunkAllocator::instance()->free(_registers);
-            _registers.data = nullptr;
-        }
+    HyperLogLog& operator=(const HyperLogLog& other);
 
-        if (other._registers.data != nullptr) {
-            ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
-            DCHECK_NE(_registers.data, nullptr);
-            DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
-            memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
-        }
-    }
+    HyperLogLog(HyperLogLog&& other) noexcept;
 
-    HyperLogLog& operator=(const HyperLogLog& other) {
-        if (this != &other) {
-            this->_type = other._type;
-            this->_hash_set = other._hash_set;
+    HyperLogLog& operator=(HyperLogLog&& other) noexcept;
 
-            if (_registers.data != nullptr) {
-                ChunkAllocator::instance()->free(_registers);
-                _registers.data = nullptr;
-            }
-
-            if (other._registers.data != nullptr) {
-                ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
-                DCHECK_NE(_registers.data, nullptr);
-                DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
-                memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
-            }
-        }
-        return *this;
-    }
-
-    HyperLogLog(HyperLogLog&& other) noexcept : _type(other._type), _hash_set(std::move(other._hash_set)) {
-        if (_registers.data != nullptr) {
-            ChunkAllocator::instance()->free(_registers);
-        }
-        _registers = other._registers;
-
-        other._type = HLL_DATA_EMPTY;
-        other._registers.data = nullptr;
-    }
-
-    HyperLogLog& operator=(HyperLogLog&& other) noexcept {
-        if (this != &other) {
-            this->_type = other._type;
-            this->_hash_set = std::move(other._hash_set);
-
-            if (_registers.data != nullptr) {
-                ChunkAllocator::instance()->free(_registers);
-            }
-            _registers = other._registers;
-
-            other._type = HLL_DATA_EMPTY;
-            other._registers.data = nullptr;
-        }
-        return *this;
-    }
-
-    explicit HyperLogLog(uint64_t hash_value) : _type(HLL_DATA_EXPLICIT) { _hash_set.emplace(hash_value); }
+    explicit HyperLogLog(uint64_t hash_value);
 
     explicit HyperLogLog(const Slice& src);
 
@@ -181,13 +127,7 @@ public:
 
     int64_t estimate_cardinality() const;
 
-    static std::string empty() {
-        static HyperLogLog hll;
-        std::string buf;
-        buf.resize(HLL_EMPTY_SIZE);
-        hll.serialize((uint8_t*)buf.c_str());
-        return buf;
-    }
+    static std::string empty();
 
     // Check if input slice is a valid serialized binary of HyperLogLog.
     // This function only check the encoded type in slice, whose complex
@@ -200,14 +140,13 @@ public:
     uint64_t serialize_size() const { return max_serialized_size(); }
 
     // common interface
-    void clear() {
-        _type = HLL_DATA_EMPTY;
-        _hash_set.clear();
-    }
+    void clear();
 
 private:
     HllDataType _type = HLL_DATA_EMPTY;
-    phmap::flat_hash_set<uint64_t> _hash_set;
+
+    using ElementSet = phmap::flat_hash_set<uint64_t>;
+    std::unique_ptr<ElementSet> _hash_set;
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.

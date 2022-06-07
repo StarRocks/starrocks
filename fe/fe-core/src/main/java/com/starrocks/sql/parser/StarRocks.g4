@@ -24,6 +24,7 @@ statement
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
+    | refreshTableStatement                                                                 #refreshTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -48,9 +49,13 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
-    // Admin Set Statement
+    // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
+    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
+            (WHERE where=expression)?                                                       #adminShowReplicaStatus
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -124,6 +129,10 @@ showColumnStatement
 
 showTableStatusStatement
     : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+refreshTableStatement
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -300,6 +309,7 @@ classifier
 
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showVariablesStatement

@@ -72,6 +72,7 @@ public class ConnectorMgr {
             } finally {
                 writeUnLock();
             }
+            connector.shutdown();
             throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
                     catalogName, type), e);
         }
@@ -89,7 +90,8 @@ public class ConnectorMgr {
         removeConnectorInternal(catalogName);
         writeLock();
         try {
-            connectors.remove(catalogName);
+            Connector connector = connectors.remove(catalogName);
+            connector.shutdown();
         } finally {
             writeUnLock();
         }
