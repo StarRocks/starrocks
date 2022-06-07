@@ -24,6 +24,8 @@ namespace starrocks::vectorized {
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+struct ShortKeyRangeOption;
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 
 class SegmentReadOptions {
 public:
@@ -61,6 +63,7 @@ public:
     bool has_delete_pred = false;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
+    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;

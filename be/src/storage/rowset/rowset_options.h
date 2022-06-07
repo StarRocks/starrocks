@@ -27,6 +27,8 @@ class DeletePredicates;
 class Schema;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+struct ShortKeyRangeOption;
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 
 class RowsetReadOptions {
 public:
@@ -60,6 +62,7 @@ public:
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
+    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 };
 
 } // namespace starrocks::vectorized

@@ -83,7 +83,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -651,7 +650,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
         }
 
-
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
         List<Column> baseSchema = olapTable.getBaseSchema();
@@ -1115,7 +1113,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 // 4. check distribution key:
                 DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
                 if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                    List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
+                    List<Column> distributionColumns =
+                            ((HashDistributionInfo) distributionInfo).getDistributionColumns();
                     for (Column distributionCol : distributionColumns) {
                         boolean found = false;
                         for (Column alterColumn : alterSchema) {
@@ -1381,7 +1380,6 @@ public class SchemaChangeHandler extends AlterHandler {
             alterJob.setState(JobState.FINISHED);
             // has to remove here, because check is running every interval, it maybe finished but also in job list
             // some check will failed
-            ((SchemaChangeJob) alterJob).deleteAllTableHistorySchema();
             ((SchemaChangeJob) alterJob).finishJob();
             jobDone(alterJob);
             GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
@@ -1460,8 +1458,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    public ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws UserException {
+
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
         for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
@@ -1484,16 +1483,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                     GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
-                    return null;
+                    return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
                     GlobalStateMgr.getCurrentState().convertDistributionType(db, olapTable);
-                    return null;
+                    return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                     /*
                      * This is only for fixing bug when upgrading StarRocks from 0.9.x to 0.10.x.
                      */
                     sendClearAlterTask(db, olapTable);
-                    return null;
+                    return;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
                         try {
@@ -1508,14 +1507,14 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
-                    return null;
+                    return;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
                     GlobalStateMgr.getCurrentState().modifyTableDefaultReplicationNum(db, olapTable, properties);
-                    return null;
+                    return;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
-                    return null;
+                    return;
                 }
             }
 
@@ -1555,7 +1554,6 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
-        return null;
     }
 
     private void sendClearAlterTask(Database db, OlapTable olapTable) {

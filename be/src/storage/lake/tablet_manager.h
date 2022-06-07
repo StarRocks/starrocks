@@ -6,10 +6,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 
-namespace staros::starlet {
-class Starlet;
-} // namespace staros::starlet
-
 namespace starrocks {
 class Cache;
 class TCreateTabletReq;
@@ -17,19 +13,19 @@ class TCreateTabletReq;
 
 namespace starrocks::lake {
 
+class GroupAssigner;
 class MetadataIterator;
 class Tablet;
 
 class TabletManager {
     friend class Tablet;
-    using Starlet = staros::starlet::Starlet;
 
 public:
-    // Does NOT take the ownership of |starlet| and |starlet| must outlive
+    // Does NOT take the ownership of |group_assigner| and |group_assigner| must outlive
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(Starlet* starlet, int64_t cache_capacity);
+    explicit TabletManager(GroupAssigner* group_assigner, int64_t cache_capacity);
 
     Status create_tablet(const TCreateTabletReq& req);
 
@@ -52,7 +48,7 @@ private:
     StatusOr<MetadataIterator> list_txn_log(const std::string& group);
     StatusOr<MetadataIterator> list_txn_log(const std::string& group, int64_t tablet_id);
 
-    Starlet* _starlet;
+    GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;
 };
 

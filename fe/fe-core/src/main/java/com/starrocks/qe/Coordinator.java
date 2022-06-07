@@ -1797,6 +1797,10 @@ public class Coordinator {
 
             for (int j = 0; !found && j < profile.getChildList().size(); j++) {
                 RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
+                if (pipelineProfile.getChildList().isEmpty()) {
+                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
+                    continue;
+                }
                 RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
                 if (operatorProfile.getName().contains("RESULT_SINK")) {
                     long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();

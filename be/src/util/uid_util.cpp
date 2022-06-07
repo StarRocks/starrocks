@@ -51,7 +51,7 @@ std::string print_id(const PUniqueId& id) {
 
 UniqueId UniqueId::gen_uid() {
     UniqueId uid(0, 0);
-    auto uuid = UUIDGenerator::instance()->next_uuid();
+    auto uuid = ThreadLocalUUIDGenerator::next_uuid();
     memcpy(&uid.hi, uuid.data, sizeof(int64_t));
     memcpy(&uid.lo, uuid.data + sizeof(int64_t), sizeof(int64_t));
     return uid;
@@ -59,12 +59,12 @@ UniqueId UniqueId::gen_uid() {
 
 /// generates a 16 byte
 std::string generate_uuid_string() {
-    return boost::uuids::to_string(boost::uuids::basic_random_generator<boost::mt19937>()());
+    return boost::uuids::to_string(ThreadLocalUUIDGenerator::next_uuid());
 }
 
 /// generates a 16 byte UUID
 TUniqueId generate_uuid() {
-    auto uuid = boost::uuids::basic_random_generator<boost::mt19937>()();
+    auto uuid = ThreadLocalUUIDGenerator::next_uuid();
     TUniqueId uid;
     memcpy(&uid.hi, uuid.data, sizeof(int64_t));
     memcpy(&uid.lo, uuid.data + sizeof(int64_t), sizeof(int64_t));

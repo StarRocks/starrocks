@@ -12,6 +12,7 @@
 #include "fmt/format.h"
 #include "glog/logging.h"
 #include "simdjson.h"
+#include "types/constexpr.h"
 #include "util/coding.h"
 #include "velocypack/vpack.h"
 
@@ -27,9 +28,6 @@ enum JsonType {
     JSON_ARRAY = 4,
     JSON_OBJECT = 5,
 };
-
-constexpr int kJsonDefaultSize = 128;
-constexpr int kJsonMetaDefaultFormatVersion = 1;
 
 class JsonValue {
 public:
