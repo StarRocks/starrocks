@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -20,6 +21,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
 
 public class WorkGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
@@ -157,6 +160,11 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(rows.isEmpty());
     }
 
+    private void assertWorkGroupNotExist(String wg) {
+        Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+                () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
+    }
+
     @Test
     public void testCreateResourceGroup() throws Exception {
         createResourceGroups();
@@ -182,14 +190,12 @@ public class WorkGroupStmtTest {
     public void testCreateDuplicateResourceGroup() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        String actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
-        actual = rowsToString(rows);
+        String actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_if_not_exists"));
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
@@ -205,9 +211,7 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeWorkGroupDdlSql("DROP resource group rg1");
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
         rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
@@ -224,7 +228,6 @@ public class WorkGroupStmtTest {
 
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
-
     @Test
     public void testCreateDuplicateResourceGroupFail() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
@@ -348,6 +351,18 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(result.contains("rg2_role5"));
         Assert.assertTrue(result.contains("192.169.6.1/16"));
         dropResourceGroups();
+    }
+
+    @Test
+    public void testShowUnknownOrNotExistWorkGroup() throws Exception {
+        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+
+        starRocksAssert.executeWorkGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        Assert.assertTrue(rows.isEmpty());
+
+        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        assertWorkGroupNotExist("rg1");
     }
 
     @Test
