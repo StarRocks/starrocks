@@ -314,6 +314,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                             String.format("Invalid data type of materialized key column '%s': '%s'",
                                     mvColumnItem.getName(), mvColumnItem.getType()));
                 }
+                final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
+                        .append(FunctionSet.COUNT).append("_").toString();
+                if (mvColumnItem.getName().startsWith(countPrefix)
+                        && ((OlapTable) table).getKeysType().isAggregationFamily()) {
+                    throw new SemanticException("Aggregate type table do not support count function in materialized view");
+                }
             }
             return null;
         }
