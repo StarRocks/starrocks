@@ -36,7 +36,8 @@ public class ShowCreateTableStmtTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setCluster("testCluster");
         ctx.setDatabase("testDb");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testDb", "testTbl"));
+        ShowCreateTableStmt stmt =
+                new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW CREATE TABLE testCluster:testDb.testTbl", stmt.toString());
         Assert.assertEquals("testCluster:testDb", stmt.getDb());
@@ -49,7 +50,7 @@ public class ShowCreateTableStmtTest {
     @Test(expected = SemanticException.class)
     public void testNoTbl() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
     }

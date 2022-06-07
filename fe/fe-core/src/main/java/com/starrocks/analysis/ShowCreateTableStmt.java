@@ -30,6 +30,21 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW CREATE TABLE statement.
 public class ShowCreateTableStmt extends ShowStmt {
+    public enum CreateTableType {
+        TABLE("TABLE"),
+        VIEW("VIEW"),
+        MATERIALIZED_VIEW("MATERIALIZED VIEW");
+        private final String value;
+
+        CreateTableType(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
+    }
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Table", ScalarType.createVarchar(20)))
@@ -51,15 +66,11 @@ public class ShowCreateTableStmt extends ShowStmt {
                     .build();
 
     private TableName tbl;
-    private TableType tableType;
+    private CreateTableType type;
 
-    public ShowCreateTableStmt(TableName tbl) {
-        this(tbl, null);
-    }
-
-    public ShowCreateTableStmt(TableName tbl, TableType tableType) {
+    public ShowCreateTableStmt(TableName tbl, CreateTableType type) {
         this.tbl = tbl;
-        this.tableType = tableType;
+        this.type = type;
     }
 
     public TableName getTbl() {
@@ -74,8 +85,8 @@ public class ShowCreateTableStmt extends ShowStmt {
         return tbl.getTbl();
     }
 
-    public TableType getTableType() {
-        return tableType;
+    public CreateTableType getType() {
+        return type;
     }
 
     public static ShowResultSetMetaData getViewMetaData() {
@@ -92,20 +103,7 @@ public class ShowCreateTableStmt extends ShowStmt {
 
     @Override
     public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW CREATE ");
-        if (tableType == null) {
-            sb.append("TABLE ");
-        } else {
-            if (tableType == TableType.VIEW) {
-                sb.append("VIEW ");
-            }
-            if (tableType == TableType.MATERIALIZED_VIEW) {
-                sb.append("MATERIALIZED VIEW ");
-            }
-        }
-        sb.append(tbl);
-        return sb.toString();
+        return "SHOW CREATE " + type.getValue() + " " + tbl;
     }
 
     @Override
