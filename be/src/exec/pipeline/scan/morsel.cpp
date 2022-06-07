@@ -280,6 +280,40 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
         RETURN_IF_ERROR(_init_tablet());
     }
 
+    // Take sub key ranges from each key range, until the number of taken blocks is greater than
+    // `_sample_splitted_scan_blocks`.
+    //
+    // As for the current key range, try to use the next `STEP`-th short key as the upper point of
+    // the sub key range. The upper point must be different from the lower point.
+    // Therefore, if it is the same as the lower point, try the next `STEP`-th short key repeatedly.
+    //
+    // About `STEP`:
+    // - `STEP` is equal to `_sample_splitted_scan_blocks-num_taken_blocks` for the most cases,
+    //   where `num_taken_blocks` is the number of already taken blocks fot the current morsel.
+    // - If the number of taken blocks is greater than `_sample_splitted_scan_blocks-num_taken_blocks` but the
+    //   upper point different from the lower point hasn't been found, `STEP` is `_sample_splitted_scan_blocks/4`
+    //   to avoid generating a too large morsel.
+    // - As for the last key range, if the number of the rest blocks is slightly greater than `_sample_splitted_scan_blocks`,
+    //   there will be too little blocks after this time taking. Therefore, this time taking and the next time taking share
+    //   the rest blocks equally.
+    //
+    // For example, assume that _sample_splitted_scan_blocks=3, 3 key ranges with the following short keys:
+    //   index:      0  1  2  3  4  5  6
+    // - key range1: 11 12 13 14 15
+    // - key range2: 21 22 22 22 22 24 25
+    // - key range3: 31 32 33 34 35 36
+    // Then, it will generate the following 6 morsels:
+    // - morsel1: key range1 [11, 14).
+    // - morsel2: key range1 [14, 15], key range2 [21, 22).
+    // - morsel3: key range2 [22, 24).
+    // - morsel4: key range2 [24, 25], key range3 [31, 32).
+    // - morsel5: key range3 [33, 35).
+    // - morsel6: key range3 [35, 36].
+    //
+    // As for morsel3, lower index is 1, and try to use index 4 as upper index firstly.
+    // The short keys of index 1 and 4 are both 22, so use index 5 as the range upper.
+    // As for morsel5, it trys to take index 2~4 firstly, but there will be only 1 block left.
+    // Therefore, morsel5 and morsel6 each takes 2 morsel.
     size_t num_taken_blocks = 0;
     std::vector<vectorized::ShortKeyRangeOptionPtr> short_key_ranges;
     vectorized::ShortKeyOptionPtr _cur_range_lower = nullptr;
