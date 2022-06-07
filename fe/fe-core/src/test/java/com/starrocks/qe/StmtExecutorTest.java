@@ -66,7 +66,7 @@ public class StmtExecutorTest {
     public static void start() {
         MetricRepo.init();
         try {
-            FrontendOptions.init(new String[0]);
+            FrontendOptions.init();
         } catch (UnknownHostException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();

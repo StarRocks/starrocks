@@ -33,7 +33,6 @@ import com.starrocks.journal.JournalFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
-
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.Level;
@@ -220,7 +219,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init();
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -269,10 +268,8 @@ public class MockedFrontend {
     }
 
     private void waitForCatalogReady() throws FeStartException {
-        int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 15) {
+        while (!GlobalStateMgr.getCurrentState().isReady()) {
             try {
-                tryCount ++;
                 Thread.sleep(1000);
                 System.out.println("globalStateMgr is not ready, wait for 1 second");
             } catch (InterruptedException e) {
