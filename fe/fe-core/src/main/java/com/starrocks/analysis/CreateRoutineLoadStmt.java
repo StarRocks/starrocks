@@ -25,11 +25,14 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.SqlParser;
+import com.starrocks.analysis.SqlScanner;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -37,7 +40,14 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -84,6 +94,8 @@ import java.util.regex.Pattern;
           KAFKA
 */
 public class CreateRoutineLoadStmt extends DdlStmt {
+    private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadStmt.class);
+
     // routine load properties
     public static final String DESIRED_CONCURRENT_NUMBER_PROPERTY = "desired_concurrent_number";
     // max error number in ten thousand records
@@ -283,6 +295,33 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         checkJobProperties();
         // check data source properties
         checkDataSourceProperties();
+    }
+
+    public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
+        long sqlMode;
+        if (sessionVariables != null && sessionVariables.containsKey(SessionVariable.SQL_MODE)) {
+            sqlMode = Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE));
+        } else {
+            sqlMode = SqlModeHelper.MODE_DEFAULT;
+        }
+
+        // parse the origin stmt to get routine load desc
+        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt), sqlMode));
+        try {
+            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
+            if (stmt instanceof CreateRoutineLoadStmt) {
+                return CreateRoutineLoadStmt.
+                        buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList());
+            } else if (stmt instanceof AlterRoutineLoadStmt) {
+                return CreateRoutineLoadStmt.
+                        buildLoadDesc(((AlterRoutineLoadStmt) stmt).getLoadPropertyList());
+            } else {
+                throw new IOException("stmt is neither CreateRoutineLoadStmt nor AlterRoutineLoadStmt");
+            }
+        } catch (Exception e) {
+            LOG.error("error happens when parsing create/alter routine load stmt: " + origStmt.originStmt, e);
+            return null;
+        }
     }
 
     public void checkDBTable(Analyzer analyzer) throws AnalysisException {
