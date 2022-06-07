@@ -43,6 +43,7 @@
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
 #include "util/thrift_rpc_helper.h"
+#include "util/string_parser.hpp"
 
 using std::set;
 using std::stringstream;
@@ -447,8 +448,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, list_files_cb));
 
     // Parse file name and size
-    const std::string FILE_DELIMETER_IN_DIR_RESPONSE = "\n";
-    const std::string FILE_NAME_SIZE_DELIMETER = "|";
+    const char* const FILE_DELIMETER_IN_DIR_RESPONSE = "\n";
+    const char* const FILE_NAME_SIZE_DELIMETER = "|";
     std::vector<string> file_name_list;
     std::vector<int64_t> file_size_list;
 
@@ -457,16 +458,18 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         for (auto file_str : strings::Split(file_list_str, FILE_DELIMETER_IN_DIR_RESPONSE, strings::SkipWhitespace())) {
             std::vector<string> list = strings::Split(file_str, FILE_NAME_SIZE_DELIMETER);
             if (list.size() != 2) {
-                continue;
+                return Status::InternalError(fmt::format("invalid directory entry {}", file_str));
             }
 
-            int64_t file_size = atoll(list[1].c_str());
-            if (file_size < 0) {
+            StringParser::ParseResult result;
+            std::string& file_size_str = list[1];
+            int64_t file_size = StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size() - 1, &result);
+            if (result != StringParser::PARSE_SUCCESS || file_size < 0) {
                 return Status::InternalError("wrong file size.");
             }
 
-            file_name_list.push_back(list[0]);
-            file_size_list.push_back(file_size);
+            file_name_list.emplace_back(std::move(list[0]));
+            file_size_list.emplace_back(file_size);
         }
     } else {
         file_name_list = strings::Split(file_list_str, FILE_DELIMETER_IN_DIR_RESPONSE, strings::SkipWhitespace());

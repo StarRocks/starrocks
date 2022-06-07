@@ -155,7 +155,7 @@ void do_file_response(const std::string& file_path, HttpRequest* req) {
     HttpChannel::send_file(req, fd, 0, file_size);
 }
 
-void do_dir_response(const std::string& dir_path, const std::string& type, HttpRequest* req) {
+void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     std::vector<std::string> files;
     Status status = FileSystem::Default()->get_children(dir_path, &files);
     if (!status.ok()) {
@@ -166,11 +166,14 @@ void do_dir_response(const std::string& dir_path, const std::string& type, HttpR
     const std::string FILE_DELIMETER_IN_DIR_RESPONSE = "\n";
     const std::string FILE_NAME_SIZE_DELIMETER = "|";
 
+    // Get 'type' parameter
+    const std::string& type = req->param(TYPE_PARAMETER);
+
     std::stringstream result;
     for (const std::string& file_name : files) {
         std::string file_path = dir_path + "/" + file_name;
 
-        if (!type.empty() && type == "V2") {
+        if (type == "V2") {
             int64_t file_size = -1;
             auto st = FileSystem::Default()->get_file_size(file_path);
             if (st.ok()) {
@@ -178,10 +181,14 @@ void do_dir_response(const std::string& dir_path, const std::string& type, HttpR
             } else {
                 LOG(WARNING) << "Failed to get file size. file=" << file_name;
                 HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);
+                return;
             }
             result << file_name << FILE_NAME_SIZE_DELIMETER << file_size << FILE_DELIMETER_IN_DIR_RESPONSE;
-        } else {
+        } else if (type.empty()) {
             result << file_name << FILE_DELIMETER_IN_DIR_RESPONSE;
+        } else {
+            HttpChannel::send_error("unknown type \"" + type + "\"", HttpStatus::INTERNAL_SERVER_ERROR);
+            return;
         }
     }
 
