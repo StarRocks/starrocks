@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * It is accessed by two kinds of thread, one is to create this RuntimeProfile
@@ -455,7 +456,9 @@ public class RuntimeProfile {
                 }
                 TUnit existType = counterTypes.get(name);
                 if (!existType.equals(counter.getType())) {
-                    LOG.warn("find non-isomorphic counter, profileName={}, name={}", profile0.name, name);
+                    LOG.warn(
+                            "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
+                            profile0.name, name, existType.name(), counter.getType().name());
                     return;
                 }
             }
@@ -482,7 +485,9 @@ public class RuntimeProfile {
                     continue;
                 }
                 if (!type.equals(counter.getType())) {
-                    LOG.warn("find non-isomorphic counter, profileName={}, name={}", profile0.name, name);
+                    LOG.warn(
+                            "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
+                            profile0.name, name, type.name(), counter.getType().name());
                     return;
                 }
 
@@ -577,8 +582,12 @@ public class RuntimeProfile {
             for (int j = 1; j < profiles.size(); j++) {
                 RuntimeProfile profile = profiles.get(j);
                 if (i >= profile.childList.size()) {
-                    LOG.warn("find non-isomorphic children, profile_name={}, another profile_name={}", profile0.name,
-                            profile.name);
+                    LOG.warn("find non-isomorphic children, profileName={}, childNames={}" +
+                                    ", another profileName={}, another childNames={}",
+                            profile0.name,
+                            profile0.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
+                            profile.name,
+                            profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
                     return;
                 }
                 RuntimeProfile child = profile.childList.get(i).first;
