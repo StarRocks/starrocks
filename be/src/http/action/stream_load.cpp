@@ -168,8 +168,9 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         ctx->body_sink.reset();
         RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
     } else {
-        if (_buf->has_remaining()) {
-            ctx->body_sink->append(_buf);
+        if (_buf->pos > 0) {
+            _buf->flip();
+            ctx->body_sink->append(std::move(_buf));
             _buf = ByteBuffer::allocate(_min_buf_sz);
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
@@ -308,19 +309,19 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (_buf->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
-                ByteBufferPtr buf = ByteBuffer::allocate(_buf->pos + len);
-                buf->put_bytes(_buf->ptr, buf->pos);
+                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(_buf->pos + len));
+                buf->put_bytes(_buf->ptr, _buf->pos);
                 std::swap(buf, _buf);
             } else {
-                auto st = ctx->body_sink->append(_buf);
+                _buf->flip();
+                auto st = ctx->body_sink->append(std::move(_buf));
                 if (!st.ok()) {
                     LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
                     ctx->status = st;
                     return;
                 }
 
-                ByteBufferPtr buf = ByteBuffer::allocate(_min_buf_sz);
-                std::swap(buf, _buf);
+                _buf = ByteBuffer::allocate(_min_buf_sz);
             }
         }
 
@@ -329,10 +330,9 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
             // The memory is applied for in http server thread,
             // so the release of this memory must be recorded in ProcessMemTracker
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            remove_bytes = evbuffer_remove(evbuf, _buf->ptr + _buf->pos, _buf->capacity);
+            remove_bytes = evbuffer_remove(evbuf, _buf->ptr + _buf->pos, _buf->remaining());
         }
         _buf->pos += remove_bytes;
-        _buf->flip();
         ctx->receive_bytes += remove_bytes;
     }
     ctx->total_received_data_cost_nanos += (MonotonicNanos() - start_read_data_time);

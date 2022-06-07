@@ -709,7 +709,7 @@ Status JsonReader::_read_and_parse_json() {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
 
-        if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
+        if (_parser_buf->capacity < _parser_buf->pos + simdjson::SIMDJSON_PADDING) {
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             // Hence, a re-allocation is needed if the space is not enough.
             auto buf = ByteBuffer::allocate(_parser_buf->remaining() + simdjson::SIMDJSON_PADDING);
@@ -720,7 +720,7 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
-    length = _parser_buf->remaining();
+    length = _parser_buf->limit;
 
 #endif
 
