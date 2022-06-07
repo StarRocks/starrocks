@@ -548,7 +548,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        this.starOSAgent = new StarOSAgent();
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
