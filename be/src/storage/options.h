@@ -53,5 +53,7 @@ struct EngineOptions {
     MemTracker* compaction_mem_tracker = nullptr;
     MemTracker* schema_change_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;
+    // config path to store cluster_id, used by DummyStorageEngine
+    std::string conf_path;
 };
 } // namespace starrocks

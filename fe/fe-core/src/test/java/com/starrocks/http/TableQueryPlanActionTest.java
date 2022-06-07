@@ -50,6 +50,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testQueryPlanAction() throws IOException, TException {
+        super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
         Request request = new Request.Builder()

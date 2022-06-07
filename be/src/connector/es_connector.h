@@ -75,13 +75,13 @@ private:
     int64_t _rows_read_number = 0;
     int64_t _rows_return_number = 0;
 
-    ESScanReader* _es_reader;
+    ESScanReader* _es_reader = nullptr;
     std::unique_ptr<vectorized::ScrollParser> _es_scroll_parser;
 
-    RuntimeProfile::Counter* _read_counter;
-    RuntimeProfile::Counter* _read_timer;
-    RuntimeProfile::Counter* _materialize_timer;
-    RuntimeProfile::Counter* _rows_read_counter;
+    RuntimeProfile::Counter* _read_counter = nullptr;
+    RuntimeProfile::Counter* _read_timer = nullptr;
+    RuntimeProfile::Counter* _materialize_timer = nullptr;
+    RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     // =========================
 

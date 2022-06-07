@@ -124,7 +124,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
     MonotonicStopWatch watch;
     watch.start();
-    Status st;
     bool eos = false;
     while (true) {
         if (eos || left_time <= 0 || left_bytes <= 0) {
@@ -171,8 +170,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
 
-            (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()), static_cast<size_t>(msg->len()),
-                                             row_delimiter);
+            Status st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
+                                                         static_cast<size_t>(msg->len()), row_delimiter);
 
             if (st.ok()) {
                 received_rows++;
@@ -181,8 +180,14 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
             } else {
                 // failed to append this msg, we must stop
-                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id;
+                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.get_error_msg();
                 eos = true;
+                {
+                    std::unique_lock<std::mutex> lock(_mutex);
+                    if (result_st.ok()) {
+                        result_st = st;
+                    }
+                }
             }
             delete msg;
         } else {

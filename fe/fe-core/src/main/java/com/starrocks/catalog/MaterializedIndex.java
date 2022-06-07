@@ -95,10 +95,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // this is for keeping tablet order
     private List<Tablet> tablets;
 
-    // Not persist.
-    // If useStarOS is true, use StarOSTablet in |tablets|, otherwise use LocalTablet.
-    private boolean useStarOS = false;
-
     // for push after rollup index finished
     @SerializedName(value = "rollupIndexId")
     private long rollupIndexId;
@@ -185,14 +181,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.rowCount = rowCount;
     }
 
-    public boolean isUseStarOS() {
-        return useStarOS;
-    }
-
-    public void setUseStarOS(boolean useStarOS) {
-        this.useStarOS = useStarOS;
-    }
-
     public void setRollupIndexInfo(long rollupIndexId, long rollupFinishedVersion) {
         this.rollupIndexId = rollupIndexId;
         this.rollupFinishedVersion = rollupFinishedVersion;
@@ -220,10 +208,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getReplicaCount() {
-        if (useStarOS) {
-            return tablets.size();
-        }
-
+        // Support LakeTablet later.
         long replicaCount = 0;
         for (Tablet tablet : getTablets()) {
             LocalTablet localTablet = (LocalTablet) tablet;
@@ -272,12 +257,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
         int tabletCount = in.readInt();
         for (int i = 0; i < tabletCount; ++i) {
-            Tablet tablet = null;
-            if (useStarOS) {
-                tablet = StarOSTablet.read(in);
-            } else {
-                tablet = LocalTablet.read(in);
-            }
+            // LakeTablet uses json serialization.
+            Tablet tablet = LocalTablet.read(in);
             tablets.add(tablet);
             idToTablets.put(tablet.getId(), tablet);
         }
@@ -286,15 +267,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         rollupFinishedVersion = in.readLong();
     }
 
-    public static MaterializedIndex read(DataInput in, boolean useStarOS) throws IOException {
+    public static MaterializedIndex read(DataInput in) throws IOException {
         MaterializedIndex materializedIndex = new MaterializedIndex();
-        materializedIndex.setUseStarOS(useStarOS);
         materializedIndex.readFields(in);
         return materializedIndex;
-    }
-
-    public static MaterializedIndex read(DataInput in) throws IOException {
-        return MaterializedIndex.read(in, false);
     }
 
     @Override

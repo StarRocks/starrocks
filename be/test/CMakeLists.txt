@@ -50,6 +50,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
+        ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
@@ -205,7 +206,6 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
-        ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -279,9 +279,12 @@ set(EXEC_FILES
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
-        ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
         )
+
+if ("${USE_STAROS}" STREQUAL "ON")
+        list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
@@ -303,7 +306,6 @@ add_executable(starrocks_test ${EXEC_FILES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/test")
 
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
@@ -331,10 +333,6 @@ TARGET_LINK_LIBRARIES(bytes_test
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(http/metrics_action_test)
 ADD_BE_TEST(http/http_client_test)
-
-# ADD_BE_TEST(plugin/plugin_zip_test)
-# ADD_BE_TEST(plugin/plugin_loader_test)
-# ADD_BE_PLUGIN(plugin/example/plugin_example)
 
 ADD_BE_TEST(runtime/routine_load_task_executor_test)
 ADD_BE_TEST(runtime/small_file_mgr_test)

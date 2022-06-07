@@ -48,6 +48,8 @@ vectorized_functions = [
     [10120, "floor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
 
+    [10125, "dround", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
+    [10126, "dround", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10127, "round", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
     [10128, "round", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10129, "truncate", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::truncate_decimal128"],
@@ -277,6 +279,8 @@ vectorized_functions = [
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
+    [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
+    [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],

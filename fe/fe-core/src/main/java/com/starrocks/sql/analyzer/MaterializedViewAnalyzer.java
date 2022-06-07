@@ -15,6 +15,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -75,7 +76,7 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             tableNameTableMap.forEach((tableName, table) -> {
                 if (!tableName.getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException(
@@ -187,7 +188,8 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                CheckPartitionFunction checkPartitionFunction = PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                CheckPartitionFunction checkPartitionFunction =
+                        PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support");
@@ -287,7 +289,7 @@ public class MaterializedViewAnalyzer {
             }
             FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
             String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equals("date_trunc")) {
+            if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {

@@ -27,8 +27,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Frontend;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,12 +44,10 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(FrontendsProcNode.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Name").add("IP").add("HostName").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
+            .add("Name").add("Host").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
             .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
-
-    public static final int HOSTNAME_INDEX = 2;
 
     private GlobalStateMgr globalStateMgr;
 
@@ -82,7 +80,6 @@ public class FrontendsProcNode implements ProcNodeInterface {
         // get all node which are joined in bdb group
         List<InetSocketAddress> allFe = globalStateMgr.getHaProtocol().getElectableNodes(true /* include leader */);
         allFe.addAll(globalStateMgr.getHaProtocol().getObserverNodes());
-        List<Pair<String, Integer>> allFeHosts = convertToHostPortPair(allFe);
         List<Pair<String, Integer>> helperNodes = globalStateMgr.getHelperNodes();
 
         for (Frontend fe : globalStateMgr.getFrontends(null /* all */)) {
@@ -91,7 +88,6 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(fe.getNodeName());
             info.add(fe.getHost());
 
-            info.add(FrontendOptions.getHostnameByIp(fe.getHost()));
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
 
@@ -107,7 +103,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));
-            info.add(String.valueOf(isJoin(allFeHosts, fe)));
+            info.add(String.valueOf(isJoin(allFe, fe)));
 
             if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
                 info.add("true");
@@ -140,21 +136,19 @@ public class FrontendsProcNode implements ProcNodeInterface {
         return helperNodes.stream().anyMatch(p -> p.first.equals(fe.getHost()) && p.second == fe.getEditLogPort());
     }
 
-    private static boolean isJoin(List<Pair<String, Integer>> allFeHosts, Frontend fe) {
-        for (Pair<String, Integer> pair : allFeHosts) {
-            if (fe.getHost().equals(pair.first) && fe.getEditLogPort() == pair.second) {
+    private static boolean isJoin(List<InetSocketAddress> allFeHosts, Frontend fe) {
+        for (InetSocketAddress addr : allFeHosts) {
+            String realHost = "";
+            if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
+                realHost = addr.getAddress().getHostAddress();
+            } else {
+                realHost = addr.getAddress().getHostName();
+            }
+            if (fe.getHost().equals(realHost) && fe.getEditLogPort() == addr.getPort()) {
                 return true;
             }
         }
         return false;
-    }
-
-    private static List<Pair<String, Integer>> convertToHostPortPair(List<InetSocketAddress> addrs) {
-        List<Pair<String, Integer>> hostPortPair = Lists.newArrayList();
-        for (InetSocketAddress addr : addrs) {
-            hostPortPair.add(Pair.create(addr.getAddress().getHostAddress(), addr.getPort()));
-        }
-        return hostPortPair;
     }
 }
 

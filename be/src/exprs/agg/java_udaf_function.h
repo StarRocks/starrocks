@@ -28,21 +28,7 @@ public:
     using State = JavaUDAFState;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override final {
-        int num_args = ctx->get_num_args();
-        jvalue args[num_args + 1];
-        args[0].l = this->data(state).handle();
-        for (int i = 0; i < num_args; ++i) {
-            auto& method_type = ctx->impl()->udaf_ctxs()->update->method_desc[i + 2];
-            args[i + 1] = cast_to_jvalue<handle_null>(method_type.type, method_type.is_box, columns[i], row_num);
-        }
-
-        ctx->impl()->udaf_ctxs()->_func->update(args);
-
-        for (int i = 0; i < num_args; ++i) {
-            release_jvalue(ctx->impl()->udaf_ctxs()->update->method_desc[i + 2].is_box, args[i + 1]);
-        }
-    }
+                size_t row_num) const override final {}
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                size_t row_num) const override final {
@@ -64,7 +50,7 @@ public:
         }
         JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
         memcpy(udaf_ctx->buffer_data.data(), slice.get_data(), slice.get_size());
-        udaf_ctx->_func->merge(this->data(state).handle(), udaf_ctx->buffer->handle());
+        udaf_ctx->_func->merge(this->data(state).handle, udaf_ctx->buffer->handle());
     }
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
@@ -82,7 +68,7 @@ public:
 
         size_t old_size = column->get_bytes().size();
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
-        int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle());
+        int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
         if (udaf_ctx->buffer->capacity() < serialize_size) {
             udaf_ctx->buffer_data.resize(serialize_size);
             udaf_ctx->buffer =
@@ -90,7 +76,7 @@ public:
         }
         JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
 
-        udaf_ctx->_func->serialize(this->data(state).handle(), udaf_ctx->buffer->handle());
+        udaf_ctx->_func->serialize(this->data(state).handle, udaf_ctx->buffer->handle());
         size_t new_size = old_size + serialize_size;
         column->get_bytes().resize(new_size);
         column->get_offset().emplace_back(new_size);
@@ -100,7 +86,7 @@ public:
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override final {
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
-        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle());
+        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
         release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
     }
@@ -125,8 +111,8 @@ public:
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols, chunk_size,
                                                       &args);
         // 2 batch call update
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                            ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
+        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                  ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         // 3 get serialize size
         jintArray serialize_szs = (jintArray)helper.int_batch_call(
                 ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), chunk_size);
@@ -141,8 +127,8 @@ public:
         // chunk size
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), chunk_size);
         jobject state_and_buffer[2] = {rets, buffer_array};
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                            ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                  ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
         std::vector<Slice> slices(chunk_size);
         // 5 ready
         int offsets = 0;
@@ -173,7 +159,7 @@ public:
 
     // Call Destroy method
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        ctx->impl()->udaf_ctxs()->_func->destroy(data(ptr)._handle);
+        ctx->impl()->udaf_ctxs()->_func->destroy(data(ptr).handle);
         data(ptr).~State();
     }
 
@@ -189,23 +175,33 @@ public:
         std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
-        auto arr = JavaDataTypeConverter::convert_to_object_array(states, state_offset, batch_size);
-        args.emplace_back(arr);
-        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
-        helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                            ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
-        for (int i = 0; i < args.size(); ++i) {
-            helper.getEnv()->DeleteLocalRef(args[i]);
+        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        {
+            auto states_arr = JavaDataTypeConverter::convert_to_states(states, state_offset, batch_size);
+            JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+                                args.size());
         }
+        helper.getEnv()->PopLocalFrame(nullptr);
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
-        for (size_t i = 0; i < batch_size; i++) {
-            if (filter[i] == 0) {
-                this->update(ctx, columns, states[i] + state_offset, i);
-            }
+        auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+        std::vector<DirectByteBuffer> buffers;
+        std::vector<jobject> args;
+        int num_cols = ctx->get_num_args();
+        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        {
+            auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(states, state_offset, filter.data(),
+                                                                                   batch_size);
+            JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            helper.batch_update_if_not_null(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                            ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+                                            args.size());
         }
+        helper.getEnv()->PopLocalFrame(nullptr);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
@@ -215,12 +211,12 @@ public:
         std::vector<jobject> args;
         std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
-        env->PushLocalFrame(num_cols * 2 + 1);
+        env->PushLocalFrame(num_cols * 3 + 1);
         {
             JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
 
             auto* stub = ctx->impl()->udaf_ctxs()->update_batch_call_stub.get();
-            auto state_handle = this->data(state).handle();
+            auto state_handle = this->data(state).handle;
             helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
         env->PopLocalFrame(nullptr);

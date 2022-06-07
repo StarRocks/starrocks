@@ -26,7 +26,8 @@ public enum Privilege {
     ALTER_PRIV("Alter_priv", 5, "Privilege for alter database or table"),
     CREATE_PRIV("Create_priv", 6, "Privilege for createing database or table"),
     DROP_PRIV("Drop_priv", 7, "Privilege for dropping database or table"),
-    USAGE_PRIV("Usage_priv", 8, "Privilege for using resource");
+    USAGE_PRIV("Usage_priv", 8, "Privilege for using resource"),
+    IMPERSONATE_PRIV("Impersonate_priv", 9, "Privilege for impersonate as other user");
 
     public static Privilege[] privileges = {
             NODE_PRIV,
@@ -37,7 +38,8 @@ public enum Privilege {
             ALTER_PRIV,
             CREATE_PRIV,
             DROP_PRIV,
-            USAGE_PRIV
+            USAGE_PRIV,
+            IMPERSONATE_PRIV
     };
 
     private String name;

@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -19,23 +20,20 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ShowCatalogsStmtTest {
     private static StarRocksAssert starRocksAssert;
-    private ConnectContext ctx;
-
-    @Before
-    public void setUp() throws Exception {
-        ctx = new ConnectContext(null);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
-    }
+    private static ConnectContext ctx;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        AnalyzeTestUtil.init();
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        AnalyzeTestUtil.init();
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createCatalog);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
@@ -43,6 +41,9 @@ public class ShowCatalogsStmtTest {
         DdlExecutor.execute(globalStateMgr.getCurrentState(), statement);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
+
+        ctx = new ConnectContext(null);
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
     }
 
     @Test
@@ -53,7 +54,7 @@ public class ShowCatalogsStmtTest {
     }
 
     @Test
-    public void testShowCatalogsNormal() throws AnalysisException {
+    public void testShowCatalogsNormal() throws AnalysisException, DdlException {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();

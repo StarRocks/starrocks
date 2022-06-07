@@ -26,6 +26,7 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "olap_common.proto";
+import "tablet_schema.proto";
 import "types.proto";
 
 message ZoneMapOfRowset {
@@ -137,15 +138,6 @@ enum DataFileType {
     COLUMN_ORIENTED_FILE = 1;
 }
 
-// Please keep the defined value less than 256, bacause this enum will be casted to uint8_t
-// in some cases.
-enum KeysType {
-    DUP_KEYS = 0;
-    UNIQUE_KEYS = 1;
-    AGG_KEYS = 2;
-    PRIMARY_KEYS = 10;
-}
-
 message DeletePredicatePB {
     required int32 version = 1;
     repeated string sub_predicates = 2;
@@ -175,39 +167,6 @@ message AlterTabletPB {
     required int64 related_tablet_id = 2;
     optional int32 related_schema_hash = 3;
     optional AlterTabletType alter_type = 4;
-}
-
-message ColumnPB {
-    required int32 unique_id = 1; // ColumnMessage.unique_id
-    optional string name = 2; // ColumnMessage.name
-    required string type = 3; // ColumnMessage.type
-    optional bool is_key = 4; // ColumnMessage.is_key
-    optional string aggregation = 5; // ColumnMessage.aggregation
-    optional bool is_nullable = 6; // ColumnMessage.is_allow_null
-    optional bytes default_value = 7; // ColumnMessage.default_value ?
-    optional int32 precision = 8; // ColumnMessage.precision
-    optional int32 frac = 9; // ColumnMessage.frac
-    optional int32 length = 10; // ColumnMessage.length
-    optional int32 index_length = 11; // ColumnMessage.index_length
-    optional bool is_bf_column = 12; // ColumnMessage.is_bf_column
-    optional int32 referenced_column_id = 13; //
-    optional string referenced_column = 14; // ColumnMessage.referenced_column?
-    optional bool has_bitmap_index = 15 [default=false]; // ColumnMessage.has_bitmap_index
-    optional bool visible = 16 [default=true]; // used for hided column
-    repeated ColumnPB children_columns = 17;
-}
-
-message TabletSchemaPB {
-    optional KeysType keys_type = 1;    // OLAPHeaderMessage.keys_type
-    repeated ColumnPB column = 2;   // OLAPHeaderMessage.column
-    optional int32 num_short_key_columns = 3;   // OLAPHeaderMessage.num_short_key_fields
-    optional int32 num_rows_per_row_block = 4;  // OLAPHeaderMessage.num_rows_per_data_block
-    optional CompressKind compress_kind = 5; // OLAPHeaderMessage.compress_kind
-    optional double bf_fpp = 6; // OLAPHeaderMessage.bf_fpp
-    optional uint32 next_column_unique_id = 7; // OLAPHeaderMessage.next_column_unique_id
-    optional bool DEPRECATED_is_in_memory = 8 [default=false];
-    optional int64 deprecated_id = 9; // deprecated
-    optional int64 id = 50;
 }
 
 enum TabletStatePB {

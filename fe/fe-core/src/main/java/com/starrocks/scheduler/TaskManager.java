@@ -6,20 +6,35 @@ package com.starrocks.scheduler;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Queues;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.Util;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -50,7 +65,8 @@ public class TaskManager {
     private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
 
     // Use to concurrency control
-    private final QueryableReentrantLock lock;
+    private final QueryableReentrantLock taskLock;
+    private final QueryableReentrantLock taskRunLock;
 
     private AtomicBoolean isStart = new AtomicBoolean(false);
 
@@ -58,13 +74,15 @@ public class TaskManager {
         manualTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         taskRunManager = new TaskRunManager();
-        lock = new QueryableReentrantLock(true);
+        taskLock = new QueryableReentrantLock(true);
+        taskRunLock = new QueryableReentrantLock(true);
     }
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+            clearUnfinishedTaskRun();
             dispatchScheduler.scheduleAtFixedRate(() -> {
-                if (!tryLock()) {
+                if (!tryTaskRunLock()) {
                     return;
                 }
                 try {
@@ -73,14 +91,46 @@ public class TaskManager {
                 } catch (Exception ex) {
                     LOG.warn("failed to dispatch job.", ex);
                 } finally {
-                    unlock();
+                    taskRunUnlock();
                 }
             }, 0, 1, TimeUnit.SECONDS);
         }
     }
 
-    public long createTask(Task task) {
-        if (!tryLock()) {
+    private void clearUnfinishedTaskRun() {
+        if (!tryTaskRunLock()) {
+            return;
+        }
+        try {
+            Iterator<Long> pendingIter = taskRunManager.getPendingTaskRunMap().keySet().iterator();
+            while (pendingIter.hasNext()) {
+                Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().get(pendingIter.next());
+                for (TaskRun taskRun : taskRuns) {
+                    taskRun.getStatus().setErrorMessage("Fe restart abort the task");
+                    taskRun.getStatus().setErrorCode(-1);
+                    taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+                }
+                pendingIter.remove();
+            }
+            // will not happen, but defensive programming
+            Iterator<Long> runningIter = taskRunManager.getRunningTaskRunMap().keySet().iterator();
+            while (runningIter.hasNext()) {
+                TaskRun taskRun = taskRunManager.getRunningTaskRunMap().get(runningIter.next());
+                taskRun.getStatus().setErrorMessage("Fe restart abort the task");
+                taskRun.getStatus().setErrorCode(-1);
+                taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
+                runningIter.remove();
+                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
+            }
+        } finally {
+            taskRunUnlock();
+        }
+    }
+
+    public long createTask(Task task, boolean isReplay) {
+        // make sure nameToTaskMap and manualTaskMap consist
+        if (!tryTaskLock()) {
             return GET_TASK_LOCK_FAILED;
         }
         try {
@@ -92,29 +142,46 @@ public class TaskManager {
                 return DUPLICATE_CREATE_TASK;
             }
             manualTaskMap.put(task.getId(), task);
-            // GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateTask(task);
+            }
             return task.getId();
         } finally {
-            unlock();
+            taskUnlock();
         }
     }
 
-    public String executeTask(String taskName) {
+    public SubmitResult executeTask(String taskName) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
-            return null;
+            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.addTaskRun(TaskRunBuilder.newBuilder(task).build());
+        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build());
     }
 
-    public void dropTask(String taskName) {
-        Task task = nameToTaskMap.get(taskName);
-        if (task == null) {
+    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
+        // keep nameToTaskMap and manualTaskMap consist
+        if (!tryTaskLock()) {
             return;
         }
-        nameToTaskMap.remove(taskName);
-        manualTaskMap.remove(task.getId());
-        // GlobalStateMgr.getCurrentState().getEditLog().logDropTask(taskName);
+        try {
+            for (long taskId : taskIdList) {
+                Task task = manualTaskMap.get(taskId);
+                if (task == null) {
+                    LOG.warn("drop taskId {} failed because task is null", taskId);
+                    continue;
+                }
+                nameToTaskMap.remove(task.getName());
+                manualTaskMap.remove(task.getId());
+            }
+
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentState().getEditLog().logDropTasks(taskIdList);
+            }
+        } finally {
+            taskUnlock();
+        }
+        LOG.info("drop tasks:{}", taskIdList);
     }
 
     public List<Task> showTasks(String dbName) {
@@ -128,10 +195,10 @@ public class TaskManager {
         return taskList;
     }
 
-    private boolean tryLock() {
+    private boolean tryTaskLock() {
         try {
-            if (!lock.tryLock(1, TimeUnit.SECONDS)) {
-                Thread owner = lock.getOwner();
+            if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
+                Thread owner = taskLock.getOwner();
                 if (owner != null) {
                     LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
                 } else {
@@ -143,19 +210,44 @@ public class TaskManager {
         } catch (InterruptedException e) {
             LOG.warn("got exception while getting task lock", e);
         }
-        return lock.isHeldByCurrentThread();
+        return false;
     }
 
-    private void unlock() {
-        this.lock.unlock();
+    public void taskUnlock() {
+        this.taskLock.unlock();
+    }
+
+    private boolean tryTaskRunLock() {
+        try {
+            if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
+                Thread owner = taskRunLock.getOwner();
+                if (owner != null) {
+                    LOG.warn("task run lock is held by: {}", Util.dumpThread(owner, 50));
+                } else {
+                    LOG.warn("task run lock owner is null");
+                }
+                return false;
+            }
+            return true;
+        } catch (InterruptedException e) {
+            LOG.warn("got exception while getting task run lock", e);
+        }
+        return false;
+    }
+
+    public void taskRunUnlock() {
+        this.taskRunLock.unlock();
     }
 
     public void replayCreateTask(Task task) {
-        createTask(task);
+        if (task.getExpireTime() > 0  && System.currentTimeMillis() > task.getExpireTime()) {
+            return;
+        }
+        createTask(task, true);
     }
 
-    public void replayDropTask(String taskName) {
-        dropTask(taskName);
+    public void replayDropTasks(List<Long> taskIdList) {
+        dropTasks(taskIdList, true);
     }
 
     public TaskRunManager getTaskRunManager() {
@@ -164,23 +256,214 @@ public class TaskManager {
 
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ConnectContext.get());
-        Long createResult = this.createTask(task);
+        long createResult = createTask(task, false);
 
         String taskName = task.getName();
+        SubmitResult submitResult;
         if (createResult < 0) {
             if (createResult == TASK_EXISTS) {
                 throw new DdlException("Task " +  taskName + " already exist.");
+            } else {
+                LOG.warn("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
+                submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
             }
-            throw new DdlException("Failed to create Task: " +  taskName + ", ErrorCode: " + createResult);
+        } else {
+            submitResult = executeTask(taskName);
+            if (submitResult.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
+                dropTasks(ImmutableList.of(task.getId()), false);
+            }
         }
-        String queryId = this.executeTask(taskName);
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         builder.addColumn(new Column("TaskName", ScalarType.createVarchar(40)));
         builder.addColumn(new Column("Status", ScalarType.createVarchar(10)));
-        List<String> item = ImmutableList.of(taskName, "Submitted");
+        List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);
+    }
+
+    public long loadTasks(DataInputStream dis, long checksum) throws IOException {
+        int taskCount = 0;
+        try {
+            String s = Text.readString(dis);
+            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
+            if (data != null) {
+                if (data.tasks != null) {
+                    for (Task task : data.tasks) {
+                        replayCreateTask(task);
+                    }
+                    taskCount = data.tasks.size();
+                }
+
+                if (data.runStatus != null) {
+                    for (TaskRunStatus runStatus : data.runStatus) {
+                        replayCreateTaskRun(runStatus);
+                    }
+                }
+            }
+            checksum ^= taskCount;
+            LOG.info("finished replaying TaskManager from image");
+        } catch (EOFException e) {
+            LOG.info("no TaskManager to replay.");
+        }
+        return checksum;
+    }
+
+    public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
+        SerializeData data = new SerializeData();
+        data.tasks = new ArrayList<>(nameToTaskMap.values());
+        checksum ^= data.tasks.size();
+        data.runStatus = showTaskRunStatus(null);
+        String s = GsonUtils.GSON.toJson(data);
+        Text.writeString(dos, s);
+        return checksum;
+    }
+
+    public List<TaskRunStatus> showTaskRunStatus(String dbName) {
+        List<TaskRunStatus> taskRunList = Lists.newArrayList();
+        if (dbName == null) {
+            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
+                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
+            }
+            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
+                    .collect(Collectors.toList()));
+            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory());
+        } else {
+            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
+                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus)
+                        .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+            }
+            taskRunList.addAll(taskRunManager.getRunningTaskRunMap().values().stream().map(TaskRun::getStatus)
+                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+            taskRunList.addAll(taskRunManager.getTaskRunHistory().getAllHistory().stream()
+                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+
+        }
+        return taskRunList;
+    }
+
+    public void replayCreateTaskRun(TaskRunStatus status) {
+
+        if (status.getState() == Constants.TaskRunState.SUCCESS ||
+                status.getState() == Constants.TaskRunState.FAILED) {
+            if (System.currentTimeMillis() > status.getExpireTime()) {
+                return;
+            }
+        }
+
+        switch (status.getState()) {
+            case PENDING:
+                String taskName = status.getTaskName();
+                Task task = nameToTaskMap.get(taskName);
+                if (task == null) {
+                    LOG.warn("fail to obtain task name {} because task is null", taskName);
+                    return;
+                }
+                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                taskRun.initStatus(status.getQueryId(), status.getCreateTime());
+                Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().computeIfAbsent(taskRun.getTaskId(),
+                        u -> Queues.newConcurrentLinkedQueue());
+                taskRuns.offer(taskRun);
+                break;
+            // this will happen in build image
+            case RUNNING:
+                status.setState(Constants.TaskRunState.FAILED);
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
+            case FAILED:
+            case SUCCESS:
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
+        }
+    }
+
+    public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
+        Constants.TaskRunState toStatus = statusChange.getToStatus();
+        Long taskId = statusChange.getTaskId();
+        Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
+        if (taskRunQueue != null) {
+            if (taskRunQueue.size() == 0) {
+                taskRunManager.getPendingTaskRunMap().remove(taskId);
+                return;
+            }
+
+            TaskRun pendingTaskRun = taskRunQueue.poll();
+            TaskRunStatus status = pendingTaskRun.getStatus();
+            if (status.getQueryId().equals(statusChange.getQueryId())) {
+                if (toStatus == Constants.TaskRunState.FAILED) {
+                    status.setErrorMessage(statusChange.getErrorMessage());
+                    status.setErrorCode(statusChange.getErrorCode());
+                }
+                status.setState(toStatus);
+                status.setFinishTime(statusChange.getFinishTime());
+                taskRunManager.getTaskRunHistory().addHistory(status);
+            }
+        }
+    }
+
+    public void replayDropTaskRuns(List<String> queryIdList) {
+        Map<String, String> index = Maps.newHashMapWithExpectedSize(queryIdList.size());
+        for (String queryId : queryIdList) {
+            index.put(queryId, null);
+        }
+        taskRunManager.getTaskRunHistory().getAllHistory().removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+    }
+
+    public void removeOldTaskInfo() {
+        long currentTimeMs = System.currentTimeMillis();
+
+        List<Long> taskIdToDelete = Lists.newArrayList();
+        if (!tryTaskLock()) {
+            return;
+        }
+        try {
+            List<Task> currentTask = showTasks(null);
+            for (Task task : currentTask) {
+                Long expireTime = task.getExpireTime();
+                if (expireTime > 0 && currentTimeMs > expireTime) {
+                    taskIdToDelete.add(task.getId());
+                }
+            }
+        } finally {
+            taskUnlock();
+        }
+        // this will do in checkpoint thread and does not need write log
+        dropTasks(taskIdToDelete, true);
+    }
+
+    public void removeOldTaskRunHistory() {
+        long currentTimeMs = System.currentTimeMillis();
+
+        List<String> historyToDelete = Lists.newArrayList();
+
+        if (!tryTaskRunLock()) {
+            return;
+        }
+        try {
+            // only SUCCESS and FAILED in taskRunHistory
+            Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
+            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
+            while (iterator.hasNext()) {
+                TaskRunStatus taskRunStatus = iterator.next();
+                long expireTime = taskRunStatus.getExpireTime();
+                if (currentTimeMs > expireTime) {
+                    historyToDelete.add(taskRunStatus.getQueryId());
+                    iterator.remove();
+                }
+            }
+        } finally {
+            taskRunUnlock();
+        }
+        LOG.info("remove run history:{}", historyToDelete);
+    }
+
+
+    private static class SerializeData {
+        @SerializedName("tasks")
+        public List<Task> tasks;
+
+        @SerializedName("runStatus")
+        public List<TaskRunStatus> runStatus;
     }
 
 }

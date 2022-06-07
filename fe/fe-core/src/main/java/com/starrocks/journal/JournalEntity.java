@@ -30,6 +30,7 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -64,6 +65,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
@@ -71,6 +73,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -91,6 +94,11 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.persist.DropTaskRunsLog;
+import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -313,6 +321,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_FRONTEND:
             case OperationType.OP_ADD_FIRST_FRONTEND:
+            case OperationType.OP_UPDATE_FRONTEND:
             case OperationType.OP_REMOVE_FRONTEND: {
                 data = new Frontend();
                 ((Frontend) data).readFields(in);
@@ -505,6 +514,26 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_TASK:
+                data = Task.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASKS:
+                data = DropTasksLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_CREATE_TASK_RUN:
+                data = TaskRunStatus.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_UPDATE_TASK_RUN:
+                data = TaskRunStatusChange.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_TASK_RUNS:
+                data = DropTaskRunsLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
@@ -586,6 +615,26 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                 data = ModifyTableColumnOperationLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_GRANT_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REVOKE_IMPERSONATE: {
+                data = ImpersonatePrivInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_CATALOG: {
+                data = Catalog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_CATALOG: {
+                data = DropCatalogLog.read(in);
                 isRead = true;
                 break;
             }

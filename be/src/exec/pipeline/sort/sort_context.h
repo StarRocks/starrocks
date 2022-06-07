@@ -24,9 +24,11 @@ using vectorized::SortedRuns;
 
 class SortContext final : public ContextWithDependency {
 public:
-    explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers,
-                         const std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs)
+    explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t limit,
+                         const int32_t num_right_sinkers, const std::vector<ExprContext*> sort_exprs,
+                         const SortDescs& sort_descs)
             : _state(state),
+              _topn_type(topn_type),
               _limit(limit),
               _num_partition_sinkers(num_right_sinkers),
               _sort_exprs(sort_exprs),
@@ -53,12 +55,13 @@ public:
         return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
     }
 
-    ChunkPtr pull_chunk();
+    StatusOr<ChunkPtr> pull_chunk();
 
 private:
     Status _merge_inputs();
 
     RuntimeState* _state;
+    const TTopNType::type _topn_type;
     const int64_t _limit;
     const int32_t _num_partition_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
@@ -75,14 +78,15 @@ private:
 
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
-                       const std::vector<ExprContext*>& sort_exprs, const std::vector<bool>& _is_asc_order,
-                       const std::vector<bool>& is_null_first);
+    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t limit,
+                       int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
+                       const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);
 
 private:
     RuntimeState* _state;
+    const TTopNType::type _topn_type;
     // _is_merging is true means to merge multiple output streams of PartitionSortSinkOperators into a common
     // LocalMergeSortSourceOperator that will produce a total order output stream.
     // _is_merging is false means to pipe each output stream of PartitionSortSinkOperators to an independent

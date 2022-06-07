@@ -32,10 +32,8 @@ add_library(Storage STATIC
     decimal12.cpp
     delete_handler.cpp
     del_vector.cpp
-    hll.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
-    null_predicate.cpp
     kv_store.cpp
     olap_common.cpp
     olap_server.cpp
@@ -114,7 +112,6 @@ add_library(Storage STATIC
     async_delta_writer.cpp
     chunk_helper.cpp
     column_predicate_cmp.cpp
-    column_predicate.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
     column_null_predicate.cpp
@@ -156,4 +153,7 @@ add_library(Storage STATIC
     vertical_compaction_task.cpp
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
+    cluster_id_mgr.cpp
+    lake/tablet.cpp
+    lake/tablet_manager.cpp
 )

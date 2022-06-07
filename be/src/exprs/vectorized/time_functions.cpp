@@ -7,8 +7,8 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
-#include "runtime/date_value.h"
 #include "runtime/runtime_state.h"
+#include "types/date_value.h"
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
@@ -487,6 +487,115 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_yearImpl, v) {
     return day.get_week_of_year();
 }
 DEFINE_TIME_UNARY_FN(week_of_year, TYPE_DATETIME, TYPE_INT);
+
+uint TimeFunctions::week_mode(uint mode) {
+    uint week_format = (mode & 7);
+    if (!(week_format & WEEK_MONDAY_FIRST)) week_format ^= WEEK_FIRST_WEEKDAY;
+    return week_format;
+}
+
+/*
+   Calc days in one year.
+   @note Works with both two and four digit years.
+   @return number of days in that year
+*/
+uint TimeFunctions::compute_days_in_year(uint year) {
+    return ((year & 3) == 0 && (year % 100 || (year % 400 == 0 && year)) ? TimeFunctions::NUMBER_OF_LEAP_YEAR
+                                                                         : TimeFunctions::NUMBER_OF_NON_LEAP_YEAR);
+}
+
+/*
+   Calc weekday from daynr.
+   @retval 0 for Monday
+   @retval 6 for Sunday
+*/
+int TimeFunctions::compute_weekday(long daynr, bool sunday_first_day_of_week) {
+    return (static_cast<int>((daynr + 5L + (sunday_first_day_of_week ? 1L : 0L)) % 7));
+}
+
+/*
+  Calculate nr of day since year 0 in new date-system (from 1615).
+  @param year	  Year (exact 4 digit year, no year conversions)
+  @param month  Month
+  @param day	  Day
+  @note 0000-00-00 is a valid date, and will return 0
+  @return Days since 0000-00-00
+*/
+long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
+    long delsum;
+    int temp;
+    int y = year;
+
+    if (y == 0 && month == 0) {
+        return 0;
+    }
+
+    delsum = static_cast<long>(TimeFunctions::NUMBER_OF_NON_LEAP_YEAR * y + 31 * (static_cast<int>(month) - 1) +
+                               static_cast<int>(day));
+    if (month <= 2) {
+        y--;
+    } else {
+        delsum -= static_cast<long>(static_cast<int>(month) * 4 + 23) / 10;
+    }
+    temp = ((y / 100 + 1) * 3) / 4;
+    DCHECK(delsum + static_cast<int>(y) / 4 - temp >= 0);
+    return (delsum + static_cast<int>(y) / 4 - temp);
+}
+
+int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour) {
+    uint days;
+    ulong daynr = TimeFunctions::compute_daynr((uint)year, (uint)month, (uint)day);
+    ulong first_daynr = TimeFunctions::compute_daynr((uint)year, 1, 1);
+    bool monday_first = (week_behaviour & WEEK_MONDAY_FIRST);
+    bool week_year = (week_behaviour & WEEK_YEAR);
+    bool first_weekday = (week_behaviour & WEEK_FIRST_WEEKDAY);
+
+    uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);
+    uint year_local = year;
+
+    if (month == 1 && day <= 7 - weekday) {
+        if (!week_year && ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4))) {
+            return 0;
+        }
+        week_year = true;
+        year_local--;
+        first_daynr -= (days = TimeFunctions::compute_days_in_year(year_local));
+        weekday = (weekday + 53 * 7 - days) % 7;
+    }
+
+    if ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4)) {
+        days = daynr - (first_daynr + (7 - weekday));
+    } else {
+        days = daynr - (first_daynr - weekday);
+    }
+
+    if (week_year && days >= 52 * 7) {
+        weekday = (weekday + TimeFunctions::compute_days_in_year(year_local)) % 7;
+        if ((!first_weekday && weekday < 4) || (first_weekday && weekday == 0)) {
+            year_local++;
+            return 1;
+        }
+    }
+    return days / 7 + 1;
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0));
+}
+DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m));
+}
+DEFINE_TIME_BINARY_FN(week_of_year_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
 
 // to_date
 DEFINE_UNARY_FN_WITH_IMPL(to_dateImpl, v) {

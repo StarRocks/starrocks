@@ -62,7 +62,7 @@ set(RUNTIME_FILES
     export_sink.cpp
     load_channel_mgr.cpp
     load_channel.cpp
-    tablets_channel.cpp
+    local_tablets_channel.cpp
     snapshot_loader.cpp
     query_statistics.cpp 
     message_body_sink.cpp
@@ -83,8 +83,6 @@ set(RUNTIME_FILES
     mysql_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
-    date_value.cpp
-    timestamp_value.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp

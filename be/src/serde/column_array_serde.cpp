@@ -17,6 +17,7 @@
 #include "runtime/descriptors.h"
 #include "util/coding.h"
 #include "util/json.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::serde {
 namespace {

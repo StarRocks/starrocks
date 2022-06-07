@@ -81,13 +81,14 @@ public class FunctionCallExpr extends Expr {
     private boolean mergeAggFnHasNullableChild = true;
 
     private static final ImmutableSet<String> STDDEV_FUNCTION_SET =
-            new ImmutableSortedSet.Builder(String.CASE_INSENSITIVE_ORDER)
-                    .add("stddev").add("stddev_val").add("stddev_samp")
-                    .add("variance").add("variance_pop").add("variance_pop").add("var_samp").add("var_pop").build();
+            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_VAL).add(FunctionSet.STDDEV_SAMP)
+                    .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VARIANCE_POP)
+                    .add(FunctionSet.VAR_SAMP).add(FunctionSet.VAR_POP).build();
 
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
-            new ImmutableSet.Builder().add("year").build();
+            new ImmutableSet.Builder<String>().add(FunctionSet.YEAR).build();
 
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;
@@ -423,8 +424,8 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("lag")
-                || fnName.getFunction().equalsIgnoreCase("lead")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD)) {
             if (!isAnalyticFnCall) {
                 throw new AnalysisException(fnName.getFunction() + " only used in analytic function");
             } else {
@@ -439,12 +440,12 @@ public class FunctionCallExpr extends Expr {
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("dense_rank")
-                || fnName.getFunction().equalsIgnoreCase("rank")
-                || fnName.getFunction().equalsIgnoreCase("row_number")
-                || fnName.getFunction().equalsIgnoreCase("first_value")
-                || fnName.getFunction().equalsIgnoreCase("last_value")
-                || fnName.getFunction().equalsIgnoreCase("first_value_rewrite")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.DENSE_RANK)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.RANK)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.ROW_NUMBER)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.LAST_VALUE)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE_REWRITE)) {
             if (!isAnalyticFnCall) {
                 throw new AnalysisException(fnName.getFunction() + " only used in analytic function");
             }
@@ -466,13 +467,13 @@ public class FunctionCallExpr extends Expr {
         }
 
         // SUM and AVG cannot be applied to non-numeric types
-        if ((fnName.getFunction().equalsIgnoreCase("sum")
-                || fnName.getFunction().equalsIgnoreCase("avg"))
+        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.AVG))
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
                 !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(fnName.getFunction() + " requires a numeric parameter: " + this.toSql());
         }
-        if (fnName.getFunction().equalsIgnoreCase("sum_distinct")
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)
                 && ((!arg.type.isNumericType() && !arg.type.isNull() && !(arg instanceof NullLiteral)) ||
                 !arg.type.canApplyToNumeric())) {
             throw new AnalysisException(
@@ -530,26 +531,26 @@ public class FunctionCallExpr extends Expr {
             return;
         }
 
-        if ((fnName.getFunction().equalsIgnoreCase("HLL_UNION_AGG")
-                || fnName.getFunction().equalsIgnoreCase("HLL_UNION")
-                || fnName.getFunction().equalsIgnoreCase("HLL_CARDINALITY")
-                || fnName.getFunction().equalsIgnoreCase("HLL_RAW_AGG"))
+        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION_AGG)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_CARDINALITY)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_RAW_AGG))
                 && !arg.type.isHllType()) {
             throw new AnalysisException(
                     "HLL_UNION_AGG, HLL_RAW_AGG and HLL_CARDINALITY's params must be hll column");
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("min")
-                || fnName.getFunction().equalsIgnoreCase("max")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.MIN)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)) {
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
-        } else if (fnName.getFunction().equalsIgnoreCase("DISTINCT_PC")
-                || fnName.getFunction().equalsIgnoreCase("DISTINCT_PCSA")
-                || fnName.getFunction().equalsIgnoreCase("NDV")
-                || fnName.getFunction().equalsIgnoreCase("HLL_UNION_AGG")) {
+        } else if (fnName.getFunction().equalsIgnoreCase(FunctionSet.DISTINCT_PC)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.DISTINCT_PCSA)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
+                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION_AGG)) {
             fnParams.setIsDistinct(false);
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("percentile_approx")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.PERCENTILE_APPROX)) {
             if (children.size() != 2 && children.size() != 3) {
                 throw new AnalysisException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters");
             }
@@ -582,11 +583,11 @@ public class FunctionCallExpr extends Expr {
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("sum")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM)) {
             return "SUM requires a numeric parameter: " + toSql();
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("avg")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.AVG)) {
             return "AVG requires a numeric or timestamp parameter: " + toSql();
         }
 
@@ -600,14 +601,6 @@ public class FunctionCallExpr extends Expr {
                 fnName, fnParams.isStar() ? "*" : Joiner.on(", ").join(argTypesSql));
     }
 
-    private static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("abs").add("positive").add("negative").add("money_format").build();
-
-    private static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("least").add("greatest").add("nullif").add("ifnull").add("coalesce").build();
-
     private static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
@@ -617,14 +610,19 @@ public class FunctionCallExpr extends Expr {
 
     private static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
-                    .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
-                    .add("stddev").add("stddev_pop").add("std").add("stddev_samp").build();
+                    .add(FunctionSet.SUM).add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).add("avg")
+                    .add(FunctionSet.VARIANCE)
+                    .add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP).add(FunctionSet.VARIANCE_SAMP)
+                    .add(FunctionSet.VAR_SAMP)
+                    .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STD)
+                    .add(FunctionSet.STDDEV_SAMP).build();
 
     private static final Set<String> DECIMAL_AGG_VARIANCE_STDDEV_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("variance").add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
-                    .add("stddev").add("stddev_pop").add("std").add("stddev_samp").build();
+                    .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP)
+                    .add(FunctionSet.VARIANCE_SAMP).add(FunctionSet.VAR_SAMP)
+                    .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STD)
+                    .add(FunctionSet.STDDEV_SAMP).build();
 
     private static final Set<String> DECIMAL_AGG_FUNCTION =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
@@ -668,7 +666,7 @@ public class FunctionCallExpr extends Expr {
         Type decimalReturnType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argTypes, fnName.getFunction());
         analyzeBuiltinAggFunction();
 
-        if (fnName.getFunction().equalsIgnoreCase("sum")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM)) {
             if (this.children.isEmpty()) {
                 throw new AnalysisException("The " + fnName + " function must has one input param");
             }
@@ -723,7 +721,7 @@ public class FunctionCallExpr extends Expr {
             throw new AnalysisException(getFunctionNotFoundError(collectChildReturnTypes()));
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("date_trunc")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             if (children.size() != 2) {
                 throw new AnalysisException("date_trunc function must have 2 arguments");
             }
@@ -831,10 +829,10 @@ public class FunctionCallExpr extends Expr {
         }
 
         // For BE code simply, handle the following window functions with nullable
-        if (fnName.getFunction().equalsIgnoreCase("lead") ||
-                fnName.getFunction().equalsIgnoreCase("lag") ||
-                fnName.getFunction().equalsIgnoreCase("first_value") ||
-                fnName.getFunction().equalsIgnoreCase("last_value")) {
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD) ||
+                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG) ||
+                fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE) ||
+                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAST_VALUE)) {
             return true;
         }
 
@@ -854,7 +852,7 @@ public class FunctionCallExpr extends Expr {
         }
         // check children nullable
         if (nullableSameWithChildrenFunctions.contains(fnName.getFunction())) {
-            return children.stream().anyMatch(Expr::isNullable);
+            return children.stream().anyMatch(e -> e.isNullable() || e.getType().isDecimalV3());
         }
         return true;
     }

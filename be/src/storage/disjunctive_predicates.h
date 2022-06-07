@@ -29,9 +29,9 @@ public:
     DisjunctivePredicates() = default;
     ~DisjunctivePredicates() = default;
 
-    void evaluate(const Chunk* chunk, uint8_t* selection) const;
+    Status evaluate(const Chunk* chunk, uint8_t* selection) const;
 
-    void evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    Status evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
     void add(const ConjunctivePredicates& pred) { _preds.emplace_back(pred); }
     void add(ConjunctivePredicates&& pred) { _preds.emplace_back(std::move(pred)); }

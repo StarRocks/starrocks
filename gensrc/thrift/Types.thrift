@@ -49,8 +49,7 @@ enum TStorageType {
 
 enum TStorageMedium {
     HDD,
-    SSD,
-    S3
+    SSD
 }
 
 enum TVarType {
@@ -358,7 +357,8 @@ enum TTableType {
     ICEBERG_TABLE,
     HUDI_TABLE,
     JDBC_TABLE,
-    VIEW = 20
+    VIEW = 20,
+    MATERIALIZED_VIEW
 }
 
 enum TKeysType {

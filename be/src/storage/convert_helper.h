@@ -30,6 +30,12 @@ public:
 
     virtual Status convert(void* dest, const void* src, MemPool* memPool) const = 0;
 
+    virtual Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
+                                  MemPool* mem_pool) const;
+
+private:
+    friend class SchemaChangeTest;
+
     virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                                  MemPool* mem_pool) const = 0;
 };

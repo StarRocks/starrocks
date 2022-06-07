@@ -3,6 +3,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Queues;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 
 import java.util.Deque;
 

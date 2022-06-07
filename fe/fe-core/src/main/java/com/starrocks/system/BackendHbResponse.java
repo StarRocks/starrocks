@@ -46,7 +46,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int httpPort;
     @SerializedName(value = "brpcPort")
     private int brpcPort;
-    @SerializedName(value = "starletPort")
+
     private int starletPort;
     @SerializedName(value = "version")
     private String version = "";
@@ -57,21 +57,18 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         super(HeartbeatResponse.Type.BACKEND);
     }
 
-    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort, long hbTime, String version, int cpuCores) {
+    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
+                             int starletPort, long hbTime, String version, int cpuCores) {
         super(HeartbeatResponse.Type.BACKEND);
         this.beId = beId;
         this.status = HbStatus.OK;
         this.bePort = bePort;
         this.httpPort = httpPort;
         this.brpcPort = brpcPort;
+        this.starletPort = starletPort;
         this.hbTime = hbTime;
         this.version = version;
         this.cpuCores = cpuCores;
-    }
-    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort, int starletPort,
-                             long hbTime, String version, int cpuCores) {
-        this(beId, bePort, httpPort, brpcPort, hbTime, version, cpuCores);
-        this.starletPort = starletPort;
     }
 
     public BackendHbResponse(long beId, String errMsg) {
@@ -131,9 +128,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         bePort = in.readInt();
         httpPort = in.readInt();
         brpcPort = in.readInt();
-        starletPort = in.readInt();
-        // for debug
-        LOG.info("starletPort in BackendHbResponse.readFields in {}", starletPort);
     }
 
 }

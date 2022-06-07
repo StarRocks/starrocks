@@ -50,6 +50,8 @@ under the License.
         <hadoop.version>3.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.0</hudi.version>
+        <hive-apache.version>3.1.2-13</hive-apache.version>
+        <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
     </properties>
 
     <profiles>
@@ -277,9 +279,9 @@ under the License.
             </dependency>
 
             <dependency>
-                <groupId>com.starrocks</groupId>
-                <artifactId>starrocks-bdb-je</artifactId>
-                <version>7.3.8</version>
+                <groupId>com.sleepycat</groupId>
+                <artifactId>je</artifactId>
+                <version>7.3.7</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
@@ -570,12 +572,20 @@ under the License.
                 <scope>provided</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.facebook.presto.hive/hive-apache -->
+            <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
             <dependency>
-                <groupId>com.facebook.presto.hive</groupId>
+                <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.0.0-7</version>
+                <version>${hive-apache.version}</version>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
+            <dependency>
+                <groupId>com.aliyun.datalake</groupId>
+                <artifactId>metastore-client-hive3</artifactId>
+                <version>${dlf-metastore-client.version}</version>
+            </dependency>
+
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
             <dependency>

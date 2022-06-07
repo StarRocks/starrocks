@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -35,13 +36,14 @@ public class FoldConstantsRuleTest {
     @Test
     public void applyCall() {
 
-        CallOperator root = new CallOperator("concat", Type.VARCHAR, Lists.newArrayList(
+        CallOperator root = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),
                 ConstantOperator.createVarchar("3")
         ));
 
-        Function fn = new Function(new FunctionName("concat"), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn =
+                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(root) {
             {

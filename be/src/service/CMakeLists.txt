@@ -25,13 +25,22 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
-add_library(Service
+add_subdirectory(service_be)
+add_subdirectory(service_cn)
+
+set(EXEC_FILES
     backend_options.cpp
-    backend_service.cpp
+    backend_base.cpp
     brpc_service.cpp
-    http_service.cpp
     internal_service.cpp
-    mem_hook.cpp
+    mem_hook.cpp)
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND EXEC_FILES staros_worker.cpp)
+endif()
+
+add_library(Service
+        ${EXEC_FILES}
 )
 
 add_executable(starrocks_be

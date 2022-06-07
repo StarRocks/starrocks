@@ -1939,7 +1939,7 @@ public class JoinTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        String plan  = starRocksAssert.query(sql).explainQuery();
+        String plan = starRocksAssert.query(sql).explainQuery();
         assertContains(plan, "  3:SELECT\n" +
                 "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
                 "  |  \n" +
@@ -2613,4 +2613,58 @@ public class JoinTest extends PlanTestBase {
         // check no error
         assertContains(plan, "16:ASSERT NUMBER OF ROWS");
     }
+
+    @Test
+    public void testSemiOuterJoin() throws Exception {
+        String sql = "select * from t0 full outer join t2 on t0.v1 = t2.v7 and t0.v1 > t2.v7 " +
+                "where t0.v2 in (select t1.v4 from t1 where false)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 7: v4\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)");
+    }
+
+    @Test
+    public void testCrossJoinWithRF() throws Exception {
+        // supported
+        String sql = "select * from t0 join t2 on t0.v1 < t2.v7";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 < 4: v7\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7), remote = false");
+
+        sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "build runtime filters");
+
+        sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t0.v1 ";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "build runtime filters");
+
+        sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t2.v8";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 1: v1 < 4: v7 + 5: v8\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7 + 5: v8), remote = false");
+
+        // avoid push down CrossJoin RF across ExchangeNode
+        sql = "select * from t1 join [shuffle] t2 on v4 = v7 join t0 on v4 < v1 ";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:EXCHANGE\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 1, probe_expr = (1: v4)");
+    }
+
 }

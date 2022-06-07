@@ -211,6 +211,11 @@ public class Backend implements Writable {
         heartbeatErrMsg = "";
     }
 
+    // for test only
+    public void setStarletPort(int starletPort) {
+        this.starletPort = starletPort;
+    }
+
     public boolean setDecommissioned(boolean isDecommissioned) {
         if (this.isDecommissioned.compareAndSet(!isDecommissioned, isDecommissioned)) {
             LOG.warn("{} set decommission: {}", this.toString(), isDecommissioned);
@@ -249,6 +254,10 @@ public class Backend implements Writable {
 
     public void setBrpcPort(int brpcPort) {
         this.brpcPort = brpcPort;
+    }
+
+    public void setHeartbeatPort(int heartbeatPort) {
+        this.heartbeatPort = heartbeatPort;
     }
 
     public long getLastUpdateMs() {

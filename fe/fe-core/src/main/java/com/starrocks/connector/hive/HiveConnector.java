@@ -3,11 +3,13 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,9 +28,9 @@ public class HiveConnector implements Connector {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
+        onCreate();
     }
 
-    @Override
     public void validate() {
         this.resourceName = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
@@ -46,5 +48,21 @@ public class HiveConnector implements Connector {
             }
         }
         return metadata;
+    }
+
+
+    public void onCreate() {
+        if (Config.enable_hms_events_incremental_sync) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .registerExternalCatalogResource(resourceName);
+        }
+    }
+
+    @Override
+    public void shutdown() {
+        if (Config.enable_hms_events_incremental_sync) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .unregisterExternalCatalogResource(resourceName);
+        }
     }
 }

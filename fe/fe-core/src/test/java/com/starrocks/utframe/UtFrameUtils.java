@@ -76,7 +76,6 @@ import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
 import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -130,20 +129,9 @@ public class UtFrameUtils {
         ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
-        return ctx;
-    }
-
-    // Help to create a mocked test ConnectContext.
-    public static ConnectContext createTestUserCtx(UserIdentity testUser) throws IOException {
-        ConnectContext ctx = new ConnectContext(null);
-        ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        ctx.setCurrentUserIdentity(testUser);
-        ctx.setQualifiedUser(testUser.getQualifiedUser());
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
-        ctx.setThreadLocalInfo();
         return ctx;
     }
 
@@ -254,10 +242,6 @@ public class UtFrameUtils {
         }
     }
 
-    public static void createMinStarRocksClusterWithBDB() {
-        createMinStarRocksCluster(true);
-    }
-
     public static void createMinStarRocksCluster() {
         createMinStarRocksCluster(false);
     }
@@ -285,13 +269,6 @@ public class UtFrameUtils {
 
     public static void dropMockBackend(int backendId) throws DdlException {
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
-    }
-
-    public static void cleanStarRocksFeDir(String baseDir) {
-        try {
-            FileUtils.deleteDirectory(new File(baseDir));
-        } catch (IOException e) {
-        }
     }
 
     public static int findValidPort() {

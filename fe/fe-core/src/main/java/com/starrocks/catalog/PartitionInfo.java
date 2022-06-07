@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
@@ -45,12 +46,16 @@ import java.util.Map;
 public class PartitionInfo implements Writable {
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
+    @SerializedName(value = "type")
     protected PartitionType type;
     // partition id -> data property
+    @SerializedName(value = "idToDataProperty")
     protected Map<Long, DataProperty> idToDataProperty;
     // partition id -> replication num
+    @SerializedName(value = "idToReplicationNum")
     protected Map<Long, Short> idToReplicationNum;
     // true if the partition has multi partition columns
+    @SerializedName(value = "isMultiColumnPartition")
     protected boolean isMultiColumnPartition = false;
 
     protected Map<Long, Boolean> idToInMemory;
@@ -85,14 +90,6 @@ public class PartitionInfo implements Writable {
 
     public void setDataProperty(long partitionId, DataProperty newDataProperty) {
         idToDataProperty.put(partitionId, newDataProperty);
-    }
-
-    public boolean isUseStarOS(long partitionId) {
-        DataProperty dataProperty = getDataProperty(partitionId);
-        if (dataProperty == null) {
-            return false;
-        }
-        return CatalogUtils.isUseStarOS(dataProperty.getStorageMedium());
     }
 
     public int getQuorumNum(long partitionId) {
@@ -205,6 +202,14 @@ public class PartitionInfo implements Writable {
                 idToInMemory.put(partitionId, false);
             }
         }
+    }
+
+    public void preSerialize() throws IOException {
+
+    }
+
+    public void postDeserialized() throws IOException {
+
     }
 
     @Override
