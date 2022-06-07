@@ -130,5 +130,7 @@ public class StarOSAgentTest {
     public void testGetWorkerIdByBackendId() throws Exception {
         long BackendId = 1;
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(BackendId));
+        starosAgent.setWorkerToBackend(5, BackendId);
+        Assert.assertEquals(5, starosAgent.getWorkerIdByBackendId(BackendId));
     }
 }
