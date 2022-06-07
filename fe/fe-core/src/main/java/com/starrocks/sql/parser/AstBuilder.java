@@ -1723,14 +1723,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB", "DATE_FLOOR");
+            Lists.newArrayList(FunctionSet.DATE_ADD,
+                    FunctionSet.ADDDATE,
+                    FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
+                    FunctionSet.SUBDATE,
+                    FunctionSet.DAYS_SUB,
+                    FunctionSet.TIME_SLICE);
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
-        String functionName = getQualifiedName(context.qualifiedName()).toString();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
-        if (DATE_FUNCTIONS.contains(functionName.toUpperCase())) {
+        if (DATE_FUNCTIONS.contains(functionName)) {
             if (context.expression().size() != 2) {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit)");
@@ -1747,7 +1752,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     intervalLiteral.getUnitIdentifier().getDescription());
         }
 
-        if (functionName.equalsIgnoreCase("isnull")) {
+        if (functionName.equals(FunctionSet.ISNULL)) {
             List<Expr> params = visit(context.expression(), Expr.class);
             if (params.size() != 1) {
                 throw new SemanticException("No matching function with signature: %s(%s).", functionName,
