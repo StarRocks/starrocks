@@ -102,6 +102,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -2229,6 +2230,10 @@ public class GlobalStateMgr {
 
     public void replayCreateTable(String dbName, Table table) {
         localMetastore.replayCreateTable(dbName, table);
+    }
+
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        localMetastore.replayCreateMaterializedView(dbName, materializedView);
     }
 
     // Drop table
