@@ -399,10 +399,14 @@ bool LogicalSplitMorselQueue::_cur_tablet_finished() const {
 }
 
 Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSharedPtr>& rowsets) {
-    Rowset* largest_rowset = nullptr;
-    for (const auto& rowset : rowsets) {
-        if (largest_rowset == nullptr || largest_rowset->num_rows() < rowset->num_rows()) {
-            largest_rowset = rowset.get();
+    if (rowsets.empty()) {
+        return nullptr;
+    }
+
+    Rowset* largest_rowset = rowsets[0].get();
+    for (int i = 1; i < rowsets.size(); ++i) {
+        if (largest_rowset->num_rows() < rowsets[i]->num_rows()) {
+            largest_rowset = rowsets[i].get();
         }
     }
 
@@ -411,10 +415,15 @@ Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSh
 
 SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(Rowset* rowset) const {
     auto* beta_rowset = down_cast<BetaRowset*>(rowset);
-    SegmentSharedPtr largest_segment = nullptr;
-    for (const auto& segment : beta_rowset->segments()) {
-        if (largest_segment == nullptr || largest_segment->num_rows() < segment->num_rows()) {
-            largest_segment = segment;
+    const auto& segments = beta_rowset->segments();
+    if (segments.empty()) {
+        return nullptr;
+    }
+
+    SegmentSharedPtr largest_segment = segments[0];
+    for (int i = 1; i < segments.size(); ++i) {
+        if (largest_segment->num_rows() < segments[i]->num_rows()) {
+            largest_segment = segments[i];
         }
     }
 
