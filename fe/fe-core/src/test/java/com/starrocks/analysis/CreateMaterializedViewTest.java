@@ -281,6 +281,48 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testNoDuplicateKey() {
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+
+        try {
+            FeConstants.shortkey_max_column_count = 0;
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "Data type of first column cannot be DATE");
+        } finally {
+            FeConstants.shortkey_max_column_count = 3;
+        }
+    }
+
+    @Test
+    public void testDistributeKeyIsNotKey() {
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+
+        try {
+            FeConstants.shortkey_max_column_count = 1;
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            FeConstants.shortkey_max_column_count = 3;
+        }
+    }
+
+    @Test
     public void testFullCreate() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
@@ -695,7 +737,7 @@ public class CreateMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select sqrt(tbl1.k1) s1, k2 from tbl1;";
+                "as select k2,sqrt(tbl1.k1) s1 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -765,7 +807,7 @@ public class CreateMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select sqrt(tbl1.k1) ss, k2 from tbl1;";
+                "as select k2, sqrt(tbl1.k1) ss from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {

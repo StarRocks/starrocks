@@ -205,8 +205,9 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
-                    LOG.info("Begin to unprotect create materialized view. db = "
-                            + info.getDbName() + " create materialized view = " + info.getTable().getId());
+                    LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                            + " create materialized view = " + info.getTable().getId()
+                            + " tableName = " + info.getTable().getName());
                     globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
                     break;
                 }
