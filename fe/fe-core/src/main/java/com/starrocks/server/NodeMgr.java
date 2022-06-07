@@ -820,7 +820,7 @@ public class NodeMgr {
         try {
             targetPair = NetUtils.getIpAndFqdnByHost(ipOrFqdn);
         } catch (UnknownHostException e) {
-            LOG.info("faild to get address by fqdn {}", e.getMessage());
+            LOG.info("failed to get right ip by fqdn {}", e.getMessage());
             return null;
         }
         for (Frontend fe : frontends.values()) {
@@ -828,10 +828,15 @@ public class NodeMgr {
             try {
                 curPair = NetUtils.getIpAndFqdnByHost(fe.getHost());
             } catch (UnknownHostException e) {
-                LOG.info("faild to get address by fqdn {}", e.getMessage());
+                LOG.info("failed to get right ip by fqdn {}", e.getMessage());
                 continue;
             }
-            if (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second)) {
+            // target, cur has same ip
+            if (targetPair.first.equals(curPair.first)) {
+                return fe;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
                 return fe;
             }
         }

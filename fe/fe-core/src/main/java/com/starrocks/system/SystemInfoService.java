@@ -374,8 +374,16 @@ public class SystemInfoService {
                 LOG.info("faild to get address by fqdn {}", e.getMessage());
                 continue;
             }
-            boolean hostOk = (targetPair.first.equals(curPair.first) || targetPair.second.equals(curPair.second));
-            if (hostOk && (backend.getBePort() == bePort)) {
+            boolean hostMatch = false;
+            // target, cur has same ip
+            if (targetPair.first.equals(curPair.first)) {
+                hostMatch = true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
+                hostMatch = true;
+            }
+            if (hostMatch && (backend.getBePort() == bePort)) {
                 return backend;
             }
         }
