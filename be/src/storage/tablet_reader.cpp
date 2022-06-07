@@ -120,6 +120,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
     rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges = params.short_key_ranges;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

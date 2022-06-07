@@ -10,6 +10,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "fmt/compile.h"
@@ -38,6 +39,7 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -69,6 +71,16 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
         }
     }
     return 0;
+}
+
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
+    DCHECK_GE(rhs_chunk.num_rows(), 1u);
+
+    SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
+    std::string rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    auto rhs = Slice(rhs_index_key);
+
+    return lhs_index_key.compare(rhs);
 }
 
 /// SegmentIterator
@@ -179,6 +191,8 @@ private:
     template <bool check_global_dict>
     Status _init_column_iterators(const Schema& schema);
     Status _get_row_ranges_by_keys();
+    Status _get_row_ranges_by_key_ranges();
+    Status _get_row_ranges_by_short_key_ranges();
     Status _get_row_ranges_by_zone_map();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
@@ -187,6 +201,8 @@ private:
     uint32_t num_rows() const { return _segment->num_rows(); }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
+    Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
+                           rowid_t* rowid);
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
@@ -337,11 +353,11 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
-    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -434,11 +450,26 @@ void SegmentIterator::_init_column_predicates() {
 Status SegmentIterator::_get_row_ranges_by_keys() {
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
 
+    if (!_opts.short_key_ranges.empty()) {
+        RETURN_IF_ERROR(_get_row_ranges_by_short_key_ranges());
+    } else {
+        RETURN_IF_ERROR(_get_row_ranges_by_key_ranges());
+    }
+
+    _opts.stats->rows_key_range_filtered += num_rows() - _scan_range.span_size();
+    StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_key_ranges() {
+    DCHECK(_opts.short_key_ranges.empty());
+    DCHECK_EQ(0, _scan_range.span_size());
+
     if (_opts.ranges.empty()) {
         _scan_range.add(Range(0, num_rows()));
         return Status::OK();
     }
-    DCHECK_EQ(0, _scan_range.span_size());
+
     RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
@@ -456,8 +487,52 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
             _scan_range.add(Range{lower_rowid, upper_rowid});
         }
     }
-    _opts.stats->rows_key_range_filtered += num_rows() - _scan_range.span_size();
-    StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+
+    return Status::OK();
+}
+
+Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
+    DCHECK(!_opts.short_key_ranges.empty());
+    DCHECK_EQ(0, _scan_range.span_size());
+
+    if (_opts.short_key_ranges.size() == 1 && _opts.short_key_ranges[0]->lower->is_infinite() &&
+        _opts.short_key_ranges[0]->upper->is_infinite()) {
+        _scan_range.add(Range(0, num_rows()));
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    for (const auto& short_key_range : _opts.short_key_ranges) {
+        rowid_t lower_rowid = 0;
+        rowid_t upper_rowid = num_rows();
+
+        const auto& upper = short_key_range->upper;
+        if (upper->tuple_key != nullptr) {
+            _init_column_iterators<false>(upper->tuple_key->schema());
+            RETURN_IF_ERROR(_lookup_ordinal(*(upper->tuple_key), !upper->inclusive, num_rows(), &upper_rowid));
+        } else if (!upper->short_key.empty()) {
+            _init_column_iterators<false>(*(upper->short_key_schema));
+            RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
+                                            &upper_rowid));
+        }
+
+        if (upper_rowid > 0) {
+            const auto& lower = short_key_range->lower;
+            if (lower->tuple_key != nullptr) {
+                _init_column_iterators<false>(lower->tuple_key->schema());
+                RETURN_IF_ERROR(_lookup_ordinal(*(lower->tuple_key), lower->inclusive, upper_rowid, &lower_rowid));
+            } else if (!lower->short_key.empty()) {
+                _init_column_iterators<false>(*(lower->short_key_schema));
+                RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
+                                                upper_rowid, &lower_rowid));
+            }
+        }
+
+        if (lower_rowid <= upper_rowid) {
+            _scan_range.add(Range{lower_rowid, upper_rowid});
+        }
+    }
+
     return Status::OK();
 }
 
@@ -566,6 +641,61 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
             RETURN_IF_ERROR(_seek_columns(key.schema(), mid));
             RETURN_IF_ERROR(_read_columns(key.schema(), chunk.get(), 1));
             if (compare(key, *chunk) < 0) {
+                end = mid;
+            } else {
+                start = mid + 1;
+            }
+        }
+    }
+    *rowid = start;
+    return Status::OK();
+}
+
+Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
+                                        rowid_t* rowid) {
+    uint32_t start_block_id;
+    auto start_iter = _segment->lower_bound(index_key);
+    if (start_iter.valid()) {
+        // Because previous block may contain this key, so we should set rowid to
+        // last block's first row.
+        start_block_id = start_iter.ordinal();
+        if (start_block_id > 0) {
+            start_block_id--;
+        }
+    } else {
+        // When we don't find a valid index item, which means all short key is
+        // smaller than input key, this means that this key may exist in the last
+        // row block. so we set the rowid to first row of last row block.
+        start_block_id = _segment->last_block();
+    }
+    rowid_t start = start_block_id * _segment->num_rows_per_block();
+
+    auto end_iter = _segment->upper_bound(index_key);
+    if (end_iter.valid()) {
+        end = end_iter.ordinal() * _segment->num_rows_per_block();
+    }
+
+    // binary search to find the exact key
+    ChunkPtr chunk = ChunkHelper::new_chunk(short_key_schema, 1);
+    if (lower) {
+        while (start < end) {
+            chunk->reset();
+            rowid_t mid = start + (end - start) / 2;
+            RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
+            RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
+            if (compare(index_key, *chunk, short_key_schema) > 0) {
+                start = mid + 1;
+            } else {
+                end = mid;
+            }
+        }
+    } else {
+        while (start < end) {
+            chunk->reset();
+            rowid_t mid = start + (end - start) / 2;
+            RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
+            RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
+            if (compare(index_key, *chunk, short_key_schema) < 0) {
                 end = mid;
             } else {
                 start = mid + 1;
