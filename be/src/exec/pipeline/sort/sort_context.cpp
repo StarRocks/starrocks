@@ -29,7 +29,9 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
 
     SortedRun& run = _merged_runs.front();
     ChunkPtr res = run.steal_chunk(required_rows);
-    RETURN_IF_ERROR(res->downgrade());
+    if (res != nullptr) {
+        RETURN_IF_ERROR(res->downgrade());
+    }
 
     if (run.empty()) {
         _merged_runs.pop_front();
