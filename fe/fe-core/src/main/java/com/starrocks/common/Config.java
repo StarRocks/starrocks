@@ -1505,4 +1505,22 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+
+    /**
+     * If the configuration is not set, it is not enabled tracer.
+     */
+    @ConfField(mutable = true)
+    public static String jaeger_server_endpoint = "";
+
+    /**
+     * Send a batch of trace spans if tracing schedule delay time.
+     */
+    @ConfField(mutable = true)
+    public static long tracing_schedule_delay_time_ms = 60;
+
+    /**
+     * Send a batch of trace spans if max export batch size.
+     */
+    @ConfField(mutable = true)
+    public static int tracing_max_export_batch_size = 1000;
 }
