@@ -29,8 +29,6 @@ import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -45,14 +43,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -60,7 +55,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -571,24 +565,8 @@ public class RoutineLoadManager implements Writable {
         // NOTE: we use the origin statement to get the RoutineLoadDesc
         RoutineLoadDesc routineLoadDesc = null;
         if (log.getOriginStatement() != null) {
-            long sqlMode;
-            if (job.getSessionVariables() != null && job.getSessionVariables().containsKey(SessionVariable.SQL_MODE)) {
-                sqlMode = Long.parseLong(job.getSessionVariables().get(SessionVariable.SQL_MODE));
-            } else {
-                sqlMode = SqlModeHelper.MODE_DEFAULT;
-            }
-            try {
-                SqlParser parser = new SqlParser(
-                        new SqlScanner(new StringReader(log.getOriginStatement().originStmt), sqlMode));
-                AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) SqlParserUtils.getStmt(
-                        parser, log.getOriginStatement().idx);
-                if (stmt.getLoadPropertyList() != null) {
-                    routineLoadDesc = CreateRoutineLoadStmt.buildLoadDesc(stmt.getLoadPropertyList());
-                }
-            } catch (Exception e) {
-                throw new IOException("error happens when parsing alter routine load stmt: "
-                        + log.getOriginStatement().originStmt, e);
-            }
+            routineLoadDesc = CreateRoutineLoadStmt.getLoadDesc(
+                    log.getOriginStatement(), job.getSessionVariables());
         }
         job.modifyJob(routineLoadDesc, log.getJobProperties(),
                 log.getDataSourceProperties(), log.getOriginStatement(), true);
