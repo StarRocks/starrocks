@@ -24,29 +24,18 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <mutex>
-#include <ostream>
 #include <string>
-
-#include "util/spinlock.h"
 
 namespace starrocks {
 
-class UUIDGenerator {
+class ThreadLocalUUIDGenerator {
 public:
-    boost::uuids::uuid next_uuid() {
-        std::lock_guard<SpinLock> lock(_uuid_gen_lock);
-        return _boost_uuid_generator();
-    }
+    static boost::uuids::uuid next_uuid() { return s_tls_gen(); }
 
-    static UUIDGenerator* instance() {
-        static UUIDGenerator generator;
-        return &generator;
-    }
+    static std::string next_uuid_string() { return boost::uuids::to_string(next_uuid()); }
 
 private:
-    boost::uuids::basic_random_generator<boost::mt19937> _boost_uuid_generator;
-    SpinLock _uuid_gen_lock;
+    static inline thread_local boost::uuids::basic_random_generator<boost::mt19937> s_tls_gen;
 };
 
 } // namespace starrocks
