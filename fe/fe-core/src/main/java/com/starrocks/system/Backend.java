@@ -243,10 +243,6 @@ public class Backend implements Writable {
         this.brpcPort = brpcPort;
     }
 
-    public void setHeartbeatPort(int heartbeatPort) {
-        this.heartbeatPort = heartbeatPort;
-    }
-
     public long getLastUpdateMs() {
         return this.lastUpdateMs;
     }
