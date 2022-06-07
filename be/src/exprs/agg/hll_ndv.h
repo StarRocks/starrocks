@@ -8,6 +8,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "types/hll.h"
 
 namespace starrocks::vectorized {
 

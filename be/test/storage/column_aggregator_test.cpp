@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "column/column_helper.h"
+#include "storage/array_type_info.h"
 #include "storage/column_aggregate_func.h"
 
 namespace starrocks::vectorized {
@@ -592,7 +593,7 @@ TEST(ColumnAggregator, testNullIntReplace) {
 }
 
 TEST(ColumnAggregator, testArrayReplace) {
-    auto array_type_info = std::make_shared<ArrayTypeInfo>(get_type_info(FieldType::OLAP_FIELD_TYPE_VARCHAR));
+    auto array_type_info = get_array_type_info(get_type_info(FieldType::OLAP_FIELD_TYPE_VARCHAR));
     FieldPtr field = std::make_shared<Field>(1, "test_array", array_type_info,
                                              FieldAggregationMethod::OLAP_FIELD_AGGREGATION_REPLACE, 1, false, false);
 
@@ -672,7 +673,7 @@ TEST(ColumnAggregator, testArrayReplace) {
 
 // insert into tbl values (key, null);
 TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
-    auto array_type_info = std::make_shared<ArrayTypeInfo>(get_type_info(FieldType::OLAP_FIELD_TYPE_VARCHAR));
+    auto array_type_info = get_array_type_info(get_type_info(FieldType::OLAP_FIELD_TYPE_VARCHAR));
     FieldPtr field =
             std::make_shared<Field>(1, "test_array", array_type_info,
                                     FieldAggregationMethod::OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, 1, false, true);
