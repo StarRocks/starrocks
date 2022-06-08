@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.statistic.Constants;
@@ -27,8 +28,6 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public abstract class JoinOrder {
     /**
@@ -297,16 +296,25 @@ public abstract class JoinOrder {
             return;
         }
 
-        Map<ColumnRefOperator, ScalarOperator> projection = exprInfo.expr.getOutputColumns()
-                .getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
-                .collect(Collectors.toMap(Function.identity(), Function.identity()));
-        projection.putAll(expression);
+        Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
         if (exprInfo.expr.getOp().getProjection() != null) {
             projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
+        } else {
+            exprInfo.expr.getOutputColumns().getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+                    .forEach(c -> projection.put(c, c));
         }
+
+        // merge two projection, keep same logical from MergeTwoProjectRule
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection);
+        Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expression.entrySet()) {
+            resultMap.put(entry.getKey(), entry.getValue().clone().accept(rewriter, null));
+        }
+        resultMap.putAll(projection);
+
         Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
         exprInfo.expr = OptExpression.create(
-                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(projection)).build(),
+                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(resultMap)).build(),
                 exprInfo.expr.getInputs());
         exprInfo.expr.deriveLogicalPropertyItself();
     }
