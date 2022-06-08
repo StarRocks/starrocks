@@ -612,6 +612,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
+
+        Config.integrate_starmgr = false;
     }
 
     @Test
