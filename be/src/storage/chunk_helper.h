@@ -48,6 +48,9 @@ public:
     static vectorized::Schema convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
                                                           const std::vector<ColumnId>& cids);
 
+    // Get schema with format v2 type containing short key columns from TabletSchema.
+    static vectorized::Schema get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema);
+
     static ColumnId max_column_id(const vectorized::Schema& schema);
 
     // Create an empty chunk according to the |schema| and reserve it of size |n|.
