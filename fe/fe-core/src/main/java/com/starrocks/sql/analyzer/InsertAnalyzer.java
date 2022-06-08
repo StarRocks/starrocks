@@ -10,6 +10,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -41,6 +42,10 @@ public class InsertAnalyzer {
 
         if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
+        }
+
+        if (table instanceof MaterializedView) {
+            throw unsupportedException("not support MaterializedView");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();

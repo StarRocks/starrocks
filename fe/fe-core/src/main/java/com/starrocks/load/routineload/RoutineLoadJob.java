@@ -39,6 +39,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -1029,6 +1030,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         if (table.getType() != Table.TableType.OLAP) {
             throw new AnalysisException("Only olap table support routine load");
+        }
+
+        if (table instanceof MaterializedView) {
+            throw new AnalysisException("not support MaterializedView");
         }
 
         if (routineLoadDesc == null) {

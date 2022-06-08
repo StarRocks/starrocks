@@ -37,6 +37,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -123,6 +124,9 @@ public class BrokerFileGroup implements Writable {
         }
         if (!(table instanceof OlapTable)) {
             throw new DdlException("Table " + table.getName() + " is not OlapTable");
+        }
+        if (table instanceof MaterializedView) {
+            throw new DdlException("not support MaterializedView");
         }
         OlapTable olapTable = (OlapTable) table;
         tableId = table.getId();
