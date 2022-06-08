@@ -23,7 +23,7 @@ class TabletWriter;
 class Tablet {
 public:
     // group: the URI of the storage group for this tablet, e.g, "s3://bucket/serviceID/groupID/"
-    explicit Tablet(TabletManager* mgr, std::string group, int64_t id);
+    explicit Tablet(TabletManager* mgr, std::string group, int64_t id) : _mgr(mgr), _group(std::move(group)), _id(id) {}
 
     ~Tablet() = default;
 

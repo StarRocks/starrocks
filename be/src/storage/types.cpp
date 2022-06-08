@@ -25,6 +25,7 @@
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
+#include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
 #include "storage/array_type_info.h"

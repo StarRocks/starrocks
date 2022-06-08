@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-static const string LOAD_OP_COLUMN = "__op";
+static const std::string LOAD_OP_COLUMN = "__op";
 
 void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);

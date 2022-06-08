@@ -3,6 +3,7 @@
 #include "exec/vectorized/schema_scanner/schema_tasks_scanner.h"
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
+#include "runtime/string_value.h"
 
 namespace starrocks::vectorized {
 

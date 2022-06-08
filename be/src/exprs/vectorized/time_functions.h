@@ -218,24 +218,24 @@ public:
                                        starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     /*
-     * Called by datetime_floor
+     * Called by time_slice
      * Floor to the corresponding period
      */
-    DEFINE_VECTORIZED_FN(datetime_floor_second);
-    DEFINE_VECTORIZED_FN(datetime_floor_minute);
-    DEFINE_VECTORIZED_FN(datetime_floor_hour);
-    DEFINE_VECTORIZED_FN(datetime_floor_day);
-    DEFINE_VECTORIZED_FN(datetime_floor_month);
-    DEFINE_VECTORIZED_FN(datetime_floor_year);
-    DEFINE_VECTORIZED_FN(datetime_floor_week);
-    DEFINE_VECTORIZED_FN(datetime_floor_quarter);
-    // datetime_floor for sql.
-    DEFINE_VECTORIZED_FN(datetime_floor);
+    DEFINE_VECTORIZED_FN(time_slice_second);
+    DEFINE_VECTORIZED_FN(time_slice_minute);
+    DEFINE_VECTORIZED_FN(time_slice_hour);
+    DEFINE_VECTORIZED_FN(time_slice_day);
+    DEFINE_VECTORIZED_FN(time_slice_month);
+    DEFINE_VECTORIZED_FN(time_slice_year);
+    DEFINE_VECTORIZED_FN(time_slice_week);
+    DEFINE_VECTORIZED_FN(time_slice_quarter);
+    // time_slice for sql.
+    DEFINE_VECTORIZED_FN(time_slice);
 
-    static Status datetime_floor_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status datetime_floor_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_prepare(starrocks_udf::FunctionContext* context,
+                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_close(starrocks_udf::FunctionContext* context,
+                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
     /*
      * Called by date_trunc
      * Truncate to the corresponding part
@@ -462,10 +462,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(str_to_date);
 
-    /** 
-     * 
+    /**
+     *
      * cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
-     * 
+     *
      */
     DEFINE_VECTORIZED_FN(str2date);
 
@@ -632,7 +632,7 @@ private:
         char* fmt;
     };
 
-    // method for datetime_trunc and datetime_floor
+    // method for datetime_trunc and time_slice
     struct DateTruncCtx {
         ScalarFunction function;
     };

@@ -20,4 +20,7 @@ constexpr int HLL_EMPTY_SIZE = 1;
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
 
+constexpr __int128 MAX_INT128 = ~((__int128)0x01 << 127);
+constexpr __int128 MIN_INT128 = ((__int128)0x01 << 127);
+
 } // namespace starrocks

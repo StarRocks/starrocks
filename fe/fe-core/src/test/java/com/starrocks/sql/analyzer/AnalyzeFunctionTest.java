@@ -62,23 +62,23 @@ public class AnalyzeFunctionTest {
 
     @Test
     public void testDateFloor() {
-        analyzeSuccess("select date_floor(th, interval 1 year) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 month) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 day) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 week) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 quarter) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 hour) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 minute) from tall");
-        analyzeSuccess("select date_floor(th, interval 1 second) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 year) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 month) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 day) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 week) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 quarter) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 hour) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 minute) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 second) from tall");
 
-        analyzeFail("select date_floor(ta, th) from tall",
-                "date_floor requires second parameter must be a constant interval");
+        analyzeFail("select time_slice(ta, th) from tall",
+                "time_slice requires second parameter must be a constant interval");
 
-        analyzeFail("select date_floor(NULL, NULL) from tall",
-                "date_floor requires second parameter must be a constant interval");
+        analyzeFail("select time_slice(NULL, NULL) from tall",
+                "time_slice requires second parameter must be a constant interval");
 
-        analyzeFail("select date_floor(ta, -1) from tall",
-                "date_floor requires second parameter must be greater than 0");
+        analyzeFail("select time_slice(ta, -1) from tall",
+                "time_slice requires second parameter must be greater than 0");
     }
 
     @Test

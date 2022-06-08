@@ -18,6 +18,8 @@
 #endif
 namespace starrocks::vectorized {
 
+class ColumnRef;
+
 #define APPLY_FOR_JOIN_VARIANTS(M) \
     M(keyboolean)                  \
     M(key8)                        \

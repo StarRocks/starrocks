@@ -24,7 +24,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/column_mapping.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -135,12 +135,7 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
-        return _global_dict_columns_valid_info;
-    }
-
-protected:
-    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const = 0;
 };
 
 } // namespace starrocks

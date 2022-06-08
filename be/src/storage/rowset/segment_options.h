@@ -7,7 +7,7 @@
 
 #include "column/datum.h"
 #include "fs/fs.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/seek_range.h"
 
