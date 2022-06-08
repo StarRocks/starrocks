@@ -190,19 +190,13 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayWindowFunction() {
+    public void testArrayWindowFunction() throws Exception {
         for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
-            try {
-                String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
-                getFragmentPlan(sql);
-            } catch (Exception e) {
-                e.printStackTrace();
-                assertContains(e.getMessage(),
-                        String.format("No matching function with signature: %s(ARRAY<bigint(20)>)",
-                                fnName.toLowerCase()));
-                continue;
-            }
-            throw new AssertionError();
+            String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
+            expectedEx.expect(SemanticException.class);
+            expectedEx.expectMessage(
+                    String.format("No matching function with signature: %s(ARRAY<bigint(20)>)", fnName.toLowerCase()));
+            getFragmentPlan(sql);
         }
     }
 }
