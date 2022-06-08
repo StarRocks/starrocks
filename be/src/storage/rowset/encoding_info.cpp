@@ -230,7 +230,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<OLAP_FIELD_TYPE_BOOL, RLE>();
     _add_map<OLAP_FIELD_TYPE_BOOL, BIT_SHUFFLE>();
-    _add_map<OLAP_FIELD_TYPE_BOOL, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_BOOL, PLAIN_ENCODING, true>();
 
     _add_map<OLAP_FIELD_TYPE_DATE, BIT_SHUFFLE>();
