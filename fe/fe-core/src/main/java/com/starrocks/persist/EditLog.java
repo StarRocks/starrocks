@@ -980,6 +980,7 @@ public class EditLog {
                 return;
             } catch (InterruptedException e) {
                 LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
+                cnt++;
             }
         }
     }

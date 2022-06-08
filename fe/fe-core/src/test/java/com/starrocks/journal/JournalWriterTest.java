@@ -160,5 +160,4 @@ public class JournalWriterTest {
             Assert.assertEquals(0, logQueue.size());
         }
     }
-
 }

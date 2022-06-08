@@ -30,7 +30,6 @@ public class EditLogTest {
                 public void run() {
                     EditLog editLog = new EditLog(null, logQueue);
                     editLog.logEdit(n, new Text("111"), -1);
-
                 }
             }));
         }
@@ -111,7 +110,8 @@ public class EditLogTest {
         new Expectations(entity) {
             {
                 entity.waitLatch();
-                times = 2;
+                times = 3;
+                result = new InterruptedException("mock mock");
                 result = new InterruptedException("mock mock");
                 result = null;
             }
