@@ -86,7 +86,7 @@ Example 2: Set the replica status of tablet 10003 on BE 10001 to `ok`。
 ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "ok");
 ```
 
-- > *Provide examples for using this command and explain the purpose of the example.*
+- > *Provide examples for using this command and explain the purpose of each example.*
 
 - > *You can provide multiple examples.*
 
