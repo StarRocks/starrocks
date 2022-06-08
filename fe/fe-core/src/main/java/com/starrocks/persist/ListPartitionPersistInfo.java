@@ -10,6 +10,7 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ListPartitionPersistInfo extends PartitionPersistInfoV2 {
@@ -20,6 +21,8 @@ public class ListPartitionPersistInfo extends PartitionPersistInfoV2 {
     private List<List<String>> multiValues;
 
     public ListPartitionPersistInfo() {
+        this.values = new ArrayList<>();
+        this.multiValues = new ArrayList<>();
     }
 
     @Override
