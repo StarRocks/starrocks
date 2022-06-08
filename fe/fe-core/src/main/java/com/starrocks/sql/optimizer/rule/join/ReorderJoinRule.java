@@ -2,7 +2,9 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -83,7 +85,6 @@ public class ReorderJoinRule extends Rule {
         for (OptExpression joinExpr : reorderTopKResult) {
             ColumnRefSet outputColumns = new ColumnRefSet();
             Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
-            Map<ColumnRefOperator, ScalarOperator> commonProjectMap = new HashMap<>();
             if (oldRoot.getProjection() == null) {
                 innerJoinRoot.getInputs().forEach(opt -> outputColumns.union(opt.getOutputColumns()));
 
@@ -93,7 +94,6 @@ public class ReorderJoinRule extends Rule {
             } else {
                 outputColumns.union(oldRoot.getProjection().getOutputColumns());
                 projectMap.putAll(oldRoot.getProjection().getColumnRefMap());
-                commonProjectMap.putAll(oldRoot.getProjection().getCommonSubOperatorMap());
             }
 
             ColumnRefSet newRootInputColumns = new ColumnRefSet();
@@ -118,7 +118,7 @@ public class ReorderJoinRule extends Rule {
                             scalarOperator.clone().accept(replaceColumnRefRewriter, null));
                 }
             }
-            joinExpr.getOp().setProjection(new Projection(projectMap, commonProjectMap));
+            joinExpr.getOp().setProjection(new Projection(projectMap));
             ColumnRefSet requireInputColumns = ((LogicalJoinOperator) joinExpr.getOp()).getRequiredChildInputColumns();
             requireInputColumns.union(outputColumns);
 
@@ -177,23 +177,37 @@ public class ReorderJoinRule extends Rule {
             this.optimizerContext = optimizerContext;
         }
 
-        public OptExpression rewrite(OptExpression optExpression, ColumnRefSet pruneOutputColumns) {
+        public OptExpression rewrite(OptExpression optExpression, ColumnRefSet requiredColumns) {
             Operator operator = optExpression.getOp();
-            if (operator.getProjection() != null) {
+            if (operator.getProjection() != null && operator.getProjection().getColumnRefMap().size() > 1) {
                 Projection projection = operator.getProjection();
 
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                    if (!entry.getValue().isColumnRef()) {
-                        return optExpression;
+                List<ColumnRefOperator> outputColumns = Lists.newArrayList();
+                for (ColumnRefOperator key : projection.getColumnRefMap().keySet()) {
+                    if (requiredColumns.contains(key)) {
+                        outputColumns.add(key);
+                    }
+                }
+
+                if (outputColumns.size() == 0) {
+                    outputColumns.add(Utils.findSmallestColumnRef(projection.getOutputColumns()));
+                }
+
+                if (outputColumns.size() != projection.getColumnRefMap().size()) {
+                    Map<ColumnRefOperator, ScalarOperator> newOutputProjections = Maps.newHashMap();
+                    for (ColumnRefOperator ref : outputColumns) {
+                        newOutputProjections.put(ref, projection.getColumnRefMap().get(ref));
                     }
 
-                    if (!entry.getKey().equals(entry.getValue())) {
-                        return optExpression;
-                    }
+                    optExpression.getOp().setProjection(new Projection(newOutputProjections));
+                }
+
+                for (ScalarOperator value : optExpression.getOp().getProjection().getColumnRefMap().values()) {
+                    requiredColumns.union(value.getUsedColumns());
                 }
             }
 
-            return optExpression.getOp().accept(this, optExpression, pruneOutputColumns);
+            return optExpression.getOp().accept(this, optExpression, requiredColumns);
         }
 
         @Override
@@ -210,14 +224,9 @@ public class ReorderJoinRule extends Rule {
                     newOutputColumns.union(id);
                 }
             }
-            requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
-
-            ColumnRefSet childInputColumns = new ColumnRefSet();
-            optExpression.getInputs().forEach(opt -> childInputColumns.union(
-                    ((LogicalOperator) opt.getOp()).getOutputColumns(new ExpressionContext(opt))));
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-            if (!newOutputColumns.isEmpty()) {
+            if (joinOperator.getProjection() == null && !newOutputColumns.isEmpty()) {
                 joinOperator = new LogicalJoinOperator.Builder()
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
@@ -225,8 +234,12 @@ public class ReorderJoinRule extends Rule {
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();
+            } else if (joinOperator.getProjection() != null) {
+                Preconditions.checkState(
+                        newOutputColumns.cardinality() >= joinOperator.getProjection().getColumnRefMap().size());
             }
 
+            requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
             requireColumns.union(newOutputColumns);
             OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
             OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
