@@ -76,31 +76,5 @@ public:
                                      const starrocks::TabletSchema& tschema, vectorized::Chunk* chunk);
 };
 
-inline ChunkPtr ChunkHelper::new_chunk(const vectorized::Schema& schema, size_t n) {
-    size_t fields = schema.num_fields();
-    Columns columns;
-    columns.reserve(fields);
-    for (size_t i = 0; i < fields; i++) {
-        const vectorized::FieldPtr& f = schema.field(i);
-        columns.emplace_back(column_from_field(*f));
-        columns.back()->reserve(n);
-    }
-    return std::make_shared<Chunk>(std::move(columns), std::make_shared<vectorized::Schema>(schema));
-}
-
-inline std::shared_ptr<Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_chunk(tuple_desc.slots(), n);
-}
-
-inline std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_shared<Chunk>();
-    for (const auto slot : slots) {
-        ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-        column->reserve(n);
-        chunk->append_column(column, slot->id());
-    }
-    return chunk;
-}
-
 } // namespace vectorized
 } // namespace starrocks

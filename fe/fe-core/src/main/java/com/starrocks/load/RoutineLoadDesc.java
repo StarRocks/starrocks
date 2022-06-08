@@ -22,18 +22,25 @@
 package com.starrocks.load;
 
 import com.starrocks.analysis.ColumnSeparator;
+import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RowDelimiter;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class RoutineLoadDesc {
-    private final ColumnSeparator columnSeparator;
-    private final RowDelimiter rowDelimiter;
-    private final ImportColumnsStmt columnsInfo;
-    private final ImportWhereStmt wherePredicate;
+    private ColumnSeparator columnSeparator;
+    private RowDelimiter rowDelimiter;
+    private ImportColumnsStmt columnsInfo;
+    private ImportWhereStmt wherePredicate;
     // nullable
-    private final PartitionNames partitionNames;
+    private PartitionNames partitionNames;
+
+    public RoutineLoadDesc() {}
 
     public RoutineLoadDesc(ColumnSeparator columnSeparator, RowDelimiter rowDelimiter, ImportColumnsStmt columnsInfo,
                            ImportWhereStmt wherePredicate, PartitionNames partitionNames) {
@@ -48,20 +55,90 @@ public class RoutineLoadDesc {
         return columnSeparator;
     }
 
+    public void setColumnSeparator(ColumnSeparator columnSeparator) {
+        this.columnSeparator = columnSeparator;
+    }
+
     public RowDelimiter getRowDelimiter() {
         return rowDelimiter;
+    }
+
+    public void setRowDelimiter(RowDelimiter rowDelimiter) {
+        this.rowDelimiter = rowDelimiter;
     }
 
     public ImportColumnsStmt getColumnsInfo() {
         return columnsInfo;
     }
 
+    public void setColumnsInfo(ImportColumnsStmt importColumnsStmt) {
+        this.columnsInfo = importColumnsStmt;
+    }
+
     public ImportWhereStmt getWherePredicate() {
         return wherePredicate;
+    }
+
+    public void setWherePredicate(ImportWhereStmt wherePredicate) {
+        this.wherePredicate = wherePredicate;
     }
 
     // nullable
     public PartitionNames getPartitionNames() {
         return partitionNames;
+    }
+
+    public void setPartitionNames(PartitionNames partitionNames) {
+        this.partitionNames = partitionNames;
+    }
+
+    public String toSql() {
+        List<String> subSQLs = new ArrayList<>();
+        if (columnSeparator != null) {
+            subSQLs.add("COLUMNS TERMINATED BY " + columnSeparator.toSql());
+        }
+        if (rowDelimiter != null) {
+            subSQLs.add("ROWS TERMINATED BY " + rowDelimiter.toSql());
+        }
+        if (columnsInfo != null) {
+            String subSQL = "COLUMNS(" +
+                    columnsInfo.getColumns().stream().map(this::columnToString)
+                            .collect(Collectors.joining(", ")) +
+                    ")";
+            subSQLs.add(subSQL);
+        }
+        if (partitionNames != null) {
+            String subSQL = null;
+            if (partitionNames.isTemp()) {
+                subSQL = "TEMPORARY PARTITION";
+            } else {
+                subSQL = "PARTITION";
+            }
+            subSQL += "(" + partitionNames.getPartitionNames().stream().map(this::pack)
+                    .collect(Collectors.joining(", "))
+                    + ")";
+            subSQLs.add(subSQL);
+        }
+        if (wherePredicate != null) {
+            subSQLs.add("WHERE " + wherePredicate.getExpr().toSql());
+        }
+        return String.join(", ", subSQLs);
+    }
+
+    private String pack(String str) {
+        return "`" + str + "`";
+    }
+
+    public String columnToString(ImportColumnDesc desc) {
+        String str = pack(desc.getColumnName());
+        if (desc.getExpr() != null) {
+            str += " = " + desc.getExpr().toSql();
+        }
+        return str;
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 }

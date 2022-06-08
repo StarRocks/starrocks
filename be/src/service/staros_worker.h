@@ -35,8 +35,7 @@ extern staros::starlet::Starlet* g_starlet;
 void init_staros_worker();
 void shutdown_staros_worker();
 
-StatusOr<staros::starlet::ShardInfo> get_shard_info(staros::starlet::ShardId shard_id);
+StatusOr<std::string> get_staros_shard_path(int64_t shard_id);
 
 } // namespace starrocks
-
 #endif // USE_STAROS

@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "column/column.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"

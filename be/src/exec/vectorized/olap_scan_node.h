@@ -12,6 +12,7 @@
 #include "exec/scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/vectorized/tablet_scanner.h"
+#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 class DescriptorTbl;

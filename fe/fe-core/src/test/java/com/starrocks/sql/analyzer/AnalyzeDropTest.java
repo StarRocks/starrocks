@@ -10,7 +10,7 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class AnalyzerDropTest {
+public class AnalyzeDropTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -28,13 +28,11 @@ public class AnalyzerDropTest {
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table if exists db1.test1 force");
         Assert.assertEquals("default_cluster:db1", stmt.getDbName());
         Assert.assertEquals("test1", stmt.getTableName());
-        Assert.assertEquals("DROP TABLE IF EXISTS `default_cluster:db1`.`test1` FORCE", stmt.toString());
         Assert.assertTrue(stmt.isSetIfExists());
         Assert.assertTrue(stmt.isForceDrop());
         stmt = (DropTableStmt) analyzeSuccess("drop table test2");
         Assert.assertEquals("default_cluster:test", stmt.getDbName());
         Assert.assertEquals("test2", stmt.getTableName());
-        Assert.assertEquals("DROP TABLE `default_cluster:test`.`test2`", stmt.toString());
         Assert.assertFalse(stmt.isSetIfExists());
         Assert.assertFalse(stmt.isForceDrop());
     }
@@ -49,7 +47,6 @@ public class AnalyzerDropTest {
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop view if exists db1.test1");
         Assert.assertEquals("default_cluster:db1", stmt.getDbName());
         Assert.assertEquals("test1", stmt.getTableName());
-        Assert.assertEquals("DROP VIEW IF EXISTS `default_cluster:db1`.`test1`", stmt.toString());
         Assert.assertTrue(stmt.isView());
         Assert.assertTrue(stmt.isSetIfExists());
         Assert.assertFalse(stmt.isForceDrop());

@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "storage/snapshot_manager.h"
+#include "util/phmap/phmap.h"
 
 using std::string;
 using std::vector;

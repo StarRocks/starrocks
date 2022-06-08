@@ -1205,6 +1205,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
               << " rowset:" << rowset_id;
     // 1. load index
+    std::lock_guard lg(_index_lock);
     bool enable_persistent_index = _tablet.get_enable_persistent_index();
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());

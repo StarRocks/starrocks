@@ -7,10 +7,14 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
+#include "types/constexpr.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+
+class RuntimeState;
+
+namespace vectorized {
 
 OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema,
                                                  const TOlapTablePartitionParam& t_param)
@@ -259,4 +263,5 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

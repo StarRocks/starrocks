@@ -173,6 +173,22 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl_for_count " +
+                        "(" +
+                        "   c_0_0 BIGINT NULL ," +
+                        "   c_0_1 DATE NOT NULL ," +
+                        "   c_0_2 DECIMAL(37, 5)  NOT NULL," +
+                        "   c_0_3 INT MAX NOT NULL , " +
+                        "   c_0_4 DATE REPLACE_IF_NOT_NULL NOT NULL ," +
+                        "   c_0_5 PERCENTILE PERCENTILE_UNION NOT NULL" +
+                        ") " +
+                        "AGGREGATE KEY (c_0_0,c_0_1,c_0_2) " +
+                        "PARTITION BY RANGE(c_0_1) " +
+                        "(" +
+                        "   START (\"2010-01-01\") END (\"2021-12-31\") EVERY (INTERVAL 219 day) " +
+                        ") " +
+                        "DISTRIBUTED BY HASH (c_0_2,c_0_1) BUCKETS 3 " +
+                        "properties(\"replication_num\"=\"1\") ;")
                 .useDatabase("test");
     }
 
@@ -348,7 +364,7 @@ public class CreateMaterializedViewTest {
             OlapTable baseTable = ((OlapTable) testDb.getTable(baseTableIds.iterator().next()));
             assertEquals(baseTable.getRelatedMaterializedViews().size(), 1);
             assertEquals(materializedView.getViewDefineSql(),
-                    "SELECT date_trunc('month', `default_cluster:test`.`tbl1`.`k1`) AS `s1`, `default_cluster:test`.`tbl1`.`k2` AS `s2` FROM `default_cluster:test`.`tbl1`");
+                    "SELECT date_trunc('month', `test`.`tbl1`.`k1`) AS `s1`, `test`.`tbl1`.`k2` AS `s2` FROM `test`.`tbl1`");
             TableProperty tableProperty = materializedView.getTableProperty();
             assertEquals(tableProperty.getReplicationNum().shortValue(), 1);
             assertEquals(materializedView.getState(), OlapTable.OlapTableState.NORMAL);
@@ -1124,6 +1140,19 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             assertEquals(e.getMessage(),
                     "Do not support alter non-OLAP table[v1]");
+        }
+    }
+
+    @Test
+    public void testAggregateTableWithCount() {
+        String sql = "CREATE MATERIALIZED VIEW v0 AS SELECT t0_57.c_0_1," +
+                " COUNT(t0_57.c_0_0) , MAX(t0_57.c_0_2) , MAX(t0_57.c_0_3) , MIN(t0_57.c_0_4)" +
+                " FROM tbl_for_count AS t0_57 GROUP BY t0_57.c_0_1 ORDER BY t0_57.c_0_1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Aggregate type table do not support count function in materialized view");
         }
     }
 }
