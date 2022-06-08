@@ -129,12 +129,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
-    // if ScanNode is followed directly by a global AggregateNode that needs no finalization,
-    // then in pipeline engine(dop adaptation enabled), needsLocalShuffle is set to be false to
-    // indicate that the pipelineDop should be 1 to prevent local shuffle interpolated between
-    // ScanOperator and AggregateBlockSourceOperator/DistinctBlockSourceOperator.
-    private boolean needsLocalShuffle = true;
-
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
@@ -286,14 +280,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean isDopEstimated() {
         return dopEstimated;
-    }
-
-    public void setNeedsLocalShuffle(boolean need) {
-        this.needsLocalShuffle = need;
-    }
-
-    public boolean isNeedsLocalShuffle() {
-        return needsLocalShuffle;
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {

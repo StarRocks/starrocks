@@ -1294,10 +1294,6 @@ public class PlanFragmentBuilder {
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if (node.isOnePhaseAgg()) {
                 inputFragment.preferInstanceParallel();
-                boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                        ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                        inputFragment.getPlanRoot().canUsePipeLine();
-                inputFragment.setNeedsLocalShuffle(false);
             }
 
             inputFragment.setPlanRoot(aggregationNode);

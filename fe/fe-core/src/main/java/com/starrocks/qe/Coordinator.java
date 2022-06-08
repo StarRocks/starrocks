@@ -1309,13 +1309,6 @@ public class Coordinator {
                         }
                     }
                 }
-                // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-                if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
-                    FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
-                    int numBackends = param.scanRangeAssignment.size();
-                    int numInstances = param.instanceExecParams.size();
-                    param.fragment.adaptPipelineDop(numBackends, numInstances);
-                }
             }
 
             if (params.instanceExecParams.isEmpty()) {
@@ -1527,13 +1520,6 @@ public class Coordinator {
                 }
                 params.instanceExecParams.add(instanceParam);
             }
-        }
-        boolean dopAdaptionEnabled = connectContext != null &&
-                connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                params.fragment.getPlanRoot().canUsePipeLine();
-        // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-        if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
-            params.fragment.adaptPipelineDop(addressToScanRanges.size(), params.instanceExecParams.size());
         }
     }
 
