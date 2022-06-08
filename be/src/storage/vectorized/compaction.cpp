@@ -63,15 +63,12 @@ CompactionAlgorithm Compaction::choose_compaction_algorithm(size_t num_columns, 
 }
 
 uint32_t Compaction::get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size) {
-    // max segment rows
-    int64_t max_segment_rows = max_segment_file_size * input_row_num / (input_size + 1);
-    // default value in RowsetWriterContext is INT32_MAX.
-    // segment file use uint32 to represent row number,
-    // and use INT32_MAX to avoid overflow issue when casting from uint32_t to int.
-    if (max_segment_rows > INT32_MAX) {
+    // The range of config::max_segments_file_size is between [1, INT64_MAX]
+    // If the configuration is set wrong, the config::max_segments_file_size will be a negtive value.
+    // Using division instead multiplication can avoid the overflow
+    int64_t max_segment_rows = max_segment_file_size / (input_size / (input_row_num + 1) + 1);
+    if (max_segment_rows > INT32_MAX || max_segment_rows <= 0) {
         max_segment_rows = INT32_MAX;
-    } else if (max_segment_rows < 1) {
-        max_segment_rows = 1;
     }
     return max_segment_rows;
 }
