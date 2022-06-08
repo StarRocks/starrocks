@@ -3,8 +3,10 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 class Cache;
@@ -33,18 +35,20 @@ public:
 
     Status drop_tablet(int64_t tablet_id);
 
-private:
     Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
     Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
     Status delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
-    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group);
-    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group, int64_t tablet_id);
-
     Status put_txn_log(const std::string& group, const TxnLog& log);
     Status put_txn_log(const std::string& group, TxnLogPtr log);
     StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
+
+private:
+    std::string tablet_meta_path(const std::string& group, int64_t tablet_id, int64_t verson);
+    std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
+    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group);
+    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group, int64_t tablet_id);
     StatusOr<MetadataIterator> list_txn_log(const std::string& group);
     StatusOr<MetadataIterator> list_txn_log(const std::string& group, int64_t tablet_id);
 

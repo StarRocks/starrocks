@@ -13,6 +13,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"

@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <rapidjson/document.h>
+
 #include <string>
 
 #include "gen_cpp/persistent_index.pb.h"
