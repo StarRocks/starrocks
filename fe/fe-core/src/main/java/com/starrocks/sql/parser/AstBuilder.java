@@ -1194,7 +1194,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitParenthesizedRelation(StarRocksParser.ParenthesizedRelationContext context) {
-        return visit(context.relation());
+        if (context.relation().size() == 1) {
+            return visit(context.relation().get(0));
+        } else {
+            List<Relation> relations = visit(context.relation(), Relation.class);
+            Iterator<Relation> iterator = relations.iterator();
+            Relation relation = iterator.next();
+            while (iterator.hasNext()) {
+                relation = new JoinRelation(null, relation, iterator.next(), null, false);
+            }
+            return relation;
+        }
     }
 
     @Override
