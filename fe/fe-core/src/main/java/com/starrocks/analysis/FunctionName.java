@@ -25,8 +25,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunctionName;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -38,8 +36,6 @@ import java.util.Objects;
  * db.function_name.
  */
 public class FunctionName implements Writable {
-    private static final Logger LOG = LogManager.getLogger(FunctionName.class);
-
     private String db_;
     private String fn_;
 
@@ -91,18 +87,7 @@ public class FunctionName implements Writable {
             return false;
         }
         FunctionName o = (FunctionName) obj;
-        if ((db_ == null || o.db_ == null) && (db_ != o.db_)) {
-            if (db_ == null && o.db_ != null) {
-                return false;
-            }
-            if (db_ != null && o.db_ == null) {
-                return false;
-            }
-            if (!db_.equalsIgnoreCase(o.db_)) {
-                return false;
-            }
-        }
-        return fn_.equalsIgnoreCase(o.fn_);
+        return Objects.equals(db_, o.db_) && Objects.equals(fn_, o.fn_);
     }
 
     public String getDb() {
@@ -168,13 +153,6 @@ public class FunctionName implements Writable {
             }
             db_ = ClusterNamespace.getFullName(analyzer.getClusterName(), db_);
         }
-
-        // If the function name is not fully qualified, it must not be the same as a builtin
-        //        if (!isFullyQualified() && OpcodeRegistry.instance().getFunctionOperator(
-        //          getFunction()) != FunctionOperator.INVALID_OPERATOR) {
-        //            throw new AnalysisException(
-        //              "Function cannot have the same name as a builtin: " + getFunction());
-        //        }
     }
 
     private boolean isValidCharacter(char c) {

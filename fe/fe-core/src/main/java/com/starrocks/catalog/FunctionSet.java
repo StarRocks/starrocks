@@ -166,7 +166,7 @@ public class FunctionSet {
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String DATE_TRUNC = "date_trunc";
-    public static final String DATE_FLOOR = "date_floor";
+    public static final String TIME_SLICE = "time_slice";
     public static final String STRFTIME = "strftime";
     public static final String TIME_FORMAT = "time_format";
     public static final String DATE_FORMAT = "date_format";
@@ -219,6 +219,7 @@ public class FunctionSet {
     // Util functions
     public static final String UUID = "uuid";
     public static final String SLEEP = "sleep";
+    public static final String ISNULL = "isnull";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
