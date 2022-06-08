@@ -246,7 +246,20 @@
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
-    + Aggregation Functions
+    + JSON Functions
+      + [Overview of JSON functions and operators](/sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
+      + JSON constructor functions
+        + [JSON_ARRAY](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
+        + [JSON_OBJECT](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
+        + [PARSE_JSON](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
+      + JSON query and processing functions
+        + [Arrow function](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
+        + [JSON_QUERY](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [JSON_EXISTS](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [JSON_EACH](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+        + [CAST](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
+      + [JSON operators](/sql-reference/sql-functions/json-functions/json-operators.md)
+    + Aggregate Functions
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
       + [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)
