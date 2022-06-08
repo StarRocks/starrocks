@@ -15,6 +15,8 @@
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "storage/txn_manager.h"
 #include "util/block_compression.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"

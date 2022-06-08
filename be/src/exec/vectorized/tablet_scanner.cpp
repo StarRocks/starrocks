@@ -16,6 +16,8 @@
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
 
