@@ -198,8 +198,8 @@ public:
     int32_t idle_timeout_sec = -1;
 
     // buf for reading data from ev_buffer
+    static const size_t buf_default_sz = 64 * 1024;
     ByteBufferPtr buf = ByteBuffer::allocate(buf_default_sz);
-    const size_t buf_default_sz = 64 * 1024;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }
