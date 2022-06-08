@@ -32,6 +32,11 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
+<<<<<<< HEAD
+=======
+        Preconditions.checkState(!l1.hasOffset());
+
+>>>>>>> 8884a1ffd (Fix merge limit error when subquery has limit with offset (#6920))
         // l2 range
         long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
         long l2Max = l2Min + l2.getLimit();
@@ -48,8 +53,16 @@ public class MergeLimitWithLimitRule extends TransformationRule {
             offset = Operator.DEFAULT_OFFSET;
         }
 
+<<<<<<< HEAD
         if (offset <= 0) {
             offset = Operator.DEFAULT_OFFSET;
+=======
+        Operator result;
+        if (l1.getLimit() <= l2.getLimit()) {
+            result = LogicalLimitOperator.local(limit, l2.getOffset());
+        } else {
+            result = LogicalLimitOperator.init(limit, l2.getOffset());
+>>>>>>> 8884a1ffd (Fix merge limit error when subquery has limit with offset (#6920))
         }
 
         return Lists.newArrayList(OptExpression.create(new LogicalLimitOperator(limit, offset),

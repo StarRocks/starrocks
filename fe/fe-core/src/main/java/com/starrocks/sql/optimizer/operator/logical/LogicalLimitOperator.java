@@ -19,10 +19,31 @@ public class LogicalLimitOperator extends LogicalOperator {
         offset = DEFAULT_OFFSET;
     }
 
+<<<<<<< HEAD
     public LogicalLimitOperator(long limit, long offset) {
         super(OperatorType.LOGICAL_LIMIT);
         this.limit = limit;
         this.offset = offset;
+=======
+    public static LogicalLimitOperator init(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.INIT);
+    }
+
+    public static LogicalLimitOperator global(long limit) {
+        return global(limit, DEFAULT_OFFSET);
+    }
+
+    public static LogicalLimitOperator global(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.GLOBAL);
+    }
+
+    public static LogicalLimitOperator local(long limit) {
+        return local(limit, DEFAULT_OFFSET);
+    }
+
+    public static LogicalLimitOperator local(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.LOCAL);
+>>>>>>> 8884a1ffd (Fix merge limit error when subquery has limit with offset (#6920))
     }
 
     public LogicalLimitOperator(Builder builder) {

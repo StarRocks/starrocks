@@ -21,7 +21,15 @@ public class MergeLimitWithSortRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
+<<<<<<< HEAD
         return !topN.hasLimit();
+=======
+        LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
+
+        // Merge Init-Limit/Local-limit and Sort
+        // Local-limit may be generate at MergeLimitWithLimitRule
+        return (limit.isInit() || limit.isLocal()) && !topN.hasLimit();
+>>>>>>> 8884a1ffd (Fix merge limit error when subquery has limit with offset (#6920))
     }
 
     @Override
