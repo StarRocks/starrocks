@@ -815,13 +815,9 @@ public class FunctionSet {
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull()) {
-                continue; // NULL is handled through type promotion.
-            }
-            if (t.isChar()) {
-                continue; // promoted to STRING
-            }
-            if (t.isTime()) {
+            // null/char/time is handled through type promotion
+            // TODO: array/json/pseudo is not supported yet
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
