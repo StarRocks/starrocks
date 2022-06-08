@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <cstring>
 #include <limits>
 #include <vector>

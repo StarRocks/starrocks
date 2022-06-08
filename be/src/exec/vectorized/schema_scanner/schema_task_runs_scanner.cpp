@@ -3,6 +3,9 @@
 #include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
+#include "runtime/datetime_value.h"
+#include "runtime/string_value.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 

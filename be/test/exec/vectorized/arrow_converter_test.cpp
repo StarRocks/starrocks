@@ -12,6 +12,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "exec/vectorized/arrow_to_starrocks_converter.h"
+#include "runtime/datetime_value.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
     do {                          \

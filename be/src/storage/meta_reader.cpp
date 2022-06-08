@@ -6,7 +6,7 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_iterator.h"

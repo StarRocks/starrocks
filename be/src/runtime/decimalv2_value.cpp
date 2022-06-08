@@ -21,6 +21,8 @@
 
 #include "runtime/decimalv2_value.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <iostream>
 #include <utility>

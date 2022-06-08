@@ -9,6 +9,7 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
+#include "types/constexpr.h"
 
 namespace starrocks::vectorized {
 

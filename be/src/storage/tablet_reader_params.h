@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/tuple.h"
