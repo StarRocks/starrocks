@@ -591,8 +591,7 @@ public class ShowExecutorTest {
             @Mock
             List<Long> getBackendIds() {
                 List<Long> backends = Lists.newArrayList();
-                long id = 1;
-                backends.add(id);
+                backends.add(1L);
                 return backends;
             }
 
