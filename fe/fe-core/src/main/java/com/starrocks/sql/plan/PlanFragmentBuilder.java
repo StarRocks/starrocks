@@ -1291,6 +1291,10 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
+            // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
+            if (node.isOnePhaseAgg()) {
+                inputFragment.preferInstanceParallel();
+            }
             boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
                     hasNoExchangeNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
