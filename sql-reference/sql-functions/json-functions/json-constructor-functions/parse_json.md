@@ -1,0 +1,63 @@
+# PARSE_JSON
+
+## Description
+
+Converts a string to a JSON value.
+
+## Syntax
+
+```Plain%20Text
+PARSE_JSON(string_expr)
+```
+
+## Parameters
+
+`string_expr`: the expression that represents the string. Only the STRING, VARCHAR, and CHAR data types are supported.
+
+## Return value
+
+Returns a JSON value.
+
+> Note: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. For information about the JSON specification, see [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
+
+## Examples
+
+Example 1: Convert a STRING value of `1` to a JSON value of `1`.
+
+```Plain%20Text
+mysql> SELECT PARSE_JSON('1');
+
+       -> 1
+```
+
+Example 2: Convert an array of the STRING data type to a JSON array.
+
+```Plain%20Text
+mysql> SELECT PARSE_JSON('[1,2,3]');
+
+       -> [1, 2, 3]   
+```
+
+Example 3: Convert an object of the STRING data type to a JSON object.
+
+```Plain%20Text
+mysql> SELECT PARSE_JSON('{"star": "rocks"}');
+
+       -> {"star": "rocks"}
+```
+
+Example 4: Construct a JSON value of `NULL`.
+
+```Plain%20Text
+mysql> SELECT PARSE_JSON('null');
+
+       -> NULL
+```
+
+Example 5: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. In this example, star is not enclosed in double quotation marks ("). Therefore, the PARSE_JSON function returns `NULL`.
+
+```Plain%20Text
+mysql> SELECT PARSE_JSON('{star: "rocks"}');
+
+       -> NULL
+```
