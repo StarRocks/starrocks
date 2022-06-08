@@ -115,10 +115,8 @@ public class BackendsProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         for (long backendId : backendIds) {
-            LOG.info("backendId in backendIds is {} ", backendId);
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
-                LOG.info("backend is null");
                 continue;
             }
 
