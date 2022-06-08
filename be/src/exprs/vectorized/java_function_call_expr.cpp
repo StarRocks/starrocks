@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"

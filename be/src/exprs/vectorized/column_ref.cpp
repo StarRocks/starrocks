@@ -2,6 +2,7 @@
 
 #include "exprs/vectorized/column_ref.h"
 
+#include "column/chunk.h"
 #include "exprs/expr.h"
 
 namespace starrocks::vectorized {
@@ -36,6 +37,12 @@ std::string ColumnRef::debug_string() const {
 
 ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
     return get_column(this, ptr);
+}
+
+vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
+    ColumnRef* ref = (ColumnRef*)expr;
+    ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
+    return column;
 }
 
 } // namespace starrocks::vectorized

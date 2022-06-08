@@ -13,6 +13,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 

@@ -2,6 +2,7 @@
 
 #include "plain_text_builder.h"
 
+#include "column/chunk.h"
 #include "column/const_column.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
