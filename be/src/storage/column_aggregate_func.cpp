@@ -2,6 +2,7 @@
 
 #include "storage/column_aggregate_func.h"
 
+#include "column/array_column.h"
 #include "column/vectorized_fwd.h"
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"

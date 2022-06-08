@@ -9,6 +9,7 @@
 #include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 #include "util/logging.h"

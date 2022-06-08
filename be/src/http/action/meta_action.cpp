@@ -33,6 +33,7 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "util/json_util.h"
 

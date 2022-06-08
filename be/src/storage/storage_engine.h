@@ -42,16 +42,12 @@
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
-#include "storage/compaction_manager.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
-#include "storage/tablet_manager.h"
-#include "storage/task/engine_task.h"
-#include "storage/txn_manager.h"
 
 namespace starrocks {
 

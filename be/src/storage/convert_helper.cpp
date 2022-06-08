@@ -17,6 +17,8 @@
 #include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
+#include "types/bitmap_value.h"
+#include "types/hll.h"
 #include "types/timestamp_value.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
