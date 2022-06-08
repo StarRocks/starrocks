@@ -27,26 +27,16 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
-    TGetDbsParams db_params;
-    if (nullptr != _param->db) {
-        db_params.__set_pattern(*(_param->db));
-    }
+    TGetTasksParams task_params;
     if (nullptr != _param->current_user_ident) {
-        db_params.__set_current_user_ident(*(_param->current_user_ident));
-    } else {
-        if (nullptr != _param->user) {
-            db_params.__set_user(*(_param->user));
-        }
-        if (nullptr != _param->user_ip) {
-            db_params.__set_user_ip(*(_param->user_ip));
-        }
+        task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result));
+        RETURN_IF_ERROR(SchemaHelper::get_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+    _task_run_index = 0;
     return Status::OK();
 }
 
@@ -129,8 +119,8 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             // DATABASE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-                Slice value(db_name.c_str(), db_name.length());
+                const std::string* db_name = &task_run_info.database;
+                Slice value(db_name->c_str(), db_name->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
@@ -181,35 +171,16 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status SchemaTaskRunsScanner::get_new_task_runs() {
-    TGetTasksParams task_params;
-    task_params.__set_db(_db_result.dbs[_db_index++]);
-    if (nullptr != _param->current_user_ident) {
-        task_params.__set_current_user_ident(*(_param->current_user_ident));
-    }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
-    _task_run_index = 0;
-    return Status::OK();
-}
-
 Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("Used before initialized.");
     }
+    if (_task_run_index >= _task_run_result.task_runs.size()) {
+        *eos = true;
+        return Status::OK();
+    }
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
-    }
-    while (_task_run_index >= _task_run_result.task_runs.size()) {
-        if (_db_index < _db_result.dbs.size()) {
-            RETURN_IF_ERROR(get_new_task_runs());
-        } else {
-            *eos = true;
-            return Status::OK();
-        }
     }
     *eos = false;
     return fill_chunk(chunk);
