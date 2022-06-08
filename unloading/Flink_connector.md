@@ -125,7 +125,7 @@ public class StarRocksSourceApp {
                .field("decimal_1", DataTypes.DECIMAL(27, 9))
                .build();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.addSource(StarRocksSource.source(options, tableSchema)).setParallelism(5).print();
+        env.addSource(StarRocksSource.source(tableSchema, options)).setParallelism(5).print();
         env.execute("StarRocks flink source");
     }
 

@@ -178,7 +178,8 @@ default_authentication_plugin=mysql_native_password
 
 ## 怎么查看StarRocks版本
 
-可以通过`select current_version();`或者CLI执行`sh bin/show_fe_version.sh`查看版本
+可以通过`select current_version();`或者CLI执行`sh bin/show_fe_version.sh`查看版本。
+> 如果您安装StarRocks时，不是通过下载二进制包，而是通过下载源码编译安装，则执行`select current_version();`时，会报错UNKNOWN。
 
 ## fe内存大小如何设置
 
