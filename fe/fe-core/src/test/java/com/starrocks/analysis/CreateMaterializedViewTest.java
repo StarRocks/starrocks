@@ -364,7 +364,7 @@ public class CreateMaterializedViewTest {
             OlapTable baseTable = ((OlapTable) testDb.getTable(baseTableIds.iterator().next()));
             assertEquals(baseTable.getRelatedMaterializedViews().size(), 1);
             assertEquals(materializedView.getViewDefineSql(),
-                    "SELECT date_trunc('month', `default_cluster:test`.`tbl1`.`k1`) AS `s1`, `default_cluster:test`.`tbl1`.`k2` AS `s2` FROM `default_cluster:test`.`tbl1`");
+                    "SELECT date_trunc('month', `test`.`tbl1`.`k1`) AS `s1`, `test`.`tbl1`.`k2` AS `s2` FROM `test`.`tbl1`");
             TableProperty tableProperty = materializedView.getTableProperty();
             assertEquals(tableProperty.getReplicationNum().shortValue(), 1);
             assertEquals(materializedView.getState(), OlapTable.OlapTableState.NORMAL);
