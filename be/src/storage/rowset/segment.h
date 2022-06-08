@@ -148,6 +148,9 @@ public:
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(MemTracker* mem_tracker);
+    bool has_loaded_index() const;
+
+    const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
 private:
     Segment(const Segment&) = delete;
