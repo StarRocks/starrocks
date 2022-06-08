@@ -30,6 +30,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
+import com.staros.journal.JournalSystem;
+import com.staros.manager.StarManager;
+import com.staros.manager.StarManagerServer;
+import com.staros.util.GlobalIdGenerator;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -209,10 +213,13 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.staros.BDBJournalWriter;
+import com.starrocks.staros.StarMgrIdGenerator;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -406,6 +413,8 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private StarManagerServer starMgrServer;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -561,6 +570,10 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+
+        if (Config.integrate_starmgr) {
+            this.starMgrServer = new StarManagerServer();
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -826,7 +839,10 @@ public class GlobalStateMgr {
         // 5. create txn timeout checker thread
         createTxnTimeoutChecker();
 
-        // 6. start state listener thread
+        // 6. start starMgr server, must do this before 7
+        startStarMgrServer();
+
+        // 7. start state listener thread
         createStateListener();
         listener.start();
     }
@@ -1001,10 +1017,13 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
 
-        // register service to starMgr
         if (Config.integrate_starmgr) {
+            // register service to starMgr
             int clusterId = getCurrentState().getClusterId();
             getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
+
+            // start starMgr background threads
+            getStarMgr().start();
         }
     }
 
@@ -1059,6 +1078,11 @@ public class GlobalStateMgr {
         if (replayer == null) {
             createReplayer();
             replayer.start();
+        }
+
+        if (Config.integrate_starmgr) {
+            // stop starMgr background threads
+            getStarMgr().stop();
         }
 
         startNonMasterDaemonThreads();
@@ -1124,6 +1148,7 @@ public class GlobalStateMgr {
             checksum = catalogMgr.loadCatalogs(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
+            checksum = loadStarMgrMeta(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1304,6 +1329,24 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long saveStarMgrMeta(DataOutputStream dos, long checksum) throws IOException {
+        if (Config.integrate_starmgr) {
+            getStarMgr().dumpMeta(dos);
+        }
+        return checksum;
+    }
+
+    public long loadStarMgrMeta(DataInputStream dis, long checksum) throws IOException {
+        try {
+            if (Config.integrate_starmgr) {
+                getStarMgr().loadMeta(dis);
+            }
+        } catch (EOFException e) {
+            LOG.warn("no starMgr meta to replay.", e);
+        }
+        return checksum;
+    }
+
     public long loadResources(DataInputStream in, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
@@ -1372,6 +1415,7 @@ public class GlobalStateMgr {
             checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
+            checksum = saveStarMgrMeta(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3132,6 +3176,48 @@ public class GlobalStateMgr {
             taskManager.removeOldTaskRunHistory();
         } catch (Throwable t) {
             LOG.warn("task manager clean old run history failed", t);
+        }
+    }
+
+    public StarManager getStarMgr() {
+        if (!Config.integrate_starmgr) {
+            LOG.fatal("FE not integrated with starmgr!");
+            System.exit(-1);
+        }
+        return starMgrServer.getStarManager();
+    }
+
+    private void startStarMgrServer() {
+        if (Config.integrate_starmgr) {
+            try {
+                String[] starMgrAddr = Config.starmgr_address.split(":");
+                if (starMgrAddr.length != 2) {
+                    LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
+                    System.exit(-1);
+                }
+                int port = Integer.parseInt(starMgrAddr[1]);
+
+                if (Config.starmgr_s3_bucket.isEmpty()) {
+                    LOG.fatal("Config.starmgr_s3_bucket is not set.");
+                    System.exit(-1);
+                }
+
+                // necessary starMgr config setting
+                com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
+                com.staros.util.Config.STARMGR_RPC_PORT = port;
+                com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
+
+                BDBJournalWriter journalWriter = new BDBJournalWriter(editLog);
+                JournalSystem.overrideJournalWriter(journalWriter);
+
+                StarMgrIdGenerator generator = new StarMgrIdGenerator(idGenerator);
+                GlobalIdGenerator.overrideIdGenerator(generator);
+
+                this.starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+            } catch (Exception e) {
+                LOG.fatal("start star manager failed, {}.", e.getMessage());
+                System.exit(-1);
+            }
         }
     }
 }

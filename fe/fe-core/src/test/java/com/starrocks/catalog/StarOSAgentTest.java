@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.StatusCode;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
@@ -47,7 +48,7 @@ public class StarOSAgentTest {
             {
                 client.registerService("starrocks");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.bootstrapService("starrocks", "123");
@@ -65,7 +66,7 @@ public class StarOSAgentTest {
             {
                 client.bootstrapService("starrocks", "123");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.getServiceInfo("123").getServiceId();
@@ -120,7 +121,7 @@ public class StarOSAgentTest {
             {
                 client.addWorker(1, "127.0.0.1:8090");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "worker already exists");
 
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
@@ -142,7 +143,7 @@ public class StarOSAgentTest {
             {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
+                result = new StarClientException(StatusCode.GRPC,
                         "network error");
             }
         };
@@ -160,7 +161,7 @@ public class StarOSAgentTest {
 
                 client.removeWorker(1, 10);
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
+                result = new StarClientException(StatusCode.GRPC,
                         "network error");
             }
         };

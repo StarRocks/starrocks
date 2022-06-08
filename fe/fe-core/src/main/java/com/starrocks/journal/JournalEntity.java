@@ -101,6 +101,7 @@ import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -639,6 +640,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
                 data = InsertOverwriteStateChangeInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_STARMGR: {
+                data = StarMgrJournal.read(in);
                 isRead = true;
                 break;
             }

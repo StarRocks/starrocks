@@ -72,6 +72,7 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
@@ -889,6 +890,11 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
+                case OperationType.OP_STARMGR: {
+                    StarMgrJournal j = (StarMgrJournal) journal.getData();
+                    globalStateMgr.getStarMgr().replay(j.getJournal());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1517,5 +1523,9 @@ public class EditLog {
 
     public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+    }
+
+    public void logStarMgrOperation(StarMgrJournal journal) {
+        logEdit(OperationType.OP_STARMGR, journal);
     }
 }
