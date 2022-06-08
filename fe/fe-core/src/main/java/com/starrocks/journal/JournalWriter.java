@@ -2,7 +2,6 @@
 
 package com.starrocks.journal;
 
-
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.metric.MetricRepo;
@@ -14,6 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
+/**
+ * An independent thread to write journals by batch asynchronously.
+ * Each thread that needs to write a log can put the log in a blocking queue, while JournalWriter constantly gets as
+ * many logs as possible from the queue and write them all to BDB in one transaction.
+ * After committing, JournalWriter will notify the caller thread for consistency.
+ */
 public class JournalWriter extends Daemon {
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
     // other threads can put log to this queue by calling Editlog.logEdit()
@@ -83,7 +88,6 @@ public class JournalWriter extends Daemon {
 
             // 3. commit
             journal.commitTxn();
-
 
             // 4. countdown
             for (JournalQueueEntity e : staggingLogs) {

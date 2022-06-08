@@ -265,7 +265,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_TABLET_COMPACTION_SCORE);
 
         GAUGE_STACKED_EDIT_LOG_NUM = new GaugeMetricImpl<>(
-                "edit_log_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
+                "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
         GAUGE_STACKED_EDIT_LOG_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_EDIT_LOG_NUM);
 
