@@ -10,6 +10,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "types/timestamp_value.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 

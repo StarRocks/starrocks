@@ -26,8 +26,10 @@
 
 #include "common/status.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/runtime_filter_cache.h"
 #include "storage/options.h"
+// NOTE: Be careful about adding includes here. This file is included by many files.
+// Unnecssary includes will cause compilatio very slow.
+// So please consider use forward declaraion as much as possible.
 
 namespace starrocks {
 
@@ -59,6 +61,8 @@ class RoutineLoadTaskExecutor;
 class SmallFileMgr;
 class PluginMgr;
 class RuntimeFilterWorker;
+class RuntimeFilterCache;
+struct RfTracePoint;
 
 class BackendServiceClient;
 class FrontendServiceClient;
