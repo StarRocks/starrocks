@@ -3,9 +3,11 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_scheduler.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
+#include "util/starrocks_metrics.h"
 #include "util/time.h"
 #include "util/trace.h"
 

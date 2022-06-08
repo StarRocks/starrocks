@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"

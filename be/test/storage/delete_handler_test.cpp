@@ -33,6 +33,7 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 

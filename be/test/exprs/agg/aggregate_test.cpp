@@ -19,6 +19,7 @@
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"

@@ -40,8 +40,12 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
+#include "util/runtime_profile.h"
+#include "util/starrocks_metrics.h"
+#include "util/time.h"
 
 namespace starrocks {
 

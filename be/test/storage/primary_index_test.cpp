@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
