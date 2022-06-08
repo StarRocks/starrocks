@@ -255,7 +255,6 @@ public class ShowExecutorTest {
                 result = ctx;
             }
         };
-
     }
 
     @Test

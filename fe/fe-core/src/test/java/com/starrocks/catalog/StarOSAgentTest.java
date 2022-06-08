@@ -126,5 +126,4 @@ public class StarOSAgentTest {
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
     }
-
 }
