@@ -256,7 +256,15 @@ public enum ErrorCode {
     ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
             "set config failed: %s"),
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
+<<<<<<< HEAD
             "Query cancelled by crash of backends.");
+=======
+            "Query cancelled by crash of backends."),
+    ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown catalog.db '%s'"),
+    ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown workgroup '%s' ");
+>>>>>>> bf6f32251 ([BugFix] showing unkonwn resource group should throw Exception (#6888))
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
