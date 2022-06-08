@@ -2329,7 +2329,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum);
             Preconditions.checkState(bucketNum == shardIds.size());
             for (long shardId : shardIds) {
-                Tablet tablet = new LakeTablet(getNextId(), shardId);
+                Tablet tablet = new LakeTablet(shardId);
                 index.addTablet(tablet, tabletMeta);
                 tabletIdSet.add(tablet.getId());
             }
