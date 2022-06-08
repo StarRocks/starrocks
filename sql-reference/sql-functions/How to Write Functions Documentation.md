@@ -64,7 +64,7 @@ MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles'
 +--------------------------------------------------------------------+
 ```
 
+> - *Provide examples for using this function and describe the purpose of each example to help users quickly understand the example.*
 > - *Enclose the code of different use scenarios in different code blocks.*
-> - *Describe the* *scenario* *of each example.*
 > - *If you need to describe more than one scenario in an example, add a comment for each scenario to help* *users quickly distinguish between them.*
 > - *If the returned result is simple, the format in example* *1* *is recommended. Otherwise, the format in example 2 is recommended.*
