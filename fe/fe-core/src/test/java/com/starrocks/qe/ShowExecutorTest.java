@@ -39,6 +39,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -52,6 +53,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
@@ -59,12 +61,14 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.internal.expectations.transformation.ExpectationsTransformer;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -251,6 +255,7 @@ public class ShowExecutorTest {
                 result = ctx;
             }
         };
+
     }
 
     @Test
@@ -566,6 +571,47 @@ public class ShowExecutorTest {
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Unknown table 'testCluster:testDb.emptyTable'");
         executor.execute();
+    }
+
+    @Test
+    public void testShowBackends() throws AnalysisException, DdlException {
+        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
+        GlobalStateMgr globalStateMgr = AccessTestUtil.fetchAdminCatalog();
+
+        // mock backends
+        Backend backend = new Backend();
+        new Expectations() {
+            {
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = backend;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            List<Long> getBackendIds() {
+                List<Long> backends = Lists.newArrayList();
+                long id = 1;
+                backends.add(id);
+                return backends;
+            }
+
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return clusterInfo;
+            }
+        };
+
+        Config.integrate_starmgr = true;
+        ShowBackendsStmt stmt = new ShowBackendsStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(26, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
     }
 
     @Test
