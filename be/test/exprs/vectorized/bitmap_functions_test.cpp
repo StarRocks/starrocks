@@ -7,6 +7,7 @@
 #include "column/array_column.h"
 #include "exprs/base64.h"
 #include "types/bitmap_value.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace vectorized {

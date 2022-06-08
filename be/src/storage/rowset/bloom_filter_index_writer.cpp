@@ -32,6 +32,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/slice.h"
 

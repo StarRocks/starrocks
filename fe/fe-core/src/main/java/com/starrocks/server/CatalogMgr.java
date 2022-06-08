@@ -68,7 +68,8 @@ public class CatalogMgr {
         }
 
         connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
-        Catalog catalog = new ExternalCatalog(catalogName, comment, properties);
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
 
         writeLock();
         try {

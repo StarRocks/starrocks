@@ -113,8 +113,6 @@ public class PropertyAnalyzer {
                     storageMedium = TStorageMedium.SSD;
                 } else if (value.equalsIgnoreCase(TStorageMedium.HDD.name())) {
                     storageMedium = TStorageMedium.HDD;
-                } else if (value.equalsIgnoreCase(TStorageMedium.S3.name()) && Config.use_staros) {
-                    storageMedium = TStorageMedium.S3;
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }

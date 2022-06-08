@@ -2,20 +2,20 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.staros.client.StarClient;
+import com.staros.client.StarClientException;
+import com.staros.proto.ServiceInfo;
+import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * StarOSAgent is responsible for
@@ -27,9 +27,10 @@ public class StarOSAgent {
 
     private StarClient client;
     private long serviceId;
+    private Map<String, Long> workerToId;
+    private Map<Long, Long> workerToBackend;
 
     public StarOSAgent() {
-        client = new StarClient();
         serviceId = -1;
         // check if Config.starmanager_address == FE address
         if (Config.integrate_staros) {
@@ -39,116 +40,111 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
+        client = new StarClient();
+        client.connectServer(Config.starmgr_address);
+
+        workerToId = Maps.newHashMap();
+        workerToBackend = Maps.newHashMap();
+    }
+
+    // for ut only
+    public long getServiceId() {
+        return serviceId;
+    }
+
+    // for ut only
+    public void setServiceId(long id) {
+        this.serviceId = id;
     }
 
     public List<Long> createShards(int numShards) {
-        // TODO: support shardGroup, numReplicasPerShard and shardStorageType
-        return client.createShards(numShards);
+        return Lists.newArrayList();
     }
 
     public long getPrimaryBackendIdByShard(long shardId) {
-        long workerId = client.getPrimaryWorkerIdByShard(shardId);
-        Worker worker = client.getWorker(workerId);
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
+        return 0;
     }
 
     public Set<Long> getBackendIdsByShard(long shardId) {
-        Set<Long> backendIds = Sets.newHashSet();
-        for (long workerId : client.getWorkerIdsByShard(shardId)) {
-            Worker worker = client.getWorker(workerId);
-            long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
-            backendIds.add(backendId);
-        }
-        return backendIds;
+        return Sets.newHashSet();
     }
 
     public void registerAndBootstrapService(String serviceName) {
-        if (serviceId == -1) {
-            client.registerService("starrocks");
-            serviceId = client.bootstrapService("starrocks", serviceName);
+        if (serviceId != -1) {
+            return;
         }
-        LOG.info("serviceId from starClient is {} ", serviceId);
+
+        try {
+            client.registerService("starrocks");
+        } catch (StarClientException e) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                LOG.warn(e);
+                System.exit(-1);
+            }
+        }
+
+        try {
+            serviceId = client.bootstrapService("starrocks", serviceName);
+            LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
+        } catch (StarClientException e) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                LOG.warn(e);
+                System.exit(-1);
+            } else {
+                getServiceId(serviceName);
+            }
+        }
     }
 
     public void getServiceId(String serviceName) {
         if (serviceId != -1) {
             return;
         }
-        serviceId = client.getServiceInfo(serviceName);
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            LOG.warn(e);
+            System.exit(-1);
+        }
+        LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
-
-    // Mock StarClient
-    private class StarClient {
-        // private Map<Long, List<Replica>> shardIdToWorkerIds;
-        private Map<Long, Worker> idToWorker;
-
-        private long id = System.currentTimeMillis();
-
-        public StarClient() {
-            idToWorker = Maps.newHashMap();
-        }
-
-        public synchronized List<Long> createShards(int numShards) {
-            // Get shard and workers from StarOS and update shardIdToWorkerIds
-            List<Long> shards = Lists.newArrayList();
-            for (int i = 0; i < numShards; ++i) {
-                shards.add(id++);
-            }
-            return shards;
-        }
-
-        public synchronized long getPrimaryWorkerIdByShard(long shardId) {
-            // Use primary replica of shard from StarOS
-            return getWorkerIdsByShard(shardId).get(0);
-        }
-
-        public synchronized List<Long> getWorkerIdsByShard(long shardId) {
-            // Use workers from StarOS
-            idToWorker.clear();
-            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-            for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
-                idToWorker.put(entry.getKey(), new Worker(entry.getKey(), entry.getValue().getHost()));
-            }
-            List<Long> workerIds = idToWorker.keySet().stream().sorted().collect(Collectors.toList());
-            return Lists.newArrayList(workerIds.get((int) (shardId % workerIds.size())));
-        }
-
-        public synchronized Worker getWorker(long id) {
-            return idToWorker.get(id);
-        }
-
-        // register service
-        public synchronized void registerService(String serviceTemplateName) {
-            LOG.info("service {} registered.", serviceTemplateName);
-        }
-
-        // bootstrap service
-        public synchronized long bootstrapService(String serviceTemplateName, String serviceName) {
-            long serviceId = 1;
-            LOG.info("service {} bootstrapped.", serviceName);
-            return serviceId;
-        }
-
-        public long getServiceInfo(String serviceName) {
-            long serviceId = 1;
-            // get serviceId by client
-            return serviceId;
-        }
+    // for ut only
+    public long getWorkerId(String workerIpPort) {
+        return workerToId.get(workerIpPort);
     }
 
-    // Mock StarOS Worker
-    private class Worker {
-        private long id;
-        private String host;
-
-        public Worker(long id, String host) {
-            this.id = id;
-            this.host = host;
+    public void addWorker(long backendId, String workerIpPort) {
+        if (serviceId == -1) {
+            LOG.warn("When addWorker serviceId is -1");
+            return;
+        }
+        if (workerToId.containsKey(workerIpPort)) {
+            return;
+        }
+        long workerId = -1;
+        try {
+            workerId = client.addWorker(serviceId, workerIpPort);
+        } catch (StarClientException e) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                LOG.warn(e);
+                return;
+            } else {
+                // get workerId from staros
+                try {
+                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                    workerId = workerInfo.getWorkerId();
+                } catch (StarClientException e2) {
+                    LOG.warn(e2);
+                    return;
+                }
+                LOG.info("worker {} already added in starMgr", workerId);
+            }
         }
 
-        public String getHost() {
-            return host;
-        }
+        workerToId.put(workerIpPort, workerId);
+        workerToBackend.put(workerId, backendId);
+        LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 }

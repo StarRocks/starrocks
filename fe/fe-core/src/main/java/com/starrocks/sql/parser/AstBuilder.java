@@ -10,6 +10,9 @@ import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -96,6 +99,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
@@ -1402,6 +1406,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAdminShowConfig(StarRocksParser.AdminShowConfigContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue());
+        }
+        return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaDistribution(StarRocksParser.AdminShowReplicaDistributionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaStatus(StarRocksParser.AdminShowReplicaStatusContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
+    }
+
+    @Override
     public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
@@ -2073,14 +2109,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SlotRef(null, identifier.getValue(), identifier.getValue());
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            if (qualifiedName.getParts().size() == 3) {
-                return new SlotRef(new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1)),
-                        qualifiedName.getParts().get(2),
-                        qualifiedName.getParts().get(2));
-            } else if (qualifiedName.getParts().size() == 2) {
-                return new SlotRef(new TableName(null, qualifiedName.getParts().get(0)),
-                        qualifiedName.getParts().get(1),
-                        qualifiedName.getParts().get(1));
+            List<String> parts = qualifiedName.getParts();
+            TableName tableName;
+            if (parts.size() == 4) {
+                tableName = new TableName(qualifiedName.getParts().get(0),
+                        qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
+                return new SlotRef(tableName, parts.get(3), parts.get(3));
+            } else if (parts.size() == 3) {
+                tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
+                return new SlotRef(tableName, parts.get(2), parts.get(2));
+            } else if (parts.size() == 2) {
+                tableName = new TableName(null, qualifiedName.getParts().get(0));
+                return new SlotRef(tableName, parts.get(1), parts.get(1));
             } else {
                 throw new ParsingException("Unqualified column reference " + qualifiedName);
             }

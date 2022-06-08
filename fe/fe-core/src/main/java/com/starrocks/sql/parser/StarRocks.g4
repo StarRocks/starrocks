@@ -49,9 +49,13 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
-    // Admin Set Statement
+    // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
+    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
+            (WHERE where=expression)?                                                       #adminShowReplicaStatus
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem

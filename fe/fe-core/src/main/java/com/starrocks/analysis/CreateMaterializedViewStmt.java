@@ -29,9 +29,11 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -274,11 +276,18 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 throw new SemanticException("Materialized view query statement only support select");
             }
 
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
             }
-            statement.setBaseIndexName(tables.entrySet().iterator().next().getValue().getName());
+            Table table = tables.entrySet().iterator().next().getValue();
+            if (table instanceof View) {
+                // Only in order to make the error message keep compatibility
+                throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
+            } else if (!(table instanceof OlapTable)) {
+                throw new SemanticException("The materialized view only support olap table.");
+            }
+            statement.setBaseIndexName(table.getName());
             statement.setDBName(context.getDatabase());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
@@ -299,11 +308,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
                         + " limit " + selectRelation.getLimit());
             }
+            final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
+                    .append(FunctionSet.COUNT).append("_").toString();
             for (MVColumnItem mvColumnItem : statement.getMVColumnItemList()) {
                 if (!statement.isReplay() && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
                     throw new SemanticException(
                             String.format("Invalid data type of materialized key column '%s': '%s'",
                                     mvColumnItem.getName(), mvColumnItem.getType()));
+                }
+                if (mvColumnItem.getName().startsWith(countPrefix)
+                        && ((OlapTable) table).getKeysType().isAggregationFamily()) {
+                    throw new SemanticException("Aggregate type table do not support count function in materialized view");
                 }
             }
             return null;

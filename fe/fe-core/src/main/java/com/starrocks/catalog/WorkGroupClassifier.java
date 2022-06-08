@@ -181,7 +181,7 @@ public class WorkGroupClassifier implements Writable {
                                     .map(Database::getFullName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));
-            classifiersStr.append(", database='" + str + "'");
+            classifiersStr.append(", db='" + str + "'");
         }
         if (sourceIp != null) {
             classifiersStr.append(", source_ip=" + sourceIp);
