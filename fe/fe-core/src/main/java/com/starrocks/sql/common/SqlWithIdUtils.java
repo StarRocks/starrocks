@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.common.util;
+package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
