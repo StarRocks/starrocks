@@ -2752,12 +2752,12 @@ public class GlobalStateMgr {
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
         } else if (parts.length == 1) {
-            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
+            dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
                     ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
+                dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
                         ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
@@ -2766,7 +2766,7 @@ public class GlobalStateMgr {
         }
 
         // check auth for internal catalog
-        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
