@@ -222,12 +222,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.parallelExecNum = degreeOfParallelism / pipelineDop;
     }
 
+    /**
+     * Several cases we could prefer the instance-parallel:
+     * 1. One-phase aggregation: avoid local exchange
+     * 2. Colocate join
+     * 3. Bucket join
+     */
     public void preferInstanceParallel() {
         this.parallelExecNum = BackendCoreStat.getDefaultDOP();
         this.pipelineDop = 1;
         this.dopEstimated = true;
     }
 
+    /**
+     * In most cases we prefer the pipeline-parallel
+     */
     public void preferPipelineParallel() {
         this.parallelExecNum = 1;
         this.pipelineDop = BackendCoreStat.getDefaultDOP();
