@@ -70,10 +70,10 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
@@ -102,6 +102,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -208,6 +209,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -549,7 +551,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        this.starOSAgent = new StarOSAgent();
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
@@ -706,6 +711,11 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    @VisibleForTesting
+    public void setMetadataMgr(MetadataMgr metadataMgr) {
+        this.metadataMgr = metadataMgr;
     }
 
     public TaskManager getTaskManager() {
@@ -1145,6 +1155,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = catalogMgr.loadCatalogs(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1375,6 +1387,8 @@ public class GlobalStateMgr {
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -2145,6 +2159,10 @@ public class GlobalStateMgr {
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
             sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
+            String maxTotalBytes = icebergTable.getFileIOMaxTotalBytes();
+            if (!Strings.isNullOrEmpty(maxTotalBytes)) {
+                sb.append("\"fileIO.cache.max-total-bytes\" = \"").append(maxTotalBytes).append("\",\n");
+            }
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
@@ -2217,6 +2235,10 @@ public class GlobalStateMgr {
 
     public void replayCreateTable(String dbName, Table table) {
         localMetastore.replayCreateTable(dbName, table);
+    }
+
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        localMetastore.replayCreateMaterializedView(dbName, materializedView);
     }
 
     // Drop table
@@ -2819,8 +2841,8 @@ public class GlobalStateMgr {
         return localMetastore.getMigrations();
     }
 
-    public void refreshExternalTable(RefreshExternalTableStmt stmt) throws DdlException {
-        refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
+    public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
+        refreshExternalTable(stmt.getTableName(), stmt.getPartitions());
 
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
@@ -2830,7 +2852,7 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                    stmt.getDbName(), stmt.getTableName(), stmt.getPartitions()));
+                    stmt.getTableName(), stmt.getPartitions()));
         }
 
         String errMsg = "";
@@ -2853,14 +2875,15 @@ public class GlobalStateMgr {
         }
     }
 
-    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
+    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
                                                 List<String> partitions) {
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
                 + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
-            request.setDb_name(dbName);
-            request.setTable_name(tableName);
+            request.setCatalog_name(tableName.getCatalog());
+            request.setDb_name(tableName.getDb());
+            request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
@@ -2881,15 +2904,18 @@ public class GlobalStateMgr {
         return task;
     }
 
-    public void refreshExternalTable(String dbName, String tableName, List<String> partitions) throws DdlException {
-        Database db = getDb(dbName);
+    public void refreshExternalTable(TableName tableName, List<String> partitions) throws DdlException {
+        String catalogName = tableName.getCatalog();
+        String dbName = tableName.getDb();
+        String tblName = tableName.getTbl();
+        Database db = metadataMgr.getDb(catalogName, tableName.getDb());
         if (db == null) {
-            throw new DdlException("db: " + dbName + " not exists");
+            throw new DdlException("db: " + tableName.getDb() + " not exists");
         }
         HiveMetaStoreTable table;
         db.readLock();
         try {
-            Table tbl = db.getTable(tableName);
+            Table tbl = metadataMgr.getTable(catalogName, dbName, tblName);
             if (tbl == null || !(tbl instanceof HiveMetaStoreTable)) {
                 throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
@@ -2901,7 +2927,7 @@ public class GlobalStateMgr {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache(dbName, tableName);
+            table.refreshTableCache(dbName, tblName);
         }
     }
 

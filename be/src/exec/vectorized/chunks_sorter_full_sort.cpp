@@ -44,17 +44,12 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     if (!_unsorted_chunk) {
         return Status::OK();
     }
-    bool reach_limit = _unsorted_chunk->num_rows() >= kMaxBufferedChunkSize || _unsorted_chunk->reach_capacity_limit();
+    bool reach_limit = _unsorted_chunk->num_rows() >= kMaxBufferedChunkSize ||
+                       _unsorted_chunk->bytes_usage() >= kMaxBufferedChunkBytes;
     if (done || reach_limit) {
         SCOPED_TIMER(_sort_timer);
 
-        // Check column overflow problem
-        // TODO upgrade to large binary column if overflow
-        if (_unsorted_chunk->reach_capacity_limit()) {
-            LOG(WARNING) << fmt::format("Sorter encounter big chunk overflow with {} rows and {} bytes",
-                                        _unsorted_chunk->num_rows(), _unsorted_chunk->bytes_usage());
-            return Status::InternalError("Sorter encounter big chunk overflow");
-        }
+        RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
         _sort_permutation.resize(0);
@@ -62,6 +57,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
                                              _null_first_flag, &_sort_permutation));
         ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
         append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
+        RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
         _sorted_chunks.push_back(sorted_chunk);
         _total_rows += _unsorted_chunk->num_rows();
@@ -86,8 +82,24 @@ Status ChunksSorterFullSort::done(RuntimeState* state) {
     return Status::OK();
 }
 
-void ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
-    *eos = pull_chunk(chunk);
+Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
+    SCOPED_TIMER(_output_timer);
+    if (_merged_runs.num_chunks() == 0) {
+        *chunk = nullptr;
+        *eos = true;
+        return Status::OK();
+    }
+    size_t chunk_size = _state->chunk_size();
+    SortedRun& run = _merged_runs.front();
+    *chunk = run.steal_chunk(chunk_size);
+    if (*chunk != nullptr) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
+    if (run.empty()) {
+        _merged_runs.pop_front();
+    }
+    *eos = false;
+    return Status::OK();
 }
 
 SortedRuns ChunksSorterFullSort::get_sorted_runs() {
@@ -96,21 +108,6 @@ SortedRuns ChunksSorterFullSort::get_sorted_runs() {
 
 size_t ChunksSorterFullSort::get_output_rows() const {
     return _merged_runs.num_rows();
-}
-
-bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
-    SCOPED_TIMER(_output_timer);
-    if (_merged_runs.num_chunks() == 0) {
-        *chunk = nullptr;
-        return true;
-    }
-    size_t chunk_size = _state->chunk_size();
-    SortedRun& run = _merged_runs.front();
-    *chunk = run.steal_chunk(chunk_size);
-    if (run.empty()) {
-        _merged_runs.pop_front();
-    }
-    return false;
 }
 
 int64_t ChunksSorterFullSort::mem_usage() const {

@@ -215,15 +215,15 @@ public class ShowExecutorTest {
                 GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default");
+                GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default_catalog");
                 minTimes = 0;
                 result = Lists.newArrayList("testCluster:testDb");
 
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default", "testCluster:testDb");
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "testCluster:testDb");
                 minTimes = 0;
                 result = db;
 
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default", "testCluster:emptyDb");
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
             }
@@ -240,7 +240,7 @@ public class ShowExecutorTest {
         };
 
         ctx.setConnectScheduler(scheduler);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
         ctx.setCluster("testCluster");
 
@@ -277,7 +277,7 @@ public class ShowExecutorTest {
     public void testShowDbPriv() throws AnalysisException, DdlException {
         ShowDbStmt stmt = new ShowDbStmt(null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ctx.setCatalog(AccessTestUtil.fetchBlockCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchBlockCatalog());
         ShowResultSet resultSet = executor.execute();
     }
 
@@ -457,7 +457,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
-        ctx.setCatalog(globalStateMgr);
+        ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:testDb");
@@ -472,7 +472,7 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException, DdlException {
-        ctx.setCatalog(globalStateMgr);
+        ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:emptyDb");
@@ -502,7 +502,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowColumn() throws AnalysisException, DdlException {
-        ctx.setCatalog(globalStateMgr);
+        ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
@@ -608,7 +608,6 @@ public class ShowExecutorTest {
 
         Assert.assertFalse(resultSet.next());
     }
-
     @Test
     public void testHelp() throws AnalysisException, IOException, UserException {
         HelpModule module = new HelpModule();

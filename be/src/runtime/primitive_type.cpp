@@ -23,6 +23,7 @@
 
 #include <sstream>
 
+#include "column/type_traits.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type_infra.h"
 
@@ -184,6 +185,17 @@ PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type) {
     PrimitiveType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
     DCHECK(ptype != INVALID_TYPE);
     return ptype;
+}
+
+struct FixedLengthTypeGetter {
+    template <PrimitiveType ptype>
+    size_t operator()() {
+        return vectorized::RunTimeFixedTypeLength<ptype>::value;
+    }
+};
+
+size_t get_size_of_fixed_length_type(PrimitiveType ptype) {
+    return type_dispatch_all(ptype, FixedLengthTypeGetter());
 }
 
 } // namespace starrocks

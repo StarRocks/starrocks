@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "common/status.h"
+#include "gutil/casts.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/common.h" // for ordinal_t
 #include "storage/types.h"

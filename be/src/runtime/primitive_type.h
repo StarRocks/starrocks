@@ -26,13 +26,9 @@
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/large_int_value.h"
-#include "runtime/string_value.h"
 #include "storage/olap_common.h"
 #include "util/guard.h"
+
 namespace starrocks {
 
 enum PrimitiveType {
@@ -182,5 +178,8 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
 
 PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
+
+// Return length of fixed-length type, return 0 for dynamic length type
+size_t get_size_of_fixed_length_type(PrimitiveType ptype);
 
 } // namespace starrocks

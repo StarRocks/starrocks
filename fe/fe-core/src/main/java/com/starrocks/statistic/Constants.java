@@ -12,6 +12,7 @@ public class Constants {
     public static final String INFORMATION_SCHEMA = SystemInfoService.DEFAULT_CLUSTER + ":information_schema";
 
     public static final int CrossJoinCostPenalty = 100000000;
+    public static final int BroadcastJoinMemExceedPenalty = 1000;
 
     public enum AnalyzeType {
         SAMPLE,
@@ -28,15 +29,6 @@ public class Constants {
         RUNNING,
         // only use for ScheduleType.ONCE
         FINISH,
-    }
-
-    // PENDING -> RUNNING -> FAILED
-    //                    -> SUCCESS
-    public enum TaskRunState {
-        PENDING,
-        RUNNING,
-        FAILED,
-        SUCCESS,
     }
 
 }

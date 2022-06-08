@@ -56,19 +56,19 @@ public:
     // keep the order with PrimitiveType
 
     struct TypeDesc {
-        ::starrocks::PrimitiveType type;
+        ::starrocks::PrimitiveType type = ::starrocks::TYPE_NULL;
 
         /// Only valid if type == TYPE_DECIMAL
-        int precision;
-        int scale;
+        int precision = 0;
+        int scale = 0;
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
-        int len;
+        int len = 0;
     };
 
     struct UniqueId {
-        int64_t hi;
-        int64_t lo;
+        int64_t hi = 0;
+        int64_t lo = 0;
     };
 
     enum FunctionStateScope {

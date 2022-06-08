@@ -131,11 +131,7 @@ public:
             : _task_info(algorithm), _runtime_profile("compaction"), _mem_tracker(nullptr) {
         _watch.start();
     }
-    virtual ~CompactionTask() {
-        if (_mem_tracker) {
-            delete _mem_tracker;
-        }
-    }
+    virtual ~CompactionTask();
 
     void run() override;
 

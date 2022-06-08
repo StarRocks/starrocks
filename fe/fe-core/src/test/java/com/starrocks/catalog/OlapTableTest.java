@@ -27,12 +27,8 @@ import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -41,7 +37,6 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class OlapTableTest {
@@ -82,7 +77,6 @@ public class OlapTableTest {
             Partition partition = ((OlapTable) copiedTbl).getPartition(3L);
             Assert.assertFalse(partition.isUseStarOS());
             MaterializedIndex newIndex = partition.getIndex(4L);
-            Assert.assertFalse(newIndex.isUseStarOS());
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
@@ -95,87 +89,6 @@ public class OlapTableTest {
             Assert.assertEquals(Sets.newHashSet(30l), tbl.getRelatedMaterializedViews());
             tbl.removeRelatedMaterializedView(30l);
             Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
-        }
-    }
-
-    @Test
-    public void testTableWithStarOSTablet() throws IOException {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            int getCurrentStateJournalVersion() {
-                return FeConstants.meta_version;
-            }
-        };
-
-        long dbId = 1L;
-        long tableId = 2L;
-        long partitionId = 3L;
-        long indexId = 4L;
-        long tablet1Id = 10L;
-        long tablet2Id = 11L;
-
-        // Columns
-        List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
-        columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
-
-        // Tablet
-        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
-        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
-
-        // Partition info and distribution info
-        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        PartitionInfo partitionInfo = new SinglePartitionInfo();
-        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.S3));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
-        partitionInfo.setReplicationNum(partitionId, (short) 3);
-
-        // Index
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        index.setUseStarOS(partitionInfo.isUseStarOS(partitionId));
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.S3);
-        index.addTablet(tablet1, tabletMeta);
-        index.addTablet(tablet2, tabletMeta);
-
-        // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
-        partition.setPartitionInfo(partitionInfo);
-
-        // Table
-        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
-        table.addPartition(partition);
-        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
-
-        // Serialize
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
-            table.write(out);
-            out.flush();
-        }
-
-        // Deserialize
-        Table newTable = null;
-        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
-            newTable = Table.read(in);
-        }
-        byteArrayOutputStream.close();
-
-        // Check
-        Assert.assertTrue(newTable instanceof OlapTable);
-        OlapTable newOlapTable = (OlapTable) newTable;
-        Partition p1 = newOlapTable.getPartition(partitionId);
-        Assert.assertTrue(p1.isUseStarOS());
-        MaterializedIndex newIndex = p1.getBaseIndex();
-        Assert.assertTrue(newIndex.isUseStarOS());
-        long expectedShardId = 0L;
-        for (Tablet tablet : newIndex.getTablets()) {
-            Assert.assertTrue(tablet instanceof StarOSTablet);
-            StarOSTablet starOSTablet = (StarOSTablet) tablet;
-            Assert.assertEquals(expectedShardId++, starOSTablet.getShardId());
         }
     }
 }

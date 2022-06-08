@@ -25,6 +25,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/status.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h" // for ArrayVal

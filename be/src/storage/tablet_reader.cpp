@@ -120,6 +120,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.meta = _tablet->data_dir()->get_meta();
     }
     rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges = params.short_key_ranges;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
@@ -375,16 +376,20 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet, const std::string& range_start_op,
-                                      const std::string& range_end_op, const std::vector<OlapTuple>& range_start_key,
+Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
+                                      TabletReaderParams::RangeStartOperation range_start_op,
+                                      TabletReaderParams::RangeEndOperation range_end_op,
+                                      const std::vector<OlapTuple>& range_start_key,
                                       const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                       MemPool* mempool) {
     if (range_start_key.empty()) {
         return {};
     }
 
-    bool lower_inclusive = range_start_op == "ge" || range_start_op == "eq";
-    bool upper_inclusive = range_end_op == "le" || range_end_op == "eq";
+    bool lower_inclusive = range_start_op == TabletReaderParams::RangeStartOperation::GE ||
+                           range_start_op == TabletReaderParams::RangeStartOperation::EQ;
+    bool upper_inclusive = range_end_op == TabletReaderParams::RangeEndOperation::LE ||
+                           range_end_op == TabletReaderParams::RangeEndOperation::EQ;
 
     CHECK_EQ(range_start_key.size(), range_end_key.size());
     size_t n = range_start_key.size();

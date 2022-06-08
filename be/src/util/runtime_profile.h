@@ -647,6 +647,8 @@ private:
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||
                TUnit::type::TIME_S == type;
     }
+
+    std::string get_children_name_string();
 };
 
 // Utility class to update the counter at object construction and destruction.

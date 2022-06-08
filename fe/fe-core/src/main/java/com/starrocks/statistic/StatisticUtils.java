@@ -42,7 +42,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
-        context.setCatalog(GlobalStateMgr.getCurrentState());
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());

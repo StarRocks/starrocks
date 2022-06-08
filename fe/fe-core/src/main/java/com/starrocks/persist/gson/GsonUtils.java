@@ -73,9 +73,9 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.qe.SqlModeHelper;
@@ -166,7 +166,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<Tablet> tabletTypeAdapterFactory = RuntimeTypeAdapterFactory
             .of(Tablet.class, "clazz")
             .registerSubtype(LocalTablet.class, LocalTablet.class.getSimpleName(), true)
-            .registerSubtype(StarOSTablet.class, StarOSTablet.class.getSimpleName());
+            .registerSubtype(LakeTablet.class, LakeTablet.class.getSimpleName());
 
     // runtime adapter for HeartbeatResponse
     private static final RuntimeTypeAdapterFactory<HeartbeatResponse> heartbeatResponseAdapterFactor = RuntimeTypeAdapterFactory
@@ -199,7 +199,7 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
-            .registerTypeAdapterFactory(new PostProcessTypeAdapterFactory())
+            .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             .registerTypeAdapterFactory(columnTypeAdapterFactory)
             .registerTypeAdapterFactory(distributionInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(resourceTypeAdapterFactory)
@@ -416,9 +416,9 @@ public class GsonUtils {
         }
     }
 
-    public static class PostProcessTypeAdapterFactory implements TypeAdapterFactory {
+    public static class ProcessHookTypeAdapterFactory implements TypeAdapterFactory {
 
-        public PostProcessTypeAdapterFactory() {
+        public ProcessHookTypeAdapterFactory() {
         }
 
         @Override
@@ -426,8 +426,11 @@ public class GsonUtils {
             TypeAdapter<T> delegate = gson.getDelegateAdapter(this, type);
 
             return new TypeAdapter<T>() {
-                public void write(JsonWriter out, T value) throws IOException {
-                    delegate.write(out, value);
+                public void write(JsonWriter out, T obj) throws IOException {
+                    if (obj instanceof GsonPreProcessable) {
+                        ((GsonPreProcessable) obj).gsonPreProcess();
+                    }
+                    delegate.write(out, obj);
                 }
 
                 public T read(JsonReader reader) throws IOException {

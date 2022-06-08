@@ -23,6 +23,7 @@
 
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
+#include "runtime/mem_tracker.h"
 #include "storage/kv_store.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"

@@ -10,6 +10,7 @@
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "util/defer_op.h"
 
 using namespace std::chrono_literals;
 

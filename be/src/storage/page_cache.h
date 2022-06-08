@@ -27,6 +27,7 @@
 
 #include "gutil/macros.h" // for DISALLOW_COPY_AND_ASSIGN
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
 

@@ -8,6 +8,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/tablet.h"

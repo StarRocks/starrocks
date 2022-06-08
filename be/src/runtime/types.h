@@ -19,8 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_RUNTIME_TYPES_H
-#define STARROCKS_BE_RUNTIME_TYPES_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -29,9 +28,8 @@
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "runtime/primitive_type.h"
-#include "storage/hll.h"
 #include "thrift/protocol/TDebugProtocol.h"
-#include "util/json.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
@@ -282,59 +280,7 @@ struct TypeDescriptor {
     bool is_huge_type() const { return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL; }
 
     /// Returns the size of a slot for this type.
-    inline int get_slot_size() const {
-        switch (type) {
-        case TYPE_CHAR:
-        case TYPE_VARCHAR:
-        case TYPE_HLL:
-        case TYPE_OBJECT:
-        case TYPE_PERCENTILE:
-        case TYPE_JSON:
-            return sizeof(StringValue);
-
-        case TYPE_NULL:
-        case TYPE_BOOLEAN:
-        case TYPE_TINYINT:
-            return 1;
-
-        case TYPE_SMALLINT:
-            return 2;
-
-        case TYPE_INT:
-        case TYPE_FLOAT:
-        case TYPE_DECIMAL32:
-            return 4;
-
-        case TYPE_BIGINT:
-        case TYPE_DOUBLE:
-        case TYPE_TIME:
-        case TYPE_DECIMAL64:
-            return 8;
-
-        case TYPE_DATE:
-        case TYPE_DATETIME:
-            // This is the size of the slot, the actual size of the data is 12.
-            return sizeof(DateTimeValue);
-
-        case TYPE_DECIMAL:
-            return sizeof(DecimalValue);
-
-        case TYPE_LARGEINT:
-        case TYPE_DECIMALV2:
-        case TYPE_DECIMAL128:
-            return 16;
-        case TYPE_ARRAY:
-            return sizeof(void*); // sizeof(Collection*)
-        case INVALID_TYPE:
-        case TYPE_BINARY:
-        case TYPE_STRUCT:
-        case TYPE_MAP:
-            DCHECK(false);
-            break;
-        }
-        // For llvm complain
-        return -1;
-    }
+    int get_slot_size() const;
 
     static inline int get_decimal_byte_size(int precision) {
         DCHECK_GT(precision, 0);
@@ -370,5 +316,3 @@ inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
 }
 
 } // namespace starrocks
-
-#endif

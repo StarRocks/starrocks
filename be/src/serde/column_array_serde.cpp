@@ -15,8 +15,10 @@
 #include "column/object_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
+#include "types/hll.h"
 #include "util/coding.h"
 #include "util/json.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::serde {
 namespace {

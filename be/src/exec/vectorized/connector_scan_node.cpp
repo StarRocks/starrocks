@@ -8,6 +8,7 @@
 #include "common/config.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {

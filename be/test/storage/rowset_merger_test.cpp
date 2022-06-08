@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -80,11 +81,15 @@ public:
         all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
         return Status::OK();
     }
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
+        return _global_dict_columns_valid_info;
+    }
 
     std::unique_ptr<Column> all_pks;
     vector<uint32_t> all_rssids;
 
     vector<std::unique_ptr<Column>> non_key_columns;
+    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 class RowsetMergerTest : public testing::Test {

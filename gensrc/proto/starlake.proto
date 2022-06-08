@@ -9,7 +9,7 @@ import "tablet_schema.proto";
 
 message RowsetMetadataPB {
     optional uint32 id = 1;
-    repeated bool overlapped = 2;
+    optional bool overlapped = 2;
     repeated string segments = 3; 
     repeated string del_vectors = 4;
     optional int64 num_rows = 5;
@@ -24,12 +24,13 @@ message PrimaryIndexMetadataPB {
 }
 
 message TabletMetadataPB {
-    optional int64 tablet_id = 1;
+    optional int64 id = 1;
     optional int64 version = 2;
     optional int64 flags = 3; 
     optional TabletSchemaPB schema = 4;
     repeated RowsetMetadataPB rowsets = 5;
     optional PrimaryIndexMetadataPB primary_index = 6;
+    optional uint32 next_rowset_id = 7;
 }
 
 message TxnLogPB {

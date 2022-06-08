@@ -17,6 +17,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "util/json.h"

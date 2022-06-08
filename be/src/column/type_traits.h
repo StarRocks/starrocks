@@ -11,6 +11,7 @@
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/primitive_type.h"
+#include "types/constexpr.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -309,11 +310,23 @@ struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
 };
 
+// Length of fixed-length type, 0 for dynamic-length type
+template <PrimitiveType ptype, typename = guard::Guard>
+struct RunTimeFixedTypeLength {
+    static constexpr size_t value = 0;
+};
+
+template <PrimitiveType ptype>
+struct RunTimeFixedTypeLength<ptype, FixedLengthPTGuard<ptype>> {
+    static constexpr size_t value = sizeof(RunTimeCppType<ptype>);
+};
+
 template <PrimitiveType ptype, typename = guard::Guard>
 struct RunTimeTypeLimits {};
 
 template <PrimitiveType ptype>
 struct RunTimeTypeLimits<ptype, ArithmeticPTGuard<ptype>> {
+    // Cpp type of this primitive type
     using value_type = RunTimeCppType<ptype>;
 
     static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }

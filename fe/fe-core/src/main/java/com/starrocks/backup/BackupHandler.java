@@ -110,7 +110,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
         this.globalStateMgr = globalStateMgr;
     }
 
-    public void setCatalog(GlobalStateMgr globalStateMgr) {
+    public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
 
@@ -170,7 +170,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
         }
 
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
-            job.setCatalog(globalStateMgr);
+            job.setGlobalStateMgr(globalStateMgr);
             job.run();
         }
     }
@@ -545,7 +545,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
                         existingJob, job);
                 return;
             }
-            existingJob.setCatalog(globalStateMgr);
+            existingJob.setGlobalStateMgr(globalStateMgr);
             existingJob.replayCancel();
         } else if (!job.isPending()) {
             AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
@@ -614,7 +614,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
             readFields(dis);
         }
-        setCatalog(globalStateMgr);
+        setGlobalStateMgr(globalStateMgr);
         LOG.info("finished replay backupHandler from image");
         return checksum;
     }

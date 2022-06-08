@@ -71,6 +71,8 @@ message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
+option(USE_STAROS "Use StarOS to manager tablet info" OFF)
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -301,6 +303,33 @@ set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THI
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+if ("${USE_STAROS}" STREQUAL "ON")
+     find_package(protobuf CONFIG REQUIRED)
+     message(STATUS "Using protobuf ${protobuf_VERSION}")
+     message(STATUS "protobuf include path: ${protobuf_INCLUDE_DIRS}")
+     message(STATUS "protobuf libs: ${protobuf_LIBS}")
+
+     find_package(gRPC CONFIG REQUIRED)
+     message(STATUS "Using gRPC ${gRPC_VERSION}")
+     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+     include_directories(${gRPC_INCLUDE_DIR})
+
+     find_package(starlet CONFIG REQUIRED)
+     message(STATUS "Using starlet ${starlet_VERSION}")
+     message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+     message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+     include_directories(${STARLET_INCLUDE_DIRS})
+     add_library(starlet STATIC IMPORTED)
+     set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
+
+     set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        starlet
+        gRPC::grpc++_reflection
+        gRPC::grpc++
+        )
+endif()
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -331,6 +360,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment"
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
+if (${USE_STAROS} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -466,6 +498,7 @@ set(STARROCKS_LINK_LIBS
     Service
     ServiceBE
     ServiceCN
+    Types
     Udf
     Util
     StarRocksGen
@@ -631,6 +664,7 @@ add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
+add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
