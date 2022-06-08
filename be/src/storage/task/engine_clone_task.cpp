@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_clone_task.h"
 
+#include <fmt/format.h>
 #include <sys/stat.h>
 
 #include <filesystem>
@@ -42,6 +43,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
+#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
 using std::set;
@@ -317,7 +319,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             continue;
         }
 
-        std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&file=$4/$5/$6/", src.host,
+        std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", src.host,
                                                        src.http_port, HTTP_REQUEST_PREFIX, token, snapshot_path,
                                                        _clone_req.tablet_id, _clone_req.schema_hash);
 
@@ -445,7 +447,35 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         return Status::OK();
     };
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, list_files_cb));
-    std::vector<string> file_name_list = strings::Split(file_list_str, "\n", strings::SkipWhitespace());
+
+    // Parse file name and size
+    const char* const FILE_DELIMETER_IN_DIR_RESPONSE = "\n";
+    const char* const FILE_NAME_SIZE_DELIMETER = "|";
+    std::vector<string> file_name_list;
+    std::vector<int64_t> file_size_list;
+
+    bool use_file_name_and_size_format = file_list_str.find(FILE_NAME_SIZE_DELIMETER) != string::npos;
+    if (use_file_name_and_size_format) {
+        for (auto file_str : strings::Split(file_list_str, FILE_DELIMETER_IN_DIR_RESPONSE, strings::SkipWhitespace())) {
+            std::vector<string> list = strings::Split(file_str, FILE_NAME_SIZE_DELIMETER);
+            if (list.size() != 2) {
+                return Status::InternalError(fmt::format("invalid directory entry {}", file_str.as_string()));
+            }
+
+            StringParser::ParseResult result;
+            std::string& file_size_str = list[1];
+            int64_t file_size =
+                    StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size() - 1, &result);
+            if (result != StringParser::PARSE_SUCCESS || file_size < 0) {
+                return Status::InternalError("wrong file size.");
+            }
+
+            file_name_list.emplace_back(std::move(list[0]));
+            file_size_list.emplace_back(file_size);
+        }
+    } else {
+        file_name_list = strings::Split(file_list_str, FILE_DELIMETER_IN_DIR_RESPONSE, strings::SkipWhitespace());
+    }
 
     // If the header file is not exist, the table could't loaded by olap engine.
     // Avoid of data is not complete, we copy the header file at last.
@@ -458,6 +488,9 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         StringPiece sp(file_name_list[i]);
         if (sp.ends_with(".hdr")) {
             std::swap(file_name_list[i], file_name_list[file_name_list.size() - 1]);
+            if (use_file_name_and_size_format) {
+                std::swap(file_size_list[i], file_size_list[file_size_list.size() - 1]);
+            }
             break;
         }
     }
@@ -466,19 +499,24 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     uint64_t total_file_size = 0;
     MonotonicStopWatch watch;
     watch.start();
-    for (auto& file_name : file_name_list) {
+    for (int i = 0; i < file_name_list.size(); ++i) {
+        std::string& file_name = file_name_list[i];
         auto remote_file_url = remote_url_prefix + file_name;
 
-        // get file length
         uint64_t file_size = 0;
-        auto get_file_size_cb = [&remote_file_url, &file_size](HttpClient* client) {
-            RETURN_IF_ERROR(client->init(remote_file_url));
-            client->set_timeout_ms(GET_LENGTH_TIMEOUT * 1000);
-            RETURN_IF_ERROR(client->head());
-            file_size = client->get_content_length();
-            return Status::OK();
-        };
-        RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, get_file_size_cb));
+        if (use_file_name_and_size_format) {
+            file_size = file_size_list[i];
+        } else {
+            auto get_file_size_cb = [&remote_file_url, &file_size](HttpClient* client) {
+                RETURN_IF_ERROR(client->init(remote_file_url));
+                client->set_timeout_ms(GET_LENGTH_TIMEOUT * 1000);
+                RETURN_IF_ERROR(client->head());
+                file_size = client->get_content_length();
+                return Status::OK();
+            };
+            RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, get_file_size_cb));
+        }
+
         // check disk capacity
         if (data_dir->reach_capacity_limit(file_size)) {
             return Status::InternalError("Disk reach capacity limit");
