@@ -9,7 +9,9 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
 namespace starrocks::vectorized {

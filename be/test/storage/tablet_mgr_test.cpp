@@ -18,6 +18,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 #include <filesystem>
 #include <string>
 
@@ -26,6 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/kv_store.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/txn_manager.h"
 

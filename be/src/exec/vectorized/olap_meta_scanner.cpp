@@ -4,6 +4,7 @@
 
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 
 namespace starrocks {
 namespace vectorized {

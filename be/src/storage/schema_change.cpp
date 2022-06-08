@@ -39,6 +39,7 @@
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/wrapper_field.h"
 #include "util/defer_op.h"

@@ -30,14 +30,13 @@
 #include <unordered_map>
 
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
-#include "runtime/mem_pool.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
-#include "util/mem_util.hpp"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
 
+class MemPool;
 class TabletColumn;
 class TypeInfo;
 class ScalarTypeInfo;
