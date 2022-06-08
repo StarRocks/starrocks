@@ -3,7 +3,7 @@
 #pragma once
 
 #include "exec/pipeline/operator.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 class ExprContext;

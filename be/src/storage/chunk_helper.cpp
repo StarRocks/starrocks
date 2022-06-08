@@ -6,6 +6,7 @@
 #include "column/column_pool.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
+#include "runtime/descriptors.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
@@ -334,6 +335,32 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     default:
         return NullableIfNeed(column_from_field_type(type, false));
     }
+}
+
+ChunkPtr ChunkHelper::new_chunk(const vectorized::Schema& schema, size_t n) {
+    size_t fields = schema.num_fields();
+    Columns columns;
+    columns.reserve(fields);
+    for (size_t i = 0; i < fields; i++) {
+        const vectorized::FieldPtr& f = schema.field(i);
+        columns.emplace_back(column_from_field(*f));
+        columns.back()->reserve(n);
+    }
+    return std::make_shared<Chunk>(std::move(columns), std::make_shared<vectorized::Schema>(schema));
+}
+
+std::shared_ptr<Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_chunk(tuple_desc.slots(), n);
+}
+
+std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_shared<Chunk>();
+    for (const auto slot : slots) {
+        ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        column->reserve(n);
+        chunk->append_column(column, slot->id());
+    }
+    return chunk;
 }
 
 } // namespace starrocks::vectorized

@@ -90,15 +90,10 @@ Status DictDecodeNode::open(RuntimeState* state) {
         if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
-        DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
         // TODO : avoid copy dict
-        decoder->dict = dict_iter->second.second;
+        GlobalDictDecoderPtr decoder = create_global_dict_decoder(dict_iter->second.second);
+
         _decoders.emplace_back(std::move(decoder));
-    }
-    if (VLOG_ROW_IS_ON) {
-        for (int i = 0; i < _decoders.size(); ++i) {
-            VLOG_ROW << "map " << _encode_column_cids[i] << ":" << _decoders[i]->dict;
-        }
     }
 
     return Status::OK();

@@ -10,6 +10,7 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_vector.h"

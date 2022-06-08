@@ -6,7 +6,7 @@
 
 #include "column/binary_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {

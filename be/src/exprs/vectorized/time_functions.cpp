@@ -7,6 +7,7 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
+#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "udf/udf_internal.h"

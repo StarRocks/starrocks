@@ -9,6 +9,8 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <utility>
 DIAGNOSTIC_POP
 
+#include <re2/re2.h>
+
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"

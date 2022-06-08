@@ -1,30 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/parser.h"
 
-#include <algorithm>
-#include <cstdint>
-#include <cstring>
-#include <memory>
-#include <utility>
-#include <vector>
-
-#include "column/binary_column.h"
+#include "column/chunk.h"
 #include "column/column_builder.h"
-#include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/const_column.h"
-#include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/global_types.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/dictmapping_expr.h"
-#include "glog/logging.h"
-#include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
+#include "runtime/descriptors.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/global_dict/dict_column.h"
+#include "runtime/global_dict/miscs.h"
+#include "runtime/global_dict/types.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "simd/gather.h"
 
@@ -318,29 +308,6 @@ void DictOptimizeParser::close(RuntimeState* state) noexcept {
 
 Status DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
     return _check_could_apply_dict_optimize(expr_ctx, dict_opt_ctx);
-}
-
-std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_with_codes(
-        const GlobalDictMap& dict_map) {
-    auto res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    res->reserve(dict_map.size() + 1);
-
-    std::vector<Slice> slices;
-    std::vector<int> codes;
-
-    slices.reserve(dict_map.size() + 1);
-    codes.reserve(dict_map.size() + 1);
-
-    slices.emplace_back(Slice());
-    codes.emplace_back(0);
-
-    for (auto& [slice, code] : dict_map) {
-        slices.emplace_back(slice);
-        codes.emplace_back(code);
-    }
-    res->append_strings(slices);
-    res->set_null(0);
-    return std::make_pair(std::move(res), std::move(codes));
 }
 
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,

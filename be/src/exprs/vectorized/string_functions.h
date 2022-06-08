@@ -393,22 +393,6 @@ private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
 private:
-    struct StringFunctionsState {
-        std::unique_ptr<re2::RE2> regex;
-        std::unique_ptr<re2::RE2::Options> options;
-        bool const_pattern{false};
-
-        StringFunctionsState() : regex(), options() {}
-    };
-
-    static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns);
-    static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Options* options,
-                                            const Columns& columns);
-
-    static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns);
-    static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
-                                            const Columns& columns);
-
     struct CurrencyFormat : std::moneypunct<char> {
         pattern do_pos_format() const override { return {{none, sign, none, value}}; }
         pattern do_neg_format() const override { return {{none, sign, none, value}}; }
