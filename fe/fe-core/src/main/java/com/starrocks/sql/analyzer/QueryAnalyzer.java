@@ -55,8 +55,10 @@ import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -154,7 +156,9 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
-            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope);
+            //Record aliases at this level to prevent alias conflicts
+            Set<String> aliasSet = new HashSet<>();
+            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
             if (resolvedRelation instanceof TableFunctionRelation) {
                 throw unsupportedException("Table function must be used with lateral join");
             }
@@ -178,17 +182,23 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
-        private Relation resolveTableRef(Relation relation, Scope scope) {
+        private Relation resolveTableRef(Relation relation, Scope scope, Set<String> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
-                join.setLeft(resolveTableRef(join.getLeft(), scope));
-                Relation rightRelation = resolveTableRef(join.getRight(), scope);
+                join.setLeft(resolveTableRef(join.getLeft(), scope, aliasSet));
+                Relation rightRelation = resolveTableRef(join.getRight(), scope, aliasSet);
                 join.setRight(rightRelation);
                 if (rightRelation instanceof TableFunctionRelation) {
                     join.setLateral(true);
                 }
                 return join;
             } else if (relation instanceof TableRelation) {
+                if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                } else {
+                    aliasSet.add(relation.getResolveTableName().getTbl());
+                }
+
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
@@ -238,6 +248,13 @@ public class QueryAnalyzer {
                     }
                 }
             } else {
+                if (relation.getResolveTableName() != null) {
+                    if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                    } else {
+                        aliasSet.add(relation.getResolveTableName().getTbl());
+                    }
+                }
                 return relation;
             }
         }
@@ -419,7 +436,7 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() == null) {
-                throw new SemanticException("Every derived table must have its own alias");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
 
             Scope queryOutputScope = process(subquery.getQueryStatement(), context);
