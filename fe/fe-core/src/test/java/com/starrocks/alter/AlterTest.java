@@ -41,7 +41,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -649,10 +650,7 @@ public class AlterTest {
         String dropFollowerSql = "ALTER SYSTEM DROP FOLLOWER \"192.168.1.1:8080\"";
         AlterSystemStmt dropFollowerStmt = (AlterSystemStmt) UtFrameUtils.parseStmtWithNewParser(dropFollowerSql, ctx);
 
-
     }
-
-
 
     @Test
     public void testCatalogAddPartitions5Day() throws Exception {
@@ -1191,15 +1189,15 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        OlapTable table = (OlapTable)GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
-        ListPartitionInfo partitionInfo = (ListPartitionInfo)table.getPartitionInfo();
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<List<String>>> idToValues = partitionInfo.getIdToMultiValues();
 
         long id3 = table.getPartition("p3").getId();
         List<List<String>> list3 = idToValues.get(id3);
-        Assert.assertEquals("2022-04-01",list3.get(0).get(0));
-        Assert.assertEquals("shandong",list3.get(0).get(1));
+        Assert.assertEquals("2022-04-01", list3.get(0).get(0));
+        Assert.assertEquals("shandong", list3.get(0).get(1));
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1236,15 +1234,15 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        OlapTable table = (OlapTable)GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
                 .getTable("test_partition");
-        ListPartitionInfo partitionInfo = (ListPartitionInfo)table.getPartitionInfo();
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<String>> idToValues = partitionInfo.getIdToValues();
 
         long id3 = table.getPartition("p3").getId();
         List<String> list3 = idToValues.get(id3);
-        Assert.assertEquals("shanxi",list3.get(0));
-        Assert.assertEquals("shanghai",list3.get(1));
+        Assert.assertEquals("shanxi", list3.get(0));
+        Assert.assertEquals("shanghai", list3.get(1));
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1273,21 +1271,21 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db =  GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
-        OlapTable table = (OlapTable)db.getTable("test_partition");
-        ListPartitionInfo partitionInfo = (ListPartitionInfo)table.getPartitionInfo();
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable table = (OlapTable) db.getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
         long dbId = db.getId();
         long tableId = table.getId();
         Partition partition = table.getPartition("p1");
         long partitionId = partition.getId();
-        List<String> values =  partitionInfo.getIdToValues().get(partitionId);
+        List<String> values = partitionInfo.getIdToValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
-        short replicationNum =  partitionInfo.getReplicationNum(partitionId);
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
-        boolean isTempPartition = false ;
-        PartitionPersistInfo partitionPersistInfoOut = new PartitionPersistInfo(dbId,tableId,partition,
-                values,new ArrayList<>(),dataProperty,replicationNum,isInMemory,isTempPartition);
+        boolean isTempPartition = false;
+        ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
+                dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>());
 
         // write log
         File file = new File("./test_serial.log");
@@ -1300,25 +1298,25 @@ public class AlterTest {
 
         // read log
         DataInputStream in = new DataInputStream(new FileInputStream(file));
-        PartitionPersistInfo partitionPersistInfoIn = PartitionPersistInfo.read(in);
+        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
 
-        Assert.assertEquals(dbId,partitionPersistInfoIn.getDbId().longValue());
-        Assert.assertEquals(tableId,partitionPersistInfoIn.getTableId().longValue());
-        Assert.assertEquals(partitionId,partitionPersistInfoIn.getPartition().getId());
-        Assert.assertEquals(partition.getName(),partitionPersistInfoIn.getPartition().getName());
-        Assert.assertEquals(replicationNum,partitionPersistInfoIn.getReplicationNum());
-        Assert.assertEquals(isInMemory,partitionPersistInfoIn.isInMemory());
-        Assert.assertEquals(isTempPartition,partitionPersistInfoIn.isTempPartition());
-        Assert.assertEquals(dataProperty,partitionPersistInfoIn.getDataProperty());
+        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
+        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
+        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
+        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
+        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
+        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
+        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
+        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
 
-        List<String> assertValues = partitionPersistInfoIn.getValues();
-        Assert.assertEquals(values.size(),assertValues.size());
-        for (int i = 0 ; i < values.size() ;i++){
-            Assert.assertEquals(values.get(i),assertValues.get(i));
+        List<String> assertValues = partitionPersistInfoIn.asListPartitionPersistInfo().getValues();
+        Assert.assertEquals(values.size(), assertValues.size());
+        for (int i = 0; i < values.size(); i++) {
+            Assert.assertEquals(values.get(i), assertValues.get(i));
         }
 
         // replay log
-        partitionInfo.setValues(partitionId,null);
+        partitionInfo.setValues(partitionId, null);
         GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
         Assert.assertNotNull(partitionInfo.getIdToValues().get(partitionId));
 
@@ -1349,21 +1347,21 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db =  GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
-        OlapTable table = (OlapTable)db.getTable("test_partition");
-        ListPartitionInfo partitionInfo = (ListPartitionInfo)table.getPartitionInfo();
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable table = (OlapTable) db.getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
         long dbId = db.getId();
         long tableId = table.getId();
         Partition partition = table.getPartition("p1");
         long partitionId = partition.getId();
-        List<List<String>> multiValues =  partitionInfo.getIdToMultiValues().get(partitionId);
+        List<List<String>> multiValues = partitionInfo.getIdToMultiValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
-        short replicationNum =  partitionInfo.getReplicationNum(partitionId);
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
-        boolean isTempPartition = false ;
-        PartitionPersistInfo partitionPersistInfoOut = new PartitionPersistInfo(dbId,tableId,partition,
-                new ArrayList<>(),multiValues,dataProperty,replicationNum,isInMemory,isTempPartition);
+        boolean isTempPartition = false;
+        ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
+                dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues);
 
         // write log
         File file = new File("./test_serial.log");
@@ -1376,29 +1374,29 @@ public class AlterTest {
 
         // replay log
         DataInputStream in = new DataInputStream(new FileInputStream(file));
-        PartitionPersistInfo partitionPersistInfoIn = PartitionPersistInfo.read(in);
+        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
 
-        Assert.assertEquals(dbId,partitionPersistInfoIn.getDbId().longValue());
-        Assert.assertEquals(tableId,partitionPersistInfoIn.getTableId().longValue());
-        Assert.assertEquals(partitionId,partitionPersistInfoIn.getPartition().getId());
-        Assert.assertEquals(partition.getName(),partitionPersistInfoIn.getPartition().getName());
-        Assert.assertEquals(replicationNum,partitionPersistInfoIn.getReplicationNum());
-        Assert.assertEquals(isInMemory,partitionPersistInfoIn.isInMemory());
-        Assert.assertEquals(isTempPartition,partitionPersistInfoIn.isTempPartition());
-        Assert.assertEquals(dataProperty,partitionPersistInfoIn.getDataProperty());
+        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
+        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
+        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
+        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
+        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
+        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
+        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
+        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
 
-        List<List<String>> assertMultiValues = partitionPersistInfoIn.getMultiValues();
-        Assert.assertEquals(multiValues.size(),assertMultiValues.size());
-        for (int i = 0 ; i < multiValues.size() ;i++){
+        List<List<String>> assertMultiValues = partitionPersistInfoIn.asListPartitionPersistInfo().getMultiValues();
+        Assert.assertEquals(multiValues.size(), assertMultiValues.size());
+        for (int i = 0; i < multiValues.size(); i++) {
             List<String> valueItem = multiValues.get(i);
             List<String> assertValueItem = assertMultiValues.get(i);
-            for (int j = 0 ; j < valueItem.size() ;j++){
-                Assert.assertEquals(valueItem.get(i),assertValueItem.get(i));
+            for (int j = 0; j < valueItem.size(); j++) {
+                Assert.assertEquals(valueItem.get(i), assertValueItem.get(i));
             }
         }
 
         // replay log
-        partitionInfo.setMultiValues(partitionId,null);
+        partitionInfo.setMultiValues(partitionId, null);
         GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
         Assert.assertNotNull(partitionInfo.getIdToMultiValues().get(partitionId));
 
@@ -1462,7 +1460,8 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
-        String alterSQL = "ALTER TABLE test_partition_2 ADD PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")) ";
+        String alterSQL =
+                "ALTER TABLE test_partition_2 ADD PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")) ";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);

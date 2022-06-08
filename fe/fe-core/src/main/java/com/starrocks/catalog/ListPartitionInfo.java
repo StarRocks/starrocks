@@ -11,7 +11,7 @@ import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
-import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -44,6 +44,8 @@ public class ListPartitionInfo extends PartitionInfo {
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
     private Map<Long, List<LiteralExpr>> idToLiteralExprValues;
+    @SerializedName("idToTemp")
+    private Map<Long, Boolean> idToIsTempPartition;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -55,6 +57,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
+        this.idToIsTempPartition = new HashMap<>();
     }
 
     public ListPartitionInfo() {
@@ -64,6 +67,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
+        this.idToIsTempPartition = new HashMap<>();
     }
 
     public void setValues(long partitionId, List<String> values) {
@@ -308,11 +312,12 @@ public class ListPartitionInfo extends PartitionInfo {
                     throw new AnalysisException(
                             "add list partition only support single item or multi item list partition now");
                 }
+                this.idToIsTempPartition.put(partitionId, isTempPartition);
             }
         }
     }
 
-    public void unprotectHandleNewartitionDesc(PartitionPersistInfo partitionPersistInfo) throws AnalysisException {
+    public void unprotectHandleNewartitionDesc(ListPartitionPersistInfo partitionPersistInfo) throws AnalysisException {
         Partition partition = partitionPersistInfo.getPartition();
         long partitionId = partition.getId();
         this.idToDataProperty.put(partitionId, partitionPersistInfo.getDataProperty());

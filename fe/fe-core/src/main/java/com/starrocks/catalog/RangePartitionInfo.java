@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
@@ -33,6 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -211,6 +211,14 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, dataProperty);
         idToReplicationNum.put(partitionId, replicationNum);
         idToInMemory.put(partitionId, isInMemory);
+    }
+
+    /**
+     * @param info
+     * @TODO This method may be used in future
+     */
+    public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
+
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

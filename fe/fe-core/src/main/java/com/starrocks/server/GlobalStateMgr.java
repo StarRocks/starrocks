@@ -247,12 +247,14 @@ import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -3631,21 +3633,20 @@ public class GlobalStateMgr {
 
     private void addListPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
                                      boolean isTempPartition, ListPartitionInfo listPartitionInfo,
-                                     List<Partition> partitionList, Set<String> existPartitionNameSet)
-            throws DdlException {
+                                     List<Partition> partitionList, Set<String> existPartitionNameSet) {
         Partition partition = partitionList.get(0);
         if (existPartitionNameSet.contains(partition.getName())) {
             LOG.info("add partition[{}] which already exists", partition.getName());
             return;
         }
         long partitionId = partition.getId();
-        PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                listPartitionInfo.getIdToValues().get(partitionId),
-                listPartitionInfo.getIdToMultiValues().get(partitionId),
+        ListPartitionPersistInfo info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                 partitionDescs.get(0).getPartitionDataProperty(),
                 listPartitionInfo.getReplicationNum(partitionId),
                 listPartitionInfo.getIsInMemory(partitionId),
-                isTempPartition);
+                isTempPartition,
+                listPartitionInfo.getIdToValues().get(partitionId),
+                listPartitionInfo.getIdToMultiValues().get(partitionId));
         editLog.logAddPartition(info);
         LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
                 partition.getName(), isTempPartition);
@@ -3779,6 +3780,55 @@ public class GlobalStateMgr {
         return sourceProperties;
     }
 
+    public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
+        Database db = this.getDb(info.getDbId());
+        db.writeLock();
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            Partition partition = info.getPartition();
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            if (info.isTempPartition()) {
+                olapTable.addTempPartition(partition);
+            } else {
+                olapTable.addPartition(partition);
+            }
+
+            PartitionType partitionType = partitionInfo.getType();
+            if (partitionType == PartitionType.LIST) {
+                try {
+                    ((ListPartitionInfo) partitionInfo).unprotectHandleNewartitionDesc(info.asListPartitionPersistInfo());
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+            } else if (partitionType == PartitionType.RANGE) {
+                ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(info.asRangePartitionPersistInfo());
+            } else {
+                throw new DdlException("Only support adding partition to range/list partitioned table");
+            }
+
+            if (!isCheckpointThread()) {
+                // add to inverted index
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
+                    long indexId = index.getId();
+                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), partition.getId(),
+                            index.getId(), schemaHash, info.getDataProperty().getStorageMedium());
+                    for (Tablet tablet : index.getTablets()) {
+                        long tabletId = tablet.getId();
+                        invertedIndex.addTablet(tabletId, tabletMeta);
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            invertedIndex.addReplica(tabletId, replica);
+                        }
+                    }
+                }
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
     public void replayAddPartition(PartitionPersistInfo info) throws DdlException {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
@@ -3798,13 +3848,7 @@ public class GlobalStateMgr {
                 ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
                         info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
                         info.isInMemory());
-            } else if (partitionType == PartitionType.LIST) {
-                try {
-                    ((ListPartitionInfo) partitionInfo).unprotectHandleNewartitionDesc(info);
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
-            } else {
+            }  else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
 

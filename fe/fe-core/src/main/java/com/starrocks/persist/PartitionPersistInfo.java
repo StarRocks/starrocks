@@ -21,41 +21,25 @@
 
 package com.starrocks.persist;
 
-import com.facebook.presto.hive.$internal.com.google.common.reflect.TypeToken;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class PartitionPersistInfo implements Writable {
     private Long dbId;
     private Long tableId;
     private Partition partition;
 
-    // value for range partition
     private Range<PartitionKey> range;
-    // value for single item list partition
-    private List<String> values;
-    // value from multi item list partition
-    private List<List<String>> multiValues;
     private DataProperty dataProperty;
     private short replicationNum;
     private boolean isInMemory = false;
@@ -77,46 +61,6 @@ public class PartitionPersistInfo implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
-
-        this.values = new ArrayList<>();
-        this.multiValues = new ArrayList<>();
-    }
-
-    public PartitionPersistInfo(long dbId, long tableId, Partition partition,
-                                List<String> values, List<List<String>> multiValues,
-                                DataProperty dataProperty, short replicationNum,
-                                boolean isInMemory, boolean isTempPartition) throws DdlException {
-        this.dbId = dbId;
-        this.tableId = tableId;
-        this.partition = partition;
-
-        this.range = this.findTempRange();
-        this.dataProperty = dataProperty;
-
-        this.replicationNum = replicationNum;
-        this.isInMemory = isInMemory;
-        this.isTempPartition = isTempPartition;
-
-        this.values = values == null ? new ArrayList<>() : values;
-        this.multiValues = multiValues == null ? new ArrayList<>() : multiValues;
-    }
-
-    /**
-     * Initialize an empty object, the purpose is for placeholders, compatible with older versions
-     *
-     * @return
-     * @throws DdlException
-     */
-    private Range<PartitionKey> findTempRange() throws DdlException {
-        try {
-            PartitionKey lower = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-1")),
-                    Arrays.asList(new Column("tinyint", Type.TINYINT)));
-            PartitionKey upper = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("1")),
-                    Arrays.asList(new Column("tinyint", Type.TINYINT)));
-            return Range.closedOpen(lower, upper);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
     }
 
     public Long getDbId() {
@@ -151,14 +95,6 @@ public class PartitionPersistInfo implements Writable {
         return isTempPartition;
     }
 
-    public List<String> getValues() {
-        return values;
-    }
-
-    public List<List<String>> getMultiValues() {
-        return multiValues;
-    }
-
     public void write(DataOutput out) throws IOException {
         out.writeLong(dbId);
         out.writeLong(tableId);
@@ -169,12 +105,6 @@ public class PartitionPersistInfo implements Writable {
         out.writeShort(replicationNum);
         out.writeBoolean(isInMemory);
         out.writeBoolean(isTempPartition);
-
-        String valuesJsonStr = GsonUtils.GSON.toJson(values);
-        Text.writeString(out, valuesJsonStr);
-
-        String multiValuesJsonStr = GsonUtils.GSON.toJson(multiValues);
-        Text.writeString(out, multiValuesJsonStr);
     }
 
     public static PartitionPersistInfo read(DataInput in) throws IOException {
@@ -197,19 +127,6 @@ public class PartitionPersistInfo implements Writable {
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             isTempPartition = in.readBoolean();
-        }
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
-            String valuesJsonStr = Text.readString(in);
-            if (valuesJsonStr != null) {
-                values = GsonUtils.GSON.fromJson(valuesJsonStr, ArrayList.class);
-            }
-            String multiValuesJsonStr = Text.readString(in);
-            if (multiValuesJsonStr != null) {
-                java.lang.reflect.Type multiValueType = new TypeToken<List<ArrayList<String>>>() {
-                }.getType();
-                multiValues = GsonUtils.GSON.fromJson(multiValuesJsonStr, multiValueType);
-            }
         }
 
     }
