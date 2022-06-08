@@ -669,6 +669,14 @@ public class MaterializedViewRule extends Rule {
             }
         }
 
+        // When all query column are key column and out mv is agg keys index
+        // we should not match for this agg columns
+        if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
+                .filter(queryExpr -> !keyColumns.containsAll(queryExpr.getUsedColumns()))
+                .findAny().isPresent()) {
+            return false;
+        }
+
         for (CallOperator queryExpr : queryExprList) {
             boolean match = false;
             for (CallOperator mvExpr : mvColumnExprList) {
