@@ -24,12 +24,8 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
-bool MemTable::_is_aggregate_needed() {
-    return _keys_type != KeysType::DUP_KEYS;
-}
-
 void MemTable::_init_aggregator_if_needed() {
-    if (_is_aggregate_needed()) {
+    if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
@@ -163,7 +159,7 @@ Status MemTable::finalize() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
 
-        if (_is_aggregate_needed()) {
+        if (_keys_type != KeysType::DUP_KEYS) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
                 _merge();
@@ -237,7 +233,7 @@ Status MemTable::flush() {
 }
 
 void MemTable::_merge() {
-    if (_chunk == nullptr || !_is_aggregate_needed()) {
+    if (_chunk == nullptr || _keys_type == KeysType::DUP_KEYS) {
         return;
     }
 
