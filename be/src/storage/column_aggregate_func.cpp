@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "storage/column_aggregator.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
