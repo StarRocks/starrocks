@@ -57,11 +57,6 @@ public class StarOSAgent {
         this.serviceId = id;
     }
 
-    // for ut only
-    public void setWorkerToBackend(long workerId, long backendId) {
-        workerToBackend.put(workerId, backendId);
-    }
-
     public List<Long> createShards(int numShards) {
         return Lists.newArrayList();
     }

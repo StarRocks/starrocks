@@ -124,13 +124,7 @@ public class StarOSAgentTest {
         starosAgent.setServiceId(1);
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
+        Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
     }
 
-    @Test
-    public void testGetWorkerIdByBackendId() throws Exception {
-        long BackendId = 1;
-        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(BackendId));
-        starosAgent.setWorkerToBackend(5, BackendId);
-        Assert.assertEquals(5, starosAgent.getWorkerIdByBackendId(BackendId));
-    }
 }
