@@ -2476,6 +2476,10 @@ public class GlobalStateMgr {
         return this.hiveRepository;
     }
 
+    public IcebergRepository getIcebergRepository() {
+        return this.icebergRepository;
+    }
+
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
