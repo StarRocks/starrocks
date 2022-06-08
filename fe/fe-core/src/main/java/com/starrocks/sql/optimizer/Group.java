@@ -188,8 +188,25 @@ public class Group {
                 lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
             Pair<Double, GroupExpression> pair = entry.getValue();
-            if (pair.second.equals(groupExpression)) {
+            GroupExpression bestExpression = pair.second;
+            if (bestExpression.equals(groupExpression)) {
                 iterator.remove();
+            }
+        }
+
+        // we need to delete the enforcer whose input property is satisfied by the deleted group expression.
+        for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
+                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
+            PhysicalPropertySet requiredProperty = entry.getKey();
+            Pair<Double, GroupExpression> pair = entry.getValue();
+            GroupExpression bestExpression = pair.second;
+            // enforcer's child group is same with itself.
+            if (bestExpression.arity() == 1 && bestExpression.inputAt(0) == bestExpression.getGroup()) {
+                // the enforcer need to be deleted when its input property can not be satisfied by the group
+                if (!lowestCostExpressions.keySet().containsAll(bestExpression.getInputProperties(requiredProperty))) {
+                    iterator.remove();
+                }
             }
         }
     }
