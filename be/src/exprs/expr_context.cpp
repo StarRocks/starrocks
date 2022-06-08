@@ -21,12 +21,14 @@
 
 #include "exprs/expr_context.h"
 
+#include <fmt/format.h>
 #include <gperftools/profiler.h>
 
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 
+#include "column/chunk.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"

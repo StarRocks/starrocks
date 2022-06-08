@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "column/chunk.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"

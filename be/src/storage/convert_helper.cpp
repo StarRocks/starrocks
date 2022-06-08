@@ -19,6 +19,7 @@
 #include "storage/tablet_schema.h"
 #include "types/timestamp_value.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
 #include "util/pred_guard.h"
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"

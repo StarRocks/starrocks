@@ -9,6 +9,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
+#include "udf/udf.h"
 #include "util/url_parser.h"
 
 namespace starrocks {

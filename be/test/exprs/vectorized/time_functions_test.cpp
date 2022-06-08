@@ -14,6 +14,8 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/datetime_value.h"
+#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
@@ -2369,7 +2371,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2408,7 +2410,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2447,7 +2449,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2486,7 +2488,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2525,7 +2527,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2564,7 +2566,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2603,7 +2605,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
@@ -2642,7 +2644,7 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
-                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);

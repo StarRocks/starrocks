@@ -9,6 +9,7 @@
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {

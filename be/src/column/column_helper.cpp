@@ -16,6 +16,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
