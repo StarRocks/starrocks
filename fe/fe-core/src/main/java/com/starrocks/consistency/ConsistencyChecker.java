@@ -232,7 +232,7 @@ public class ConsistencyChecker extends MasterDaemon {
      * we use a priority queue to sort db/table/partition/index/tablet by 'lastCheckTime'.
      * chose a tablet which has the smallest 'lastCheckTime'.
      */
-    public List<Long> chooseTablets() {
+    protected List<Long> chooseTablets() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetaObject chosenOne = null;
 
