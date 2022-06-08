@@ -44,7 +44,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
         : _exec_env(exec_env), _master_info(master_info) {
     for (auto& path : exec_env->store_paths()) {
         try {
-            string dpp_download_path_str = path.path + DPP_PREFIX;
+             string dpp_download_path_str = path.path + DPP_PREFIX;
             std::filesystem::path dpp_download_path(dpp_download_path_str);
             if (std::filesystem::exists(dpp_download_path)) {
                 std::filesystem::remove_all(dpp_download_path);
