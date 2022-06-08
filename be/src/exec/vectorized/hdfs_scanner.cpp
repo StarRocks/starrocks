@@ -2,6 +2,7 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
+#include "column/column_helper.h"
 #include "exec/exec_node.h"
 
 namespace starrocks::vectorized {

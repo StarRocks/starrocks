@@ -10,12 +10,13 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 
 #include <re2/re2.h>
+#include <simdjson.h>
+#include <velocypack/vpack.h>
 
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
-#include "simdjson.h"
-#include "velocypack/vpack.h"
+#include "udf/udf.h"
 
 namespace starrocks {
 namespace vectorized {

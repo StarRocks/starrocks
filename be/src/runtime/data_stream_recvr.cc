@@ -21,6 +21,8 @@
 
 #include "runtime/data_stream_recvr.h"
 
+#include <fmt/format.h>
+
 #include <condition_variable>
 #include <deque>
 #include <memory>
