@@ -385,7 +385,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             Database db = globalStateMgr.getDb(status.getDbName());
             if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-                return result;
+                continue;
             }
 
             TTaskRunInfo info = new TTaskRunInfo();
