@@ -587,8 +587,8 @@ CONF_Int32(late_materialization_ratio, "10");
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Max batched bytes for each transmit request.
-CONF_Int64(max_transmit_batched_bytes, "65536");
+// Max batched bytes for each transmit request. (256KB)
+CONF_Int64(max_transmit_batched_bytes, "262144");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
