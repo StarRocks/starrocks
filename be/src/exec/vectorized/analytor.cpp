@@ -17,6 +17,7 @@
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
 #include "udf/udf.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -135,7 +136,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 return Status::NotSupported("The NTILE window function is only supported by the pipeline engine.");
             }
 
-            _need_partition_boundary_for_unbounded_preceding_rows_frame = true;
+            _need_partition_materializing = true;
         }
 
         bool is_input_nullable = false;
@@ -397,7 +398,7 @@ void Analytor::get_window_function_result(size_t start, size_t end) {
     }
 }
 
-bool Analytor::is_partition_finished() {
+bool Analytor::is_partition_boundary_reached() {
     if (_input_eos) {
         return true;
     }
@@ -497,9 +498,15 @@ void Analytor::find_partition_end() {
 }
 
 bool Analytor::find_and_check_partition_end() {
+    // current partition data don't consume finished
+    if (_current_row_position < _partition_end) {
+        _found_partition_end = _partition_end;
+        return false;
+    }
+
     if (_partition_columns.empty() || _input_rows == 0) {
         _found_partition_end = _input_rows;
-        return false;
+        return _input_eos;
     }
 
     int64_t start = _found_partition_end;
@@ -507,22 +514,44 @@ bool Analytor::find_and_check_partition_end() {
     for (auto& column : _partition_columns) {
         _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
     }
-    return _found_partition_end != static_cast<int64_t>(_partition_columns[0]->size());
+
+    if (_found_partition_end < static_cast<int64_t>(_partition_columns[0]->size())) {
+        return true;
+    }
+
+    // genuine partition end may be existed in the incoming chunks if _input_eos = false
+    DCHECK_EQ(_found_partition_end, _partition_columns[0]->size());
+    return _input_eos;
 }
 
-void Analytor::find_peer_group_end() {
+bool Analytor::find_and_check_peer_group_end(bool found_partition_end) {
     // current peer group data don't output finished
     if (_current_row_position < _peer_group_end) {
-        return;
+        return false;
     }
 
     _peer_group_start = _peer_group_end;
-    _peer_group_end = _partition_end;
+    _found_peer_group_end = _found_partition_end;
     DCHECK(!_order_columns.empty());
 
     for (auto& column : _order_columns) {
-        _peer_group_end = _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start, _peer_group_end);
+        _found_peer_group_end =
+                _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start, _found_peer_group_end);
     }
+
+    if (_found_peer_group_end < _found_partition_end) {
+        _peer_group_end = _found_peer_group_end;
+        return true;
+    }
+
+    DCHECK_EQ(_found_peer_group_end, _found_partition_end);
+    if (found_partition_end) {
+        // _found_peer_group_end is the genuine partition boundary
+        _peer_group_end = _found_peer_group_end;
+        return true;
+    }
+
+    return false;
 }
 
 void Analytor::reset_state_for_cur_partition() {

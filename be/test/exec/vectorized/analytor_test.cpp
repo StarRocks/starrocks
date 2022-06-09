@@ -54,9 +54,9 @@ TEST_F(AnalytorTest, find_peer_group_end) {
 
     analytor.update_input_rows(20);
     analytor._order_columns.emplace_back(c1);
-    analytor._partition_end = 20;
+    analytor._found_partition_end = 20;
 
-    analytor.find_peer_group_end();
+    analytor.find_and_check_peer_group_end(true);
     ASSERT_EQ(analytor.peer_group_end(), 10);
 }
 
@@ -113,18 +113,21 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
     analytor1._partition_columns.emplace_back(c1);
     analytor1._partition_columns.emplace_back(c2);
 
+    analytor1._current_row_position = analytor1.found_partition_end();
     bool end = analytor1.find_and_check_partition_end();
     ASSERT_TRUE(end);
     ASSERT_EQ(analytor1.found_partition_end(), 5);
 
     analytor1.reset_state_for_cur_partition();
 
+    analytor1._current_row_position = analytor1.found_partition_end();
     end = analytor1.find_and_check_partition_end();
     ASSERT_TRUE(end);
     ASSERT_EQ(analytor1.found_partition_end(), 10);
 
     analytor1.reset_state_for_cur_partition();
 
+    analytor1._current_row_position = analytor1.found_partition_end();
     end = analytor1.find_and_check_partition_end();
     ASSERT_FALSE(end);
     ASSERT_EQ(analytor1.found_partition_end(), 20);
@@ -133,6 +136,7 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
     Analytor analytor2(plan_node, row_desc, nullptr);
     analytor2.update_input_rows(20);
 
+    analytor2._current_row_position = analytor2.found_partition_end();
     end = analytor2.find_and_check_partition_end();
     ASSERT_FALSE(end);
     ASSERT_EQ(analytor2.found_partition_end(), 20);
@@ -141,6 +145,7 @@ TEST_F(AnalytorTest, find_and_check_partition_end) {
     Analytor analytor3(plan_node, row_desc, nullptr);
     analytor3.update_input_rows(0);
 
+    analytor2._current_row_position = analytor2.found_partition_end();
     end = analytor3.find_and_check_partition_end();
     ASSERT_FALSE(end);
     ASSERT_EQ(analytor3.found_partition_end(), 0);

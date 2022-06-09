@@ -83,6 +83,7 @@ public:
     int64_t found_partition_end() const { return _found_partition_end; }
     int64_t peer_group_start() const { return _peer_group_start; }
     int64_t peer_group_end() const { return _peer_group_end; }
+    int64_t found_peer_group_end() const { return _found_peer_group_end; }
 
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -102,7 +103,7 @@ public:
     void reset_window_state();
     void get_window_function_result(size_t start, size_t end);
 
-    bool is_partition_finished();
+    bool is_partition_boundary_reached();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     void create_agg_result_columns(int64_t chunk_size);
     void append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
@@ -112,14 +113,13 @@ public:
     void find_partition_end();
     bool find_and_check_partition_end();
     void find_peer_group_end();
+    bool find_and_check_peer_group_end(bool found_partition_end = false);
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 
     void remove_unused_buffer_values(RuntimeState* state);
 
-    bool need_partition_boundary_for_unbounded_preceding_rows_frame() const {
-        return _need_partition_boundary_for_unbounded_preceding_rows_frame;
-    }
+    bool need_partition_materializing() const { return _need_partition_materializing; }
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
@@ -166,7 +166,7 @@ private:
 
     int64_t _current_row_position = 0;
 
-    // Record the start pos of current partition
+    // Record the start pos of current partition.
     int64_t _partition_start = 0;
     // Record the end pos of current partition.
     // If the end position has not been found during the iteration, _partition_end = _partition_start.
@@ -176,9 +176,14 @@ private:
     int64_t _found_partition_end = 0;
 
     // A peer group is all of the rows that are peers within the specified ordering.
-    // Rows are peers if they compare equal to each other using the specified ordering expression.
+    // Record the start pos of current peer group.
     int64_t _peer_group_start = 0;
+    // Record the end pos of current peer group.
+    // If the end position has not been found during the iteration, _peer_group_end = _peer_group_start.
     int64_t _peer_group_end = 0;
+    // Used to record the first position of the latest Chunk that is not equal to the peer group.
+    // If not found, it points to the last position + 1.
+    int64_t _found_peer_group_end = 0;
 
     // Offset from the current row for ROWS windows with start or end bounds specified
     // with offsets. Is positive if the offset is FOLLOWING, negative if PRECEDING, and 0
@@ -214,7 +219,7 @@ private:
 
     // Some window functions, eg. NTILE, need the boundary of partition to calculate its value.
     // For these functions, we must wait util the partition finished.
-    bool _need_partition_boundary_for_unbounded_preceding_rows_frame = false;
+    bool _need_partition_materializing = false;
 
 private:
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
