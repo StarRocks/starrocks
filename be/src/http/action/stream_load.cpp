@@ -168,10 +168,10 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         ctx->body_sink.reset();
         RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
     } else {
-        if (ctx->buf->pos > 0) {
-            ctx->buf->flip();
-            ctx->body_sink->append(std::move(ctx->buf));
-            ctx->buf = ByteBuffer::allocate(ctx->buf_default_sz);
+        if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
+            ctx->buffer->flip();
+            ctx->body_sink->append(std::move(ctx->buffer));
+            ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
     }
@@ -244,7 +244,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         }
 
         // allocate buffer in advance.
-        ctx->buf = ByteBuffer::allocate(ctx->body_bytes);
+        ctx->buffer = ByteBuffer::allocate(ctx->body_bytes);
     } else {
 #ifndef BE_TEST
         evhttp_connection_set_max_body_size(evhttp_request_get_connection(http_req->get_evhttp_request()),
@@ -310,26 +310,30 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
 
     size_t len = 0;
     while ((len = evbuffer_get_length(evbuf)) > 0) {
-        if (ctx->buf->remaining() < len) {
+        if (ctx->buffer == nullptr) {
+            // Initialize buffer.
+            ctx->buffer = ByteBuffer::allocate(ctx->kDefaultBufferSize);
+
+        } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
                 // For json format, we need build a complete json before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buf->pos + len));
-                buf->put_bytes(ctx->buf->ptr, ctx->buf->pos);
-                std::swap(buf, ctx->buf);
+                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len));
+                buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
+                std::swap(buf, ctx->buffer);
 
             } else {
                 // For non-json format, we could push buffer to the body_sink in streaming mode.
                 // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
-                ctx->buf->flip();
-                auto st = ctx->body_sink->append(std::move(ctx->buf));
+                ctx->buffer->flip();
+                auto st = ctx->body_sink->append(std::move(ctx->buffer));
                 if (!st.ok()) {
                     LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();
                     ctx->status = st;
                     return;
                 }
 
-                ctx->buf = ByteBuffer::allocate(ctx->buf_default_sz);
+                ctx->buffer = ByteBuffer::allocate(ctx->kDefaultBufferSize);
             }
         }
 
@@ -338,9 +342,9 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
             // The memory is applied for in http server thread,
             // so the release of this memory must be recorded in ProcessMemTracker
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            remove_bytes = evbuffer_remove(evbuf, ctx->buf->ptr + ctx->buf->pos, ctx->buf->remaining());
+            remove_bytes = evbuffer_remove(evbuf, ctx->buffer->ptr + ctx->buffer->pos, ctx->buffer->remaining());
         }
-        ctx->buf->pos += remove_bytes;
+        ctx->buffer->pos += remove_bytes;
         ctx->receive_bytes += remove_bytes;
     }
     ctx->total_received_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
