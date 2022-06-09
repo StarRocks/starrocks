@@ -372,7 +372,7 @@ public class Explain {
             OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
             PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("- ").append(join.getJoinType());
+            StringBuilder sb = new StringBuilder("- ").append(join.getJoinAlgo()).append("-").append(join.getJoinType());
             if (!join.getJoinType().isCrossJoin()) {
                 sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
             }

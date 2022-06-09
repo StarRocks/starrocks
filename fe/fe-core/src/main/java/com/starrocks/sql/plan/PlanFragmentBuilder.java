@@ -99,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
@@ -1778,19 +1779,17 @@ public class PlanFragmentBuilder {
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
+                List<PlanFragment> nullablePlanFragments = new ArrayList<>();
                 if (joinOperator.isLeftOuterJoin()) {
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
+                    nullablePlanFragments.add(rightFragment);
                 } else if (joinOperator.isRightOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
+                    nullablePlanFragments.add(leftFragment);
                 } else if (joinOperator.isFullOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
+                    nullablePlanFragments.add(leftFragment);
+                    nullablePlanFragments.add(rightFragment);
+                }
+                for (PlanFragment planFragment : nullablePlanFragments) {
+                    for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
                         context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
                     }
                 }
@@ -1806,11 +1805,13 @@ public class PlanFragmentBuilder {
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
                             joinOperator, conjuncts);
-                } else {
+                } else if (node instanceof PhysicalMergeJoinOperator) {
                     joinNode = new MergeJoinNode(
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                             joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+                } else {
+                    throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
                 }
 
                 //Build outputColumns
@@ -1824,8 +1825,7 @@ public class PlanFragmentBuilder {
                     }
 
                     outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                    joinNode.setOutputSlots(
-                            outputColumns.getStream().boxed().collect(Collectors.toList()));
+                    joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
                 }
 
                 joinNode.setDistributionMode(distributionMode);

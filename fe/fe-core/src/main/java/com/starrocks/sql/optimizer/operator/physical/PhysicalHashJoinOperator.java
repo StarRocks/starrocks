@@ -44,6 +44,11 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     }
 
     @Override
+    public String getJoinAlgo() {
+        return "HASH-JOIN";
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;

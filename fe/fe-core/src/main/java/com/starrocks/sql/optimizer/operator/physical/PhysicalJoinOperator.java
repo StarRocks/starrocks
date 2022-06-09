@@ -36,6 +36,10 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         return joinType;
     }
 
+    public String getJoinAlgo() {
+        return "PhysicalJoin";
+    }
+
     public ScalarOperator getOnPredicate() {
         return onPredicate;
     }

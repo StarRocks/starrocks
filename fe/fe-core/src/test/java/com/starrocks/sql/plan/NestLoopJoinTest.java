@@ -27,7 +27,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testCorssJoinWithPredicate() throws Exception {
+    public void testNLJoinWithPredicate() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("nestloop");
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
         String planFragment = getFragmentPlan(sql);
