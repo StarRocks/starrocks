@@ -10,6 +10,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
@@ -18,21 +19,17 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 public class RestrictOpMaterializedViewTest {
     private static StarRocksAssert starRocksAssert;
-
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     private static ConnectContext ctx;
 
@@ -89,10 +86,29 @@ public class RestrictOpMaterializedViewTest {
     }
 
     @Test
+    public void testInsertNormal() {
+        String sql1 = "INSERT INTO db1.mv1\n" +
+                "VALUES\n" +
+                "  (\"2021-02-02\", \"1\");";
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(sql1, ctx.getSessionVariable().getSqlMode()).get(0);
+        InsertStmt insertStmt = (InsertStmt) statementBase;
+        insertStmt.setInsertToMvFromBaseTable(true);
+        try {
+            com.starrocks.sql.analyzer.Analyzer.analyze(insertStmt, ctx);
+        } catch (Exception e) {
+            assertNotEquals(e.getMessage(), "not support MaterializedView");
+        }
+
+    }
+
+    @Test
     public void testDelete() {
         String sql1 = "delete from db1.mv1 where k2 = 3;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+            DeleteHandler deleteHandler = new DeleteHandler();
+            deleteHandler.process((DeleteStmt) statementBase);
             Assert.fail();
         } catch (Exception e) {
             assertEquals(e.getMessage(), "not support MaterializedView");
@@ -113,7 +129,7 @@ public class RestrictOpMaterializedViewTest {
     }
 
     @Test
-    public void testBrokerLoad() throws Exception {
+    public void testBrokerLoad() {
         String sql1 = "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
             SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));

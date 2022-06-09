@@ -171,12 +171,12 @@ public class DeleteHandler implements Writable {
                     throw new DdlException("Table does not exist. name: " + tableName);
                 }
 
-                if (table.getType() != Table.TableType.OLAP) {
-                    throw new DdlException("Not olap type table. type: " + table.getType().name());
-                }
-
                 if (table instanceof MaterializedView) {
                     throw new DdlException("not support MaterializedView");
+                }
+
+                if (table.getType() != Table.TableType.OLAP) {
+                    throw new DdlException("Not olap type table. type: " + table.getType().name());
                 }
 
                 OlapTable olapTable = (OlapTable) table;

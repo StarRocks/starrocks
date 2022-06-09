@@ -134,6 +134,8 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean isTransactionBegin = false;
 
+    private boolean isInsertToMvFromBaseTable = false;
+
     public InsertStmt(InsertTarget target, String label, List<String> cols, InsertSource source, List<String> hints) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
@@ -278,6 +280,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isTransactionBegin() {
         return isTransactionBegin;
+    }
+
+    public boolean isInsertToMvFromBaseTable() {
+        return isInsertToMvFromBaseTable;
+    }
+
+    public void setInsertToMvFromBaseTable(boolean insertToMvFromBaseTable) {
+        isInsertToMvFromBaseTable = insertToMvFromBaseTable;
     }
 
     @Override
