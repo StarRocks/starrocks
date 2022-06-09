@@ -335,7 +335,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                     return;
                 }
 
-                ctx->buffer = ByteBuffer::allocate(ctx->kDefaultBufferSize);
+                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
             }
         }
 
