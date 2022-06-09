@@ -1,5 +1,26 @@
 # StarRocks version 2.1
 
+## 2.1.8
+
+Release date: June 9, 2022
+
+Improvements
+
+- The concurrency control mechanism used for internal processing workloads such as schema changes is optimized to reduce the pressure on frontend (FE) metadata. As such, load jobs are less likely to pile up and slow down if these load jobs are concurrently run to load a large amount of data. [#6560](https://github.com/StarRocks/starrocks/pull/6560) [#6804](https://github.com/StarRocks/starrocks/pull/6804)
+- The performance of StarRocks in loading data at a high frequency is improved. [#6532](https://github.com/StarRocks/starrocks/pull/6532) [#6533](https://github.com/StarRocks/starrocks/pull/6533)
+
+Bug Fixes
+
+The following bugs are fixed:
+
+- ALTER operation logs do not record all information about LOAD statements. Therefore, after you perform an ALTER operation on a routine load job, the metadata of the job is lost after checkpoints are created. [#6936](https://github.com/StarRocks/starrocks/issues/6936)
+- A deadlock may occur if you stop a routine load job. [#6450](https://github.com/StarRocks/starrocks/issues/6450)
+- By default, a backend (BE) uses the default UTC+8 time zone for a load job. If your server uses the UTC time zone, 8 hours are added to the timestamps in the DateTime column of the table that is loaded by using a Spark load job. [#6592](https://github.com/StarRocks/starrocks/issues/6592)
+- The GET_JSON_STRING function cannot process non-JSON strings. If you extract a JSON value from a JSON object or array, the function returns NULL. The function has been optimized to return an equivalent JSON-formatted STRING value for a JSON object or array. [#6426](https://github.com/StarRocks/starrocks/issues/6426)
+- If the data volume is large, a schema change may fail due to excessive memory consumption. Optimizations have been made to allow you to specify memory consumption limits at all stages of a schema change. [#6705](https://github.com/StarRocks/starrocks/pull/6705)
+- If the number of duplicate values in a column of a table that is being compacted exceeds 0x40000000, the compaction is suspended. [#6513](https://github.com/StarRocks/starrocks/issues/6513)
+- After an FE restarts, it encounters high I/O and abnormally increasing disk usage due to a few issues in BDB JE v7.3.8 and shows no sign of restoring to normal. The FE is restored to normal after it rolls back to BDB JE v7.3.7. [#6634](https://github.com/StarRocks/starrocks/issues/6634)
+
 ## 2.1.7
 
 Release date: May 26, 2022
