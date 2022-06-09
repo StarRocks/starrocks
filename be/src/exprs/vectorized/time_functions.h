@@ -2,9 +2,8 @@
 
 #pragma once
 
-#include "column/column.h"
 #include "column/column_builder.h"
-#include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 #include "udf/udf.h"
@@ -12,6 +11,7 @@
 
 namespace starrocks {
 namespace vectorized {
+
 // TODO:
 class TimeFunctions {
 public:
