@@ -46,7 +46,7 @@ public class PhysicalMergeJoinOperator extends PhysicalJoinOperator {
 
     @Override
     public String getJoinAlgo() {
-        return "MERGE-JOIN";
+        return "MERGE";
     }
 
     @Override

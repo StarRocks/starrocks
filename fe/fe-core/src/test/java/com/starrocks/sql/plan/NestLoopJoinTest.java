@@ -23,7 +23,24 @@ public class NestLoopJoinTest extends PlanTestBase {
 
         sql = " select a.v2 from t0 a join t0 b on a.v3 = b.v3;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("NESTLOOP JOIN"));
+        System.err.println(planFragment);
+        Assert.assertTrue(planFragment, planFragment.contains("|   3:NESTLOOP JOIN|\n" +
+                "|  join op: INNER JOIN (COLOCATE)\n" +
+                "|  hash predicates:\n" +
+                "|  colocate: true\n" +
+                "|\n" +
+                "|----1:OlapScanNode\n" +
+                "|       TABLE: t0\n" +
+                "|       PREAGGREGATION: ON\n" +
+                "|       partitions=0/1\n" +
+                "|       rollup: t0\n" +
+                "|       tabletRatio=0/0\n" +
+                "|       tabletList=\n" +
+                "|       cardinality=1\n" +
+                "|       avgRowSize=1.0\n" +
+                "|       numNodes=0\n" +
+                "|\n" +
+                "|----2:EXCHANGE"));
     }
 
     @Test

@@ -46,7 +46,7 @@ public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
 
     @Override
     public String getJoinAlgo() {
-        return "NL-JOIN";
+        return "NESTLOOP";
     }
 
     @Override

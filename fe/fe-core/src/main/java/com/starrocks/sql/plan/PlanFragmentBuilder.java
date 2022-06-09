@@ -1657,26 +1657,22 @@ public class PlanFragmentBuilder {
                     rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
 
-            /*
-            if (node.getJoinType().isCrossJoin() ||
-                (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
-                NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
-                        leftFragment.getPlanRoot(),
-                        rightFragment.getPlanRoot(),
-                        null, node.getJoinType(), Utils.extractConjuncts(node.getOnPredicate()));
-
-                joinNode.setLimit(node.getLimit());
-                joinNode.computeStatistics(optExpr.getStatistics());
+            if (node.getJoinType().isCrossJoin()
+                    || (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())
+                    || node instanceof PhysicalNestLoopJoinOperator) {
                 List<Expr> conjuncts = Utils.extractConjuncts(node.getPredicate()).stream()
                         .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
-                joinNode.addConjuncts(conjuncts);
-                List<Expr> onConjuncts = Utils.extractConjuncts(node.getOnPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                joinNode.addConjuncts(onConjuncts);
+
+                NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
+                        leftFragment.getPlanRoot(),
+                        rightFragment.getPlanRoot(),
+                        null, node.getJoinType(), conjuncts);
+
+                joinNode.setLimit(node.getLimit());
+                joinNode.computeStatistics(optExpr.getStatistics());
+
                 // Connect parent and child fragment
                 rightFragment.getPlanRoot().setFragment(leftFragment);
 
@@ -1704,8 +1700,7 @@ public class PlanFragmentBuilder {
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
-             */
-            {
+            } else {
                 JoinOperator joinOperator = node.getJoinType();
 
                 PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
@@ -1800,11 +1795,6 @@ public class PlanFragmentBuilder {
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                             joinOperator, eqJoinConjuncts, otherJoinConjuncts);
-                } else if (node instanceof PhysicalNestLoopJoinOperator) {
-                    joinNode = new NestLoopJoinNode(
-                            context.getNextNodeId(),
-                            leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
-                            joinOperator, conjuncts);
                 } else if (node instanceof PhysicalMergeJoinOperator) {
                     joinNode = new MergeJoinNode(
                             context.getNextNodeId(),
