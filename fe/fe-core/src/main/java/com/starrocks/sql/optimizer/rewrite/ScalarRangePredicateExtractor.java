@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType;
 
@@ -60,6 +61,17 @@ public class ScalarRangePredicateExtractor {
                 .map(extractMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
+
+        List<ScalarOperator> decimalKeys =
+                extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
+                        .filter(k -> k.getType().isDecimalOfAnyVersion()).collect(Collectors.toList());
+        if (!decimalKeys.isEmpty()) {
+            for (ScalarOperator key : decimalKeys) {
+                ValueDescriptor vd = extractMap.get(key);
+                vd.toScalarOperator().forEach(s -> Preconditions.checkState(
+                        s.getChildren().stream().allMatch(c -> c.getType().equals(key.getType()))));
+            }
+        }
 
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         if (extractExpr == null) {
