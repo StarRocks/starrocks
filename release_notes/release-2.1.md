@@ -1,5 +1,26 @@
 # StarRocks version 2.1
 
+## 2.1.8
+
+发布日期：2022年6月9日
+
+### 提升改进
+
+- 优化表结构变更 (Schema Change) 等内部处理的并发控制，降低对 FE 元数据的压力，最终减少在高并发、大数据量导入场景下容易发生的导入积压、变慢的情况。[#6560](https://github.com/StarRocks/starrocks/pull/6560) [#6804](https://github.com/StarRocks/starrocks/pull/6804)
+- 优化高频导入的性能。[#6532](https://github.com/StarRocks/starrocks/pull/6532) [#6533](https://github.com/StarRocks/starrocks/pull/6533)
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 对 Routine Load 任务进行 ALTER 操作后，由于 ALTER 操作没有记录全量的 LOAD 语句信息，导致这个导入任务的元数据在做完 Checkpoint 后丢失。[#6936](https://github.com/StarRocks/starrocks/issues/6936)
+- 停止 Routine Load 任务可能导致死锁。[#6450](https://github.com/StarRocks/starrocks/issues/6450)
+- BE 导入数据时默认按 UTC+8 时区导入。如果用户机器时区为 UTC，那么用户使用 Spark Load 方式导入的数据的 DateTime 列会多加 8 个小时。 [#6592](https://github.com/StarRocks/starrocks/issues/6592)
+- GET_JSON_STRING 函数无法处理非 JSON string 类型的值。如果要提取的值是 JSON 对象或 JSON 数组、而不是 JSON string 类型，该函数会直接返回 NULL。当前优化为返回 JSON 格式的 STRING 类型的数据。[#6426](https://github.com/StarRocks/starrocks/issues/6426)
+- 如果数据量很大，做表结构变更 (Schema Change) 时可能因为内存消耗过多而失败。现允许限制表结构变更中各阶段的内存使用限额。[#6705](https://github.com/StarRocks/starrocks/pull/6705)
+- 在进行 Compaction 时，如果某列的任意一个值重复出现的次数超过 0x40000000，会导致 Compaction 卡住。[#6513](https://github.com/StarRocks/starrocks/issues/6513)
+- BDB JE v7.3.8 版本引入了一些问题，导致 FE 启动后磁盘 I/O 很高、磁盘使用率持续异常增长、且没有恢复迹象，回退到 BDB JE v7.3.7 版本后 FE 恢复正常。[#6634](https://github.com/StarRocks/starrocks/issues/6634)
+
 ## 2.1.7
 
 发布日期：2022年5月26日
