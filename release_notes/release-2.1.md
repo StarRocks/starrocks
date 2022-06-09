@@ -4,12 +4,12 @@
 
 发布日期：2022年6月9日
 
-提升改进
+### 提升改进
 
 - 优化表结构变更 (Schema Change) 等内部处理的并发控制，降低对 FE 元数据的压力，最终减少在高并发、大数据量导入场景下容易发生的导入积压、变慢的情况。[#6560](https://github.com/StarRocks/starrocks/pull/6560) [#6804](https://github.com/StarRocks/starrocks/pull/6804)
 - 优化高频导入的性能。[#6532](https://github.com/StarRocks/starrocks/pull/6532) [#6533](https://github.com/StarRocks/starrocks/pull/6533) 
 
-Bug 修复
+### Bug 修复
 
 修复了如下 Bug：
 
