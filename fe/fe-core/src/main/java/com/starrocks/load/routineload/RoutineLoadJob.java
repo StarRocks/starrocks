@@ -1028,12 +1028,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
 
-        if (table.getType() != Table.TableType.OLAP) {
-            throw new AnalysisException("Only olap table support routine load");
-        }
-
         if (table instanceof MaterializedView) {
             throw new AnalysisException("not support MaterializedView");
+        }
+
+        if (table.getType() != Table.TableType.OLAP) {
+            throw new AnalysisException("Only olap table support routine load");
         }
 
         if (routineLoadDesc == null) {
