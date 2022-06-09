@@ -1506,4 +1506,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 5000;
+
+    /**
+     * Fqdn function switch, 
+     * this switch will be deleted after release the fqdn func
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_fqdn_func = false;
 }
