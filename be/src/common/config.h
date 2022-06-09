@@ -479,7 +479,7 @@ CONF_mBool(sync_tablet_meta, "false");
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "10000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
