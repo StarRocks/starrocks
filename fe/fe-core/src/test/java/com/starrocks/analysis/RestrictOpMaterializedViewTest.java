@@ -93,7 +93,7 @@ public class RestrictOpMaterializedViewTest {
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(sql1, ctx.getSessionVariable().getSqlMode()).get(0);
         InsertStmt insertStmt = (InsertStmt) statementBase;
-        insertStmt.setInsertToMvFromBaseTable(true);
+        insertStmt.setSystem(true);
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(insertStmt, ctx);
         } catch (Exception e) {

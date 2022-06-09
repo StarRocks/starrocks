@@ -44,7 +44,7 @@ public class InsertAnalyzer {
             throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
-        if (table instanceof MaterializedView && !insertStmt.isInsertToMvFromBaseTable()) {
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw unsupportedException("not support MaterializedView");
         }
 
