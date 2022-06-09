@@ -324,7 +324,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
                 ctx->buf->flip();
                 auto st = ctx->body_sink->append(std::move(ctx->buf));
                 if (!st.ok()) {
-                    LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
+                    LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();
                     ctx->status = st;
                     return;
                 }
