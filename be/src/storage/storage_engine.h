@@ -49,9 +49,12 @@
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
 
+namespace bthread {
+class Executor;
+}
+
 namespace starrocks {
 
-class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
@@ -153,7 +156,7 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
-    AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+    bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -323,7 +326,7 @@ private:
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
-    std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
+    std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
