@@ -1803,7 +1803,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
 
         if (context.over() != null) {
