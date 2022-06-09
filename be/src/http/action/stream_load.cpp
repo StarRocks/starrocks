@@ -245,7 +245,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
-            ctx->buffer = ByteBuffer::allocate(ctx->body_bytes);
+            ctx->buffer = ByteBuffer::allocate(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
         }
     } else {
 #ifndef BE_TEST
