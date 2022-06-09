@@ -1188,6 +1188,35 @@ public class AggregateTest extends PlanTestBase {
                         "  |  output: any_value(2: v2), any_value(3: v3)\n" +
                         "  |  group by: 1: v1"));
 
+        sql = "select v1, v2,sum(if (v2 =2,1,2)) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 6: any_value | 5: sum\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: if), any_value(2: v2)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 4> : if(2: v2 = 2, 1, 2)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                ""));
+
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
 
