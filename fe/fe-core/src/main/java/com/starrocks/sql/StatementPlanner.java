@@ -22,6 +22,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -216,6 +217,7 @@ public class StatementPlanner {
                 || statement instanceof ShowAnalyzeStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
+                || statement instanceof ShowCreateTableStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt

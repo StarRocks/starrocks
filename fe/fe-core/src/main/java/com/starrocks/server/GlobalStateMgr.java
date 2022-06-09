@@ -1848,7 +1848,14 @@ public class GlobalStateMgr {
         StringBuilder sb = new StringBuilder();
 
         // 1. create table
-        // 1.1 view
+        // 1.1 materialized view
+        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+            MaterializedView mv = (MaterializedView) table;
+            sb.append(mv.getViewDefineSql());
+            createTableStmt.add(sb.toString());
+            return;
+        }
+        // 1.2 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
             sb.append("CREATE VIEW `").append(table.getName()).append("` (");
@@ -1871,7 +1878,7 @@ public class GlobalStateMgr {
             return;
         }
 
-        // 1.2 other table type
+        // 1.3 other table type
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE

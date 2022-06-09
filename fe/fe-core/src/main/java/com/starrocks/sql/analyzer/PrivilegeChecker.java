@@ -18,6 +18,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
@@ -329,6 +330,19 @@ public class PrivilegeChecker {
                         ConnectContext.get().getQualifiedUser(),
                         ConnectContext.get().getRemoteIP(),
                         tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateTableStmt(ShowCreateTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(ConnectContext.get(), statement.getDb(), statement.getTable(),
+                            PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW CREATE TABLE",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        statement.getTable());
             }
             return null;
         }
