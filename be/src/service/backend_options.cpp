@@ -32,6 +32,7 @@ static const std::string PRIORITY_CIDR_SEPARATOR = ";";
 
 std::string BackendOptions::_s_localhost;
 std::vector<CIDR> BackendOptions::_s_priority_cidrs;
+TBackend BackendOptions::_backend;
 
 bool BackendOptions::init() {
     if (!analyze_priority_cidrs()) {
@@ -79,6 +80,17 @@ bool BackendOptions::init() {
 
 std::string BackendOptions::get_localhost() {
     return _s_localhost;
+}
+
+TBackend BackendOptions::get_localBackend() {
+    _backend.__set_host(_s_localhost);
+    _backend.__set_be_port(config::be_port);
+    _backend.__set_http_port(config::webserver_port);
+    return _backend;
+}
+
+void BackendOptions::set_localhost(const std::string& host) {
+    _s_localhost = host;
 }
 
 bool BackendOptions::analyze_priority_cidrs() {

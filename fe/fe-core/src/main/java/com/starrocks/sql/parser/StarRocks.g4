@@ -210,8 +210,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -234,12 +236,20 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
 
 dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
