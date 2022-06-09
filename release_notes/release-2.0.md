@@ -1,5 +1,16 @@
 # StarRocks version 2.0
 
+## 2.0.7
+
+Release date: June 10, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- If the number of duplicate values in a column of a table that is being compacted exceeds 0x40000000, the compaction is suspended. [#6513](https://github.com/StarRocks/starrocks/issues/6513)
+- After an FE restarts, it encounters high I/O and abnormally increasing disk usage due to a few issues in BDB JE v7.3.8 and shows no sign of restoring to normal. The FE is restored to normal after it rolls back to BDB JE v7.3.7. [#6634](https://github.com/StarRocks/starrocks/issues/6634)
+
 ## 2.0.6
 
 Release date: May 25, 2022
