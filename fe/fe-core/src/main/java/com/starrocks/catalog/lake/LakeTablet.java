@@ -19,26 +19,23 @@ import java.util.Set;
  * This class represents the StarRocks lake tablet related metadata.
  * LakeTablet is based on cloud object storage, such as S3, OSS.
  * Data replicas are managed by object storage and compute replicas are managed by StarOS through Shard.
+ * Tablet id is same as StarOS Shard id.
  */
 public class LakeTablet extends Tablet {
-    private static final String JSON_KEY_SHARD_ID = "shardId";
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
 
-    @SerializedName(value = JSON_KEY_SHARD_ID)
-    private long shardId;
     @SerializedName(value = JSON_KEY_DATA_SIZE)
     private long dataSize = 0L;
     @SerializedName(value = JSON_KEY_ROW_COUNT)
     private long rowCount = 0L;
 
-    public LakeTablet(long id, long shardId) {
+    public LakeTablet(long id) {
         super(id);
-        this.shardId = shardId;
     }
 
     public long getShardId() {
-        return shardId;
+        return getId();
     }
 
     // singleReplica is not used
@@ -62,12 +59,12 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryBackendId() {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
     }
 
     @Override
     public Set<Long> getBackendIds() {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId());
     }
 
     // visibleVersion and schemaHash is not used

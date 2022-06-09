@@ -41,6 +41,7 @@
 #include "storage/olap_define.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 #include "util/json_util.h"

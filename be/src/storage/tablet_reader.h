@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
@@ -41,8 +42,10 @@ public:
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
-    static Status parse_seek_range(const TabletSharedPtr& tablet, const std::string& range_start_op,
-                                   const std::string& range_end_op, const std::vector<OlapTuple>& range_start_key,
+    static Status parse_seek_range(const TabletSharedPtr& tablet,
+                                   TabletReaderParams::RangeStartOperation range_start_op,
+                                   TabletReaderParams::RangeEndOperation range_end_op,
+                                   const std::vector<OlapTuple>& range_start_key,
                                    const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                    MemPool* mempool);
 

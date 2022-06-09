@@ -23,12 +23,12 @@
 
 #include <memory>
 
-#include "column/chunk.h"
-#include "column/column.h"
-#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h" // for ArrayVal
+// Only include column/vectorized_fwd.h in this file, you need include what you need
+// in the source files. Please NOT add unnecessary includes in this file.
 
 #undef USING_STARROCKS_UDF
 #define USING_STARROCKS_UDF using namespace starrocks_udf

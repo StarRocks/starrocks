@@ -28,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -66,6 +67,7 @@ public class Table extends MetaObject implements Writable {
         ODBC,
         JDBC,
         MATERIALIZED_VIEW,
+        LAKE
     }
 
     @SerializedName(value = "id")
@@ -160,6 +162,18 @@ public class Table extends MetaObject implements Writable {
         return type;
     }
 
+    public boolean isOlapTable() {
+        return type == TableType.OLAP;
+    }
+
+    public boolean isLakeTable() {
+        return type == TableType.LAKE;
+    }
+
+    public boolean isOlapOrLakeTable() {
+        return isOlapTable() || isLakeTable();
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }
@@ -220,6 +234,10 @@ public class Table extends MetaObject implements Writable {
             table = new JDBCTable();
         } else if (type == TableType.MATERIALIZED_VIEW) {
             table = MaterializedView.read(in);
+            table.setTypeRead(true);
+            return table;
+        } else if (type == TableType.LAKE) {
+            table = LakeTable.read(in);
             table.setTypeRead(true);
             return table;
         } else {

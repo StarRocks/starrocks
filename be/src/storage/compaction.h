@@ -13,6 +13,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
+#include "util/runtime_profile.h"
 #include "util/semaphore.hpp"
 
 namespace starrocks::vectorized {

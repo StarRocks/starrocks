@@ -313,6 +313,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_FRONTEND:
             case OperationType.OP_ADD_FIRST_FRONTEND:
+            case OperationType.OP_UPDATE_FRONTEND:
             case OperationType.OP_REMOVE_FRONTEND: {
                 data = new Frontend();
                 ((Frontend) data).readFields(in);

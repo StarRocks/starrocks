@@ -21,6 +21,8 @@
 
 #include "exec/sort_exec_exprs.h"
 
+#include <fmt/format.h>
+
 namespace starrocks {
 
 Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool) {

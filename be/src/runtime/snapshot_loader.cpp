@@ -38,6 +38,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

@@ -39,6 +39,7 @@
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

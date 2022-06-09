@@ -2,7 +2,9 @@
 
 #include "storage/chunk_helper.h"
 
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
@@ -12,6 +14,7 @@
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/metrics.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
@@ -145,6 +148,15 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
                                                                        const std::vector<ColumnId>& cids) {
     starrocks::vectorized::Fields fields;
     for (ColumnId cid : cids) {
+        auto f = convert_field_to_format_v2(cid, schema.column(cid));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+    }
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+}
+
+starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
+    starrocks::vectorized::Fields fields;
+    for (ColumnId cid = 0; cid < schema.num_short_key_columns(); ++cid) {
         auto f = convert_field_to_format_v2(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }

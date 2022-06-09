@@ -100,14 +100,19 @@ public class StarRocksFE {
             // check command line options
             checkCommandLineOptions(cmdLineOpts);
 
+            // check meta dir
+            checkMetaDir();
+
             LOG.info("StarRocks FE starting...");
 
-            FrontendOptions.init();
+            FrontendOptions.init(args);
             ExecuteEnv.setup();
 
             // init globalStateMgr and wait it be ready
             GlobalStateMgr.getCurrentState().initialize(args);
             GlobalStateMgr.getCurrentState().waitForReady();
+
+            FrontendOptions.saveStartType();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -133,6 +138,47 @@ public class StarRocksFE {
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
             e.printStackTrace();
+        }
+    }
+
+    private static void checkMetaDir() {
+
+        // check meta dir
+        //   if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
+        //   we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
+        //   and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
+        //   we need to let users keep only one to avoid starting from outdated metadata.
+        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
+        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+        String metaDir = Config.meta_dir;
+        if (metaDir.equals(newDefaultMetaDir)) {
+            File oldMeta = new File(oldDefaultMetaDir);
+            File newMeta = new File(newDefaultMetaDir);
+            if (oldMeta.exists() && newMeta.exists()) {
+                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
+                                "Please make sure {} has the latest data, and remove the another one.",
+                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
+                System.exit(-1);
+            }
+        }
+
+        File meta = new File(metaDir);
+        if (!meta.exists()) {
+            // If metaDir is not the default config, it means the user has specified the other directory
+            // We should not use the oldDefaultMetaDir.
+            // Just exit in this case
+            if (!metaDir.equals(newDefaultMetaDir)) {
+                LOG.error("meta dir {} dose not exist, will exit", metaDir);
+                System.exit(-1);
+            }
+            File oldMeta = new File(oldDefaultMetaDir);
+            if (oldMeta.exists()) {
+                // For backward compatible
+                Config.meta_dir = oldDefaultMetaDir;
+            } else {
+                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
+                System.exit(-1);
+            }
         }
     }
 
@@ -163,6 +209,7 @@ public class StarRocksFE {
     private static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
+        options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");

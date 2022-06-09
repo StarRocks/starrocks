@@ -40,18 +40,21 @@ add_library(Service
         ${EXEC_FILES}
 )
 
-add_executable(starrocks_be
-    starrocks_main.cpp
-)
+# only build starrocks_be when TEST is off
+if (NOT ${MAKE_TEST} STREQUAL "ON")
+    add_executable(starrocks_be
+        starrocks_main.cpp
+        )
 
-# This permits libraries loaded by dlopen to link to the symbols in the program.
-# set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
+    # This permits libraries loaded by dlopen to link to the symbols in the program.
+    # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
 
-target_link_libraries(starrocks_be
-    ${STARROCKS_LINK_LIBS}
-)
+    target_link_libraries(starrocks_be
+        ${STARROCKS_LINK_LIBS}
+        )
 
-install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
+    install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
 
-install(TARGETS starrocks_be
-    DESTINATION ${OUTPUT_DIR}/lib/)
+    install(TARGETS starrocks_be
+        DESTINATION ${OUTPUT_DIR}/lib/)
+endif()

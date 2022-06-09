@@ -2,6 +2,7 @@
 
 #include "runtime/sorted_chunks_merger.h"
 
+#include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
 
 namespace starrocks::vectorized {

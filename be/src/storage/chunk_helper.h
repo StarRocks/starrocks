@@ -4,16 +4,6 @@
 
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/binary_column.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/decimalv3_column.h"
-#include "column/field.h"
-#include "column/nullable_column.h"
-#include "column/object_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/schema.h"
@@ -25,11 +15,6 @@ class TabletColumn;
 class TabletSchema;
 
 namespace vectorized {
-
-class Chunk;
-class Field;
-class Column;
-class Schema;
 
 class ChunkHelper {
 public:
@@ -47,6 +32,9 @@ public:
     // Convert TabletSchema to vectorized::Schema with changing format v1 type to format v2 type.
     static vectorized::Schema convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
                                                           const std::vector<ColumnId>& cids);
+
+    // Get schema with format v2 type containing short key columns from TabletSchema.
+    static vectorized::Schema get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema);
 
     static ColumnId max_column_id(const vectorized::Schema& schema);
 

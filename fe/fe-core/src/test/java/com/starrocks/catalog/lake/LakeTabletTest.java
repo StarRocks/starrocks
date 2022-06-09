@@ -29,7 +29,7 @@ public class LakeTabletTest {
             }
         };
 
-        LakeTablet tablet = new LakeTablet(1L, 2L);
+        LakeTablet tablet = new LakeTablet(1L);
         tablet.setDataSize(3L);
         tablet.setRowCount(4L);
 
@@ -50,11 +50,10 @@ public class LakeTabletTest {
         // Check
         Assert.assertNotNull(newTablet);
         Assert.assertEquals(1L, newTablet.getId());
-        Assert.assertEquals(2L, newTablet.getShardId());
+        Assert.assertEquals(1L, newTablet.getShardId());
         Assert.assertEquals(3L, newTablet.getDataSize(true));
         Assert.assertEquals(4L, newTablet.getRowCount(0L));
 
         file.delete();
     }
-
 }

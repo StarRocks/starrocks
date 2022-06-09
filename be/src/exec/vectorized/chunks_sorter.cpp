@@ -39,6 +39,14 @@ static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_c
     }
 }
 
+void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
+    chunk = cnk;
+    order_by_columns.reserve(sort_exprs->size());
+    for (ExprContext* expr_ctx : (*sort_exprs)) {
+        order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
+    }
+}
+
 Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
                                      std::vector<std::vector<uint8_t>>& filter_array,
                                      const std::vector<int>& sort_order_flags, const std::vector<int>& null_first_flags,

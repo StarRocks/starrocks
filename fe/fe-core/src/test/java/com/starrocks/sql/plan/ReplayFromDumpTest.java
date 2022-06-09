@@ -418,4 +418,13 @@ public class ReplayFromDumpTest {
                 "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
         Assert.assertTrue(replayPair.second.contains("OLAP TABLE SINK"));
     }
+
+    @Test
+    public void testMergeGroupWithDeleteBestExpression() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+        // check without expression
+        Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
 }

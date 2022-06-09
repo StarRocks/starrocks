@@ -25,13 +25,7 @@ struct DataSegment {
 
     int64_t mem_usage() const { return chunk->memory_usage(); }
 
-    void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
-        chunk = cnk;
-        order_by_columns.reserve(sort_exprs->size());
-        for (ExprContext* expr_ctx : (*sort_exprs)) {
-            order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
-        }
-    }
+    void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
     // there is two compares in the method,
     // the first is:

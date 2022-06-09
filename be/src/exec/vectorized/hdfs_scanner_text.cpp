@@ -2,6 +2,7 @@
 
 #include "exec/vectorized/hdfs_scanner_text.h"
 
+#include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"

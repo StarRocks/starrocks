@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "runtime/primitive_type.h"
