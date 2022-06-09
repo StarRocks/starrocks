@@ -166,6 +166,15 @@ Status TabletManager::put_txn_log(const std::string& group, const TxnLog& log) {
     return Status::OK();
 }
 
+Status TabletManager::put_txn_log(const std::string& group, TxnLogPtr log) {
+    auto txnlog_path = txn_log_path(group, log->tablet_id(), log->txn_id());
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txnlog_path));
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(txnlog_path));
+    RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
+    RETURN_IF_ERROR(wf->close());
+    return Status::OK();
+}
+
 Status TabletManager::delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id) {
     auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txnlog_path));
