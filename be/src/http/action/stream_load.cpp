@@ -53,6 +53,7 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
+#include "simdjson.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -245,6 +246,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
+            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             ctx->buffer = ByteBuffer::allocate(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
         }
     } else {
