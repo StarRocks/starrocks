@@ -86,7 +86,7 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
     // and used later in pull_chunk() of source operator. If we reuse partition_row_indexes in partitioner,
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
-    partitioner.partition_chunk(chunk, *partition_row_indexes);
+    RETURN_IF_ERROR(partitioner.partition_chunk(chunk, *partition_row_indexes));
 
     for (size_t i = 0; i < _source->get_sources().size(); ++i) {
         size_t from = partitioner.partition_begin_offset(i);

@@ -53,7 +53,7 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(Runtime
 }
 
 Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    _aggregator->evaluate_exprs(chunk.get());
+    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
     bool agg_group_by_with_limit =
             (!_aggregator->is_none_group_by_exprs() &&     // has group by
