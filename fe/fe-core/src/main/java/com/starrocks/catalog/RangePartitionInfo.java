@@ -233,6 +233,14 @@ public class RangePartitionInfo extends PartitionInfo {
         idToInMemory.put(partitionId, isInMemory);
     }
 
+    /**
+     * @param info
+     * @TODO This method may be used in future
+     */
+    public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
+
+    }
+
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {
         setRangeInternal(partitionId, isTemp, range);
     }
