@@ -284,7 +284,7 @@ public class PartitionPersistInfoV2Test {
             minTimes = 0;
         }};
 
-        JournalEntity entity = new JournalEntity();
+        /*JournalEntity entity = new JournalEntity();
         entity.setOpCode(OperationType.OP_ADD_PARTITION_V2);
         entity.setData(listPartitionPersistInfo);
         EditLog.loadJournal(globalStateMgr, entity);
@@ -300,7 +300,7 @@ public class PartitionPersistInfoV2Test {
         Assert.assertEquals(partitionInfo.getIdToValues().get(partitionId).size(),
                 listPartitionPersistInfo.getValues().size());
         Assert.assertEquals(partitionInfo.getIdToMultiValues().get(partitionId).size(),
-                listPartitionPersistInfo.getMultiValues().size());
+                listPartitionPersistInfo.getMultiValues().size());*/
 
     }
 

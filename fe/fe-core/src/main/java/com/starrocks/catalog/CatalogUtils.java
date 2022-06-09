@@ -7,6 +7,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
+import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;

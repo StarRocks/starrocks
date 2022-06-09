@@ -325,13 +325,13 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToInMemory.put(partitionId, partitionPersistInfo.isInMemory());
 
         List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
-        if (multiValues != null && multiValues.size() > 0){
+        if (multiValues != null && multiValues.size() > 0) {
             this.idToMultiValues.put(partitionId, partitionPersistInfo.getMultiValues());
             this.setMultiLiteralExprValues(partitionId, partitionPersistInfo.getMultiValues());
         }
 
         List<String> values = partitionPersistInfo.getValues();
-        if (values != null && values.size() > 0){
+        if (values != null && values.size() > 0) {
             if (values.size() > 0) {
                 this.idToValues.put(partitionId, partitionPersistInfo.getValues());
                 this.setLiteralExprValues(partitionId, partitionPersistInfo.getValues());
