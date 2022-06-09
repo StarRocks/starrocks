@@ -1,13 +1,26 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#pragma once
+
+// Note: include order matters
+// clang-format off
+#include "common/compiler_util.h" // DIAGNOSTIC_PUSH
+
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/execution_queue.h>
 DIAGNOSTIC_POP
 
+// clang-format on
+
+#include <cassert>
+
 #include "common/ownership.h"
 #include "gutil/macros.h"
-#include "util/threadpool.h"
+
+namespace starrocks {
+class ThreadPool;
+}
 
 namespace starrocks::bthreads {
 
@@ -24,12 +37,10 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ThreadPoolExecutor);
 
-    ~ThreadPoolExecutor() override {
-        if (_ownership == kTakesOwnership) delete _thread_pool;
-    }
+    ~ThreadPoolExecutor() override;
 
     void set_thread_pool(ThreadPool* thread_pool) {
-        CHECK(_thread_pool == nullptr);
+        assert(_thread_pool == nullptr);
         _thread_pool = thread_pool;
     }
 
@@ -44,17 +55,5 @@ private:
     Ownership _ownership;
     int64_t _busy_sleep_ms;
 };
-
-inline int ThreadPoolExecutor::submit(void* (*fn)(void*), void* args) {
-    Status st;
-    while (true) {
-        st = _thread_pool->submit_func([=]() { fn(args); });
-        if (!st.is_service_unavailable()) break;
-        LOG(INFO) << "async_delta_writer is busy, retry after " << _busy_sleep_ms << "ms";
-        bthread_usleep(_busy_sleep_ms * 1000);
-    }
-    LOG_IF(WARNING, !st.ok()) << st;
-    return st.ok() ? 0 : -1;
-}
 
 } // namespace starrocks::bthreads
