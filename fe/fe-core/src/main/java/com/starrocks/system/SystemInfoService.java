@@ -263,6 +263,9 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(droppedBackend.getOwnerClusterName());
         if (null != cluster) {
             cluster.removeBackend(droppedBackend.getId());
+            // remove worker
+            String starletHost = droppedBackend.getHost() + ":" + droppedBackend.getStarletPort();
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(starletHost);
         } else {
             LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
         }
