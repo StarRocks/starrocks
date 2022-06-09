@@ -51,6 +51,7 @@ public class OperationType {
     public static final short OP_MODIFY_VIEW_DEF = 119;
     public static final short OP_REPLACE_TEMP_PARTITION = 210;
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
+    public static final short OP_ADD_PARTITION_V2 = 212;
 
     // 20~29 120~129 220~229 ...
     @Deprecated

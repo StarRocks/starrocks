@@ -13,6 +13,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -43,18 +44,32 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         this.partitionProperties = partitionProperties;
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return this.partitionProperties;
+    }
+
+    @Override
     public short getReplicationNum() {
         return this.replicationNum;
     }
 
+    @Override
     public DataProperty getPartitionDataProperty() {
         return this.partitionDataProperty;
     }
 
+    @Override
+    public Long getVersionInfo() {
+        return versionInfo;
+    }
+
+    @Override
     public TTabletType getTabletType() {
         return this.tabletType;
     }
 
+    @Override
     public boolean isInMemory() {
         return this.isInMemory;
     }
@@ -63,8 +78,14 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         return this.values;
     }
 
+    @Override
     public String getPartitionName() {
         return this.partitionName;
+    }
+
+    @Override
+    public boolean isSetIfNotExists() {
+        return ifNotExists;
     }
 
     public List<LiteralExpr> getLiteralExprValues() throws AnalysisException {
@@ -83,8 +104,17 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
+        this.analyzeValues();
         this.analyzeProperties(tableProperties);
         this.columnDefList = columnDefList;
+    }
+
+    private void analyzeValues() throws AnalysisException {
+        for (String value : this.values) {
+            if (StringUtils.isBlank(value)){
+                throw new AnalysisException("Partition value should not have blank item");
+            }
+        }
     }
 
     private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {

@@ -4,10 +4,14 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiItemListPartitionDesc;
+import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionValue;
+import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -21,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -39,6 +44,8 @@ public class ListPartitionInfo extends PartitionInfo {
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
     private Map<Long, List<LiteralExpr>> idToLiteralExprValues;
+    @SerializedName("idToTemp")
+    private Map<Long, Boolean> idToIsTempPartition;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -50,6 +57,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
+        this.idToIsTempPartition = new HashMap<>();
     }
 
     public ListPartitionInfo() {
@@ -59,6 +67,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
+        this.idToIsTempPartition = new HashMap<>();
     }
 
     public void setValues(long partitionId, List<String> values) {
@@ -74,6 +83,18 @@ public class ListPartitionInfo extends PartitionInfo {
             partitionValues.add(partitionValue);
         }
         this.idToLiteralExprValues.put(partitionId, partitionValues);
+    }
+
+    public void setBatchLiteralExprValues(Map<Long, List<String>> batchValues) throws AnalysisException {
+        for (Map.Entry<Long, List<String>> entry : batchValues.entrySet()) {
+            long partitionId = entry.getKey();
+            List<String> values = entry.getValue();
+            this.setLiteralExprValues(partitionId, values);
+        }
+    }
+
+    public Map<Long, List<LiteralExpr>> getLiteralExprValues() {
+        return this.idToLiteralExprValues;
     }
 
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
@@ -93,6 +114,19 @@ public class ListPartitionInfo extends PartitionInfo {
             multiPartitionValues.add(partitionValues);
         }
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
+    }
+
+    public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
+            throws AnalysisException {
+        for (Map.Entry<Long, List<List<String>>> entry : batchMultiValues.entrySet()) {
+            long partitionId = entry.getKey();
+            List<List<String>> multiValues = entry.getValue();
+            this.setMultiLiteralExprValues(partitionId, multiValues);
+        }
+    }
+
+    public Map<Long, List<List<LiteralExpr>>> getMultiLiteralExprValues() {
+        return this.idToMultiLiteralExprValues;
     }
 
     private void setIsMultiColumnPartition() {
@@ -240,5 +274,58 @@ public class ListPartitionInfo extends PartitionInfo {
             return this.multiValuesToString(this.idToMultiLiteralExprValues.get(partitionId));
         }
         return "";
+    }
+
+    public void handleNewListPartitionDescs(List<PartitionDesc> partitionDescs, List<Partition> partitionList,
+                                            Set<String> existPartitionNameSet, boolean isTempPartition)
+            throws AnalysisException {
+        for (int i = 0; i < partitionDescs.size(); i++) {
+            Partition partition = partitionList.get(i);
+            String name = partition.getName();
+            if (!existPartitionNameSet.contains(name)) {
+                long partitionId = partition.getId();
+                PartitionDesc partitionDesc = partitionDescs.get(i);
+                this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
+                this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
+                this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
+                if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                    MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                    this.idToMultiValues.put(partitionId, multiItemListPartitionDesc.getMultiValues());
+                    this.setMultiLiteralExprValues(partitionId, multiItemListPartitionDesc.getMultiValues());
+                } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                    SingleItemListPartitionDesc singleItemListPartitionDesc =
+                            (SingleItemListPartitionDesc) partitionDesc;
+                    this.idToValues.put(partitionId, singleItemListPartitionDesc.getValues());
+                    this.setLiteralExprValues(partitionId, singleItemListPartitionDesc.getValues());
+                } else {
+                    throw new AnalysisException(
+                            "add list partition only support single item or multi item list partition now");
+                }
+                this.idToIsTempPartition.put(partitionId, isTempPartition);
+            }
+        }
+    }
+
+    public void unprotectHandleNewartitionDesc(ListPartitionPersistInfo partitionPersistInfo) throws AnalysisException {
+        Partition partition = partitionPersistInfo.getPartition();
+        long partitionId = partition.getId();
+        this.idToDataProperty.put(partitionId, partitionPersistInfo.getDataProperty());
+        this.idToReplicationNum.put(partitionId, partitionPersistInfo.getReplicationNum());
+        this.idToInMemory.put(partitionId, partitionPersistInfo.isInMemory());
+
+        List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
+        if (multiValues != null && multiValues.size() > 0) {
+            this.idToMultiValues.put(partitionId, partitionPersistInfo.getMultiValues());
+            this.setMultiLiteralExprValues(partitionId, partitionPersistInfo.getMultiValues());
+        }
+
+        List<String> values = partitionPersistInfo.getValues();
+        if (values != null && values.size() > 0) {
+            if (values.size() > 0) {
+                this.idToValues.put(partitionId, partitionPersistInfo.getValues());
+                this.setLiteralExprValues(partitionId, partitionPersistInfo.getValues());
+            }
+        }
+
     }
 }

@@ -105,6 +105,7 @@ public enum ErrorCode {
     ERR_DROP_LAST_PARTITION(1508, new byte[] {'H', 'Y', '0', '0', '0'},
             "Cannot remove all partitions, use DROP TABLE instead"),
     ERR_SAME_NAME_PARTITION(1517, new byte[] {'H', 'Y', '0', '0', '0'}, "Duplicate partition name %s"),
+    ERR_SAME_VALUE_PARTITION(1518, new byte[] {'H', 'Y', '0', '0', '0'}, "Duplicate partition value %s"),
     ERR_AUTH_PLUGIN_NOT_LOADED(1524, new byte[] {'H', 'Y', '0', '0', '0'}, "Plugin '%s' is not loaded"),
     ERR_WRONG_PARTITION_NAME(1567, new byte[] {'H', 'Y', '0', '0', '0'}, "Incorrect partition name '%s'"),
     ERR_VARIABLE_IS_READONLY(1621, new byte[] {'H', 'Y', '0', '0', '0'}, "Variable '%s' is a read only variable"),
