@@ -2741,11 +2741,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);
                 }
-                try {
-                    return ScalarType.createUnifiedDecimalType(precision);
-                } catch (AnalysisException e) {
-                    throw new IllegalArgumentException(e);
-                }
+                return ScalarType.createUnifiedDecimalType(precision, ScalarType.DEFAULT_SCALE);
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
