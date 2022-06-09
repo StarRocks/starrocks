@@ -201,22 +201,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     /**
-     * Adapt dop according to number of backends and number of instances
-     *
-     * @param numBackends  total number of backends
-     * @param numInstances total number of fragment instances
-     */
-    public void adaptPipelineDop(int numBackends, int numInstances) {
-        Preconditions.checkState(ConnectContext.get() != null &&
-                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                getPlanRoot().canUsePipeLine());
-
-        int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
-        this.pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-        this.parallelExecNum = degreeOfParallelism / pipelineDop;
-    }
-
-    /**
      * Several cases we could prefer the instance-parallel:
      * 1. One-phase aggregation: avoid local exchange
      * 2. Colocate join
