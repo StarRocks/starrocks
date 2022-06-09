@@ -1,4 +1,4 @@
-name: GitHub Actions Demo
+name: GitHub StarRocks BE Unittest
 on: [push]
 jobs:
   Explore-GitHub-Actions:
