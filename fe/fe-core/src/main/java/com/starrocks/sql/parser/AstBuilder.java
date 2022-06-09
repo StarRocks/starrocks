@@ -182,7 +182,6 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -2756,11 +2755,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);
                 }
-                return ScalarType.createUnifiedDecimalType(precision, ScalarType.DEFAULT_SCALE);
+                try {
+                    return ScalarType.createUnifiedDecimalType(precision);
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
-            return getDecimalType(context, PrimitiveType.valueOf(context.children.get(0).getText().toUpperCase()));
+            try {
+                ScalarType.checkEnableDecimalV3();
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            final PrimitiveType primitiveType = PrimitiveType.valueOf(context.children.get(0).getText().toUpperCase());
+            if (precision != null) {
+                if (scale != null) {
+                    return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
+                }
+                return ScalarType.createDecimalV3Type(primitiveType, precision);
+            }
+            return ScalarType.createDecimalV3Type(primitiveType);
         } else if (context.DECIMALV2() != null) {
             if (precision != null) {
                 if (scale != null) {
@@ -2772,24 +2787,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             throw new IllegalArgumentException("Unsupported type " + context.getText());
         }
-    }
-
-    @NotNull
-    private ScalarType getDecimalType(StarRocksParser.DecimalTypeContext context, PrimitiveType primitiveType) {
-        try {
-            ScalarType.checkEnableDecimalV3();
-        } catch (AnalysisException e) {
-            throw new RuntimeException(e);
-        }
-        if (context.precision != null) {
-            int precision = Integer.parseInt(context.precision.getText());
-            if (context.scale != null) {
-                int scale = Integer.parseInt(context.scale.getText());
-                return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
-            }
-            return ScalarType.createDecimalV3Type(primitiveType, precision);
-        }
-        return ScalarType.createDecimalV3Type(primitiveType);
     }
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {

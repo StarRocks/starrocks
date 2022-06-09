@@ -203,7 +203,7 @@ public class CreateTableWithDecimalTypesTest {
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = Exception.class)
     public void createTableWithDecimalV3ScaleAbsent() throws Exception {
         createTableFail(true, "DECIMAL(9)");
         Assert.fail("should throw an exception");
@@ -233,7 +233,7 @@ public class CreateTableWithDecimalTypesTest {
         Assert.fail("should throw an exception");
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = Exception.class)
     public void createTableWithDecimalV2ScaleAbsent() throws Exception {
         createTableFail(false, "DECIMAL(9)");
         Assert.fail("should throw an exception");
