@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -132,6 +131,7 @@ public class PluginZipTest {
     public void testExtract() {
         try {
             Files.copy(PluginTestUtil.getTestPath("source/test.zip"), PluginTestUtil.getTestPath("source/test-a.zip"));
+
             PluginZip util = new PluginZip(PluginTestUtil.getTestPathString("source/test-a.zip"), null);
 
             Path actualPath = util.extract(PluginTestUtil.getTestPath("target"));
