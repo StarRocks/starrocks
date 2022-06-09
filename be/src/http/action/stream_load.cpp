@@ -243,8 +243,10 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             return Status::InternalError(ss.str());
         }
 
-        // allocate buffer in advance.
-        ctx->buffer = ByteBuffer::allocate(ctx->body_bytes);
+        if (ctx->format == TFileFormatType::FORMAT_JSON) {
+            // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
+            ctx->buffer = ByteBuffer::allocate(ctx->body_bytes);
+        }
     } else {
 #ifndef BE_TEST
         evhttp_connection_set_max_body_size(evhttp_request_get_connection(http_req->get_evhttp_request()),
