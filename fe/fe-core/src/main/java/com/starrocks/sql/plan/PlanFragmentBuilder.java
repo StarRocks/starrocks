@@ -1537,13 +1537,9 @@ public class PlanFragmentBuilder {
         private void setJoinPushDown(JoinNode node) {
             // Push down the predicates constructed by the right child when the
             // join op is inner join or left semi join or right join(semi, outer, anti)
-            if (ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
+            node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
                     && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
-                    node.getJoinOp().isRightJoin())) {
-                node.setIsPushDown(true);
-            } else {
-                node.setIsPushDown(false);
-            }
+                    node.getJoinOp().isRightJoin()));
         }
 
         private boolean isDopAutoEstimate() {
@@ -1660,7 +1656,7 @@ public class PlanFragmentBuilder {
                     rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
 
-                /*
+            /*
             if (node.getJoinType().isCrossJoin() ||
                 (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
                 NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
@@ -1707,7 +1703,7 @@ public class PlanFragmentBuilder {
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
-                 */
+             */
             {
                 JoinOperator joinOperator = node.getJoinType();
 
