@@ -1031,7 +1031,7 @@ public class GlobalStateMgr {
         taskManager.start();
 
         // register service to starMgr
-        if (Config.integrate_staros) {
+        if (Config.integrate_starmgr) {
             int clusterId = getCurrentState().getClusterId();
             getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
         }
@@ -1065,7 +1065,7 @@ public class GlobalStateMgr {
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
             // get serviceId from starMgr
-            if (Config.integrate_staros) {
+            if (Config.integrate_starmgr) {
                 int clusterId = getCurrentState().getClusterId();
                 getStarOSAgent().getServiceId(Integer.toString(clusterId));
             }
