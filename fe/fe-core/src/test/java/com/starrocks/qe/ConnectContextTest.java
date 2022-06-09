@@ -148,7 +148,7 @@ public class ConnectContextTest {
 
         // GlobalStateMgr
         Assert.assertNull(ctx.getGlobalStateMgr());
-        ctx.setCatalog(globalStateMgr);
+        ctx.setGlobalStateMgr(globalStateMgr);
         Assert.assertNotNull(ctx.getGlobalStateMgr());
 
         // clean up

@@ -13,6 +13,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "udf/udf.h"
+#include "util/phmap/phmap.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {

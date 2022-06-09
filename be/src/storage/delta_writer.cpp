@@ -9,7 +9,9 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
 namespace starrocks::vectorized {
@@ -237,7 +239,10 @@ Status DeltaWriter::close() {
     case kClosed:
         return Status::OK();
     case kWriting:
-        auto st = _flush_memtable_async();
+        Status st = Status::OK();
+        if (_mem_table != nullptr) {
+            st = _flush_memtable_async();
+        }
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
@@ -245,6 +250,10 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::_flush_memtable_async() {
+    // _mem_table is nullptr means write() has not been called
+    if (_mem_table == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_mem_table->finalize());
     return _flush_token->submit(std::move(_mem_table));
 }

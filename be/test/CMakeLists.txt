@@ -152,6 +152,7 @@ set(EXEC_FILES
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
+        ./storage/lake/tablet_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -281,6 +282,10 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./gutil/sysinfo-test.cc
         )
+
+if ("${USE_STAROS}" STREQUAL "ON")
+        list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 

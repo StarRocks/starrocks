@@ -39,6 +39,7 @@
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "util/blocking_queue.hpp"
 #include "util/thrift_server.h"
 

@@ -17,6 +17,8 @@
 
 #include "string_parser.hpp"
 
+#include "types/constexpr.h"
+
 namespace starrocks {
 
 template <>

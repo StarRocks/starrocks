@@ -2,13 +2,22 @@
 #include "storage/compaction_task.h"
 
 #include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_scheduler.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
+#include "util/starrocks_metrics.h"
 #include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {
+
+CompactionTask::~CompactionTask() {
+    if (_mem_tracker) {
+        delete _mem_tracker;
+    }
+}
 
 void CompactionTask::run() {
     LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id

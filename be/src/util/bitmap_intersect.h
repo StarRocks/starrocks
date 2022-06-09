@@ -3,7 +3,9 @@
 #pragma once
 
 #include "exprs/anyval_util.h"
-#include "util/bitmap_value.h"
+#include "runtime/datetime_value.h"
+#include "runtime/string_value.h"
+#include "types/bitmap_value.h"
 
 namespace starrocks {
 

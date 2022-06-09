@@ -215,11 +215,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
-        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
-        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
-        rebuildFullSchema();
-        partitionInfo.postDeserialized();
+        super.gsonPostProcess();
+
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
@@ -244,7 +241,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public void write(DataOutput out) throws IOException {
         // write type first
         Text.writeString(out, type.name());
-        partitionInfo.preSerialize();
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 

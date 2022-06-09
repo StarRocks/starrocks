@@ -98,6 +98,9 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     // resource => set<TableName>
     private final Multimap<String, TableName> refreshColumnsTables = HashMultimap.create();
 
+    // External catalog's resource
+    private final List<String> externalCatalogResources = Lists.newArrayList();
+
     public MetastoreEventsProcessor(HiveRepository hiveRepository) {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
         this.hiveRepository = hiveRepository;
@@ -140,6 +143,16 @@ public class MetastoreEventsProcessor extends MasterDaemon {
                 Config.hms_refresh_columns_statistic_interval_s);
         scheduler.scheduleWithFixedDelay(this::refreshTableColumns, Config.hms_refresh_columns_statistic_interval_s,
                 Config.hms_refresh_columns_statistic_interval_s, TimeUnit.SECONDS);
+    }
+
+    public void registerExternalCatalogResource(String resource) {
+        if (!externalCatalogResources.contains(resource)) {
+            externalCatalogResources.add(resource);
+        }
+    }
+
+    public void unregisterExternalCatalogResource(String resource) {
+        externalCatalogResources.remove(resource);
     }
 
     public void registerTable(HiveTable tbl) {
@@ -334,13 +347,15 @@ public class MetastoreEventsProcessor extends MasterDaemon {
         }
 
         events.forEach(event -> prepareRefreshHiveColumnStats(resourceName, event));
-        lastSyncedEventIds.put(resourceName, events.get(events.size() - 1).getEventId());
+        lastSyncedEventIds.put(resourceName, filteredEvents.get(filteredEvents.size() - 1).getEventId());
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        List<String> resource = Lists.newArrayList(tables.rowKeySet());
-        for (String resourceName : resource) {
+        List<String> resources = Lists.newArrayList(tables.rowKeySet());
+        resources.addAll(externalCatalogResources);
+
+        for (String resourceName : resources) {
             eventProcessorLock.writeLock().lock();
             List<NotificationEvent> events = Collections.emptyList();
             try {

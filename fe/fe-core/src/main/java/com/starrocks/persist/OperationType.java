@@ -229,4 +229,8 @@ public class OperationType {
     // materialized view
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+
+    public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
+    // manage system node info 10100 ~ 10120
+    public static final short OP_UPDATE_FRONTEND = 10101;
 }

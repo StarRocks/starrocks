@@ -27,6 +27,8 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
@@ -43,7 +45,7 @@ import java.util.Map;
 /*
  * Repository of a partition's related infos
  */
-public class PartitionInfo implements Writable {
+public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
     @SerializedName(value = "type")
@@ -58,6 +60,7 @@ public class PartitionInfo implements Writable {
     @SerializedName(value = "isMultiColumnPartition")
     protected boolean isMultiColumnPartition = false;
 
+    @SerializedName(value = "idToInMemory")
     protected Map<Long, Boolean> idToInMemory;
 
     // partition id -> tablet type
@@ -92,14 +95,6 @@ public class PartitionInfo implements Writable {
         idToDataProperty.put(partitionId, newDataProperty);
     }
 
-    public boolean isUseStarOS(long partitionId) {
-        DataProperty dataProperty = getDataProperty(partitionId);
-        if (dataProperty == null) {
-            return false;
-        }
-        return CatalogUtils.isUseStarOS(dataProperty.getStorageMedium());
-    }
-
     public int getQuorumNum(long partitionId) {
         return getReplicationNum(partitionId) / 2 + 1;
     }
@@ -125,13 +120,16 @@ public class PartitionInfo implements Writable {
     }
 
     public TTabletType getTabletType(long partitionId) {
-        if (!idToTabletType.containsKey(partitionId)) {
+        if (idToTabletType == null || !idToTabletType.containsKey(partitionId)) {
             return TTabletType.TABLET_TYPE_DISK;
         }
         return idToTabletType.get(partitionId);
     }
 
     public void setTabletType(long partitionId, TTabletType tabletType) {
+        if (idToTabletType == null) {
+            idToTabletType = new HashMap<>();
+        }
         idToTabletType.put(partitionId, tabletType);
     }
 
@@ -212,12 +210,12 @@ public class PartitionInfo implements Writable {
         }
     }
 
-    public void preSerialize() throws IOException {
-
+    @Override
+    public void gsonPreProcess() throws IOException {
     }
 
-    public void postDeserialized() throws IOException {
-
+    @Override
+    public void gsonPostProcess() throws IOException {
     }
 
     @Override

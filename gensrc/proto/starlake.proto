@@ -35,7 +35,7 @@ message TabletMetadataPB {
 
 message TxnLogPB {
     message OpWrite {
-        repeated RowsetMetadataPB rowset = 1;
+        optional RowsetMetadataPB rowset = 1;
         repeated string deletes = 2; 
         repeated uint32 partial_column_ids = 3;
     }

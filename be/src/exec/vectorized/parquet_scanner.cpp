@@ -1,11 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 #include "exec/vectorized/parquet_scanner.h"
 
-#include <exprs/vectorized/cast_expr.h>
-#include <exprs/vectorized/column_ref.h>
-#include <fs/fs_broker.h>
-
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exprs/vectorized/cast_expr.h"
+#include "exprs/vectorized/column_ref.h"
+#include "fs/fs_broker.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"

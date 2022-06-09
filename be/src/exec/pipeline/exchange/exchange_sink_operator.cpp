@@ -9,6 +9,7 @@
 #include <memory>
 #include <random>
 
+#include "common/config.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
@@ -213,7 +214,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
-    if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
+    if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
@@ -425,7 +426,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
-            if (_current_request_bytes > _request_bytes_threshold) {
+            if (_current_request_bytes > config::max_transmit_batched_bytes) {
                 butil::IOBuf attachment;
                 construct_brpc_attachment(_chunk_request, attachment);
                 for (auto idx : _channel_indices) {

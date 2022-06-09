@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "exprs/expr_context.h"

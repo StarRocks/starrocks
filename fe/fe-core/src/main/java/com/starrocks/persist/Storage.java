@@ -195,12 +195,29 @@ public class Storage {
         }
     }
 
+    // note: if you want to use this func, please make sure that properties that have stored in role file
+    // could not be delete
     public void writeFrontendRoleAndNodeName(FrontendNodeType role, String nameNode) throws IOException {
         Preconditions.checkState(!Strings.isNullOrEmpty(nameNode));
         Properties properties = new Properties();
         properties.setProperty(FRONTEND_ROLE, role.name());
         properties.setProperty(NODE_NAME, nameNode);
 
+        try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
+            file.seek(0);
+            try (FileOutputStream out = new FileOutputStream(file.getFD())) {
+                properties.store(out, null);
+                file.setLength(out.getChannel().position());
+            }
+        }
+    }
+
+    public void writeFeStartFeHostType(String hostType) throws IOException {
+        Preconditions.checkState(!Strings.isNullOrEmpty(hostType));
+        Properties properties = new Properties();
+        properties.setProperty(FRONTEND_ROLE, this.role.name());
+        properties.setProperty(NODE_NAME, this.nodeName);
+        properties.setProperty("hostType", hostType);
         try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
             file.seek(0);
             try (FileOutputStream out = new FileOutputStream(file.getFD())) {

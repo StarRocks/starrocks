@@ -26,10 +26,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -335,20 +337,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskInfo> tasksResult = Lists.newArrayList();
         result.setTasks(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
-
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<Task> taskList = taskManager.showTasks(params.db);
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<Task> taskList = taskManager.showTasks(null);
 
         for (Task task : taskList) {
+
+            Database db = globalStateMgr.getDb(task.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
@@ -369,19 +372,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
+
+            Database db = globalStateMgr.getDb(status.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
             info.setTask_name(status.getTaskName());
@@ -1056,9 +1062,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TRefreshTableResponse refreshTable(TRefreshTableRequest request) throws TException {
         try {
-            GlobalStateMgr.getCurrentState().refreshExternalTable(request.getDb_name(),
-                    request.getTable_name(),
-                    request.getPartitions());
+            // Adapt to the situation that the Fe node before upgrading sends a request to the Fe node after upgrading.
+            if (request.getCatalog_name() == null) {
+                request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            }
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
+                            request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

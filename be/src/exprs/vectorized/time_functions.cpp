@@ -7,8 +7,9 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
-#include "runtime/date_value.h"
+#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
+#include "types/date_value.h"
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
@@ -658,8 +659,8 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
-Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* context,
-                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -670,21 +671,21 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
 
     ScalarFunction function;
     if (period_unit == "second") {
-        function = &TimeFunctions::datetime_floor_second;
+        function = &TimeFunctions::time_slice_second;
     } else if (period_unit == "minute") {
-        function = &TimeFunctions::datetime_floor_minute;
+        function = &TimeFunctions::time_slice_minute;
     } else if (period_unit == "hour") {
-        function = &TimeFunctions::datetime_floor_hour;
+        function = &TimeFunctions::time_slice_hour;
     } else if (period_unit == "day") {
-        function = &TimeFunctions::datetime_floor_day;
+        function = &TimeFunctions::time_slice_day;
     } else if (period_unit == "month") {
-        function = &TimeFunctions::datetime_floor_month;
+        function = &TimeFunctions::time_slice_month;
     } else if (period_unit == "year") {
-        function = &TimeFunctions::datetime_floor_year;
+        function = &TimeFunctions::time_slice_year;
     } else if (period_unit == "week") {
-        function = &TimeFunctions::datetime_floor_week;
+        function = &TimeFunctions::time_slice_week;
     } else if (period_unit == "quarter") {
-        function = &TimeFunctions::datetime_floor_quarter;
+        function = &TimeFunctions::time_slice_quarter;
     } else {
         return Status::InternalError("period unit must in {second, minute, hour, day, month, year, week, quarter}");
     }
@@ -695,48 +696,48 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
     return Status::OK();
 }
 
-#define DEFINE_DATETIME_FLOOR_FN(UNIT)                                         \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(datetime_floor_##UNIT##Impl, v, period) { \
-        TimestampValue result = v;                                             \
-        result.floor_to_##UNIT##_period(period);                               \
-        return result;                                                         \
-    }                                                                          \
-                                                                               \
-    DEFINE_TIME_CALC_FN(datetime_floor_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
+#define DEFINE_TIME_SLICE_FN(UNIT)                                         \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_##UNIT##Impl, v, period) { \
+        TimestampValue result = v;                                         \
+        result.floor_to_##UNIT##_period(period);                           \
+        return result;                                                     \
+    }                                                                      \
+                                                                           \
+    DEFINE_TIME_CALC_FN(time_slice_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-// datetime_floor_to_second
-DEFINE_DATETIME_FLOOR_FN(second);
+// time_slice_to_second
+DEFINE_TIME_SLICE_FN(second);
 
-// datetime_floor_to_minute
-DEFINE_DATETIME_FLOOR_FN(minute);
+// time_slice_to_minute
+DEFINE_TIME_SLICE_FN(minute);
 
-// datetime_floor_to_hour
-DEFINE_DATETIME_FLOOR_FN(hour);
+// time_slice_to_hour
+DEFINE_TIME_SLICE_FN(hour);
 
-// datetime_floor_to_day
-DEFINE_DATETIME_FLOOR_FN(day);
+// time_slice_to_day
+DEFINE_TIME_SLICE_FN(day);
 
-// datetime_floor_to_week
-DEFINE_DATETIME_FLOOR_FN(week);
+// time_slice_to_week
+DEFINE_TIME_SLICE_FN(week);
 
-// datetime_floor_to_month
-DEFINE_DATETIME_FLOOR_FN(month);
+// time_slice_to_month
+DEFINE_TIME_SLICE_FN(month);
 
-// datetime_floor_to_quarter
-DEFINE_DATETIME_FLOOR_FN(quarter);
+// time_slice_to_quarter
+DEFINE_TIME_SLICE_FN(quarter);
 
-// datetime_floor_to_year
-DEFINE_DATETIME_FLOOR_FN(year);
+// time_slice_to_year
+DEFINE_TIME_SLICE_FN(year);
 
-#undef DEFINE_DATETIME_FLOOR_FN
+#undef DEFINE_TIME_SLICE_FN
 
-ColumnPtr TimeFunctions::datetime_floor(FunctionContext* context, const Columns& columns) {
+ColumnPtr TimeFunctions::time_slice(FunctionContext* context, const Columns& columns) {
     auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::datetime_floor_close(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_close(starrocks_udf::FunctionContext* context,
+                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;

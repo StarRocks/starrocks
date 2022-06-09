@@ -103,6 +103,9 @@ public class Backend implements Writable {
     // additional backendStatus information for BE, display in JSON format
     private BackendStatus backendStatus = new BackendStatus();
 
+    // port of starlet on BE
+    private volatile int starletPort;
+
     public Backend() {
         this.host = "";
         this.version = "";
@@ -114,6 +117,7 @@ public class Backend implements Writable {
         this.bePort = 0;
         this.httpPort = 0;
         this.beRpcPort = 0;
+        this.starletPort = 0;
         this.disksRef = ImmutableMap.of();
 
         this.ownerClusterName = "";
@@ -174,6 +178,10 @@ public class Backend implements Writable {
         return brpcPort;
     }
 
+    public int getStarletPort() {
+        return starletPort;
+    }
+
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
     }
@@ -201,6 +209,11 @@ public class Backend implements Writable {
         }
 
         heartbeatErrMsg = "";
+    }
+
+    // for test only
+    public void setStarletPort(int starletPort) {
+        this.starletPort = starletPort;
     }
 
     public boolean setDecommissioned(boolean isDecommissioned) {
@@ -241,6 +254,10 @@ public class Backend implements Writable {
 
     public void setBrpcPort(int brpcPort) {
         this.brpcPort = brpcPort;
+    }
+
+    public void setHeartbeatPort(int heartbeatPort) {
+        this.heartbeatPort = heartbeatPort;
     }
 
     public long getLastUpdateMs() {
@@ -634,6 +651,11 @@ public class Backend implements Writable {
             if (this.brpcPort != hbResponse.getBrpcPort()) {
                 isChanged = true;
                 this.brpcPort = hbResponse.getBrpcPort();
+            }
+
+            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
+                isChanged = true;
+                this.starletPort = hbResponse.getStarletPort();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

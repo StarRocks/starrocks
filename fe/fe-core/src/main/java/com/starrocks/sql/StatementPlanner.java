@@ -3,6 +3,9 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -18,6 +21,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -182,6 +186,9 @@ public class StatementPlanner {
                 || AlterSystemStmt.isSupportNewPlanner(statement)
                 || statement instanceof AdminSetConfigStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof AdminShowConfigStmt
+                || statement instanceof AdminShowReplicaDistributionStmt
+                || statement instanceof AdminShowReplicaStatusStmt
                 || statement instanceof AlterMaterializedViewStatement
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
@@ -203,12 +210,14 @@ public class StatementPlanner {
                 || statement instanceof GrantImpersonateStmt
                 || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RefreshTableStmt
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof RefreshTableStmt
                 || statement instanceof ShowAnalyzeStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
+                || statement instanceof ShowCreateTableStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt

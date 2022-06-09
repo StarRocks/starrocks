@@ -362,8 +362,10 @@ public class ExpressionAnalyzer {
             return null;
         }
 
-        List<String> addDateFunctions = Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "TIMESTAMPADD");
-        List<String> subDateFunctions = Lists.newArrayList("DATE_SUB", "SUBDATE", "DAYS_SUB");
+        List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
+                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
+        List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
+                FunctionSet.DAYS_SUB);
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
@@ -371,12 +373,12 @@ public class ExpressionAnalyzer {
 
             String funcOpName;
             if (node.getFuncName() != null) {
-                if (addDateFunctions.contains(node.getFuncName().toUpperCase())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "ADD");
-                } else if (subDateFunctions.contains(node.getFuncName().toUpperCase())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "SUB");
-                } else if (node.getFuncName().toLowerCase().equals(FunctionSet.DATE_FLOOR)) {
-                    funcOpName = FunctionSet.DATE_FLOOR;
+                if (addDateFunctions.contains(node.getFuncName())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
+                } else if (subDateFunctions.contains(node.getFuncName())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
+                } else if (node.getFuncName().equals(FunctionSet.TIME_SLICE)) {
+                    funcOpName = FunctionSet.TIME_SLICE;
                     if (!(node.getChild(1) instanceof IntLiteral)) {
                         throw new ParsingException(
                                 funcOpName + " requires second parameter must be a constant interval");
@@ -388,11 +390,11 @@ public class ExpressionAnalyzer {
                     node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "DIFF");
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
                 }
             } else {
                 funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(),
-                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "ADD" : "SUB");
+                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "add" : "sub");
             }
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
@@ -549,7 +551,7 @@ public class ExpressionAnalyzer {
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
-            } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
+            } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -651,11 +653,11 @@ public class ExpressionAnalyzer {
                         .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
             } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
                     DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equalsIgnoreCase(fnName)) {
+                    FunctionSet.IF.equals(fnName)) {
                 // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
                 // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
                 List<Type> argTypes;
-                if (FunctionSet.MONEY_FORMAT.equalsIgnoreCase(fnName)) {
+                if (FunctionSet.MONEY_FORMAT.equals(fnName)) {
                     argTypes = Arrays.asList(argumentTypes);
                 } else {
                     argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)

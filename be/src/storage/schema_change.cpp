@@ -39,9 +39,11 @@
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/wrapper_field.h"
 #include "util/defer_op.h"
+#include "util/percentile_value.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
@@ -364,21 +366,18 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Field ref_field = ChunkHelper::convert_field_to_format_v2(
-                            ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                    Field new_field =
-                            ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_field.type().get(), base_datum, new_field.type().get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+
+                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field new_field =
+                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+
+                Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field
@@ -515,17 +514,12 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_type_info.get(), base_datum, new_type_info.get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+                Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field

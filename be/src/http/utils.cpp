@@ -164,14 +164,36 @@ void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     }
 
     const std::string FILE_DELIMETER_IN_DIR_RESPONSE = "\n";
+    const std::string FILE_NAME_SIZE_DELIMETER = "|";
+
+    // Get 'type' parameter
+    const std::string& type = req->param("type");
 
     std::stringstream result;
     for (const std::string& file_name : files) {
-        result << file_name << FILE_DELIMETER_IN_DIR_RESPONSE;
+        std::string file_path = dir_path + "/" + file_name;
+
+        if (type == "V2") {
+            int64_t file_size = -1;
+            auto st = FileSystem::Default()->get_file_size(file_path);
+            if (st.ok()) {
+                file_size = st.value();
+            } else {
+                LOG(WARNING) << "Failed to get file size. file=" << file_name;
+                HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);
+                return;
+            }
+            result << file_name << FILE_NAME_SIZE_DELIMETER << file_size << FILE_DELIMETER_IN_DIR_RESPONSE;
+        } else if (type.empty()) {
+            result << file_name << FILE_DELIMETER_IN_DIR_RESPONSE;
+        } else {
+            LOG(WARNING) << "unknown type \"" + type + "\".";
+            HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);
+            return;
+        }
     }
 
-    std::string result_str = result.str();
-    HttpChannel::send_reply(req, result_str);
+    HttpChannel::send_reply(req, result.str());
 }
 
 } // namespace starrocks

@@ -36,6 +36,10 @@ public class HivePartitionKey {
         return tableType;
     }
 
+    public boolean approximateMatchTable(String db, String tblName) {
+        return this.databaseName.equals(db) && this.tableName.equals(tblName) && this.tableType == TableType.HIVE;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

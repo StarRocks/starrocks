@@ -33,7 +33,6 @@
 #include "storage/types.h"
 #include "storage/utils.h"
 #include "util/hash_util.hpp"
-#include "util/mem_util.hpp"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -190,10 +189,6 @@ public:
         return _type_info->convert_from(dest, src, src_type, mem_pool);
     }
 
-    // Copy srouce content to destination in index format.
-    template <typename DstCellType, typename SrcCellType>
-    void to_index(DstCellType* dst, const SrcCellType& src) const;
-
     // used by init scan key stored in string format
     // value_string should end with '\0'
     Status from_string(char* buf, const std::string& value_string) const {
@@ -238,21 +233,12 @@ public:
 
     std::string to_zone_map_string(const char* value) const {
         switch (type()) {
-        case OLAP_FIELD_TYPE_DECIMAL32: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        case OLAP_FIELD_TYPE_DECIMAL64: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        case OLAP_FIELD_TYPE_DECIMAL128: {
-            auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>*>(type_info().get());
-            return decimal_type_info->to_zone_map_string(value);
-        }
-        default: {
+        case OLAP_FIELD_TYPE_DECIMAL32:
+        case OLAP_FIELD_TYPE_DECIMAL64:
+        case OLAP_FIELD_TYPE_DECIMAL128:
+            return get_decimal_zone_map_string(type_info().get(), value);
+        default:
             return type_info()->to_string(value);
-        }
         }
     }
 
@@ -311,30 +297,6 @@ protected:
     bool _is_nullable;
     std::vector<std::unique_ptr<Field>> _sub_fields;
 };
-
-template <typename DstCellType, typename SrcCellType>
-void Field::to_index(DstCellType* dst, const SrcCellType& src) const {
-    bool is_null = src.is_null();
-    dst->set_is_null(is_null);
-    if (is_null) {
-        return;
-    }
-
-    if (type() == OLAP_FIELD_TYPE_VARCHAR) {
-        memset(dst->mutable_cell_ptr(), 0, _index_size);
-        const Slice* slice = reinterpret_cast<const Slice*>(src.cell_ptr());
-        size_t copy_size =
-                slice->size < _index_size - OLAP_STRING_MAX_BYTES ? slice->size : _index_size - OLAP_STRING_MAX_BYTES;
-        *reinterpret_cast<StringLengthType*>(dst->mutable_cell_ptr()) = copy_size;
-        memory_copy((char*)dst->mutable_cell_ptr() + OLAP_STRING_MAX_BYTES, slice->data, copy_size);
-    } else if (type() == OLAP_FIELD_TYPE_CHAR) {
-        memset(dst->mutable_cell_ptr(), 0, _index_size);
-        const Slice* slice = reinterpret_cast<const Slice*>(src.cell_ptr());
-        memory_copy(dst->mutable_cell_ptr(), slice->data, _index_size);
-    } else {
-        memory_copy(dst->mutable_cell_ptr(), src.cell_ptr(), size());
-    }
-}
 
 template <typename CellType>
 uint32_t Field::hash_code(const CellType& cell, uint32_t seed) const {
@@ -477,14 +439,9 @@ public:
                 return local;
             }
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(
-                                                 column.precision(), column.scale()));
+                return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
             }
@@ -510,14 +467,9 @@ public:
                 return local.release();
             }
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(
-                                                 column.precision(), column.scale()));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(
-                                                 column.precision(), column.scale()));
+                return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
             }

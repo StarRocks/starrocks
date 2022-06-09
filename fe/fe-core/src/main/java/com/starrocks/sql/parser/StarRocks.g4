@@ -20,6 +20,7 @@ statement
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
@@ -50,9 +51,13 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
-    // Admin Set Statement
+    // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
+    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
+            (WHERE where=expression)?                                                       #adminShowReplicaStatus
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -117,6 +122,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
 
 showColumnStatement
@@ -211,8 +220,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -235,12 +246,20 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
 
 dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -413,7 +432,8 @@ relation
             LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
     | left=relation outerAndSemiJoinType hint?
             LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | aliasedRelation                                                                    #relationDefault
+    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
+    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
     ;
 
 crossOrInnerJoinType
@@ -443,10 +463,6 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
-    ;
-
 columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
@@ -456,7 +472,6 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
-    | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 partitionNames

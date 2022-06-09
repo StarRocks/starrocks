@@ -25,6 +25,7 @@
 
 #include <iostream>
 
+#include "column/column.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"

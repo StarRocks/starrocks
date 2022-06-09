@@ -26,13 +26,9 @@
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
-#include "runtime/decimalv2_value.h"
-#include "runtime/large_int_value.h"
-#include "runtime/string_value.h"
 #include "storage/olap_common.h"
 #include "util/guard.h"
+
 namespace starrocks {
 
 enum PrimitiveType {

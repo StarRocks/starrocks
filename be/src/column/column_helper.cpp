@@ -7,14 +7,16 @@
 #include "column/array_column.h"
 #include "column/json_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
+#include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 

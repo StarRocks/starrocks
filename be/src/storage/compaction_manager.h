@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/config.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
