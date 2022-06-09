@@ -321,6 +321,7 @@ void RuntimeProfile::reverse_childs() {
 void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos) {
     DCHECK(child != nullptr);
     DCHECK(child->_parent == nullptr);
+    DCHECK(_child_map.find(child->_name) == _child_map.end());
     _child_map[child->_name] = child;
     _children.insert(pos, std::make_pair(child, indent));
     child->_parent = this;
