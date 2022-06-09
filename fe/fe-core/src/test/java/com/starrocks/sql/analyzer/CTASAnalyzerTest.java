@@ -4,7 +4,11 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.HashDistributionDesc;
+<<<<<<< HEAD
 import com.starrocks.catalog.Catalog;
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> 536b979fe (Fix CTAS speculation replication_num is wrong (#6994))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -20,6 +24,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -328,4 +334,31 @@ public class CTASAnalyzerTest {
         Assert.assertEquals("vc1", hashDistributionDesc.getDistributionColumnNames().get(0));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testCTASReplicaNum() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Table table = ctx.getGlobalStateMgr().getDb("default_cluster:ctas")
+                .getTable("duplicate_table_with_null");
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setReplicationNum((short) 3);
+        String sql = "CREATE TABLE test_replica as select * from duplicate_table_with_null";
+        CreateTableAsSelectStmt createTableStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        Map<String, String> properties = createTableStmt.getCreateTableStmt().getProperties();
+        Assert.assertTrue(properties.containsKey("replication_num"));
+        Assert.assertEquals(properties.get("replication_num"), "3");
+
+        String sql2 = "CREATE TABLE test_replica2 as select 1 as id";
+        CreateTableAsSelectStmt createTableStmt2 =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
+
+        Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
+        Assert.assertTrue(properties2.containsKey("replication_num"));
+        Assert.assertEquals(properties2.get("replication_num"), "1");
+
+    }
+>>>>>>> 536b979fe (Fix CTAS speculation replication_num is wrong (#6994))
 }
