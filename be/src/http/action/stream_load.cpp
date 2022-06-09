@@ -311,16 +311,16 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     size_t len = 0;
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buf->remaining() < len) {
-            // buf capacity is not enough, try to expand the buffer.
-
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
-                // For json format, we need build a complete json before we push the buffer to the body_sink.
+                // For json format, we need build a complete json before we push the buffer to the pipe.
+                // buffer capacity is not enough, so we try to expand the buffer.
                 ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buf->pos + len));
                 buf->put_bytes(ctx->buf->ptr, ctx->buf->pos);
                 std::swap(buf, ctx->buf);
 
             } else {
                 // For non-json format, we could push buffer to the body_sink in streaming mode.
+                // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
                 ctx->buf->flip();
                 auto st = ctx->body_sink->append(std::move(ctx->buf));
                 if (!st.ok()) {
