@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
 

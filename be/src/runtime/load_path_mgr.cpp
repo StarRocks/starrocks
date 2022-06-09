@@ -28,6 +28,7 @@
 #include <boost/algorithm/string/join.hpp>
 #include <string>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"

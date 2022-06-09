@@ -46,15 +46,19 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/chunk_allocator.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
+#include "storage/lake/group_assigner.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -68,6 +72,25 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+class FixedGroupAssigner : public lake::GroupAssigner {
+public:
+    explicit FixedGroupAssigner(std::string path) : _path(std::move(path)) {
+        if (_path.back() == '/') _path.pop_back();
+    }
+
+    ~FixedGroupAssigner() override = default;
+
+    StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
+
+    [[maybe_unused]] Status list_group(std::vector<std::string>* groups) override {
+        groups->emplace_back(_path);
+        return Status::OK();
+    }
+
+private:
+    std::string _path;
+};
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -189,6 +212,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+
+#ifndef USE_STAROS
+    _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
+#else
+    CHECK(false) << "_lake_group_assigner not implemented";
+#endif
+    // TODO: cache capacity configurable
+    _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -519,6 +550,14 @@ void ExecEnv::_destroy() {
     if (_external_scan_context_mgr) {
         delete _external_scan_context_mgr;
         _external_scan_context_mgr = nullptr;
+    }
+    if (_lake_tablet_manager) {
+        delete _lake_tablet_manager;
+        _lake_tablet_manager = nullptr;
+    }
+    if (_lake_group_assigner) {
+        delete _lake_group_assigner;
+        _lake_group_assigner = nullptr;
     }
     _metrics = nullptr;
 }

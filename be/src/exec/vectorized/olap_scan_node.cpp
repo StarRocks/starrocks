@@ -25,6 +25,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
@@ -365,8 +366,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
-    // TODO: use LogicalSplitMorselQueue, when it can split tablet logically.
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,

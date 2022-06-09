@@ -26,6 +26,7 @@
 #include <sstream>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/protobuf_file.h"
 #include "storage/tablet_meta_manager.h"

@@ -27,10 +27,12 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -266,6 +268,10 @@ public class OlapTableSink extends DataSink {
                                     + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
                         }
                     }
+                }
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+                    ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo)rangePartitionInfo;
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
                 }
                 break;
             }

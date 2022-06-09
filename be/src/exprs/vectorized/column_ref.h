@@ -51,11 +51,5 @@ private:
     bool _is_nullable = false;
 };
 
-inline vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
-    ColumnRef* ref = (ColumnRef*)expr;
-    ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
-    return column;
-}
-
 } // namespace vectorized
 } // namespace starrocks

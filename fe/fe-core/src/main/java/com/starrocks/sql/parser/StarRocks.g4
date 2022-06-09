@@ -496,7 +496,8 @@ relation
             LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
     | left=relation outerAndSemiJoinType hint?
             LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | aliasedRelation                                                                    #relationDefault
+    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
+    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
     ;
 
 crossOrInnerJoinType
@@ -526,10 +527,6 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
-    ;
-
 columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
@@ -539,7 +536,6 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
-    | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 partitionNames

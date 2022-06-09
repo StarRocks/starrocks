@@ -33,6 +33,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->profile = profile;
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
+    dst->short_key_ranges = short_key_ranges;
 
     return Status::OK();
 }

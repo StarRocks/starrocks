@@ -308,11 +308,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
                         + " limit " + selectRelation.getLimit());
             }
+            final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
+                    .append(FunctionSet.COUNT).append("_").toString();
             for (MVColumnItem mvColumnItem : statement.getMVColumnItemList()) {
                 if (!statement.isReplay() && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
                     throw new SemanticException(
                             String.format("Invalid data type of materialized key column '%s': '%s'",
                                     mvColumnItem.getName(), mvColumnItem.getType()));
+                }
+                if (mvColumnItem.getName().startsWith(countPrefix)
+                        && ((OlapTable) table).getKeysType().isAggregationFamily()) {
+                    throw new SemanticException("Aggregate type table do not support count function in materialized view");
                 }
             }
             return null;

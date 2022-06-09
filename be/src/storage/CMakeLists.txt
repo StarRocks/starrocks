@@ -28,8 +28,10 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
+    array_type_info.cpp
     base_tablet.cpp
     decimal12.cpp
+    decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
     key_coder.cpp
@@ -89,6 +91,7 @@ add_library(Storage STATIC
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
+    rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
     rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
@@ -111,6 +114,7 @@ add_library(Storage STATIC
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
+    chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
@@ -154,6 +158,8 @@ add_library(Storage STATIC
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
+    lake/delta_writer.cpp
+    lake/general_tablet_writer.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
 )

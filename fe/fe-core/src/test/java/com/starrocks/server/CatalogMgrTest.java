@@ -50,7 +50,7 @@ public class CatalogMgrTest {
         config.put("type", "hive");
         config.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
 
-        Catalog catalog = new ExternalCatalog("catalog_1", "", config);
+        Catalog catalog = new ExternalCatalog(10000, "catalog_1", "", config);
         catalogMgr.replayCreateCatalog(catalog);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));

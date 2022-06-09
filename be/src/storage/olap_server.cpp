@@ -29,10 +29,12 @@
 
 #include "common/status.h"
 #include "storage/compaction.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "util/thread.h"
 #include "util/time.h"

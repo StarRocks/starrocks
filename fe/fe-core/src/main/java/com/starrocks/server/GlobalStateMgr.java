@@ -30,7 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -103,6 +102,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -550,7 +550,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        this.starOSAgent = new StarOSAgent();
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
@@ -779,44 +782,7 @@ public class GlobalStateMgr {
         // 0. get local node and helper node info
         nodeMgr.initialize(args);
 
-        // 1. check and create dirs and files
-        //      if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
-        //      we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
-        //      and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
-        //      we need to let users keep only one to avoid starting from outdated metadata.
-        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
-        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
-        if (metaDir.equals(newDefaultMetaDir)) {
-            File oldMeta = new File(oldDefaultMetaDir);
-            File newMeta = new File(newDefaultMetaDir);
-            if (oldMeta.exists() && newMeta.exists()) {
-                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                                "Please make sure {} has the latest data, and remove the another one.",
-                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
-                System.exit(-1);
-            }
-        }
-
-        File meta = new File(metaDir);
-        if (!meta.exists()) {
-            // If metaDir is not the default config, it means the user has specified the other directory
-            // We should not use the oldDefaultMetaDir.
-            // Just exit in this case
-            if (!metaDir.equals(newDefaultMetaDir)) {
-                LOG.error("meta dir {} dose not exist, will exit", metaDir);
-                System.exit(-1);
-            }
-            File oldMeta = new File(oldDefaultMetaDir);
-            if (oldMeta.exists()) {
-                // For backward compatible
-                Config.meta_dir = oldDefaultMetaDir;
-                setMetaDir();
-            } else {
-                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
-                System.exit(-1);
-            }
-        }
-
+        // 1. create dirs and files
         if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
             File bdbDir = new File(this.bdbDir);
             if (!bdbDir.exists()) {
@@ -1029,7 +995,7 @@ public class GlobalStateMgr {
         taskManager.start();
 
         // register service to starMgr
-        if (Config.integrate_staros) {
+        if (Config.integrate_starmgr) {
             int clusterId = getCurrentState().getClusterId();
             getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
         }
@@ -1063,7 +1029,7 @@ public class GlobalStateMgr {
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
             // get serviceId from starMgr
-            if (Config.integrate_staros) {
+            if (Config.integrate_starmgr) {
                 int clusterId = getCurrentState().getClusterId();
                 getStarOSAgent().getServiceId(Integer.toString(clusterId));
             }
@@ -2234,6 +2200,10 @@ public class GlobalStateMgr {
         localMetastore.replayCreateTable(dbName, table);
     }
 
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        localMetastore.replayCreateMaterializedView(dbName, materializedView);
+    }
+
     // Drop table
     public void dropTable(DropTableStmt stmt) throws DdlException {
         localMetastore.dropTable(stmt);
@@ -2754,12 +2724,12 @@ public class GlobalStateMgr {
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
         } else if (parts.length == 1) {
-            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
+            dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
                     ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
+                dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
                         ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
@@ -2768,7 +2738,7 @@ public class GlobalStateMgr {
         }
 
         // check auth for internal catalog
-        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);

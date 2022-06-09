@@ -16,6 +16,8 @@
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
 
@@ -154,8 +156,10 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
             continue;
         }
 
-        _params.range = key_range->begin_include ? "ge" : "gt";
-        _params.end_range = key_range->end_include ? "le" : "lt";
+        _params.range = key_range->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                                 : TabletReaderParams::RangeStartOperation::GT;
+        _params.end_range = key_range->end_include ? TabletReaderParams::RangeEndOperation::LE
+                                                   : TabletReaderParams::RangeEndOperation::LT;
 
         _params.start_key.push_back(key_range->begin_scan_range);
         _params.end_key.push_back(key_range->end_scan_range);

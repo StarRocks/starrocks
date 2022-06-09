@@ -76,8 +76,8 @@ public class NetUtils {
         } else {
             // ipOrFqdn is fqdn
             ip = InetAddress.getByName(host).getHostAddress();
-            if (null == ip) {
-                ip = "";
+            if (null == ip || ip.equals("")) {
+                throw new UnknownHostException("got a wrong ip");
             }
             fqdn = host;
         }

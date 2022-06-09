@@ -23,8 +23,9 @@ public class MergeLimitWithSortRule extends TransformationRule {
         LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
         LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
 
-        // only merge Init-Limit and Sort
-        return limit.isInit() && !topN.hasLimit();
+        // Merge Init-Limit/Local-limit and Sort
+        // Local-limit may be generate at MergeLimitWithLimitRule
+        return (limit.isInit() || limit.isLocal()) && !topN.hasLimit();
     }
 
     @Override

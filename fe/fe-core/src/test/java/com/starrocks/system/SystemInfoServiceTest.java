@@ -128,17 +128,28 @@ public class SystemInfoServiceTest {
     public void testGetBackendWithBePort() throws Exception {
 
         mockNet();
-        Backend be2 = new Backend(10001, "newHost-1", 1000);
-        be2.setBePort(1001);
-        service.addBackend(be2);
-        Backend beFqdn = service.getBackendWithBePort("127.0.0.1", 1001);
-        service.dropAllBackend();
 
         Backend be1 = new Backend(10001, "127.0.0.1", 1000);
         be1.setBePort(1001);
         service.addBackend(be1);
-        Backend beIP = service.getBackendWithBePort("127.0.0.1", 1001);
-        Assert.assertTrue(beFqdn != null && beIP != null);
+        Backend beIP1 = service.getBackendWithBePort("127.0.0.1", 1001);
+
+        service.dropAllBackend();
+
+        Backend be2 = new Backend(10001, "newHost-1", 1000);
+        be2.setBePort(1001);
+        service.addBackend(be2);
+        Backend beFqdn = service.getBackendWithBePort("127.0.0.1", 1001);
+
+        Assert.assertTrue(beFqdn != null && beIP1 != null);
+
+        service.dropAllBackend();
+
+        Backend be3 = new Backend(10001, "127.0.0.1", 1000);
+        be3.setBePort(1001);
+        service.addBackend(be3);
+        Backend beIP3 = service.getBackendWithBePort("127.0.0.2", 1001);
+        Assert.assertTrue(beIP3 == null);
     }
 
     @Test

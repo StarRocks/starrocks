@@ -6,7 +6,6 @@
 
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/uid_util.h"
@@ -73,12 +72,7 @@ public:
 
     bool check_mem_limit() { return _check; }
 
-    static starrocks::MemTracker* mem_tracker() {
-        if (UNLIKELY(tls_mem_tracker == nullptr)) {
-            tls_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
-        }
-        return tls_mem_tracker;
-    }
+    static starrocks::MemTracker* mem_tracker();
 
     static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 

@@ -36,8 +36,9 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/thread_resource_mgr.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"

@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "jni_md.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 

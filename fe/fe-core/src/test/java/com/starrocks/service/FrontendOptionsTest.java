@@ -3,6 +3,7 @@
 package com.starrocks.service;
 
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import mockit.Mock;
@@ -32,6 +33,11 @@ public class FrontendOptionsTest {
 
     private boolean useFqdn = true;
     private boolean useFqdnFile = true;
+
+    @Before
+    public void setUp() {
+        Config.enable_fqdn_func = true;
+    }
 
     @Test
     public void CIDRTest() {
@@ -119,8 +125,6 @@ public class FrontendOptionsTest {
         Assert.assertTrue(useFqdn);
     }
 
-
-    
     
     private void mkdir(boolean hasFqdn, String metaPath) {
         File dir = new File(metaPath);

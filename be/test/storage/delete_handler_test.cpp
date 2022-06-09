@@ -29,9 +29,11 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 

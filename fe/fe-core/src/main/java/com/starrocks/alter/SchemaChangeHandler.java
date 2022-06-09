@@ -651,7 +651,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
         }
 
-
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
         List<Column> baseSchema = olapTable.getBaseSchema();
@@ -1115,7 +1114,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 // 4. check distribution key:
                 DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
                 if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                    List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
+                    List<Column> distributionColumns =
+                            ((HashDistributionInfo) distributionInfo).getDistributionColumns();
                     for (Column distributionCol : distributionColumns) {
                         boolean found = false;
                         for (Column alterColumn : alterSchema) {
@@ -1381,7 +1381,6 @@ public class SchemaChangeHandler extends AlterHandler {
             alterJob.setState(JobState.FINISHED);
             // has to remove here, because check is running every interval, it maybe finished but also in job list
             // some check will failed
-            ((SchemaChangeJob) alterJob).deleteAllTableHistorySchema();
             ((SchemaChangeJob) alterJob).finishJob();
             jobDone(alterJob);
             GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
