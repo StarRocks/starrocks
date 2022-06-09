@@ -5,11 +5,12 @@
 #include "common/global_types.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/operator.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/decoder.h"
+#include "runtime/global_dict/parser.h"
 
 namespace starrocks::pipeline {
 
-using vectorized::DefaultDecoderPtr;
+using vectorized::GlobalDictDecoderPtr;
 using vectorized::DictOptimizeContext;
 using vectorized::DictOptimizeParser;
 using vectorized::Columns;
@@ -18,7 +19,7 @@ class DictDecodeOperator final : public Operator {
 public:
     DictDecodeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::vector<int32_t>& encode_column_cids, std::vector<int32_t>& decode_column_cids,
-                       std::vector<DefaultDecoderPtr>& decoders, std::vector<ExprContext*>& expr_ctxs,
+                       std::vector<GlobalDictDecoderPtr>& decoders, std::vector<ExprContext*>& expr_ctxs,
                        std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& string_functions,
                        DictOptimizeParser& dict_optimize_parser)
             : Operator(factory, id, "dict_decode", plan_node_id, driver_sequence),
@@ -53,7 +54,7 @@ public:
 private:
     const std::vector<int32_t>& _encode_column_cids;
     const std::vector<int32_t>& _decode_column_cids;
-    const std::vector<DefaultDecoderPtr>& _decoders;
+    const std::vector<GlobalDictDecoderPtr>& _decoders;
 
     const std::vector<ExprContext*>& _expr_ctxs;
     const std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& _string_functions;
@@ -88,7 +89,7 @@ public:
 private:
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<DefaultDecoderPtr> _decoders;
+    std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;
     std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;

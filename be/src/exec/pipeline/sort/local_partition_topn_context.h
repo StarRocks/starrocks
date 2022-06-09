@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/partition/chunks_partitioner.h"
 

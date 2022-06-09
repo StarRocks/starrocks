@@ -32,9 +32,11 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -199,6 +201,14 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getFullName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    break;
+                }
+                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
+                    CreateTableInfo info = (CreateTableInfo) journal.getData();
+                    LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                            + " create materialized view = " + info.getTable().getId()
+                            + " tableName = " + info.getTable().getName());
+                    globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -844,14 +854,15 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
-                    CreateCatalogLog createCatalogLog =
-                            (CreateCatalogLog) journal.getData();
-                    globalStateMgr.getCatalogMgr().replayCreateCatalog(createCatalogLog);
+                    Catalog catalog = (Catalog) journal.getData();
+                    globalStateMgr.getCatalogMgr().replayCreateCatalog(catalog);
+                    break;
                 }
                 case OperationType.OP_DROP_CATALOG: {
                     DropCatalogLog dropCatalogLog =
                             (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
+                    break;
                 }
                 case OperationType.OP_GRANT_IMPERSONATE: {
                     ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
@@ -985,6 +996,10 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logEdit(OperationType.OP_CREATE_TABLE, info);
+    }
+
+    public void logCreateMaterializedView(CreateTableInfo info) {
+        logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
     public void logWorkGroupOp(WorkGroupOpEntry op) {
@@ -1467,5 +1482,13 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logCreateCatalog(Catalog log) {
+        logEdit(OperationType.OP_CREATE_CATALOG, log);
+    }
+
+    public void logDropCatalog(DropCatalogLog log) {
+        logEdit(OperationType.OP_DROP_CATALOG, log);
     }
 }

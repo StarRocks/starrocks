@@ -3,6 +3,8 @@
 #pragma once
 
 #include "column/hash_set.h"
+#include "runtime/decimalv3.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/string_parser.hpp"
 

@@ -77,12 +77,15 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class OptimizerTraceUtil {
     private static final Logger LOG = LogManager.getLogger(OptimizerTraceUtil.class);
@@ -286,17 +289,20 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalUnion(LogicalUnionOperator node, Void context) {
-            return super.visitLogicalUnion(node, context);
+            return getSetOperationBuilder("LogicalUnionOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
         }
 
         @Override
         public String visitLogicalExcept(LogicalExceptOperator node, Void context) {
-            return super.visitLogicalExcept(node, context);
+            return getSetOperationBuilder("LogicalExceptOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
         }
 
         @Override
         public String visitLogicalIntersect(LogicalIntersectOperator node, Void context) {
-            return super.visitLogicalIntersect(node, context);
+            return getSetOperationBuilder("LogicalIntersectOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
         }
 
         @Override
@@ -495,17 +501,36 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalUnion(PhysicalUnionOperator node, Void context) {
-            return super.visitPhysicalUnion(node, context);
+            return getSetOperationBuilder("PhysicalUnionOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
         }
 
         @Override
         public String visitPhysicalExcept(PhysicalExceptOperator node, Void context) {
-            return super.visitPhysicalExcept(node, context);
+            return getSetOperationBuilder("PhysicalExceptOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
         }
 
         @Override
         public String visitPhysicalIntersect(PhysicalIntersectOperator node, Void context) {
-            return super.visitPhysicalIntersect(node, context);
+            return getSetOperationBuilder("PhysicalIntersectOperator", node.getOutputColumnRefOp(),
+                    node.getChildOutputColumns());
+        }
+
+        @NotNull
+        private String getSetOperationBuilder(String name, List<ColumnRefOperator> outputColumnRefOp,
+                                              List<List<ColumnRefOperator>> childOutputColumns) {
+            StringBuilder sb = new StringBuilder(name);
+            sb.append("{");
+            sb.append("output=[").append(outputColumnRefOp.stream().map(ColumnRefOperator::toString)
+                    .collect(Collectors.joining(", "))).append("], ");
+
+            String child = childOutputColumns.stream()
+                    .map(l -> l.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(", ")))
+                    .collect(Collectors.joining(", "));
+            
+            sb.append(child).append("}");
+            return sb.toString();
         }
 
         @Override

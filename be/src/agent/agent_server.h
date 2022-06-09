@@ -25,12 +25,13 @@
 #include <vector>
 
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
+class ExecEnv;
 class MultiWorkerPool;
 class TaskWorkerPool;
+class TMasterInfo;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {

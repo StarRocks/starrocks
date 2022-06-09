@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/schema.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"

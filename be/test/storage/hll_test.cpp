@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "util/hash_util.hpp"
+#include "util/phmap/phmap.h"
 #include "util/slice.h"
 
 namespace starrocks {

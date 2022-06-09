@@ -2,6 +2,8 @@
 
 #include "exprs/vectorized/placeholder_ref.h"
 
+#include "column/chunk.h"
+
 namespace starrocks::vectorized {
 PlaceHolderRef::PlaceHolderRef(const TExprNode& node)
         : Expr(node, true), _column_id(node.vslot_ref.slot_id), _is_nullable(node.vslot_ref.nullable) {}

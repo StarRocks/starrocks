@@ -11,6 +11,7 @@
 
 #ifndef BE_TEST
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #endif
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))

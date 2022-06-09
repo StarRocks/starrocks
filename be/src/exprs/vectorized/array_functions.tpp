@@ -5,7 +5,9 @@
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
+#include "udf/udf.h"
 #include "util/orlp/pdqsort.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 template <PrimitiveType PT>

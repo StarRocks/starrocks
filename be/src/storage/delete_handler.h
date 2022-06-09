@@ -59,7 +59,7 @@ private:
         LOG(WARNING) << "invalid field name. name='" << field_name;
         return -1;
     }
-    bool is_condition_value_valid(const TabletColumn& column, const TCondition& cond, const string& value_str);
+    bool is_condition_value_valid(const TabletColumn& column, const TCondition& cond, const std::string& value_str);
 };
 
 // Used to check if one row is deleted

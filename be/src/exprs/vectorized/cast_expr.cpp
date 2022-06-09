@@ -19,6 +19,8 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
+#include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "types/hll.h"

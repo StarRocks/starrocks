@@ -31,6 +31,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -45,9 +46,11 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/chunk_allocator.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -138,6 +141,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_queue_size);
 
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+    CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
 
     _pipeline_hdfs_scan_io_thread_pool =
             new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
@@ -150,7 +154,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&hdfs_scan_worker_thread_pool));
-    _hdfs_scan_executor = new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor =
+            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
     _hdfs_scan_executor->initialize(hdfs_num_io_threads);
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
@@ -185,6 +190,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -222,7 +228,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                                 .build(&scan_worker_thread_pool));
-        _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
+        _scan_executor =
+                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
         _scan_executor->initialize(num_io_threads);
 
         Status status = _load_path_mgr->init();
@@ -311,7 +318,6 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     _init_storage_page_cache();
     return Status::OK();
 }

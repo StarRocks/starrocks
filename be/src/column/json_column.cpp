@@ -9,14 +9,9 @@
 namespace starrocks::vectorized {
 
 void JsonColumn::append_datum(const Datum& datum) {
-    if (const JsonValue* json = datum.get_if<JsonValue>()) {
-        append(json);
-    } else if (JsonValue* const* json_p = datum.get_if<JsonValue*>()) {
-        append(*json_p);
-    } else {
-        CHECK(false) << "invalid datum type";
-    }
+    append(datum.get<JsonValue*>());
 }
+
 int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::vectorized::Column& rhs,
                            int nan_direction_hint) const {
     JsonValue* x = get_object(left_idx);

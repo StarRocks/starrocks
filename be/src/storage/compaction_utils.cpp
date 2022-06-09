@@ -2,6 +2,7 @@
 
 #include "storage/compaction_utils.h"
 
+#include "common/config.h"
 #include "storage/base_and_cumulative_compaction_policy.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset_factory.h"

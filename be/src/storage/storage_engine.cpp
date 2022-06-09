@@ -21,6 +21,8 @@
 
 #include "storage/storage_engine.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <csignal>
 #include <cstring>
@@ -39,13 +41,16 @@
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
 #include "storage/base_compaction.h"
+#include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"

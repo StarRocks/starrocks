@@ -20,6 +20,7 @@
 #include "util/bit_util.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::parquet {
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,

@@ -10,6 +10,7 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 

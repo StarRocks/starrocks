@@ -102,6 +102,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -548,7 +549,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        this.starOSAgent = new StarOSAgent();
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
         this.connectorMgr = new ConnectorMgr(metadataMgr);
@@ -705,6 +709,11 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    @VisibleForTesting
+    public void setMetadataMgr(MetadataMgr metadataMgr) {
+        this.metadataMgr = metadataMgr;
     }
 
     public TaskManager getTaskManager() {
@@ -1141,6 +1150,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = catalogMgr.loadCatalogs(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1371,6 +1382,8 @@ public class GlobalStateMgr {
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -2219,6 +2232,10 @@ public class GlobalStateMgr {
         localMetastore.replayCreateTable(dbName, table);
     }
 
+    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
+        localMetastore.replayCreateMaterializedView(dbName, materializedView);
+    }
+
     // Drop table
     public void dropTable(DropTableStmt stmt) throws DdlException {
         localMetastore.dropTable(stmt);
@@ -2735,12 +2752,12 @@ public class GlobalStateMgr {
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
         } else if (parts.length == 1) {
-            dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
+            dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
                     ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
+                dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
                         ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
@@ -2749,7 +2766,7 @@ public class GlobalStateMgr {
         }
 
         // check auth for internal catalog
-        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
