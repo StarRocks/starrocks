@@ -64,11 +64,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.version = version;
         this.cpuCores = cpuCores;
     }
-    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort, int starletPort,
-                             long hbTime, String version, int cpuCores) {
-        this(beId, bePort, httpPort, brpcPort, hbTime, version, cpuCores);
-        this.starletPort = starletPort;
-    }
 
     public BackendHbResponse(long beId, String errMsg) {
         super(HeartbeatResponse.Type.BACKEND);
@@ -127,7 +122,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         bePort = in.readInt();
         httpPort = in.readInt();
         brpcPort = in.readInt();
-        starletPort = in.readInt();
     }
 
 }
