@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include "column/column_helper.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -24,40 +25,11 @@ namespace vectorized {
  * @tparam Type
  */
 
-static inline size_t not_const_mask(const ColumnPtr& column) {
-    return !column->only_null() && !column->is_constant() ? -1 : 0;
-}
-
-static inline size_t null_mask(const ColumnPtr& column) {
-    return !column->only_null() && !column->is_constant() && column->is_nullable() ? -1 : 0;
-}
-
 template <PrimitiveType Type>
 class ColumnViewer {
 public:
     static auto constexpr TYPE = Type;
-    explicit ColumnViewer(const ColumnPtr& column)
-            : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
-        if (column->only_null()) {
-            _null_column = ColumnHelper::one_size_null_column;
-            _column = RunTimeColumnType<Type>::create();
-            _column->append_default();
-        } else if (column->is_constant()) {
-            auto v = ColumnHelper::as_raw_column<ConstColumn>(column);
-            _column = ColumnHelper::cast_to<Type>(v->data_column());
-            _null_column = ColumnHelper::one_size_not_null_column;
-        } else if (column->is_nullable()) {
-            auto v = ColumnHelper::as_raw_column<NullableColumn>(column);
-            _column = ColumnHelper::cast_to<Type>(v->data_column());
-            _null_column = ColumnHelper::as_column<NullColumn>(v->null_column());
-        } else {
-            _column = ColumnHelper::cast_to<Type>(column);
-            _null_column = ColumnHelper::one_size_not_null_column;
-        }
-
-        _data = _column->get_data().data();
-        _null_data = _null_column->get_data().data();
-    }
+    explicit ColumnViewer(const ColumnPtr& column);
 
     const RunTimeCppType<Type> value(const size_t idx) const { return _data[idx & _not_const_mask]; }
 
