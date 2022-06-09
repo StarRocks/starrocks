@@ -2,6 +2,7 @@
 
 package com.starrocks.external.hive;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
@@ -11,7 +12,10 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
 
 public class HiveTableTest {
 
@@ -19,25 +23,32 @@ public class HiveTableTest {
     public void testIsRefreshColumn() throws DdlException {
         HiveTable hiveTable = new HiveTable();
         FieldSchema col1Schema = new FieldSchema("col1", "BIGINT", "");
+        List<Column> columns = Lists.newArrayList();
+        Type srType = convertColumnType(col1Schema.getType());
+        Column column = new Column(col1Schema.getName(), srType, true);
+        columns.add(column);
+        hiveTable.setNewFullSchema(columns);
+
         Map<String, FieldSchema> col1HiveSchemaMap = new HashMap<>();
         col1HiveSchemaMap.put(col1Schema.getName(), col1Schema);
-        Column column = new Column("col2", Type.BIGINT);
-        Map<String, Column> srSchemaMap = new HashMap<>();
-        srSchemaMap.put(column.getName(), column);
-        // different col name
-        Assert.assertTrue(hiveTable.isRefreshColumn(srSchemaMap, col1HiveSchemaMap));
         // no fresh
+        Assert.assertFalse(hiveTable.isRefreshColumn(col1HiveSchemaMap));
+
         FieldSchema col2Schema = new FieldSchema("col2", "BIGINT", "");
         Map<String, FieldSchema> col2HiveSchemaMap = new HashMap<>();
         col2HiveSchemaMap.put(col2Schema.getName(), col2Schema);
-        Assert.assertFalse(hiveTable.isRefreshColumn(srSchemaMap, col2HiveSchemaMap));
+        // different col name
+        Assert.assertTrue(hiveTable.isRefreshColumn(col2HiveSchemaMap));
+
         // different col type
         FieldSchema col3Schema = new FieldSchema("col2", "INT", "");
         Map<String, FieldSchema> col3HiveSchemaMap = new HashMap<>();
         col2HiveSchemaMap.put(col3Schema.getName(), col3Schema);
-        Assert.assertTrue(hiveTable.isRefreshColumn(srSchemaMap, col3HiveSchemaMap));
+        Assert.assertTrue(hiveTable.isRefreshColumn(col3HiveSchemaMap));
+
+        col1HiveSchemaMap.put(col3Schema.getName(), col3Schema);
         // different col size
         col2HiveSchemaMap.put(col1Schema.getName(), col1Schema);
-        Assert.assertTrue(hiveTable.isRefreshColumn(srSchemaMap, col1HiveSchemaMap));
+        Assert.assertTrue(hiveTable.isRefreshColumn(col1HiveSchemaMap));
     }
 }

@@ -54,6 +54,8 @@ private:
     void _sort_column_inc();
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
+    bool _is_aggregate_needed();
+    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);

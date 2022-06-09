@@ -1,4 +1,3 @@
-
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -10,12 +9,12 @@
 #include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
-#include "runtime/date_value.hpp"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
+#include "types/date_value.hpp"
 
 namespace starrocks {
 namespace vectorized {
@@ -600,6 +599,7 @@ private:
 
 Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
+    scan_keys.set_is_convertible(unlimited);
     const std::vector<std::string>& ref_key_column_names = *key_column_names;
 
     for (const auto& key_column_name : ref_key_column_names) {
@@ -608,15 +608,12 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-
-    // When there is only one conditional key column,
-    // searching for range is better than searching for multiple points.
-    scan_keys.set_is_convertible(unlimited && conditional_key_columns > 1);
-
-    for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
-        ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
-        if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
-            break;
+    if (conditional_key_columns > 1) {
+        for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
+            ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
+            if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
+                break;
+            }
         }
     }
     return Status::OK();

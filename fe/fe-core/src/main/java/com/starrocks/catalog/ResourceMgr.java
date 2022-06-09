@@ -197,8 +197,10 @@ public class ResourceMgr implements Writable {
                 ((HiveResource) resource).alterProperties(stmt.getProperties());
             } else if (resource instanceof HudiResource) {
                 ((HudiResource) resource).alterProperties(stmt.getProperties());
+            } else if (resource instanceof IcebergResource) {
+                ((IcebergResource) resource).alterProperties(stmt.getProperties());
             } else {
-                throw new DdlException("Alter resource statement only support external hive/hudi now");
+                throw new DdlException("Alter resource statement only support external hive/hudi/iceberg now");
             }
 
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);

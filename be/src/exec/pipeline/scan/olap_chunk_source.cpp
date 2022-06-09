@@ -171,8 +171,10 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
             continue;
         }
 
-        _params.range = key_range->begin_include ? "ge" : "gt";
-        _params.end_range = key_range->end_include ? "le" : "lt";
+        _params.range = key_range->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                                 : TabletReaderParams::RangeStartOperation::GT;
+        _params.end_range = key_range->end_include ? TabletReaderParams::RangeEndOperation::LE
+                                                   : TabletReaderParams::RangeEndOperation::LT;
 
         _params.start_key.push_back(key_range->begin_scan_range);
         _params.end_key.push_back(key_range->end_scan_range);
@@ -351,7 +353,8 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeOlapScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }

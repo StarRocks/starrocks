@@ -36,9 +36,6 @@
 
 namespace starrocks {
 
-const __int128 MAX_INT128 = ~((__int128)0x01 << 127);
-const __int128 MIN_INT128 = ((__int128)0x01 << 127);
-
 class LargeIntValue {
 public:
     static char* to_string(__int128 value, char* buffer, int* len) {

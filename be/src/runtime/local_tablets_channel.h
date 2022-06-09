@@ -22,7 +22,7 @@ DIAGNOSTIC_POP
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"

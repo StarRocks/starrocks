@@ -7,7 +7,8 @@
 #include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "exec/olap_common.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/decoder.h"
+#include "runtime/global_dict/parser.h"
 
 namespace starrocks::vectorized {
 
@@ -42,7 +43,7 @@ private:
     std::shared_ptr<vectorized::Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<DefaultDecoderPtr> _decoders;
+    std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;
     std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;

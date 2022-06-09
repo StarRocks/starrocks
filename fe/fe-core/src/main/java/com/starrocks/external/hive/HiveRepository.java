@@ -18,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
@@ -186,6 +187,12 @@ public class HiveRepository {
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
         return metaCache.getTableLevelColumnStats(hmsTable);
+    }
+
+    public void refreshConnectorTable(String resource, String db, String table)
+            throws DdlException, TException, ExecutionException {
+        HiveMetaCache metaCache = getMetaCache(resource);
+        metaCache.refreshConnectorTable(db, table);
     }
 
     public void refreshTableCache(HiveMetaStoreTableInfo hmsTable) throws DdlException {

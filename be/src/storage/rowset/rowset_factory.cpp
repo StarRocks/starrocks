@@ -26,6 +26,7 @@
 #include "beta_rowset.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "rowset_writer_adapter.h"
+#include "runtime/exec_env.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/type_utils.h"

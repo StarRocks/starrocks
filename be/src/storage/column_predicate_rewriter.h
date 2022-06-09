@@ -6,6 +6,7 @@
 
 #include "column/schema.h"
 #include "common/object_pool.h"
+#include "runtime/global_dict/types.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_decoder.h"

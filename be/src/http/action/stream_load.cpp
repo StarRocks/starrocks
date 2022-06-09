@@ -59,6 +59,7 @@
 #include "util/json_util.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
+#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"

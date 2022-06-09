@@ -2,7 +2,9 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -31,18 +33,26 @@ public class RefreshTableStmtTest {
     @Test
     public void testRefreshTableParserAndAnalyzer(@Mocked GlobalStateMgr globalStateMgr,
                                                   @Mocked MetadataMgr metadataMgr,
-                                                  @Mocked Table table) {
+                                                  @Mocked CatalogMgr catalogMgr,
+                                                  @Mocked Table table,
+                                                  @Mocked Database database) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
                 minTimes = 0;
 
+                globalStateMgr.getCatalogMgr().catalogExists(anyString);
+                result = true;
+
                 globalStateMgr.getMetadataMgr();
                 result = metadataMgr;
 
                 metadataMgr.getTable(anyString, anyString, anyString);
                 result = table;
+
+                metadataMgr.getDb(anyString, anyString);
+                result = database;
             }
         };
         String sql_1 = "REFRESH EXTERNAL TABLE db1.table1";
@@ -57,10 +67,9 @@ public class RefreshTableStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertTrue(stmt instanceof RefreshTableStmt);
         Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
-        Assert.assertEquals(((RefreshTableStmt) stmt).getTableName(), "table1");
+        Assert.assertEquals(((RefreshTableStmt) stmt).getTableName().getTbl(), "table1");
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"k1=0\\/k2=1\", \"k1=1\\/k2=2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
     }
-
 }

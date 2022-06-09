@@ -51,6 +51,10 @@ public:
 
     RowsetId rowset_id() override { return _writer->rowset_id(); }
 
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
+        return _writer->global_dict_columns_valid_info();
+    }
+
 private:
     Status _init_chunk_converter();
 

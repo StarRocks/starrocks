@@ -115,7 +115,7 @@ public class ShowDbStmtTest {
         };
 
         ctx.setConnectScheduler(scheduler);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
         ctx.setCluster("testCluster");
 

@@ -98,7 +98,10 @@ public class TaskRunManager {
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     runningTaskRunMap.put(taskId, pendingTaskRun);
-                    // RUNNING state persistence is not necessary currently
+                    // RUNNING state persistence is for FE FOLLOWER update state
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
+                            Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                     currentRunning++;
                 }
             }

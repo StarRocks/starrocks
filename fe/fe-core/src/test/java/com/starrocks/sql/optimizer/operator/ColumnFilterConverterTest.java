@@ -3,12 +3,22 @@
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -17,6 +27,8 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -94,4 +106,93 @@ public class ColumnFilterConverterTest {
             assertEquals(filter.upperBound, new NullLiteral());
         }
     }
+
+    @Test
+    public void convertColumnFilterExpr() {
+        List<ScalarOperator> list = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
+        assertEquals(0, result.size());
+
+        OlapTable olapTable = buildOlapTable("day");
+        Map<String, PartitionColumnFilter> result1 = ColumnFilterConverter.convertColumnFilter(list, olapTable);
+        assertEquals(1, result1.size());
+    }
+
+    @Test
+    public void convertColumnFilterExprBinaryType() {
+        List<ScalarOperator> listEq = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        OlapTable olapTable = buildOlapTable("day");
+        Map<String, PartitionColumnFilter> resultEq = ColumnFilterConverter.convertColumnFilter(listEq, olapTable);
+        assertEquals(1, resultEq.size());
+
+        List<ScalarOperator> listGe = buildOperator("day", BinaryPredicateOperator.BinaryType.GE);
+        Map<String, PartitionColumnFilter> resultGe = ColumnFilterConverter.convertColumnFilter(listGe, olapTable);
+        assertEquals(1, resultGe.size());
+
+        List<ScalarOperator> listGt = buildOperator("day", BinaryPredicateOperator.BinaryType.GT);
+        Map<String, PartitionColumnFilter> resultGt = ColumnFilterConverter.convertColumnFilter(listGt, olapTable);
+        assertEquals(1, resultGt.size());
+
+        List<ScalarOperator> listLe = buildOperator("day", BinaryPredicateOperator.BinaryType.LE);
+        Map<String, PartitionColumnFilter> resultLe = ColumnFilterConverter.convertColumnFilter(listLe, olapTable);
+        assertEquals(1, resultLe.size());
+
+        List<ScalarOperator> listLt = buildOperator("day", BinaryPredicateOperator.BinaryType.LT);
+        Map<String, PartitionColumnFilter> resultLt = ColumnFilterConverter.convertColumnFilter(listLt, olapTable);
+        assertEquals(1, resultLt.size());
+    }
+
+    @Test
+    public void convertColumnFilterExprDateTruncContains() {
+        OlapTable olapTable = buildOlapTable("month");
+
+        List<ScalarOperator> listDay = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        Map<String, PartitionColumnFilter> resultDay = ColumnFilterConverter.convertColumnFilter(listDay, olapTable);
+        assertEquals(1, resultDay.size());
+
+        List<ScalarOperator> listWeek = buildOperator("week", BinaryPredicateOperator.BinaryType.EQ);
+        Map<String, PartitionColumnFilter> resultWeek = ColumnFilterConverter.convertColumnFilter(listWeek, olapTable);
+        assertEquals(0, resultWeek.size());
+
+        List<ScalarOperator> listMonth = buildOperator("month", BinaryPredicateOperator.BinaryType.EQ);
+        Map<String, PartitionColumnFilter> resultMonth =
+                ColumnFilterConverter.convertColumnFilter(listMonth, olapTable);
+        assertEquals(1, resultMonth.size());
+
+        List<ScalarOperator> listYear = buildOperator("year", BinaryPredicateOperator.BinaryType.EQ);
+        Map<String, PartitionColumnFilter> resultYear = ColumnFilterConverter.convertColumnFilter(listYear, olapTable);
+        assertEquals(0, resultYear.size());
+    }
+
+    private List<ScalarOperator> buildOperator(String timeKey, BinaryPredicateOperator.BinaryType binaryType) {
+        List<ScalarOperator> arguments = new ArrayList<>(2);
+        arguments.add(ConstantOperator.createVarchar(timeKey));
+        arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
+        ScalarOperator callOperator = new CallOperator("date_trunc", Type.DATE, arguments);
+
+        ScalarOperator root1 = new BinaryPredicateOperator(binaryType,
+                callOperator,
+                ConstantOperator.createDate(LocalDateTime.of(2022, 12, 23, 0, 0, 0)));
+
+        return Lists.newArrayList(root1);
+    }
+
+    private OlapTable buildOlapTable(String timeKey) {
+        List<Expr> exprList = new ArrayList<>();
+        List<Expr> params = new ArrayList<>();
+        StringLiteral stringLiteral = new StringLiteral(timeKey);
+        params.add(stringLiteral);
+        TableName tableName = new TableName("testdb", "testtbl");
+        SlotRef slotRefDate = new SlotRef(tableName, "date_col");
+        slotRefDate.setType(Type.DATE);
+        params.add(slotRefDate);
+        FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                params);
+        exprList.add(zdtestCallExpr);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList);
+
+        return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
+                new RandomDistributionInfo(10));
+    }
+
 }

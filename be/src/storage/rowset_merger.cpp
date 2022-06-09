@@ -3,6 +3,7 @@
 #include "storage/rowset_merger.h"
 
 #include <memory>
+#include <queue>
 
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"

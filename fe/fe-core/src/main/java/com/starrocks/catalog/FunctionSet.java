@@ -166,7 +166,7 @@ public class FunctionSet {
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String DATE_TRUNC = "date_trunc";
-    public static final String DATE_FLOOR = "date_floor";
+    public static final String TIME_SLICE = "time_slice";
     public static final String STRFTIME = "strftime";
     public static final String TIME_FORMAT = "time_format";
     public static final String DATE_FORMAT = "date_format";
@@ -216,6 +216,7 @@ public class FunctionSet {
     // Util functions
     public static final String UUID = "uuid";
     public static final String SLEEP = "sleep";
+    public static final String ISNULL = "isnull";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
@@ -815,13 +816,9 @@ public class FunctionSet {
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
-            if (t.isNull()) {
-                continue; // NULL is handled through type promotion.
-            }
-            if (t.isChar()) {
-                continue; // promoted to STRING
-            }
-            if (t.isTime()) {
+            // null/char/time is handled through type promotion
+            // TODO: array/json/pseudo is not supported yet
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(

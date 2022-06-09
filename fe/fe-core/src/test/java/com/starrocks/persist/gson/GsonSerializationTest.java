@@ -26,6 +26,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Resource;
+import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonSerializationTest.Key.MyEnum;
@@ -427,5 +429,61 @@ public class GsonSerializationTest {
         MultiMapClassA readClassA = MultiMapClassA.read(in);
         Assert.assertEquals(Sets.newHashSet(new Key(MyEnum.TYPE_A, "key1"), new Key(MyEnum.TYPE_B, "key2")),
                 readClassA.map.keySet());
+    }
+
+    private static class GsonPrePostProcessTest implements Writable, GsonPreProcessable, GsonPostProcessable {
+        private int a;
+
+        @SerializedName(value = "b")
+        private String b = "";
+
+        public GsonPrePostProcessTest(int a) {
+            this.a = a;
+        }
+
+        @Override
+        public void gsonPreProcess() throws IOException {
+            b = String.valueOf(a);
+        }
+        
+        @Override
+        public void gsonPostProcess() throws IOException {
+            a = Integer.parseInt(b);
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            String json = GsonUtils.GSON.toJson(this);
+            System.out.println("write: " + json);
+            Text.writeString(out, json);
+        }
+
+        public static GsonPrePostProcessTest read(DataInput in) throws IOException {
+            String json = Text.readString(in);
+            System.out.println("read: " + json);
+            return GsonUtils.GSON.fromJson(json, GsonPrePostProcessTest.class);
+        }
+    }
+
+    @Test
+    public void testGsonPrePostProcess() throws IOException {
+        GsonPrePostProcessTest prePost = new GsonPrePostProcessTest(2);
+        Assert.assertEquals(2, prePost.a);
+        Assert.assertTrue(prePost.b.equals(""));
+
+        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
+            prePost.write(out);
+            out.flush();
+        }
+
+        GsonPrePostProcessTest newPrePost = null;
+        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
+            newPrePost = GsonPrePostProcessTest.read(in);
+        }
+        byteArrayOutputStream.close();
+
+        Assert.assertEquals(2, newPrePost.a);
+        Assert.assertTrue(newPrePost.b.equals("2"));
     }
 }

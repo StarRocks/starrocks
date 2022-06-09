@@ -122,6 +122,10 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
+# Prevent JVM from handling any internally or externally generated signals.
+# Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
+export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
 else
