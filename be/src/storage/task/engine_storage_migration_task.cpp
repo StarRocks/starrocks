@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include <fmt/format.h>
+
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"

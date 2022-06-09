@@ -32,6 +32,18 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
           _limit(scan_node->limit()),
           _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
 
+OlapChunkSource::~OlapChunkSource() {
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
+void OlapChunkSource::close(RuntimeState* state) {
+    _update_counter();
+    _prj_iter->close();
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -121,7 +133,7 @@ void OlapChunkSource::_decide_chunk_size() {
     }
 }
 
-Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -132,6 +144,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
+    _morsel->init_tablet_reader_params(&_params);
     _decide_chunk_size();
 
     PredicateParser parser(_tablet->tablet_schema());
@@ -158,8 +171,10 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
             continue;
         }
 
-        _params.range = key_range->begin_include ? "ge" : "gt";
-        _params.end_range = key_range->end_include ? "le" : "lt";
+        _params.range = key_range->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                                 : TabletReaderParams::RangeStartOperation::GT;
+        _params.end_range = key_range->end_include ? TabletReaderParams::RangeEndOperation::LE
+                                                   : TabletReaderParams::RangeEndOperation::LT;
 
         _params.start_key.push_back(key_range->begin_scan_range);
         _params.end_key.push_back(key_range->end_scan_range);
@@ -338,7 +353,8 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeOlapScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }
@@ -409,13 +425,6 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         return Status::EndOfFile("limit reach");
     }
     return Status::OK();
-}
-
-void OlapChunkSource::close(RuntimeState* state) {
-    _update_counter();
-    _prj_iter->close();
-    _reader.reset();
-    _predicate_free_pool.clear();
 }
 
 int64_t OlapChunkSource::last_spent_cpu_time_ns() {

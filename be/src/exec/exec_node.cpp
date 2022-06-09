@@ -564,7 +564,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectori
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, nullptr);
             zero_count = SIMD::count_zero(*raw_filter);
             if (zero_count > prune_threshold) {
-                int rows = chunk->filter(*raw_filter);
+                int rows = chunk->filter(*raw_filter, true);
                 if (rows == 0) {
                     // When all rows in chunk is filtered, direct return
                     // No need to execute the following predicate
@@ -578,7 +578,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectori
     if (zero_count == 0) {
         return Status::OK();
     }
-    chunk->filter(*raw_filter);
+    chunk->filter(*raw_filter, true);
     return Status::OK();
 }
 
@@ -631,10 +631,6 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         }
     }
 
-    int zero_count = SIMD::count_zero(*raw_filter);
-    if (zero_count == 0) {
-        return Status::OK();
-    }
     chunk->filter(*raw_filter);
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
@@ -715,7 +711,7 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vect
     // Those rows will be filtered out anyway, better to be filtered out here.
     if (after_size != before_size) {
         VLOG_FILE << "filter null values. before_size = " << before_size << ", after_size = " << after_size;
-        chunk->filter(selection);
+        chunk->filter(selection, true);
     }
 }
 

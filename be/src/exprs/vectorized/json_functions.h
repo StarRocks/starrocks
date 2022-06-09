@@ -9,11 +9,14 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <utility>
 DIAGNOSTIC_POP
 
+#include <re2/re2.h>
+#include <simdjson.h>
+#include <velocypack/vpack.h>
+
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
-#include "simdjson.h"
-#include "velocypack/vpack.h"
+#include "udf/udf.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -186,6 +189,15 @@ public:
     }
 
 private:
+#define APPEND_NULL_AND_RETURN_IF_ERROR(builder, err) \
+    do {                                              \
+        const simdjson::error_code& e = err;          \
+        if (UNLIKELY(e)) {                            \
+            builder.append_null();                    \
+            return;                                   \
+        }                                             \
+    } while (false)
+
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
 

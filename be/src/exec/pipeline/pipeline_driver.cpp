@@ -13,6 +13,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -29,7 +30,14 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
+    _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
+    _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
+    _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
+    _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
+
     _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
     _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
     _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
@@ -95,6 +103,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 }
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
+    COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
@@ -193,14 +202,16 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
-            if (total_chunks_moved >= YIELD_MAX_CHUNKS_MOVED || time_spent >= YIELD_MAX_TIME_SPENT) {
+            if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
+                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
                 break;
             }
 
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 workgroup::WorkGroupManager::instance()->should_yield_driver_worker(worker_id, _workgroup)) {
                 should_yield = true;
+                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
                 break;
             }
         }
@@ -223,10 +234,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         if (num_chunks_moved == 0 || should_yield) {
             if (is_precondition_block()) {
                 set_driver_state(DriverState::PRECONDITION_BLOCK);
+                COUNTER_UPDATE(_block_by_precondition_counter, 1);
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
                 set_driver_state(DriverState::OUTPUT_FULL);
+                COUNTER_UPDATE(_block_by_output_full_counter, 1);
             } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
                 set_driver_state(DriverState::INPUT_EMPTY);
+                COUNTER_UPDATE(_block_by_input_empty_counter, 1);
             } else {
                 set_driver_state(DriverState::READY);
             }

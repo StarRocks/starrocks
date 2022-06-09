@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -25,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 public class ScalarOperatorEvaluatorTest {
     @Test
     public void evaluationNotConstant() {
-        CallOperator operator = new CallOperator("ifnull", Type.INT,
+        CallOperator operator = new CallOperator(FunctionSet.IF_NULL, Type.INT,
                 Lists.newArrayList(new ColumnRefOperator(1, Type.INT, "test", true), ConstantOperator.createInt(2)));
 
         ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
@@ -35,10 +36,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNull() {
-        CallOperator operator = new CallOperator("concat", Type.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
                 Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createNull(Type.VARCHAR)));
 
-        Function fn = new Function(new FunctionName("concat"), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn =
+                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -55,10 +57,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationArrayArgs() {
-        CallOperator operator = new CallOperator("concat", Type.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
                 Lists.newArrayList(ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("123")));
 
-        Function fn = new Function(new FunctionName("concat"), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn =
+                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -98,13 +101,14 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationFromUtc() {
-        CallOperator operator = new CallOperator("str_to_date", Type.VARCHAR, Lists.newArrayList(
+        CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, Type.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("2003-10-11 23:56:25"),
                 ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")
         ));
 
         Function fn =
-                new Function(new FunctionName("str_to_date"), new Type[] {Type.VARCHAR, Type.VARCHAR}, Type.DATETIME,
+                new Function(new FunctionName(FunctionSet.STR_TO_DATE), new Type[] {Type.VARCHAR, Type.VARCHAR},
+                        Type.DATETIME,
                         false);
 
         new Expectations(operator) {
@@ -120,10 +124,11 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationNonNullableFunc() {
-        CallOperator operator = new CallOperator("bitmap_count", Type.BIGINT,
+        CallOperator operator = new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
                 Lists.newArrayList(ConstantOperator.createNull(Type.BITMAP)));
 
-        Function fn = new Function(new FunctionName("bitmap_count"), new Type[] {Type.BITMAP}, Type.BIGINT, false);
+        Function fn =
+                new Function(new FunctionName(FunctionSet.BITMAP_COUNT), new Type[] {Type.BITMAP}, Type.BIGINT, false);
         new Expectations(operator) {
             {
                 operator.getFunction();

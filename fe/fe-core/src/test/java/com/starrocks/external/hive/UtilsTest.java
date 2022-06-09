@@ -4,8 +4,10 @@ package com.starrocks.external.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -84,5 +86,101 @@ public class UtilsTest {
         String path = "hdfs://127.0.0.1:10000/path/1/2/3";
         Assert.assertEquals(Lists.newArrayList("1", "2", "3"),
                 Utils.getPartitionValues(path, Lists.newArrayList("a", "b", "c")));
+    }
+
+    @Test
+    public void testDecimalString() throws DdlException {
+        String t1 = "decimal(3,2)";
+        int[] res = Utils.getPrecisionAndScale(t1);
+        Assert.assertEquals(3, res[0]);
+        Assert.assertEquals(2, res[1]);
+
+        t1 = "decimal(222233,4442)";
+        res = Utils.getPrecisionAndScale(t1);
+        Assert.assertEquals(222233, res[0]);
+        Assert.assertEquals(4442, res[1]);
+
+        try {
+            t1 = "decimal(3.222,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(a,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(3, 2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(-1,2)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal()";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+
+        try {
+            t1 = "decimal(1)";
+            Utils.getPrecisionAndScale(t1);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get"));
+        }
+    }
+
+    @Test
+    public void testArrayString() throws DdlException {
+        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ArrayType arrayType = new ArrayType(new ArrayType(itemType));
+        String typeStr = "Array<Array<date>>";
+        Type resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.VARCHAR);
+        arrayType = new ArrayType(itemType);
+        typeStr = "Array<string>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.INT);
+        arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
+        typeStr = "array<Array<Array<int>>>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createType(PrimitiveType.BIGINT);
+        arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
+        typeStr = "array<Array<Array<bigint>>>";
+        resType = Utils.convertToArrayType(typeStr);
+        Assert.assertEquals(arrayType, resType);
+
+        itemType = ScalarType.createUnifiedDecimalType(4, 2);
+        try {
+            new ArrayType(new ArrayType(itemType));
+            Assert.fail();
+        } catch (InternalError e) {
+            Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
+        }
     }
 }

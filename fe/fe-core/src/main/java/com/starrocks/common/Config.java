@@ -186,6 +186,18 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     *  for task set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+
+    /**
+     *  for task run set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+
+    /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
      */
@@ -687,6 +699,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int alter_table_timeout_second = 86400; // 1day
+
+    /**
+     * The alter handler max worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_threads = 4;
+
+    /**
+     * The alter handler max queue size for worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_queue_size = 4096;
+
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
@@ -725,6 +750,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int export_running_job_num_limit = 5;
+    /**
+     * Limitation of the pending TaskRun queue length.
+     * Default is 500.
+     */
+    @ConfField(mutable = false)
+    public static int task_runs_queue_length = 500;
+    /**
+     * Limitation of the running TaskRun.
+     * Default is 20.
+     */
+    @ConfField(mutable = false)
+    public static int task_runs_concurrency = 20;
     /**
      * Default timeout of export jobs.
      */
@@ -983,17 +1020,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_balancing_tablets = 100;
 
-    // This threshold is to avoid piling up too many report task in FE, which may cause OOM exception.
-    // In some large StarRocks cluster, eg: 100 Backends with ten million replicas, a tablet report may cost
-    // several seconds after some modification of metadata(drop partition, etc..).
-    // And one Backend will report tablets info every 1 min, so unlimited receiving reports is unacceptable.
-    // TODO(cmy): we will optimize the processing speed of tablet report in future, but now, just discard
-    // the report if queue size exceeding limit.
-    // Some online time cost:
-    // 1. disk report: 0-1 ms
-    // 2. task report: 0-1 ms
-    // 3. tablet report
-    //      10000 replicas: 200ms
+    @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
 
@@ -1043,6 +1070,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long routine_load_task_timeout_second = 15;
+
+    /**
+     * kafka util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_kafka_timeout_second = 12;
 
     /**
      * it can't auto-resume routine load job as long as one of the backends is down
@@ -1423,14 +1456,14 @@ public class Config extends ConfigBase {
 
     /**
      * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets, such as storage medium is S3.
+     * Set true if using StarOS to manage tablets for StarRocks lake table.
      */
     @ConfField
     public static boolean use_staros = false;
     @ConfField
     public static String starmgr_address = "127.0.0.1:6090";
     @ConfField
-    public static boolean integrate_staros = false;
+    public static boolean integrate_starmgr = false;
 
     /**
      * default bucket number when create OLAP table without buckets info

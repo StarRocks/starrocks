@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -114,7 +115,7 @@ public class InsertStmtTest {
         v2.setIsAllowNull(false);
         columns.add(v2);
 
-        Column v3 = new Column(CreateMaterializedViewStmt.mvColumnBuilder("bitmap_union", "k1"),
+        Column v3 = new Column(CreateMaterializedViewStmt.mvColumnBuilder(FunctionSet.BITMAP_UNION, "k1"),
                 Type.BITMAP);
         v3.setIsKey(false);
         v3.setAggregationType(AggregateType.BITMAP_UNION, false);
@@ -129,13 +130,13 @@ public class InsertStmtTest {
         v3.setDefineExpr(defineExpr);
         columns.add(v3);
 
-        Column v4 = new Column(CreateMaterializedViewStmt.mvColumnBuilder("hll_union", "k2"), Type.HLL);
+        Column v4 = new Column(CreateMaterializedViewStmt.mvColumnBuilder(FunctionSet.HLL_UNION, "k2"), Type.HLL);
         v4.setIsKey(false);
         v4.setAggregationType(AggregateType.HLL_UNION, false);
         v4.setIsAllowNull(false);
         params = new ArrayList<>();
         params.add(new SlotRef(null, "k2"));
-        defineExpr = new FunctionCallExpr("hll_hash", params);
+        defineExpr = new FunctionCallExpr(FunctionSet.HLL_HASH, params);
         v4.setDefineExpr(defineExpr);
         columns.add(v4);
 
@@ -200,7 +201,7 @@ public class InsertStmtTest {
 
         Assert.assertTrue(queryStmtSubstitue.getResultExprs().get(5) instanceof FunctionCallExpr);
         FunctionCallExpr expr5 = (FunctionCallExpr) queryStmtSubstitue.getResultExprs().get(5);
-        Assert.assertTrue(expr5.getFnName().getFunction().equals("hll_hash"));
+        Assert.assertTrue(expr5.getFnName().getFunction().equals(FunctionSet.HLL_HASH));
         slots = Lists.newArrayList();
         expr5.collect(StringLiteral.class, slots);
         Assert.assertEquals(1, slots.size());
@@ -258,7 +259,7 @@ public class InsertStmtTest {
 
         Assert.assertTrue(queryStmtSubstitue.getResultExprs().get(5) instanceof FunctionCallExpr);
         FunctionCallExpr expr5 = (FunctionCallExpr) queryStmtSubstitue.getResultExprs().get(5);
-        Assert.assertTrue(expr5.getFnName().getFunction().equals("hll_hash"));
+        Assert.assertTrue(expr5.getFnName().getFunction().equals(FunctionSet.HLL_HASH));
         slots = Lists.newArrayList();
         expr5.collect(SlotRef.class, slots);
         Assert.assertEquals(1, slots.size());

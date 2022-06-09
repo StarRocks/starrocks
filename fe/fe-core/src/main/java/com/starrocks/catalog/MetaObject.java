@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,8 +32,9 @@ import java.io.IOException;
 import java.util.zip.Adler32;
 
 public class MetaObject implements Writable {
-
+    @SerializedName(value = "signature")
     protected long signature;
+    @SerializedName(value = "lastCheckTime")
     protected long lastCheckTime; // last check consistency time
 
     public MetaObject() {

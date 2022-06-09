@@ -358,10 +358,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 modColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
-        // TODO(mofei) support it
-        if (modColumn.getType().isJsonType() && olapTable.getKeysType() != KeysType.DUP_KEYS) {
-            throw new DdlException(modColumn.getType() + " must be used in duplicate key");
-        }
 
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -652,10 +648,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (newColumn.getType().isComplexType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
             throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
-        }
-
-        if (newColumn.getType().isJsonType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + " must be used in duplicate key");
         }
 
         // check if the new column already exist in base schema.
@@ -1088,60 +1080,63 @@ public class SchemaChangeHandler extends AlterHandler {
             } // end for alter
 
             // 3. check partition key
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                for (Column partitionCol : partitionColumns) {
-                    boolean found = false;
-                    for (Column alterColumn : alterSchema) {
-                        if (alterColumn.nameEquals(partitionCol.getName(), true)) {
-                            // 2.1 partition column cannot be modified
-                            if (!alterColumn.equals(partitionCol)) {
-                                throw new DdlException("Can not modify partition column["
-                                        + partitionCol.getName() + "]. index["
-                                        + olapTable.getIndexNameById(alterIndexId) + "]");
+            if (hasColumnChange) {
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                if (partitionInfo.getType() == PartitionType.RANGE) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    for (Column partitionCol : partitionColumns) {
+                        boolean found = false;
+                        for (Column alterColumn : alterSchema) {
+                            if (alterColumn.nameEquals(partitionCol.getName(), true)) {
+                                // 2.1 partition column cannot be modified
+                                if (!alterColumn.equals(partitionCol)) {
+                                    throw new DdlException("Can not modify partition column["
+                                            + partitionCol.getName() + "]. index["
+                                            + olapTable.getIndexNameById(alterIndexId) + "]");
+                                }
+                                found = true;
+                                break;
                             }
-                            found = true;
-                            break;
+                        } // end for alterColumns
+
+                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
+                            // 2.1 partition column cannot be deleted.
+                            throw new DdlException("Partition column[" + partitionCol.getName()
+                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                            // ATTN. partition columns' order also need remaining unchanged.
+                            // for now, we only allow one partition column, so no need to check order.
                         }
-                    } // end for alterColumns
+                    } // end for partitionColumns
+                }
 
-                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                        // 2.1 partition column cannot be deleted.
-                        throw new DdlException("Partition column[" + partitionCol.getName()
-                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                        // ATTN. partition columns' order also need remaining unchanged.
-                        // for now, we only allow one partition column, so no need to check order.
-                    }
-                } // end for partitionColumns
-            }
-
-            // 4. check distribution key:
-            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
-                for (Column distributionCol : distributionColumns) {
-                    boolean found = false;
-                    for (Column alterColumn : alterSchema) {
-                        if (alterColumn.nameEquals(distributionCol.getName(), true)) {
-                            // 3.1 distribution column cannot be modified
-                            if (!alterColumn.equals(distributionCol)) {
-                                throw new DdlException("Can not modify distribution column["
-                                        + distributionCol.getName() + "]. index["
-                                        + olapTable.getIndexNameById(alterIndexId) + "]");
+                // 4. check distribution key:
+                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+                if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                    List<Column> distributionColumns =
+                            ((HashDistributionInfo) distributionInfo).getDistributionColumns();
+                    for (Column distributionCol : distributionColumns) {
+                        boolean found = false;
+                        for (Column alterColumn : alterSchema) {
+                            if (alterColumn.nameEquals(distributionCol.getName(), true)) {
+                                // 3.1 distribution column cannot be modified
+                                if (!alterColumn.equals(distributionCol)) {
+                                    throw new DdlException("Can not modify distribution column["
+                                            + distributionCol.getName() + "]. index["
+                                            + olapTable.getIndexNameById(alterIndexId) + "]");
+                                }
+                                found = true;
+                                break;
                             }
-                            found = true;
-                            break;
-                        }
-                    } // end for alterColumns
+                        } // end for alterColumns
 
-                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                        // 2.2 distribution column cannot be deleted.
-                        throw new DdlException("Distribution column[" + distributionCol.getName()
-                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                    }
-                } // end for distributionCols
+                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
+                            // 2.2 distribution column cannot be deleted.
+                            throw new DdlException("Distribution column[" + distributionCol.getName()
+                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                        }
+                    } // end for distributionCols
+                }
             }
 
             // 5. calc short key
@@ -1385,7 +1380,6 @@ public class SchemaChangeHandler extends AlterHandler {
             alterJob.setState(JobState.FINISHED);
             // has to remove here, because check is running every interval, it maybe finished but also in job list
             // some check will failed
-            ((SchemaChangeJob) alterJob).deleteAllTableHistorySchema();
             ((SchemaChangeJob) alterJob).finishJob();
             jobDone(alterJob);
             GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);

@@ -771,6 +771,13 @@ public class ExportJob implements Writable {
         }
     }
 
+    /**
+     * for ut only
+     */
+    public void setTableName(TableName tableName) {
+        this.tableName = tableName;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {

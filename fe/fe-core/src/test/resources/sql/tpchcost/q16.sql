@@ -36,23 +36,26 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-14:MERGING-EXCHANGE
+15:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 
 STREAM DATA SINK
-EXCHANGE ID: 14
+EXCHANGE ID: 15
 UNPARTITIONED
 
-13:SORT
+14:SORT
 |  order by: <slot 26> 26: count DESC, <slot 10> 10: P_BRAND ASC, <slot 11> 11: P_TYPE ASC, <slot 12> 12: P_SIZE ASC
 |  offset: 0
 |
-12:AGGREGATE (merge finalize)
-|  output: multi_distinct_count(26: count)
+13:AGGREGATE (update finalize)
+|  output: count(2: PS_SUPPKEY)
 |  group by: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
+|
+12:AGGREGATE (merge serialize)
+|  group by: 2: PS_SUPPKEY, 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |
 11:EXCHANGE
 
@@ -66,8 +69,7 @@ HASH_PARTITIONED: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 
 10:AGGREGATE (update serialize)
 |  STREAMING
-|  output: multi_distinct_count(2: PS_SUPPKEY)
-|  group by: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
+|  group by: 2: PS_SUPPKEY, 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |
 9:Project
 |  <slot 2> : 2: PS_SUPPKEY
@@ -103,7 +105,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: partsupp
 tabletRatio=10/10
-tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
 cardinality=80000000
 avgRowSize=16.0
 numNodes=0
@@ -126,7 +127,6 @@ PREDICATES: 23: S_COMMENT LIKE '%Customer%Complaints%'
 partitions=1/1
 rollup: supplier
 tabletRatio=1/1
-tabletList=10111
 cardinality=250000
 avgRowSize=105.0
 numNodes=0
@@ -146,7 +146,6 @@ PREDICATES: 10: P_BRAND != 'Brand#43', NOT (11: P_TYPE LIKE 'PROMO BURNISHED%'),
 partitions=1/1
 rollup: part
 tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=2304000
 avgRowSize=47.0
 numNodes=0

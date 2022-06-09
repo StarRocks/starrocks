@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "exec/vectorized/sorting/sorting.h"

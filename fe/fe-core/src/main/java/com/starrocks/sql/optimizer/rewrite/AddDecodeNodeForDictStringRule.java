@@ -489,6 +489,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     null,
                     Operator.DEFAULT_LIMIT,
                     operator.getSortPhase(),
+                    operator.getTopNType(),
                     operator.isSplit(),
                     operator.isEnforced(),
                     predicate,

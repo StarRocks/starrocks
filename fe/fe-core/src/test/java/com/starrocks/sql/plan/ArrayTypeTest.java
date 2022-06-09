@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
@@ -185,5 +187,16 @@ public class ArrayTypeTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  8:Project\n" +
                 "  |  <slot 8> : array_contains(ARRAY<bigint(20)>[7: expr], 1)\n" +
                 "  |  <slot 9> : array_contains(ARRAY<bigint(20)>[7: expr], 2)"));
+    }
+
+    @Test
+    public void testArrayWindowFunction() throws Exception {
+        for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
+            String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
+            expectedEx.expect(SemanticException.class);
+            expectedEx.expectMessage(
+                    String.format("No matching function with signature: %s(ARRAY<bigint(20)>)", fnName.toLowerCase()));
+            getFragmentPlan(sql);
+        }
     }
 }

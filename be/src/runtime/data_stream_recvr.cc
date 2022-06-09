@@ -21,6 +21,8 @@
 
 #include "runtime/data_stream_recvr.h"
 
+#include <fmt/format.h>
+
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -33,6 +35,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/exec_env.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
 #include "util/block_compression.h"

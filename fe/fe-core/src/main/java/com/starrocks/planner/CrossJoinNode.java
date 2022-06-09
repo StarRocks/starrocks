@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.IdGenerator;
@@ -153,26 +154,30 @@ public class CrossJoinNode extends PlanNode implements RuntimeFilterBuildNode {
                 Expr left = expr.getChild(0);
                 Expr right = expr.getChild(1);
 
+                if (!(left instanceof SlotRef)) {
+                    continue;
+                }
+
+                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                    continue;
+                }
+
                 RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
                 rf.setFilterId(generator.getNextId().asInt());
                 rf.setBuildPlanNodeId(getId().asInt());
                 rf.setExprOrder(i);
                 rf.setJoinMode(distributionMode);
                 rf.setBuildCardinality(buildStageNode.getCardinality());
-                rf.setOnlyLocal(false);
+                rf.setOnlyLocal(true);
 
                 rf.setBuildExpr(right);
-                boolean accept = false;
-                for (PlanNode child : this.getChildren()) {
-                    accept = accept || child.pushDownRuntimeFilters(rf, left);
-                }
+                boolean accept = getChild(0).pushDownRuntimeFilters(rf, left);
                 if (accept) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
         }
     }
-
 
     @Override
     public int getNumInstances() {

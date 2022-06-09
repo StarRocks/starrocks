@@ -11,6 +11,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.starrocks.external.HiveMetaStoreTableUtils.getAllColumnNames;
@@ -41,7 +43,6 @@ public class HiveMetaCache {
 
     // Pulling the value of the latest state every time when getting databaseNames or tableNames
     private static final long MAX_NAMES_CACHE_SIZE = 0L;
-    private static final long REFRESH_TABLE_SCHEMA_SECONDS = 60;
     private final HiveMetaClient client;
     private final String resourceName;
 
@@ -61,12 +62,13 @@ public class HiveMetaCache {
     // HiveTableColumnsKey => ImmutableMap<ColumnName -> HiveColumnStats>
     LoadingCache<HiveTableColumnsKey, ImmutableMap<String, HiveColumnStats>> tableColumnStatsCache;
 
-    LoadingCache<String, List<String>> databaseNamesCache;
-    LoadingCache<String, List<String>> tableNamesCache;
-
     // HiveTableName => Table
     LoadingCache<HiveTableName, Table> tableCache;
     LoadingCache<String, Database> databaseCache;
+
+    LoadingCache<String, List<String>> databaseNamesCache;
+    LoadingCache<String, List<String>> tableNamesCache;
+
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
         this(hiveMetaClient, executor, null);
@@ -135,7 +137,7 @@ public class HiveMetaCache {
                     }
                 }, executor));
 
-        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE, REFRESH_TABLE_SCHEMA_SECONDS)
+        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
                 .build(asyncReloading(new CacheLoader<HiveTableName, Table>() {
                     @Override
                     public Table load(HiveTableName key) throws Exception {
@@ -143,7 +145,7 @@ public class HiveMetaCache {
                     }
                 }, executor));
 
-        databaseCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE, REFRESH_TABLE_SCHEMA_SECONDS)
+        databaseCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
                 .build(asyncReloading(new CacheLoader<String, Database>() {
                     @Override
                     public Database load(String key) throws Exception {
@@ -161,17 +163,6 @@ public class HiveMetaCache {
         if (!Config.enable_hms_events_incremental_sync &&
                 Config.hive_meta_cache_ttl_s > Config.hive_meta_cache_refresh_interval_s) {
             cacheBuilder.refreshAfterWrite(Config.hive_meta_cache_refresh_interval_s, SECONDS);
-        }
-        cacheBuilder.maximumSize(maximumSize);
-        return cacheBuilder;
-    }
-
-    private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize, long refreshIntervalSec) {
-        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
-        cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);
-        if (!Config.enable_hms_events_incremental_sync &&
-                Config.hive_meta_cache_ttl_s > refreshIntervalSec) {
-            cacheBuilder.refreshAfterWrite(refreshIntervalSec, SECONDS);
         }
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
@@ -313,6 +304,10 @@ public class HiveMetaCache {
         return client.getAllTableNames(dbName);
     }
 
+    public Table getTableFromCache(HiveTableName hiveTableName) {
+        return tableCache.getIfPresent(hiveTableName);
+    }
+
     public Table getTable(HiveTableName hiveTableName) {
         try {
             return tableCache.get(hiveTableName);
@@ -322,9 +317,14 @@ public class HiveMetaCache {
         }
     }
 
+
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        return HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
+                hiveTableName.getTableName(), null, null, table.getType()));
+
+        return table;
     }
 
     public Database getDb(String dbName) {
@@ -339,7 +339,7 @@ public class HiveMetaCache {
     private Database loadDatabase(String dbName) throws TException {
         // Check whether the db exists, if not, an exception will be thrown here
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
-        if (db.getName() == null) {
+        if (db == null || db.getName() == null) {
             throw new TException("Hive db " + dbName + " doesn't exist");
         }
         return HiveMetaStoreTableUtils.convertToSRDatabase(dbName);
@@ -403,11 +403,34 @@ public class HiveMetaCache {
     }
 
     public boolean tableExistInCache(HiveTableKey tableKey) {
-        return tableStatsCache.asMap().containsKey(tableKey);
+        boolean exist = tableStatsCache.getIfPresent(tableKey) != null;
+        if (!HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+            boolean connectorTableExist = getTableFromCache(
+                    HiveTableName.of(tableKey.getDatabaseName(), tableKey.getTableName())) != null;
+            return exist && connectorTableExist;
+        }
+        return exist;
     }
 
     public boolean partitionExistInCache(HivePartitionKey partitionKey) {
-        return partitionsCache.asMap().containsKey(partitionKey);
+        boolean exist = partitionsCache.getIfPresent(partitionKey) != null;
+        if (!HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+            boolean connectorTableExist = getTableFromCache(
+                    HiveTableName.of(partitionKey.getDatabaseName(), partitionKey.getTableName())) != null;
+            return exist && connectorTableExist;
+        }
+        return exist;
+    }
+
+    public void refreshConnectorTable(String db, String name) throws TException, DdlException, ExecutionException {
+        HiveTableName hiveTableName = HiveTableName.of(db, name);
+        refreshConnectorTableSchema(hiveTableName);
+        HiveTable newHiveTable = (HiveTable) tableCache.get(hiveTableName);
+        refreshTable(newHiveTable.getHmsTableInfo());
+    }
+
+    public void refreshConnectorTableSchema(HiveTableName hiveTableName) throws TException, DdlException {
+        tableCache.put(hiveTableName, loadTable(hiveTableName));
     }
 
     public void refreshTable(HiveMetaStoreTableInfo hmsTable)
@@ -479,6 +502,7 @@ public class HiveMetaCache {
         String dbName = hmsTable.getDb();
         String tableName = hmsTable.getTable();
         Table.TableType tableType = hmsTable.getTableType();
+
         HivePartitionKeysKey hivePartitionKeysKey = new HivePartitionKeysKey(dbName, tableName, tableType, null);
         ImmutableMap<PartitionKey, Long> partitionKeys = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
         partitionKeysCache.invalidate(hivePartitionKeysKey);
@@ -493,5 +517,19 @@ public class HiveMetaCache {
                 partitionStatsCache.invalidate(pKey);
             }
         }
+
+        if (!HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+            if (partitionKeys != null) {
+                List<HivePartitionKey> residualToRemove = partitionsCache.asMap().keySet().stream()
+                        .filter(key -> key.approximateMatchTable(dbName, tableName))
+                        .collect(Collectors.toList());
+                partitionsCache.invalidateAll(residualToRemove);
+            }
+            tableCache.invalidate(HiveTableName.of(hmsTable.getDb(), hmsTable.getTable()));
+        }
+    }
+
+    public String getResourceName() {
+        return resourceName;
     }
 }

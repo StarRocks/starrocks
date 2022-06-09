@@ -48,6 +48,8 @@ vectorized_functions = [
     [10120, "floor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
 
+    [10125, "dround", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
+    [10126, "dround", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10127, "round", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
     [10128, "round", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10129, "truncate", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::truncate_decimal128"],
@@ -277,6 +279,8 @@ vectorized_functions = [
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
+    [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
+    [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
@@ -351,7 +355,7 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'date_floor', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::datetime_floor', 'TimeFunctions::datetime_floor_prepare', 'TimeFunctions::datetime_floor_close'],
+    [50370, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

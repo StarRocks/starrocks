@@ -12,18 +12,19 @@
 
 namespace starrocks {
 
-class RowsetWriter;
 class SlotDescriptor;
 class TabletSchema;
 
 namespace vectorized {
 
+class MemTableSink;
+
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-             RowsetWriter* rowset_writer, MemTracker* mem_tracker);
+             MemTableSink* sink, MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+    MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
     ~MemTable();
@@ -53,6 +54,8 @@ private:
     void _sort_column_inc();
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
+    bool _is_aggregate_needed();
+    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
@@ -72,7 +75,7 @@ private:
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
 
-    RowsetWriter* _rowset_writer;
+    MemTableSink* _sink;
 
     // aggregate
     std::unique_ptr<ChunkAggregator> _aggregator;

@@ -32,7 +32,6 @@
 #include "column/vectorized_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_block.h"
@@ -49,6 +48,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "types/date_value.h"
 
 using std::string;
 
@@ -135,8 +135,7 @@ protected:
             } else if (type == OLAP_FIELD_TYPE_CHAR) {
                 column = create_char_key(1, true, 128);
             }
-            std::unique_ptr<ColumnWriter> writer;
-            ColumnWriter::create(writer_opts, &column, wfile.get(), &writer);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
             ASSERT_OK(writer->init());
 
             ASSERT_TRUE(writer->append(src).ok());
@@ -384,8 +383,7 @@ protected:
             element_meta->set_compression(LZ4_FRAME);
             element_meta->set_is_nullable(false);
 
-            std::unique_ptr<ColumnWriter> writer;
-            ColumnWriter::create(writer_opts, &array_column, wfile.get(), &writer);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &array_column, wfile.get()));
             ASSERT_OK(writer->init());
 
             ASSERT_TRUE(writer->append(*src_column).ok());
@@ -700,8 +698,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         writer_opts.need_zone_map = true;
 
         TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, OLAP_FIELD_TYPE_INT);
-        std::unique_ptr<ColumnWriter> writer;
-        ColumnWriter::create(writer_opts, &column, wfile.get(), &writer);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
 
         ASSERT_TRUE(writer->append(*col).ok());

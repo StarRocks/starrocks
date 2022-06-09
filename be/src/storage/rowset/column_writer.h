@@ -27,7 +27,7 @@
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -79,8 +79,8 @@ class ZoneMapIndexWriter;
 
 class ColumnWriter {
 public:
-    static Status create(const ColumnWriterOptions& opts, const TabletColumn* column, WritableFile* _wfile,
-                         std::unique_ptr<ColumnWriter>* writer);
+    static StatusOr<std::unique_ptr<ColumnWriter>> create(const ColumnWriterOptions& opts, const TabletColumn* column,
+                                                          WritableFile* wfile);
 
     explicit ColumnWriter(std::unique_ptr<Field> field, bool is_nullable)
             : _field(std::move(field)), _is_nullable(is_nullable) {}

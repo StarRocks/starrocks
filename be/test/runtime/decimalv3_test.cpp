@@ -8,6 +8,7 @@
 #include <tuple>
 #include <vector>
 
+#include "runtime/large_int_value.h"
 #include "util/logging.h"
 namespace starrocks {
 

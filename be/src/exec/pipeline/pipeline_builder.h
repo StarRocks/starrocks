@@ -27,7 +27,7 @@ public:
     // Input the output chunks from the drivers of pred operators into ONE driver of the post operators.
     OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators);
     OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, OpFactories& pred_operators,
-                                                             int num_receivers);
+                                                             int num_receivers, bool force = false);
 
     // Input the output chunks from multiple drivers of pred operators into DOP drivers of the post operators,
     // by partitioning each row output chunk to DOP partitions according to the key,
@@ -58,7 +58,11 @@ public:
 
     FragmentContext* fragment_context() { return _fragment_context; }
 
+    MorselQueue* morsel_queue_of_source_operator(const SourceOperatorFactory* source_op);
+
 private:
+    static constexpr int kLocalExchangeBufferChunks = 8;
+
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
 

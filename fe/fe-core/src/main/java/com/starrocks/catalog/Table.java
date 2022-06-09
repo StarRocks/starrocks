@@ -25,8 +25,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -64,11 +66,17 @@ public class Table extends MetaObject implements Writable {
         HUDI,
         ODBC,
         JDBC,
+        MATERIALIZED_VIEW,
+        LAKE
     }
 
+    @SerializedName(value = "id")
     protected long id;
+    @SerializedName(value = "name")
     protected String name;
+    @SerializedName(value = "type")
     protected TableType type;
+    @SerializedName(value = "createTime")
     protected long createTime;
     /*
      *  fullSchema and nameToColumn should contains all columns, both visible and shadow.
@@ -90,6 +98,7 @@ public class Table extends MetaObject implements Writable {
      * <p>
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
      */
+    @SerializedName(value = "fullSchema")
     protected List<Column> fullSchema;
     // tree map for case-insensitive lookup.
     /**
@@ -100,6 +109,7 @@ public class Table extends MetaObject implements Writable {
     // DO NOT persist this variable.
     protected boolean isTypeRead = false;
     // table(view)'s comment
+    @SerializedName(value = "comment")
     protected String comment = "";
 
     public Table(TableType type) {
@@ -150,6 +160,18 @@ public class Table extends MetaObject implements Writable {
 
     public TableType getType() {
         return type;
+    }
+
+    public boolean isOlapTable() {
+        return type == TableType.OLAP;
+    }
+
+    public boolean isLakeTable() {
+        return type == TableType.LAKE;
+    }
+
+    public boolean isOlapOrLakeTable() {
+        return isOlapTable() || isLakeTable();
     }
 
     public List<Column> getFullSchema() {
@@ -210,6 +232,14 @@ public class Table extends MetaObject implements Writable {
             table = new IcebergTable();
         } else if (type == TableType.JDBC) {
             table = new JDBCTable();
+        } else if (type == TableType.MATERIALIZED_VIEW) {
+            table = MaterializedView.read(in);
+            table.setTypeRead(true);
+            return table;
+        } else if (type == TableType.LAKE) {
+            table = LakeTable.read(in);
+            table.setTypeRead(true);
+            return table;
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }

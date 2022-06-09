@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/condition_expr.h"

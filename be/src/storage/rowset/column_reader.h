@@ -106,26 +106,24 @@ public:
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
                      Slice* page_body, PageFooterPB* footer);
 
-    bool is_nullable() const { return _flags[kIsNullablePos]; }
+    bool is_nullable() const { return _flags & kIsNullableMask; }
 
     const EncodingInfo* encoding_info() const { return _encoding_info; }
 
-    bool has_zone_map() const { return _flags[kHasZoneMapIndexMetaPos] || _flags[kHasZoneMapIndexReaderPos]; }
-    bool has_bitmap_index() const { return _flags[kHasBitmapIndexMetaPos] || _flags[kHasBitmapIndexReaderPos]; }
-    bool has_bloom_filter_index() const {
-        return _flags[kHasBloomFilterIndexMetaPos] || _flags[kHasBloomFilterIndexReaderPos];
-    }
+    bool has_zone_map() const { return _zonemap_index != nullptr; }
+    bool has_bitmap_index() const { return _bitmap_index != nullptr; }
+    bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     FieldType column_type() const { return _column_type; }
-    bool has_all_dict_encoded() const { return _flags[kHasAllDictEncodedPos]; }
-    bool all_dict_encoded() const { return _flags[kAllDictEncodedPos]; }
+    bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
+    bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
     uint64_t total_mem_footprint() const { return _total_mem_footprint; }
 
-    int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
+    int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
     ///-----------------------------------
     /// vectorized APIs
@@ -146,7 +144,7 @@ public:
     Status bloom_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                         vectorized::SparseRange* ranges);
 
-    Status load_ordinal_index_once();
+    Status load_ordinal_index();
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -166,23 +164,9 @@ private:
         private_type(int) {}
     };
 
-    template <typename Meta, typename Reader>
-    union ColumnIndex {
-        Meta* meta;
-        Reader* reader;
-    };
-
-    constexpr static size_t kHasZoneMapIndexMetaPos = 0;
-    constexpr static size_t kHasZoneMapIndexReaderPos = 1;
-    constexpr static size_t kHasOrdinalIndexMetaPos = 2;
-    constexpr static size_t kHasOrdinalIndexReaderPos = 3;
-    constexpr static size_t kHasBitmapIndexMetaPos = 4;
-    constexpr static size_t kHasBitmapIndexReaderPos = 5;
-    constexpr static size_t kHasBloomFilterIndexMetaPos = 6;
-    constexpr static size_t kHasBloomFilterIndexReaderPos = 7;
-    constexpr static size_t kIsNullablePos = 8;
-    constexpr static size_t kHasAllDictEncodedPos = 9;
-    constexpr static size_t kAllDictEncodedPos = 10;
+    constexpr static uint8_t kIsNullableMask = 1;
+    constexpr static uint8_t kHasAllDictEncodedMask = 2;
+    constexpr static uint8_t kAllDictEncodedMask = 4;
 
     // Disable copy and assignment
     ColumnReader(const ColumnReader&) = delete;
@@ -193,17 +177,10 @@ private:
 
     Status _init(ColumnMetaPB* meta);
 
-    Status _load_zone_map_index_once();
-    Status _load_bitmap_index_once();
-    Status _load_bloom_filter_index_once();
-
-    Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
-    Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);
-    Status _load_bitmap_index(bool use_page_cache, bool kept_in_memory);
-    Status _load_bloom_filter_index(bool use_page_cache, bool kept_in_memory);
-
-    static void _parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_value_container,
-                                WrapperField* max_value_container);
+    Status _load_zonemap_index();
+    Status _load_ordinal_index();
+    Status _load_bitmap_index();
+    Status _load_bloom_filter_index();
 
     Status _parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const;
 
@@ -224,31 +201,27 @@ private:
     const EncodingInfo* _encoding_info = nullptr;
     const BlockCompressionCodec* _compress_codec = nullptr; // initialized in init()
 
-    ColumnIndex<ZoneMapIndexPB, ZoneMapIndexReader> _zone_map_index;
-    ColumnIndex<OrdinalIndexPB, OrdinalIndexReader> _ordinal_index;
-    ColumnIndex<BitmapIndexPB, BitmapIndexReader> _bitmap_index;
-    ColumnIndex<BloomFilterIndexPB, BloomFilterIndexReader> _bloom_filter_index;
+    std::unique_ptr<ZoneMapIndexPB> _zonemap_index_meta;
+    std::unique_ptr<OrdinalIndexPB> _ordinal_index_meta;
+    std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
+    std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
+
+    std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
+    std::unique_ptr<OrdinalIndexReader> _ordinal_index;
+    std::unique_ptr<BitmapIndexReader> _bitmap_index;
+    std::unique_ptr<BloomFilterIndexReader> _bloom_filter_index;
 
     std::unique_ptr<ZoneMapPB> _segment_zone_map;
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
 
-    // The read operation comprise of compaction, query, checksum and so on.
-    // The ordinal index must be loaded before read operation.
-    // zonemap, bitmap, bloomfilter is only necessary for query.
-    // the other operations can not load these indices.
-    StarRocksCallOnce<Status> _ordinal_index_once;
-    StarRocksCallOnce<Status> _zonemap_index_once;
-    StarRocksCallOnce<Status> _bitmap_index_once;
-    StarRocksCallOnce<Status> _bloomfilter_index_once;
-
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
     const Segment* _segment = nullptr;
 
-    std::bitset<16> _flags;
+    uint8_t _flags;
 };
 
 } // namespace starrocks

@@ -31,12 +31,12 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
-#include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
@@ -46,15 +46,19 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/chunk_allocator.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
+#include "storage/lake/group_assigner.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -68,6 +72,25 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+class FixedGroupAssigner : public lake::GroupAssigner {
+public:
+    explicit FixedGroupAssigner(std::string path) : _path(std::move(path)) {
+        if (_path.back() == '/') _path.pop_back();
+    }
+
+    ~FixedGroupAssigner() override = default;
+
+    StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
+
+    [[maybe_unused]] Status list_group(std::vector<std::string>* groups) override {
+        groups->emplace_back(_path);
+        return Status::OK();
+    }
+
+private:
+    std::string _path;
+};
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -138,28 +161,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
 
-    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                 ? std::thread::hardware_concurrency()
-                                 : config::pipeline_scan_thread_pool_thread_num;
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-
-    _pipeline_scan_io_thread_pool =
-            new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                   num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+    CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
 
     _pipeline_hdfs_scan_io_thread_pool =
             new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
                                    hdfs_num_io_threads, config::pipeline_scan_thread_pool_queue_size);
-
-    std::unique_ptr<ThreadPool> scan_worker_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
-                            .set_min_threads(0)
-                            .set_max_threads(num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&scan_worker_thread_pool));
-    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
-    _scan_executor->initialize(num_io_threads);
 
     std::unique_ptr<ThreadPool> hdfs_scan_worker_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("hdfs_scan_executor") // hdfs_scan io task executor
@@ -168,11 +175,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&hdfs_scan_worker_thread_pool));
-    _hdfs_scan_executor = new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor =
+            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
     _hdfs_scan_executor->initialize(hdfs_num_io_threads);
 
-    _num_scan_operators = 0;
-    _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
@@ -205,6 +211,15 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
+    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+
+#ifndef USE_STAROS
+    _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
+#else
+    CHECK(false) << "_lake_group_assigner not implemented";
+#endif
+    // TODO: cache capacity configurable
+    _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
@@ -218,7 +233,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
-    _plugin_mgr = new PluginMgr();
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
@@ -227,10 +241,31 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
     _result_mgr->init();
-    Status status = _load_path_mgr->init();
-    if (!status.ok()) {
-        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
-        exit(-1);
+    // it means acting as compute node while store_path is empty. some threads are not needed for that case.
+    if (!store_paths.empty()) {
+        int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                     ? std::thread::hardware_concurrency()
+                                     : config::pipeline_scan_thread_pool_thread_num;
+
+        _pipeline_scan_io_thread_pool =
+                new PriorityThreadPool("pip_scan_io", // pipeline scan io
+                                       num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+        std::unique_ptr<ThreadPool> scan_worker_thread_pool;
+        RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
+                                .set_min_threads(0)
+                                .set_max_threads(num_io_threads)
+                                .set_max_queue_size(1000)
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                .build(&scan_worker_thread_pool));
+        _scan_executor =
+                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
+        _scan_executor->initialize(num_io_threads);
+
+        Status status = _load_path_mgr->init();
+        if (!status.ok()) {
+            LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+            exit(-1);
+        }
     }
     _broker_mgr->init();
     _small_file_mgr->init();
@@ -312,7 +347,6 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-    starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     _init_storage_page_cache();
     return Status::OK();
 }
@@ -334,10 +368,6 @@ void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
-    }
-    if (_plugin_mgr) {
-        delete _plugin_mgr;
-        _plugin_mgr = nullptr;
     }
     if (_heartbeat_flags) {
         delete _heartbeat_flags;
@@ -406,10 +436,6 @@ void ExecEnv::_destroy() {
     if (_fragment_mgr) {
         delete _fragment_mgr;
         _fragment_mgr = nullptr;
-    }
-    if (_etl_thread_pool) {
-        delete _etl_thread_pool;
-        _etl_thread_pool = nullptr;
     }
     if (_udf_call_pool) {
         delete _udf_call_pool;
@@ -525,6 +551,14 @@ void ExecEnv::_destroy() {
         delete _external_scan_context_mgr;
         _external_scan_context_mgr = nullptr;
     }
+    if (_lake_tablet_manager) {
+        delete _lake_tablet_manager;
+        _lake_tablet_manager = nullptr;
+    }
+    if (_lake_group_assigner) {
+        delete _lake_group_assigner;
+        _lake_group_assigner = nullptr;
+    }
     _metrics = nullptr;
 }
 
@@ -534,6 +568,15 @@ void ExecEnv::destroy(ExecEnv* env) {
 
 void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {
     _storage_engine = storage_engine;
+}
+
+int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+    if (pipeline_dop > 0) {
+        return pipeline_dop;
+    }
+
+    // Default dop is a half of the number of hardware threads.
+    return std::max<int32_t>(1, _max_executor_threads / 2);
 }
 
 } // namespace starrocks

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"

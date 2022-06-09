@@ -21,12 +21,14 @@
 
 #include "exprs/expr_context.h"
 
+#include <fmt/format.h>
 #include <gperftools/profiler.h>
 
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 
+#include "column/chunk.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
@@ -42,7 +44,10 @@ ExprContext::ExprContext(Expr* root)
         : _fn_contexts_ptr(nullptr), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
 
 ExprContext::~ExprContext() {
-    DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    if (_prepared) {
+        close(_runtime_state);
+    }
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
     }
@@ -54,6 +59,7 @@ Status ExprContext::prepare(RuntimeState* state) {
     }
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
+    _runtime_state = state;
     _pool = std::make_unique<MemPool>();
     return _root->prepare(state, this);
 }
@@ -79,10 +85,10 @@ Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
 }
 
 void ExprContext::close(RuntimeState* state) {
-    if (_closed) {
+    bool expected = false;
+    if (!_closed.compare_exchange_strong(expected, true)) {
         return;
     }
-    _closed = true;
     FunctionContext::FunctionStateScope scope =
             _is_clone ? FunctionContext::THREAD_LOCAL : FunctionContext::FRAGMENT_LOCAL;
     _root->close(state, this, scope);
@@ -94,6 +100,7 @@ void ExprContext::close(RuntimeState* state) {
     if (_pool != nullptr) {
         _pool->free_all();
     }
+    _pool.reset();
 }
 
 int ExprContext::register_func(RuntimeState* state, const starrocks_udf::FunctionContext::TypeDesc& return_type,

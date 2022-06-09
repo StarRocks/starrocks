@@ -16,13 +16,15 @@ import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergHiveCatalogTest {
 
     @Test
     public void testCatalogType() {
-        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030");
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
         Assert.assertEquals(IcebergCatalogType.HIVE_CATALOG, icebergHiveCatalog.getIcebergCatalogType());
     }
 
@@ -46,7 +48,8 @@ public class IcebergHiveCatalogTest {
             }
         };
 
-        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030");
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
         Table table = icebergHiveCatalog.loadTable(identifier);
         Assert.assertTrue(table.name().equals("test"));
     }

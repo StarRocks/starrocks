@@ -144,7 +144,7 @@ void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
     ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
-RuntimeState* Operator::runtime_state() {
+RuntimeState* Operator::runtime_state() const {
     return _factory->runtime_state();
 }
 

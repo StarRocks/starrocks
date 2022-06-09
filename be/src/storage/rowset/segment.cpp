@@ -257,15 +257,19 @@ Status Segment::load_index(MemTracker* mem_tracker) {
     });
 }
 
+bool Segment::has_loaded_index() const {
+    return _load_index_once.has_called();
+}
+
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
+    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
         column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
     }
 
     _column_readers.resize(_tablet_schema->columns().size());
-    for (uint32_t ordinal = 0; ordinal < _tablet_schema->num_columns(); ++ordinal) {
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->columns()[ordinal];
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
         if (iter == column_id_to_footer_ordinal.end()) {

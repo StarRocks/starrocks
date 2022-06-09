@@ -53,6 +53,16 @@ public class CTASAnalyzer {
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;
 
+        for (Table table : tableRefToTable.values()) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                Short replicationNum = olapTable.getDefaultReplicationNum();
+                if (replicationNum > defaultReplicationNum) {
+                    defaultReplicationNum = replicationNum;
+                }
+            }
+        }
+
         List<Field> allFields = queryStatement.getQueryRelation().getRelationFields().getAllFields();
         List<String> finalColumnNames = Lists.newArrayList();
 
@@ -76,6 +86,10 @@ public class CTASAnalyzer {
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
+                // lateral json_each(parse_json(c1)) will return null
+                if (slotRef.getTblNameWithoutAnalyzed() == null) {
+                    continue;
+                }
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
                 if (!(table instanceof OlapTable)) {

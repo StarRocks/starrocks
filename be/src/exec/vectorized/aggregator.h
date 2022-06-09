@@ -7,6 +7,7 @@
 #include <mutex>
 #include <queue>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"

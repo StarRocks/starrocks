@@ -34,13 +34,16 @@
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/wrapper_field.h"
 #include "util/defer_op.h"
+#include "util/percentile_value.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
@@ -363,21 +366,18 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Field ref_field = ChunkHelper::convert_field_to_format_v2(
-                            ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                    Field new_field =
-                            ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_field.type().get(), base_datum, new_field.type().get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+
+                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field new_field =
+                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+
+                Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field
@@ -514,17 +514,12 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_type_info.get(), base_datum, new_type_info.get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+                Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field
@@ -1081,15 +1076,18 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
 Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
+    MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
     Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
             base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
     Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
-    // memtable max buffer size set 80% of memory limit so that it will do _merge() if reach 80%
-    // do finialize() and flush() if reach 90%
-    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+    // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
+    // set max memtable size to 4G since some column has limit size, it will make invalid data
+    size_t max_buffer_size = std::min<size_t>(
+            4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink, max_buffer_size,
+                                                CurrentThread::mem_tracker());
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -1109,8 +1107,8 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.9, CurrentThread::mem_tracker());
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -1141,8 +1139,8 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.8, CurrentThread::mem_tracker());
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
         }
 
         mem_pool->clear();
@@ -1543,6 +1541,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                 return Status::InternalError("process failed");
             }
         }
+        sc_params.rowset_readers[i]->close();
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";

@@ -4,41 +4,9 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
-
-// TODO(hcf) move to utils
-#define RETURN_PTYPE_BYTE_SIZE(TYPE, SIZE)                                           \
-    case TYPE:                                                                       \
-        static_assert(sizeof(vectorized::RunTimeTypeTraits<TYPE>::CppType) == SIZE); \
-        return SIZE;
-
-inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
-    switch (type) {
-        RETURN_PTYPE_BYTE_SIZE(TYPE_NULL, 1);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_BOOLEAN, 1);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_TINYINT, 1);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_SMALLINT, 2);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL32, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DATE, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_INT, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_FLOAT, 4);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL64, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_BIGINT, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_TIME, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DATETIME, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DOUBLE, 8);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL128, 16);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_LARGEINT, 16);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMALV2, 16);
-    default:
-        return 0;
-    }
-}
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
@@ -52,6 +20,7 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 Status ChunksPartitioner::prepare(RuntimeState* state) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
+    _obj_pool = state->obj_pool();
     _init_hash_map_variant();
     return Status::OK();
 }
@@ -93,7 +62,7 @@ bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprC
             size += 1; // 1 bytes for  null flag.
         }
         PrimitiveType ptype = ctx->root()->type().type;
-        size_t byte_size = get_byte_size_of_primitive_type(ptype);
+        size_t byte_size = get_size_of_fixed_length_type(ptype);
         if (byte_size == 0) return false;
         size += byte_size;
     }

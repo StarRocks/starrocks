@@ -21,15 +21,18 @@
 
 #include "agent/agent_server.h"
 
+#include <thrift/protocol/TDebugProtocol.h>
+
 #include <filesystem>
 #include <string>
 
-#include "agent/multi_worker_pool.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
+#include "util/phmap/phmap.h"
 
 using std::string;
 using std::vector;
@@ -63,12 +66,8 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
     pool_name->start();
 
-#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)                                                    \
-    pool_name.reset(new MultiWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
-    pool_name->start();
 #else
 #define CREATE_AND_START_POOL(type, pool_name, worker_num)
-#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)
 #endif // BE_TEST
 
     CREATE_AND_START_POOL(CREATE_TABLE, _create_tablet_workers, config::create_tablet_worker_count);
@@ -76,7 +75,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     // Both PUSH and REALTIME_PUSH type use _push_workers
     CREATE_AND_START_POOL(PUSH, _push_workers,
                           config::push_worker_count_normal_priority + config::push_worker_count_high_priority);
-    CREATE_AND_START_MULTI_POOL(PUBLISH_VERSION, _publish_version_workers, config::publish_version_worker_count);
+    CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers, 1);
     CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
                           config::clear_transaction_task_worker_count);
     CREATE_AND_START_POOL(DELETE, _delete_workers, config::delete_worker_count);

@@ -21,6 +21,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -46,8 +47,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -306,7 +307,7 @@ public class OlapScanNode extends ScanNode {
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
                     if (useStarOS) {
-                        LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((StarOSTablet) tablet).getShardId(),
+                        LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
                         for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
@@ -675,5 +676,10 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         return Utils.canDoReplicatedJoin(olapTable, selectedIndexId, selectedPartitionIds, scanTabletIds);
+    }
+
+    @VisibleForTesting
+    public long getSelectedIndexId() {
+        return selectedIndexId;
     }
 }

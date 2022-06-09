@@ -25,6 +25,7 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -37,9 +38,10 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/global_dicts.h"
+#include "runtime/mem_tracker.h"
 #include "util/bitmap.h"
 #include "util/block_compression.h"
+#include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 
 namespace starrocks {

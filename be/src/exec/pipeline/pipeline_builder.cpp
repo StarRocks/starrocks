@@ -14,7 +14,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * num_receivers * num_receivers);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * num_receivers *
+                                                                kLocalExchangeBufferChunks);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
@@ -41,18 +42,19 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
                                                                                  OpFactories& pred_operators,
-                                                                                 int num_receivers) {
+                                                                                 int num_receivers, bool force) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
-    if (source_operator->degree_of_parallelism() == num_receivers) {
+    if (!force && source_operator->degree_of_parallelism() == num_receivers) {
         return pred_operators;
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    int buffer_size = std::max(num_receivers, static_cast<int>(source_operator->degree_of_parallelism()));
+    int buffer_size = std::max(num_receivers, static_cast<int>(source_operator->degree_of_parallelism())) *
+                      kLocalExchangeBufferChunks;
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * buffer_size);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
@@ -88,7 +90,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * state->chunk_size());
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * state->chunk_size() *
+                                                                kLocalExchangeBufferChunks);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
@@ -125,7 +128,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_row_count);
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_row_count * kLocalExchangeBufferChunks);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
@@ -145,6 +148,16 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
 
     return operators_source_with_local_exchange;
+}
+
+MorselQueue* PipelineBuilderContext::morsel_queue_of_source_operator(const SourceOperatorFactory* source_op) {
+    if (!source_op->with_morsels()) {
+        return nullptr;
+    }
+    auto& morsel_queues = _fragment_context->morsel_queues();
+    auto source_id = source_op->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    return morsel_queues[source_id].get();
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {

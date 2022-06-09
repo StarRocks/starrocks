@@ -26,10 +26,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -68,7 +70,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -335,20 +337,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskInfo> tasksResult = Lists.newArrayList();
         result.setTasks(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
-
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<Task> taskList = taskManager.showTasks(params.db);
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<Task> taskList = taskManager.showTasks(null);
 
         for (Task task : taskList) {
+
+            Database db = globalStateMgr.getDb(task.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
@@ -369,19 +372,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.getTaskRunManager().showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
+
+            Database db = globalStateMgr.getDb(status.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
             info.setTask_name(status.getTaskName());
@@ -764,7 +770,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
             // this is a duplicate request, just return previous txn id
-            LOG.info("duplicate request for stream load. request id: {}, txn: {}", e.getDuplicatedRequestId(),
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
                     e.getTxnId());
             result.setTxnId(e.getTxnId());
         } catch (LabelAlreadyUsedException e) {
@@ -821,7 +827,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn id: {}, backend: {}",
+        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -835,7 +841,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 status.addToError_msgs("Publish timeout. The data will be visible after a while");
             }
         } catch (UserException e) {
-            LOG.warn("failed to commit txn: {}: {}", request.getTxnId(), e.getMessage());
+            LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
         } catch (Throwable e) {
@@ -923,7 +929,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn id: {}, reason: {}, backend: {}",
+        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -976,7 +982,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn id: {}, load id: {}, backend: {}",
+        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
         LOG.debug("stream load put request: {}", request);
@@ -1056,9 +1062,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TRefreshTableResponse refreshTable(TRefreshTableRequest request) throws TException {
         try {
-            GlobalStateMgr.getCurrentState().refreshExternalTable(request.getDb_name(),
-                    request.getTable_name(),
-                    request.getPartitions());
+            // Adapt to the situation that the Fe node before upgrading sends a request to the Fe node after upgrading.
+            if (request.getCatalog_name() == null) {
+                request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            }
+            GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
+                            request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

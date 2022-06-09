@@ -5,6 +5,7 @@
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
+#include <unordered_map>
 #include <vector>
 
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -22,6 +23,22 @@
 #include "testutil//assert.h"
 
 namespace starrocks::vectorized {
+
+inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
+    static std::unordered_map<PredicateType, TExprOpcode::type> mapping = {
+            {PredicateType::kEQ, TExprOpcode::EQ},
+            {PredicateType::kNE, TExprOpcode::NE},
+            {PredicateType::kGT, TExprOpcode::GT},
+            {PredicateType::kGE, TExprOpcode::GE},
+            {PredicateType::kLT, TExprOpcode::LT},
+            {PredicateType::kLE, TExprOpcode::LE},
+            {PredicateType::kInList, TExprOpcode::FILTER_IN},
+            {PredicateType::kNotInList, TExprOpcode::FILTER_NOT_IN},
+            {PredicateType::kAnd, TExprOpcode::COMPOUND_AND},
+            {PredicateType::kOr, TExprOpcode::COMPOUND_OR},
+    };
+    return mapping[p];
+}
 
 // to string of boolean values, e.g,
 //   [1,2,3] => "1,1,1"

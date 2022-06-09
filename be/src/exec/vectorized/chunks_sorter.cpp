@@ -14,7 +14,7 @@
 
 namespace starrocks::vectorized {
 
-static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_columns,
+static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_columns,
                                         std::vector<CompareVector>& compare_results_array,
                                         std::vector<DataSegment>& data_segments,
                                         const std::vector<int>& sort_order_flags,
@@ -32,14 +32,22 @@ static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_co
         std::vector<Datum> rhs_values;
         auto& segment = data_segments[i];
         for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
-            rhs_values.push_back(order_by_columns[col_idx]->get(row_to_sort));
+            rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
         }
         compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_order_flags,
                         null_first_flags);
     }
 }
 
-Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t number_of_rows_to_sort,
+void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
+    chunk = cnk;
+    order_by_columns.reserve(sort_exprs->size());
+    for (ExprContext* expr_ctx : (*sort_exprs)) {
+        order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
+    }
+}
+
+Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
                                      std::vector<std::vector<uint8_t>>& filter_array,
                                      const std::vector<int>& sort_order_flags, const std::vector<int>& null_first_flags,
                                      uint32_t& least_num, uint32_t& middle_num) {
@@ -48,14 +56,14 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
     // first compare with last row of this chunk.
     {
-        get_compare_results_colwise(number_of_rows_to_sort - 1, order_by_columns, compare_results_array, data_segments,
+        get_compare_results_colwise(rows_to_sort - 1, order_by_columns, compare_results_array, data_segments,
                                     sort_order_flags, null_first_flags);
     }
 
     // but we only have one compare.
     // compare with first row of this DataSegment,
     // then we set BEFORE_LAST_RESULT and IN_LAST_RESULT at filter_array.
-    if (number_of_rows_to_sort == 1) {
+    if (rows_to_sort == 1) {
         least_num = 0, middle_num = 0;
         filter_array.resize(dats_segment_size);
         for (size_t i = 0; i < dats_segment_size; ++i) {
@@ -85,7 +93,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
             size_t local_first_size = middle_num;
             for (size_t j = 0; j < rows; ++j) {
-                if (compare_results_array[i][j] < 0) {
+                if (compare_results_array[i][j] <= 0) {
                     filter_array[i][j] = DataSegment::IN_LAST_RESULT;
                     ++middle_num;
                 }

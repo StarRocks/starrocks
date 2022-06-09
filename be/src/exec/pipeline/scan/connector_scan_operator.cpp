@@ -29,14 +29,16 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _max_scan_concurrency,
+                                                   _num_committed_scan_tasks);
 }
 
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
-                                             ScanNode* scan_node)
-        : ScanOperator(factory, id, driver_sequence, scan_node) {}
+                                             ScanNode* scan_node, int max_scan_concurrency,
+                                             std::atomic<int>& num_committed_scan_tasks)
+        : ScanOperator(factory, id, driver_sequence, scan_node, max_scan_concurrency, num_committed_scan_tasks) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -159,7 +161,8 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeHdfsScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }

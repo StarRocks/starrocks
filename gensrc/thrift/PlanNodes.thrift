@@ -351,7 +351,6 @@ enum TJoinOp {
   RIGHT_OUTER_JOIN,
   FULL_OUTER_JOIN,
   CROSS_JOIN,
-  MERGE_JOIN,
 
   RIGHT_SEMI_JOIN,
   LEFT_ANTI_JOIN,
@@ -527,6 +526,12 @@ struct TSortInfo {
   4: optional list<Exprs.TExpr> sort_tuple_slot_exprs
 }
 
+enum TTopNType {
+  ROW_NUMBER,
+  RANK,
+  DENSE_RANK
+}
+
 struct TSortNode {
   1: required TSortInfo sort_info
   // Indicates whether the backend service should use topn vs. sorting
@@ -556,6 +561,7 @@ struct TSortNode {
   22: optional list<Exprs.TExpr> analytic_partition_exprs
   23: optional list<Exprs.TExpr> partition_exprs
   24: optional i64 partition_limit
+  25: optional TTopNType topn_type;
 }
 
 enum TAnalyticWindowType {

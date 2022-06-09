@@ -4,6 +4,7 @@
 #include <sstream>
 #include <vector>
 
+#include "common/config.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_task.h"
 #include "storage/compaction_task_factory.h"

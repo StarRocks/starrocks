@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_batch_load_task.h"
 
+#include <fmt/format.h>
+
 #include <ctime>
 #include <iostream>
 #include <string>
@@ -140,7 +142,7 @@ AgentStatus EngineBatchLoadTask::_process() {
 
 Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to process push. "
-              << " transaction_id=" << request.transaction_id << " tablet_id=" << request.tablet_id
+              << " txn_id: " << request.transaction_id << " tablet_id=" << request.tablet_id
               << ", version=" << request.version;
 
     if (tablet_info_vec == nullptr) {
@@ -166,13 +168,13 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
     vectorized::PushHandler push_handler;
     Status res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
     if (!res.ok()) {
-        LOG(WARNING) << "Fail to load file. res=" << res << ", transaction_id=" << request.transaction_id
+        LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
                      << ", tablet=" << tablet->full_name()
                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
     } else {
         LOG(INFO) << "Finish to load file."
-                  << ". transaction_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
+                  << ". txn_id: " << request.transaction_id << ", tablet=" << tablet->full_name()
                   << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
         write_bytes = push_handler.write_bytes();
         write_rows = push_handler.write_rows();

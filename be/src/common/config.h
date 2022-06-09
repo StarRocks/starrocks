@@ -29,6 +29,7 @@ namespace config {
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
+CONF_Int32(thrift_port, "9060");
 
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
@@ -84,12 +85,10 @@ CONF_Int32(create_tablet_worker_count, "3");
 CONF_Int32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
-// Rhe count of thread to high priority batch load.
+// The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
-// Rhe count of thread to publish version.
-CONF_Int32(publish_version_worker_count, "2");
-// The count of thread to publish version per partition.
-CONF_Int32(partition_publish_version_worker_count, "8");
+// The count of thread to publish version per transaction
+CONF_Int32(transaction_publish_version_worker_count, "8");
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // The count of thread to delete.
@@ -216,6 +215,7 @@ CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
 // The memory_limitation_per_thread_for_schema_change unit GB.
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
+CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
@@ -494,6 +494,9 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
+// kafka reqeust timeout
+CONF_Int32(routine_load_kafka_timeout_second, "10");
+
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
@@ -587,8 +590,8 @@ CONF_Int32(late_materialization_ratio, "10");
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Max batched bytes for each transmit request.
-CONF_Int64(max_transmit_batched_bytes, "65536");
+// Max batched bytes for each transmit request. (256KB)
+CONF_Int64(max_transmit_batched_bytes, "262144");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -659,6 +662,19 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
+/// For parallel scan on the single tablet.
+// These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
+// It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+CONF_Int64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
+// Default is 16384*64, where 16384 is the chunk size in pipeline.
+CONF_Int64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
+// Default is 512MB.
+CONF_Int64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+//
+// Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
+// where scan_dop = estimated_scan_rows / splitted_scan_rows.
+CONF_Int64(tablet_internal_parallel_min_scan_dop, "4");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
@@ -724,6 +740,11 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
+
+#ifdef USE_STAROS
+CONF_String(starmgr_addr, "");
+CONF_Int32(starlet_port, "9070");
+#endif
 
 } // namespace config
 

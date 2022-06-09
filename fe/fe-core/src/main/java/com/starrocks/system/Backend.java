@@ -211,6 +211,11 @@ public class Backend implements Writable {
         heartbeatErrMsg = "";
     }
 
+    // for test only
+    public void setStarletPort(int starletPort) {
+        this.starletPort = starletPort;
+    }
+
     public boolean setDecommissioned(boolean isDecommissioned) {
         if (this.isDecommissioned.compareAndSet(!isDecommissioned, isDecommissioned)) {
             LOG.warn("{} set decommission: {}", this.toString(), isDecommissioned);
@@ -644,10 +649,9 @@ public class Backend implements Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (Config.integrate_staros && this.starletPort != hbResponse.getStarletPort()) {
+            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
-                LOG.info("starletPort in Backend.handleHbResponse is {}", this.starletPort);
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
