@@ -314,7 +314,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ctx->buffer = ByteBuffer::allocate(ctx->kDefaultBufferSize);
+            ctx->buffer = ByteBuffer::allocate(ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, kDefaultBufferSize) : len);
 
         } else if (ctx->buffer->remaining() < len) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
