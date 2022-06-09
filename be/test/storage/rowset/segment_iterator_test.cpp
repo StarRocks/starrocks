@@ -94,10 +94,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
@@ -113,10 +110,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(data_strs[j % slice_num]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
@@ -221,10 +215,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
@@ -240,10 +231,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(data_strs[j % slice_num]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
