@@ -161,13 +161,13 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *                 when t1Rows = 0 or t1Rows is null then false
          *                 when t0.v2 is null then null
          *                 when t1d.v2 is not null then true
-         *                 when v2Nulls < t1Rows then null
+         *                 when v2NotNulls < t1Rows then null
          *                 else false
          *             end
          *         from t0
          *              left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
          *                              on t0.v2= t1d.v2 and t0.v3 = t1d.v3
-         *              left outer join (select count(*) as t1Rows, count(xx.v2) as v2Nulls from xx group by xx.v3) as t1c
+         *              left outer join (select v3, count(*) as t1Rows, count(xx.v2) as v2NotNulls from xx group by xx.v3) as t1c
          *                              on t1c.v3 = t0.v3
          *
          *                                           CTEAnchor
@@ -377,7 +377,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *     when t1Rows = 0 or t1Rows is null then false
          *     when t0.v2 is null then is null
          *     when t1d.v2 is not null then true
-         *     when v2Nulls < t1Rows then null
+         *     when v2NotNulls < t1Rows then null
          *     else false
          * end
          */
