@@ -179,7 +179,7 @@ public class ReorderJoinRule extends Rule {
 
         public OptExpression rewrite(OptExpression optExpression, ColumnRefSet requiredColumns) {
             Operator operator = optExpression.getOp();
-            if (operator.getProjection() != null && operator.getProjection().getColumnRefMap().size() > 1) {
+            if (operator.getProjection() != null) {
                 Projection projection = operator.getProjection();
 
                 List<ColumnRefOperator> outputColumns = Lists.newArrayList();

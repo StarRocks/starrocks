@@ -370,11 +370,11 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testSelectSubqueryWithMultiJoin() throws Exception {
+    public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  26:Project\n" +
-                "  |  <slot 24> : 21: bitmap_union\n" +
-                "  |  <slot 32> : 32: bitmap_union"));
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
 }
