@@ -73,8 +73,7 @@ public class TransactionState implements Writable {
         INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
         ROUTINE_LOAD_TASK(4),           // routine load task use this type
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6),                      // synchronization delete job use this type
-        INSERT_OVERWRITE(7);            // insert overwrite
+        DELETE(6);                      // synchronization delete job use this type
 
         private final int flag;
 
@@ -100,8 +99,6 @@ public class TransactionState implements Writable {
                     return BATCH_LOAD_JOB;
                 case 6:
                     return DELETE;
-                case 7:
-                    return INSERT_OVERWRITE;
                 default:
                     return null;
             }

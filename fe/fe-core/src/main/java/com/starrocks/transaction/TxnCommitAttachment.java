@@ -35,6 +35,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public abstract class TxnCommitAttachment implements Writable {
+
     protected TransactionState.LoadJobSourceType sourceType;
     protected boolean isTypeRead = false;
 

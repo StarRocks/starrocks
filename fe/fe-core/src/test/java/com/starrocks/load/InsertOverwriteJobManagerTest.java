@@ -81,18 +81,6 @@ public class InsertOverwriteJobManagerTest {
 
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
-        /*
-        insertOverwriteJobManager.registerOverwriteJobTxn(1100L, 1L);
-
-         */
-
-        /*
-        Assert.assertFalse(insertOverwriteJobManager.hasRunningOverwriteJob(1l, 110L, targetPartitionIds));
-        Assert.assertTrue(insertOverwriteJobManager.hasRunningOverwriteJob(2l, 110L, targetPartitionIds));
-        insertOverwriteJobManager.deregisterOverwriteJob(1100L);
-        Assert.assertFalse(insertOverwriteJobManager.hasRunningOverwriteJob(2l, 110L, targetPartitionIds));
-
-         */
     }
 
     @Test

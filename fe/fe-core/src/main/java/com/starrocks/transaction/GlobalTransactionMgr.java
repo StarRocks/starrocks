@@ -262,6 +262,7 @@ public class GlobalTransactionMgr implements Writable {
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
+
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -305,6 +306,7 @@ public class GlobalTransactionMgr implements Writable {
             throws UserException {
         commitTransaction(dbId, transactionId, tabletCommitInfos, null);
     }
+
     /**
      * @param transactionId
      * @param tabletCommitInfos
@@ -486,6 +488,7 @@ public class GlobalTransactionMgr implements Writable {
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
+
     }
 
     public void replayDeleteTransactionState(TransactionState transactionState) {

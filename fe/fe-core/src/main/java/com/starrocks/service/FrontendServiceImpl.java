@@ -815,22 +815,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
-        Table table = null;
-        db.readLock();
-        try {
-            table = db.getTable(request.tbl);
-            if (table == null || table.getType() != TableType.OLAP) {
-                throw new UserException("unknown table, table=" + request.tbl);
-            }
-        } finally {
-            db.readUnlock();
-        }
-
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
+                db.getId(), Lists.newArrayList(), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
@@ -888,11 +877,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             throw new UserException("unknown database, database=" + dbName);
         }
-        // collect table-level metrics
-        Table tbl = db.getTable(request.getTbl());
-        if (tbl == null) {
-            throw new UserException("unknown table, table=" + request.getTbl());
-        }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make publish timeout is less than thrift_rpc_timeout_ms
@@ -911,7 +895,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (null == attachment) {
             return ret;
         }
-
+        // collect table-level metrics
+        Table tbl = db.getTable(request.getTbl());
+        if (tbl == null) {
+            throw new UserException("unknown table, table=" + request.getTbl());
+        }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:

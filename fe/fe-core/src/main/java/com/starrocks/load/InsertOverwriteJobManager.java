@@ -42,13 +42,11 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     private Map<Long, List<Long>> partitionsWithOverwrite;
 
     @SerializedName(value = "jobNum")
-    private transient long jobNum;
+    private long jobNum;
 
     private ExecutorService cancelJobExecutorService;
 
     private List<InsertOverwriteJob> runningJobs;
-
-    // private Map<Long, Long> jobToTxnId;
 
     private ReentrantReadWriteLock lock;
 

@@ -1079,6 +1079,7 @@ public class DatabaseTransactionMgr {
             txnOperated = unprotectAbortTransaction(transactionId, reason);
         } finally {
             writeUnlock();
+            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
         }
 
         // send clear txn task to BE to clear the transactions on BE.
@@ -1508,7 +1509,7 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    public void replayUpsertTransactionState(TransactionState transactionState) throws AnalysisException {
+    public void replayUpsertTransactionState(TransactionState transactionState) {
         writeLock();
         try {
             // set transaction status will call txn state change listener

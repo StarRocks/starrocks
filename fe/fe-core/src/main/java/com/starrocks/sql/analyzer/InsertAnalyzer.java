@@ -13,7 +13,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-// import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
@@ -45,7 +44,7 @@ public class InsertAnalyzer {
                 throw unsupportedException("Only support insert overwrite olap table");
             }
             if (((OlapTable) table).getState() != NORMAL) {
-                String msg = String.format("table state is {}, please wait to insert overwrite util table state is normal",
+                String msg = String.format("table state is %s, please wait to insert overwrite util table state is normal",
                         ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }

@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
@@ -1108,15 +1107,6 @@ public class StmtExecutor {
 
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        boolean isExclusive = false;
-        Map<Long, List<Long>> tablePartitionIds = Maps.newHashMap();
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
-            isExclusive = true;
-            sourceType = TransactionState.LoadJobSourceType.INSERT_OVERWRITE;
-            if (((InsertStmt) parsedStmt).isPartitionTarget()) {
-                tablePartitionIds.put(targetTable.getId(), ((InsertStmt) parsedStmt).getOriginalTargetPartitionIds());
-            }
-        }
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;

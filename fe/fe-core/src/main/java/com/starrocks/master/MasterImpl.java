@@ -1289,7 +1289,6 @@ public class MasterImpl {
             // Otherwise, the publish will be successful but commit timeout in FE
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
-            List<TabletCommitInfo> tabletCommitInfos = TabletCommitInfo.fromThrift(request.getCommit_infos());
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
