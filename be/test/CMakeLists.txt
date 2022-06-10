@@ -174,7 +174,6 @@ set(EXEC_FILES
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/index_page_test.cpp
-        ./storage/async_delta_writer_executor_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
