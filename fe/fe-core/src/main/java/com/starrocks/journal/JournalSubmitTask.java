@@ -3,10 +3,15 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.io.DataOutputBuffer;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-public class JournalQueueEntity {
+public class JournalSubmitTask implements Future<Void> {
     // op
     private short op;
     // serialized JournalEntity
@@ -17,7 +22,7 @@ public class JournalQueueEntity {
     // JournalWrite will commit immediately if recieved a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTime;
 
-    public JournalQueueEntity(short op, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+    public JournalSubmitTask(short op, DataOutputBuffer buffer, long maxWaitIntervalMs) {
         this.op = op;
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
@@ -28,11 +33,7 @@ public class JournalQueueEntity {
         }
     }
 
-    public void waitLatch() throws InterruptedException {
-        latch.await();
-    }
-
-    public void countDown() {
+    public void markDone() {
         latch.countDown();
     }
 
@@ -51,5 +52,35 @@ public class JournalQueueEntity {
 
     public short getOp() {
         return op;
+    }
+
+    @Override
+    public boolean isDone() {
+        return latch.getCount() == 0;
+    }
+
+    @Override
+    public Void get() throws InterruptedException, ExecutionException {
+        latch.await();
+        return null;
+    }
+
+    @Override
+    public Void get(long timeout, @NotNull TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        latch.await(timeout, unit);
+        return null;
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        // cannot canceled for now
+        return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        // cannot canceled for now
+        return false;
     }
 }

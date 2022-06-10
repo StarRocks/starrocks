@@ -52,7 +52,7 @@ import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalFactory;
-import com.starrocks.journal.JournalQueueEntity;
+import com.starrocks.journal.JournalSubmitTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
@@ -85,6 +85,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -96,20 +98,20 @@ public class EditLog {
 
     private final Journal journal;
 
-    private BlockingQueue<JournalQueueEntity> logQueue;
+    private BlockingQueue<JournalSubmitTask> logQueue;
 
     @VisibleForTesting
-    public EditLog(Journal journal, BlockingQueue<JournalQueueEntity> logQueue) {
+    public EditLog(Journal journal, BlockingQueue<JournalSubmitTask> logQueue) {
         this.journal = journal;
         this.logQueue = logQueue;
     }
 
     public EditLog(String nodeName) {
         journal = JournalFactory.create(nodeName);
-        logQueue = new ArrayBlockingQueue<JournalQueueEntity>(Config.journal_queue_size);
+        logQueue = new ArrayBlockingQueue<JournalSubmitTask>(Config.journal_queue_size);
     }
 
-    public BlockingQueue<JournalQueueEntity> getLogQueue() {
+    public BlockingQueue<JournalSubmitTask> getLogQueue() {
         return logQueue;
     }
 
@@ -923,26 +925,21 @@ public class EditLog {
     }
 
     /**
-     * put log to queue, wait for JournalWriter
+     * submit log to queue, wait for JournalWriter
      */
     protected void logEdit(short op, Writable writable) {
-        logEdit(op, writable, -1);
-    }
-
-
-    protected void logEdit(short op, Writable writable, long maxWaitIntervalMs) {
-        long start = System.currentTimeMillis();
-        JournalQueueEntity entity = putLogToQueue(op, writable, maxWaitIntervalMs);
-        waitLogConsumed(entity);
+        long start = System.nanoTime();
+        Future<Void> task = submitLog(op, writable, -1);
+        waitInfinity(task);
         if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.currentTimeMillis() - start));
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - start) / 1000000);
         }
     }
 
     /**
-     * put log in queue and return immediately
+     * submit log in queue and return immediately
      */
-    protected JournalQueueEntity putLogToQueue(short op, Writable writable, long maxWaitIntervalMs) {
+    protected Future<Void> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -955,7 +952,7 @@ public class EditLog {
             // The old implement swallow exception like this
             LOG.info("failed to serialized: {}", e);
         }
-        JournalQueueEntity entity = new JournalQueueEntity(op, buffer, maxWaitIntervalMs);
+        JournalSubmitTask task = new JournalSubmitTask(op, buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
@@ -969,7 +966,7 @@ public class EditLog {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                this.logQueue.put(entity);
+                this.logQueue.put(task);
                 break;
             } catch (InterruptedException e) {
                 // got interrupted while waiting if necessary for space to become available
@@ -977,24 +974,23 @@ public class EditLog {
             }
             cnt++;
         }
-
-        return entity;
+        return task;
     }
 
     /**
      * wait for JournalWriter commit all logs
      */
-    protected void waitLogConsumed(JournalQueueEntity entity) {
+    protected void waitInfinity(Future<Void> task) {
         int cnt = 0;
         while (true) {
             try {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                entity.waitLatch();
+                task.get();
                 return;
-            } catch (InterruptedException e) {
-                LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
         }

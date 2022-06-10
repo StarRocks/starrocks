@@ -3,11 +3,9 @@
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Text;
-import com.starrocks.journal.JournalQueueEntity;
+import com.starrocks.journal.JournalSubmitTask;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.bdbje.BDBJEJournal;
-import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -24,21 +22,14 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
-import org.junit.Assert;
-import org.junit.Test;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
     @Test
     public void testtNormal() throws Exception {
-        BlockingQueue<JournalQueueEntity> logQueue = new ArrayBlockingQueue<>(100);
+        BlockingQueue<JournalSubmitTask> logQueue = new ArrayBlockingQueue<>(100);
         short THREAD_NUM = 20;
         List<Thread> allThreads = new ArrayList<>();
         for (short i = 0; i != THREAD_NUM; i++) {
@@ -47,7 +38,7 @@ public class EditLogTest {
                 @Override
                 public void run() {
                     EditLog editLog = new EditLog(null, logQueue);
-                    editLog.logEdit(n, new Text("111"), -1);
+                    editLog.logEdit(n, new Text("111"));
                 }
             }));
         }
@@ -57,9 +48,9 @@ public class EditLogTest {
             public void run() {
                 for (int i = 0; i != THREAD_NUM; i++) {
                     try {
-                        JournalQueueEntity entity = logQueue.take();
-                        LOG.info("got {} entity op {}", i, entity.getOp());
-                        entity.countDown();
+                        JournalSubmitTask task = logQueue.take();
+                        LOG.info("got {} task op {}", i, task.getOp());
+                        task.markDone();
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -81,19 +72,19 @@ public class EditLogTest {
 
     @Test
     public void testNoWaitInterrupt() throws Exception {
-        BlockingQueue<JournalQueueEntity> logQueue = new ArrayBlockingQueue<>(1);
+        BlockingQueue<JournalSubmitTask> logQueue = new ArrayBlockingQueue<>(1);
         Thread t1 = new Thread(new Runnable() {
             @Override
             public void run() {
                 EditLog editLog = new EditLog(null, logQueue);
-                editLog.logEdit((short) 1, new Text("111"), -1);
+                editLog.logEdit((short) 1, new Text("111"));
             }
         });
         Thread t2 = new Thread(new Runnable() {
             @Override
             public void run() {
                 EditLog editLog = new EditLog(null, logQueue);
-                editLog.logEdit((short) 2, new Text("111"), -1);
+                editLog.logEdit((short) 2, new Text("111"));
             }
         });
         t1.start();
@@ -112,22 +103,22 @@ public class EditLogTest {
         }
 
         Assert.assertEquals(1, logQueue.size());
-        JournalQueueEntity entity = logQueue.take();
-        Assert.assertEquals((short)1, entity.getOp());
-        entity.countDown();
-        entity = logQueue.take();
-        Assert.assertEquals((short)2, entity.getOp());
-        entity.countDown();
+        JournalSubmitTask take = logQueue.take();
+        Assert.assertEquals((short)1, take.getOp());
+        take.markDone();
+        take = logQueue.take();
+        Assert.assertEquals((short)2, take.getOp());
+        take.markDone();
 
         t1.join();
         t2.join();
     }
 
     @Test
-    public void testWaitInterrupt(@Mocked JournalQueueEntity entity) throws Exception {
-        new Expectations(entity) {
+    public void testWaitInterrupt(@Mocked JournalSubmitTask task) throws Exception {
+        new Expectations(task) {
             {
-                entity.waitLatch();
+                task.get();
                 times = 3;
                 result = new InterruptedException("mock mock");
                 result = new InterruptedException("mock mock");
@@ -135,7 +126,7 @@ public class EditLogTest {
             }
         };
         EditLog editLog = new EditLog(null, null);
-        editLog.waitLogConsumed(entity);
+        editLog.waitInfinity(task);
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {

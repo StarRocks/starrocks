@@ -22,15 +22,15 @@ import java.util.concurrent.BlockingQueue;
 public class JournalWriter extends Daemon {
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
     // other threads can put log to this queue by calling Editlog.logEdit()
-    private BlockingQueue<JournalQueueEntity> logQueue;
+    private BlockingQueue<JournalSubmitTask> logQueue;
     private Journal journal;
 
     // store stagging log before commit
-    protected List<JournalQueueEntity> staggingLogs = new ArrayList<>();
+    protected List<JournalSubmitTask> staggingLogs = new ArrayList<>();
     // used for checking if edit log need to roll
     protected long rollEditCounter = 0;
 
-    public JournalWriter(Journal journal, BlockingQueue<JournalQueueEntity> logQueue) {
+    public JournalWriter(Journal journal, BlockingQueue<JournalSubmitTask> logQueue) {
         super("JournalWriter", 0L);
         this.journal = journal;
         this.logQueue = logQueue;
@@ -40,27 +40,27 @@ public class JournalWriter extends Daemon {
     protected void runOneCycle() {
         try {
             // 1. waiting if necessary until an element becomes available
-            JournalQueueEntity entity = logQueue.take();
+            JournalSubmitTask take = logQueue.take();
 
-            long start = System.currentTimeMillis();
+            long start = System.nanoTime();
             long uncommitedEstimatedBytes = 0;
             staggingLogs.clear();
 
             // 2. batch write
             while (true) {
                 if (!staggingLogs.isEmpty()) {
-                    entity = logQueue.take();
+                    take = logQueue.take();
                 }
                 // 2.1 write(no commit)
-                journal.writeWithinTxn(entity.getOp(), entity.getBuffer());
-                staggingLogs.add(entity);
+                journal.writeWithinTxn(take.getOp(), take.getBuffer());
+                staggingLogs.add(take);
 
                 // 2.2 check if is an emergency log
-                if (entity.getBetterCommitBeforeTime() > 0) {
-                    long delayMillis = System.currentTimeMillis() - entity.getBetterCommitBeforeTime();
+                if (take.getBetterCommitBeforeTime() > 0) {
+                    long delayMillis = (System.nanoTime() - take.getBetterCommitBeforeTime()) / 1000000;
                     if (delayMillis >= 0) {
                         LOG.warn("log expect commit before {} is delayed {} mills, will commit now",
-                                entity.getBetterCommitBeforeTime(), delayMillis);
+                                take.getBetterCommitBeforeTime(), delayMillis);
                         break;
                     }
                 }
@@ -73,7 +73,7 @@ public class JournalWriter extends Daemon {
                 }
 
                 // 2.4 check uncommitted logs by size
-                uncommitedEstimatedBytes += entity.estimatedSizeByte();
+                uncommitedEstimatedBytes += take.estimatedSizeByte();
                 if (uncommitedEstimatedBytes >= Config.batch_journal_size_mb * 1024 * 1024) {
                     LOG.warn("uncommitted estimated bytes {} >= {}MB, will commit now",
                             uncommitedEstimatedBytes, Config.batch_journal_size_mb);
@@ -90,14 +90,14 @@ public class JournalWriter extends Daemon {
             journal.commitTxn();
 
             // 4. countdown
-            for (JournalQueueEntity e : staggingLogs) {
-                e.countDown();
+            for (JournalSubmitTask e : staggingLogs) {
+                e.markDone();
             }
 
             // 5. update metrics
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) staggingLogs.size());
-                MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update((System.currentTimeMillis() - start));
+                MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update((System.nanoTime() - start) / 1000000);
                 MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(staggingLogs.size());
                 MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommitedEstimatedBytes);
                 MetricRepo.GAUGE_STACKED_EDIT_LOG_NUM.setValue((long) logQueue.size());

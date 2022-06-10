@@ -4,14 +4,12 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.protobuf.MapEntry;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.JournalQueueEntity;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.map.HashedMap;
 
@@ -19,7 +17,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
