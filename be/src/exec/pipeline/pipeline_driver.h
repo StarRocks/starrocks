@@ -190,10 +190,12 @@ public:
         case DriverState::OUTPUT_FULL:
             _output_full_timer->update(_output_full_timer_sw->elapsed_time());
             break;
-        case DriverState::PRECONDITION_BLOCK: {
+        case DriverState::PRECONDITION_BLOCK:
             _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
             break;
-        }
+        case DriverState::PENDING_FINISH:
+            _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
+            break;
         default:
             break;
         }
@@ -207,6 +209,9 @@ public:
             break;
         case DriverState::PRECONDITION_BLOCK:
             _precondition_block_timer_sw->reset();
+            break;
+        case DriverState::PENDING_FINISH:
+            _pending_finish_timer_sw->reset();
             break;
         default:
             break;
@@ -420,12 +425,14 @@ private:
     RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _output_full_timer = nullptr;
+    RuntimeProfile::Counter* _pending_finish_timer = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
     MonotonicStopWatch* _input_empty_timer_sw = nullptr;
     MonotonicStopWatch* _output_full_timer_sw = nullptr;
+    MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 };
 
 } // namespace pipeline
