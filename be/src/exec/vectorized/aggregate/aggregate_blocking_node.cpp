@@ -52,7 +52,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
         DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
-        _aggregator->evaluate_exprs(chunk.get());
+        RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
         size_t chunk_size = chunk->num_rows();
         {

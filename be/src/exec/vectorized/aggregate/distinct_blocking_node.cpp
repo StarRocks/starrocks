@@ -45,7 +45,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         }
         DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
-        _aggregator->evaluate_exprs(chunk.get());
+        RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
