@@ -59,6 +59,9 @@
 #include "runtime/thread_resource_mgr.h"
 #include "storage/lake/group_assigner.h"
 #include "storage/lake/tablet_manager.h"
+#ifdef USE_STAROS
+#include "storage/lake/starlet_group_assigner.h"
+#endif
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -216,7 +219,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 #ifndef USE_STAROS
     _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
 #else
-    CHECK(false) << "_lake_group_assigner not implemented";
+    _lake_group_assigner = new lake::StarletGroupAssigner();
 #endif
     // TODO: cache capacity configurable
     _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);

@@ -159,6 +159,7 @@ add_library(Storage STATIC
     cluster_id_mgr.cpp
     lake/delta_writer.cpp
     lake/general_tablet_writer.cpp
+    lake/starlet_group_assigner.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
 )
