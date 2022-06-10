@@ -32,7 +32,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.lock.LockException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -486,10 +485,7 @@ public class GlobalTransactionMgr implements Writable {
             dbTransactionMgr.replayUpsertTransactionState(transactionState);
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
-        } catch (LockException e) {
-            LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
-
     }
 
     public void replayDeleteTransactionState(TransactionState transactionState) {
