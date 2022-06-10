@@ -52,7 +52,7 @@ import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalFactory;
-import com.starrocks.journal.JournalSubmitTask;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
@@ -98,20 +98,20 @@ public class EditLog {
 
     private final Journal journal;
 
-    private BlockingQueue<JournalSubmitTask> logQueue;
+    private BlockingQueue<JournalTask> logQueue;
 
     @VisibleForTesting
-    public EditLog(Journal journal, BlockingQueue<JournalSubmitTask> logQueue) {
+    public EditLog(Journal journal, BlockingQueue<JournalTask> logQueue) {
         this.journal = journal;
         this.logQueue = logQueue;
     }
 
     public EditLog(String nodeName) {
         journal = JournalFactory.create(nodeName);
-        logQueue = new ArrayBlockingQueue<JournalSubmitTask>(Config.journal_queue_size);
+        logQueue = new ArrayBlockingQueue<JournalTask>(Config.journal_queue_size);
     }
 
-    public BlockingQueue<JournalSubmitTask> getLogQueue() {
+    public BlockingQueue<JournalTask> getLogQueue() {
         return logQueue;
     }
 
@@ -952,7 +952,7 @@ public class EditLog {
             // The old implement swallow exception like this
             LOG.info("failed to serialized: {}", e);
         }
-        JournalSubmitTask task = new JournalSubmitTask(op, buffer, maxWaitIntervalMs);
+        JournalTask task = new JournalTask(op, buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.

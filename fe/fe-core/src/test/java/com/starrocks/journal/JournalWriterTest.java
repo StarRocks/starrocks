@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.journal;
 
 import com.starrocks.common.Config;
@@ -18,7 +20,7 @@ import java.util.concurrent.BlockingQueue;
 public class JournalWriterTest {
     @Mocked
     private Journal journal = new BDBJEJournal(null, null, null);
-    private BlockingQueue<JournalSubmitTask> logQueue = new ArrayBlockingQueue<>(100);
+    private BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
     private JournalWriter writer = new JournalWriter(journal, logQueue);
 
     private DataOutputBuffer makeBuffer(int size) throws IOException {
@@ -47,7 +49,7 @@ public class JournalWriterTest {
                 times = 1;
             }
         };
-        JournalSubmitTask entity = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask entity = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(entity);
         writer.runOneCycle();
         Assert.assertEquals(1, writer.rollEditCounter);
@@ -67,12 +69,12 @@ public class JournalWriterTest {
             }
         };
         // 3 logs, the second one is emergency and must commit
-        JournalSubmitTask expectConsumedEntity = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask expectConsumedEntity = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(expectConsumedEntity);
-        JournalSubmitTask emergency = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask emergency = new JournalTask((short) -1, makeBuffer(10), -1);
         emergency.betterCommitBeforeTime = System.currentTimeMillis() - 10;
         logQueue.add(emergency);
-        JournalSubmitTask expectNotConsumedEntity = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask expectNotConsumedEntity = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(expectNotConsumedEntity);
 
         writer.runOneCycle();
@@ -100,16 +102,16 @@ public class JournalWriterTest {
         };
         // 4 logs
         // round 1: 2 logs
-        JournalSubmitTask expectConsumedEntity = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask expectConsumedEntity = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(expectConsumedEntity);
-        JournalSubmitTask expectConsumedEntity2 = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask expectConsumedEntity2 = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(expectConsumedEntity2);
         // round 2: 1 big log
-        JournalSubmitTask bigLog = new JournalSubmitTask((short) -1, makeBuffer(2 * 1024 * 1024 - 8), -1);
+        JournalTask bigLog = new JournalTask((short) -1, makeBuffer(2 * 1024 * 1024 - 8), -1);
         Assert.assertEquals(2 * 1024 * 1024, bigLog.estimatedSizeByte());
         logQueue.add(bigLog);
         // this one should be left in queue
-        JournalSubmitTask expectNotConsumedEntity = new JournalSubmitTask((short) -1, makeBuffer(10), -1);
+        JournalTask expectNotConsumedEntity = new JournalTask((short) -1, makeBuffer(10), -1);
         logQueue.add(expectNotConsumedEntity);
 
         // round 1
@@ -154,7 +156,7 @@ public class JournalWriterTest {
 
         for (int i = 0; i != 4; i ++) {
             for (int j = 0; j != 3; j ++) {
-                logQueue.add(new JournalSubmitTask((short) -1, makeBuffer(10), -1));
+                logQueue.add(new JournalTask((short) -1, makeBuffer(10), -1));
             }
             writer.runOneCycle();
             Assert.assertEquals(0, logQueue.size());

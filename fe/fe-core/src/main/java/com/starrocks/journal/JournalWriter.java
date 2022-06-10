@@ -22,15 +22,15 @@ import java.util.concurrent.BlockingQueue;
 public class JournalWriter extends Daemon {
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
     // other threads can put log to this queue by calling Editlog.logEdit()
-    private BlockingQueue<JournalSubmitTask> logQueue;
+    private BlockingQueue<JournalTask> logQueue;
     private Journal journal;
 
     // store stagging log before commit
-    protected List<JournalSubmitTask> staggingLogs = new ArrayList<>();
+    protected List<JournalTask> staggingLogs = new ArrayList<>();
     // used for checking if edit log need to roll
     protected long rollEditCounter = 0;
 
-    public JournalWriter(Journal journal, BlockingQueue<JournalSubmitTask> logQueue) {
+    public JournalWriter(Journal journal, BlockingQueue<JournalTask> logQueue) {
         super("JournalWriter", 0L);
         this.journal = journal;
         this.logQueue = logQueue;
@@ -40,7 +40,7 @@ public class JournalWriter extends Daemon {
     protected void runOneCycle() {
         try {
             // 1. waiting if necessary until an element becomes available
-            JournalSubmitTask take = logQueue.take();
+            JournalTask task = logQueue.take();
 
             long start = System.nanoTime();
             long uncommitedEstimatedBytes = 0;
@@ -49,18 +49,18 @@ public class JournalWriter extends Daemon {
             // 2. batch write
             while (true) {
                 if (!staggingLogs.isEmpty()) {
-                    take = logQueue.take();
+                    task = logQueue.take();
                 }
                 // 2.1 write(no commit)
-                journal.writeWithinTxn(take.getOp(), take.getBuffer());
-                staggingLogs.add(take);
+                journal.writeWithinTxn(task.getOp(), task.getBuffer());
+                staggingLogs.add(task);
 
                 // 2.2 check if is an emergency log
-                if (take.getBetterCommitBeforeTime() > 0) {
-                    long delayMillis = (System.nanoTime() - take.getBetterCommitBeforeTime()) / 1000000;
+                if (task.getBetterCommitBeforeTime() > 0) {
+                    long delayMillis = (System.nanoTime() - task.getBetterCommitBeforeTime()) / 1000000;
                     if (delayMillis >= 0) {
                         LOG.warn("log expect commit before {} is delayed {} mills, will commit now",
-                                take.getBetterCommitBeforeTime(), delayMillis);
+                                task.getBetterCommitBeforeTime(), delayMillis);
                         break;
                     }
                 }
@@ -73,7 +73,7 @@ public class JournalWriter extends Daemon {
                 }
 
                 // 2.4 check uncommitted logs by size
-                uncommitedEstimatedBytes += take.estimatedSizeByte();
+                uncommitedEstimatedBytes += task.estimatedSizeByte();
                 if (uncommitedEstimatedBytes >= Config.batch_journal_size_mb * 1024 * 1024) {
                     LOG.warn("uncommitted estimated bytes {} >= {}MB, will commit now",
                             uncommitedEstimatedBytes, Config.batch_journal_size_mb);
@@ -90,7 +90,7 @@ public class JournalWriter extends Daemon {
             journal.commitTxn();
 
             // 4. countdown
-            for (JournalSubmitTask e : staggingLogs) {
+            for (JournalTask e : staggingLogs) {
                 e.markDone();
             }
 

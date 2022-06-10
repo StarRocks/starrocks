@@ -11,7 +11,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class JournalSubmitTask implements Future<Void> {
+public class JournalTask implements Future<Void> {
     // op
     private short op;
     // serialized JournalEntity
@@ -22,7 +22,7 @@ public class JournalSubmitTask implements Future<Void> {
     // JournalWrite will commit immediately if recieved a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTime;
 
-    public JournalSubmitTask(short op, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+    public JournalTask(short op, DataOutputBuffer buffer, long maxWaitIntervalMs) {
         this.op = op;
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);

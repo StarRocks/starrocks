@@ -3,7 +3,7 @@
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Text;
-import com.starrocks.journal.JournalSubmitTask;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,7 +29,7 @@ public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
     @Test
     public void testtNormal() throws Exception {
-        BlockingQueue<JournalSubmitTask> logQueue = new ArrayBlockingQueue<>(100);
+        BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
         short THREAD_NUM = 20;
         List<Thread> allThreads = new ArrayList<>();
         for (short i = 0; i != THREAD_NUM; i++) {
@@ -48,7 +48,7 @@ public class EditLogTest {
             public void run() {
                 for (int i = 0; i != THREAD_NUM; i++) {
                     try {
-                        JournalSubmitTask task = logQueue.take();
+                        JournalTask task = logQueue.take();
                         LOG.info("got {} task op {}", i, task.getOp());
                         task.markDone();
                     } catch (InterruptedException e) {
@@ -72,7 +72,7 @@ public class EditLogTest {
 
     @Test
     public void testNoWaitInterrupt() throws Exception {
-        BlockingQueue<JournalSubmitTask> logQueue = new ArrayBlockingQueue<>(1);
+        BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(1);
         Thread t1 = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -103,7 +103,7 @@ public class EditLogTest {
         }
 
         Assert.assertEquals(1, logQueue.size());
-        JournalSubmitTask take = logQueue.take();
+        JournalTask take = logQueue.take();
         Assert.assertEquals((short)1, take.getOp());
         take.markDone();
         take = logQueue.take();
@@ -115,7 +115,7 @@ public class EditLogTest {
     }
 
     @Test
-    public void testWaitInterrupt(@Mocked JournalSubmitTask task) throws Exception {
+    public void testWaitInterrupt(@Mocked JournalTask task) throws Exception {
         new Expectations(task) {
             {
                 task.get();
