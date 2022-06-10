@@ -38,7 +38,7 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vec
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    _aggregator->evaluate_exprs(chunk.get());
+    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
         return _push_chunk_by_force_streaming();

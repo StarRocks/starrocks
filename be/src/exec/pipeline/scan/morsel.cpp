@@ -87,7 +87,11 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
             return nullptr;
         }
 
-        RETURN_IF_ERROR(_init_segment());
+        if (auto status = _init_segment(); !status.ok()) {
+            // Morsel_queue cannot generate morsels after errors occurring.
+            _tablet_idx = _tablets.size();
+            return status;
+        }
     }
 
     vectorized::SparseRange taken_range;
