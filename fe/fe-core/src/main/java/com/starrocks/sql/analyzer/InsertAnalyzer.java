@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
@@ -42,6 +43,11 @@ public class InsertAnalyzer {
         if (insertStmt.isOverwrite()) {
             if (!(table instanceof OlapTable)) {
                 throw unsupportedException("Only support insert overwrite olap table");
+            }
+            if (((OlapTable) table).getState() != NORMAL) {
+                String msg = String.format("table state is {}, please wait to insert overwrite util table state is normal",
+                        ((OlapTable) table).getState());
+                throw unsupportedException(msg);
             }
         } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");

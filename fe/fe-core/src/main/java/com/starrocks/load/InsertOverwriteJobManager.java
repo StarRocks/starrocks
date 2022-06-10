@@ -126,6 +126,15 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
+    public boolean hasRunningOverwriteJob(long tableId) {
+        lock.readLock().lock();
+        try {
+            return partitionsWithOverwrite.containsKey(tableId);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobInfo jobInfo) {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
                 jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
