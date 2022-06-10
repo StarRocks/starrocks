@@ -44,6 +44,7 @@
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
 #include "storage/data_dir.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
@@ -360,36 +361,48 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             worker_pool_this->_tasks.pop_front();
         }
 
+        TFinishTaskRequest finish_task_request;
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
 
+        auto tablet_type = create_tablet_req.tablet_type;
         std::vector<TTabletInfo> finish_tablet_infos;
-        Status create_status = worker_pool_this->_env->storage_engine()->create_tablet(create_tablet_req);
+        Status create_status;
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+#ifndef USE_STAROS
+            create_status = Status::NotSupported("create lake tablet");
+#else
+            create_status = worker_pool_this->_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+#endif
+        } else {
+            create_status = worker_pool_this->_env->storage_engine()->create_tablet(create_tablet_req);
+        }
         if (!create_status.ok()) {
             LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                          << ", signature: " << agent_task_req.signature;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
-            ++_s_report_version;
-            // get path hash of the created tablet
-            auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-            DCHECK(tablet != nullptr);
-            TTabletInfo tablet_info;
-            tablet_info.tablet_id = tablet->tablet_id();
-            tablet_info.schema_hash = tablet->schema_hash();
-            tablet_info.version = create_tablet_req.version;
-            tablet_info.row_count = 0;
-            tablet_info.data_size = 0;
-            tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
-            finish_tablet_infos.push_back(tablet_info);
+            if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
+                ++_s_report_version;
+                // get path hash of the created tablet
+                auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+                DCHECK(tablet != nullptr);
+                TTabletInfo tablet_info;
+                tablet_info.tablet_id = tablet->tablet_id();
+                tablet_info.schema_hash = tablet->schema_hash();
+                tablet_info.version = create_tablet_req.version;
+                tablet_info.row_count = 0;
+                tablet_info.data_size = 0;
+                tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
+                finish_tablet_infos.push_back(tablet_info);
+                finish_task_request.__set_finish_tablet_infos(finish_tablet_infos);
+            }
         }
 
         task_status.__set_status_code(status_code);
         task_status.__set_error_msgs(error_msgs);
 
-        TFinishTaskRequest finish_task_request;
-        finish_task_request.__set_finish_tablet_infos(finish_tablet_infos);
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(_s_report_version);
         finish_task_request.__set_task_type(agent_task_req.task_type);

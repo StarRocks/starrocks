@@ -5,6 +5,7 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/starlake.pb.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/group_assigner.h"
@@ -12,6 +13,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/metadata_util.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
 
@@ -39,15 +41,33 @@ std::string TabletManager::txn_log_path(const std::string& group, int64_t tablet
 }
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
-    // generate metapb
+    // generate tablet metadata pb
     TabletMetadataPB tablet_metadata_pb;
     tablet_metadata_pb.set_id(req.tablet_id);
     tablet_metadata_pb.set_version(1);
+    tablet_metadata_pb.set_next_rowset_id(2);
+
+    // schema
+    uint32_t next_unique_id = 0;
+    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+    next_unique_id = req.tablet_schema.columns.size();
+    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+        col_idx_to_unique_id[col_idx] = col_idx;
+    }
+    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(req.tablet_schema, next_unique_id, col_idx_to_unique_id,
+                                                             RowsetTypePB::BETA_ROWSET, tablet_metadata_pb.mutable_schema()));
+
+    // rowset metadata with version 1 and id 1
+    auto rowset_metadata_pb = tablet_metadata_pb.add_rowsets();
+    rowset_metadata_pb->set_id(1);
+    rowset_metadata_pb->set_overlapped(false);
+    rowset_metadata_pb->set_data_size(0);
+    rowset_metadata_pb->set_num_rows(0);
 
     // get shard group
     ASSIGN_OR_RETURN(auto group_path, _group_assigner->get_group(req.tablet_id));
 
-    // write tablet meta
+    // write tablet metadata
     auto meta_path = tablet_meta_path(group_path, tablet_metadata_pb.id(), tablet_metadata_pb.version());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
     ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(meta_path));

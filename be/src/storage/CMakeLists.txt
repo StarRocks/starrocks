@@ -36,6 +36,7 @@ add_library(Storage STATIC
     del_vector.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
+    metadata_util.cpp
     kv_store.cpp
     olap_common.cpp
     olap_server.cpp
