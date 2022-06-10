@@ -458,7 +458,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         curTotalCost += CostModel.calculateCost(enforcer);
 
         if (enforcer.updatePropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
-            enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, context.getRequiredProperty());
+            enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
         }
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
