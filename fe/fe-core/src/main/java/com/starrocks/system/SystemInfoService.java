@@ -38,6 +38,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -264,8 +265,10 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(droppedBackend.getId());
             // remove worker
-            String starletHost = droppedBackend.getHost() + ":" + droppedBackend.getStarletPort();
-            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(starletHost);
+            if (Config.integrate_starmgr) {
+                String starletHost = droppedBackend.getHost() + ":" + droppedBackend.getStarletPort();
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(starletHost);
+            }
         } else {
             LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
         }
