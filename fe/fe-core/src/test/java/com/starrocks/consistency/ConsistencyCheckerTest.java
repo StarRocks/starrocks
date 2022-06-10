@@ -1,19 +1,19 @@
 package com.starrocks.consistency;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -23,7 +23,7 @@ import org.junit.Test;
 public class ConsistencyCheckerTest {
 
     @Test
-    public void testChooseTablets(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testChooseTablets(@Mocked Catalog catalog) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -38,7 +38,7 @@ public class ConsistencyCheckerTest {
                 10, 1000, Replica.ReplicaState.NORMAL, -1, 2);
 
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
-        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        Tablet tablet = new Tablet(tabletId, Lists.newArrayList(replica));
         materializedIndex.addTablet(tablet, tabletMeta, true);
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
@@ -54,15 +54,15 @@ public class ConsistencyCheckerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+                Catalog.getCurrentCatalog();
+                result = catalog;
                 minTimes = 0;
 
-                globalStateMgr.getDbIds();
+                catalog.getDbIds();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                globalStateMgr.getDb(dbId);
+                catalog.getDb(dbId);
                 result = database;
                 minTimes = 0;
             }
