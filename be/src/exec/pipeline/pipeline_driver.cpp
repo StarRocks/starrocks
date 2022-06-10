@@ -42,6 +42,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
     _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
+    _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -92,11 +93,13 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _precondition_block_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _input_empty_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _output_full_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _pending_finish_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
     _input_empty_timer_sw->start();
     _output_full_timer_sw->start();
+    _pending_finish_timer_sw->start();
 
     return Status::OK();
 }
