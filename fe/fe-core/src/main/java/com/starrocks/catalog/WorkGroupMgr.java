@@ -8,7 +8,10 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.WorkGroupOpEntry;
@@ -97,7 +100,11 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) {
+    public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) throws AnalysisException {
+        if (stmt.getName() != null && !workGroupMap.containsKey(stmt.getName())) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, stmt.getName());
+        }
+
         List<List<String>> rows;
         if (stmt.getName() != null) {
             rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showOneWorkGroup(stmt.getName());

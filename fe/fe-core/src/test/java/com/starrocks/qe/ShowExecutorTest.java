@@ -515,7 +515,6 @@ public class ShowExecutorTest {
 
         Assert.assertFalse(resultSet.next());
     }
-
     @Test
     public void testHelp() throws AnalysisException, IOException, UserException {
         HelpModule module = new HelpModule();
