@@ -179,7 +179,7 @@ public class ReorderJoinRule extends Rule {
 
         public OptExpression rewrite(OptExpression optExpression, ColumnRefSet requiredColumns) {
             Operator operator = optExpression.getOp();
-            if (operator.getProjection() != null && operator.getProjection().getColumnRefMap().size() > 1) {
+            if (operator.getProjection() != null) {
                 Projection projection = operator.getProjection();
 
                 List<ColumnRefOperator> outputColumns = Lists.newArrayList();
@@ -234,6 +234,9 @@ public class ReorderJoinRule extends Rule {
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();
+            } else if (joinOperator.getProjection() != null) {
+                Preconditions.checkState(
+                        newOutputColumns.cardinality() >= joinOperator.getProjection().getColumnRefMap().size());
             }
 
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
