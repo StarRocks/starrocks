@@ -173,7 +173,6 @@ public class DeleteHandler implements Writable {
                 if (table.getType() != Table.TableType.OLAP) {
                     throw new DdlException("Not olap type table. type: " + table.getType().name());
                 }
-
                 OlapTable olapTable = (OlapTable) table;
 
                 if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
