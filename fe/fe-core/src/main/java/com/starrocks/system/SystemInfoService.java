@@ -266,6 +266,7 @@ public class SystemInfoService {
             cluster.removeBackend(droppedBackend.getId());
             // remove worker
             if (Config.integrate_starmgr) {
+                LOG.info("come here");
                 String starletHost = droppedBackend.getHost() + ":" + droppedBackend.getStarletPort();
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(starletHost);
             }

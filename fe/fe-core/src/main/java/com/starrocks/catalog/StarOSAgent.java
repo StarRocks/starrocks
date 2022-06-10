@@ -146,10 +146,12 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) {
+        LOG.info("enter removeWorker func");
         if (!workerToId.containsKey(workerIpPort)) {
             LOG.warn("worker {} not exist", workerIpPort);
             return;
         }
+        LOG.info("remove");
 
         long workerId = workerToId.get(workerIpPort);
         try {
