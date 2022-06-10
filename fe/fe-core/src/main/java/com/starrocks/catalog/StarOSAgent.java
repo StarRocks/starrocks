@@ -151,14 +151,15 @@ public class StarOSAgent {
             return;
         }
 
+        long workerId = workerToId.get(workerIpPort);
         try {
-            client.removeWorker(serviceId, workerToId.get(workerIpPort));
+            client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
             LOG.warn(e);
             return;
         }
 
-        workerToBackend.remove(workerToId.get(workerIpPort));
+        workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
         LOG.info("remove worker {} success in StarOSAgent", workerIpPort);
     }
