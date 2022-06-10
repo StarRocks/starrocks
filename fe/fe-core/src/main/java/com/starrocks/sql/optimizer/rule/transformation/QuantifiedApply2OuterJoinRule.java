@@ -157,8 +157,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * after: with xx as (select t1.v2, t1.v3 from t1)
          *        select t0.v1,
          *             case
-         *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false, will hit else
-         *                 when t1Rows = 0 then false
+         *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false
+         *                 when t1Rows = 0 or t1Rows is null then false
          *                 when t0.v2 is null then null
          *                 when t1d.v2 is not null then true
          *                 when v2Nulls < t1Rows then null
@@ -374,7 +374,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         /*
          * Project:
          * case
-         *     when t1Rows = 0 then false
+         *     when t1Rows = 0 or t1Rows is null then false
          *     when t0.v2 is null then is null
          *     when t1d.v2 is not null then true
          *     when v2Nulls < t1Rows then null
@@ -389,7 +389,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             distinctAggregateOutputs.forEach(k -> caseWhenMap.put(k, k));
 
             List<ScalarOperator> whenThen = Lists.newArrayList();
-            whenThen.add(BinaryPredicateOperator.eq(countRows, ConstantOperator.createBigint(0)));
+            whenThen.add(CompoundPredicateOperator.or(new IsNullPredicateOperator(countRows),
+                    BinaryPredicateOperator.eq(countRows, ConstantOperator.createBigint(0))));
             whenThen.add(ConstantOperator.createBoolean(false));
 
             whenThen.add(new IsNullPredicateOperator(inPredicate.getChild(0)));
