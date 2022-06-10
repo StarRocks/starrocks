@@ -241,41 +241,9 @@ public class GlobalTransactionMgr implements Writable {
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
                                  LoadJobSourceType sourceType,
-                                 long timeoutSecond, Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
-            throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
-        return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1,
-                timeoutSecond, tablePartitionIds, isExclusive);
-    }
-
-    public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
-                                 LoadJobSourceType sourceType,
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
         return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1, timeoutSecond);
-    }
-
-    // final call of beginTransaction
-    private long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
-                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
-                                  long timeoutSecond, Map<Long, List<Long>> tablePartitionIds, boolean isExclusive)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
-        if (Config.disable_load_job) {
-            throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
-        }
-
-        switch (sourceType) {
-            case BACKEND_STREAMING:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
-                        Config.min_load_timeout_second);
-                break;
-            default:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
-        }
-
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        return dbTransactionMgr
-                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
-                        tablePartitionIds, isExclusive);
     }
 
     /**
@@ -295,8 +263,22 @@ public class GlobalTransactionMgr implements Writable {
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
-        return beginTransaction(dbId, tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
-                Maps.newHashMap(), false);
+        if (Config.disable_load_job) {
+            throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        switch (sourceType) {
+            case BACKEND_STREAMING:
+                checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
+                        Config.min_load_timeout_second);
+                break;
+            default:
+                checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
+        }
+
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        return dbTransactionMgr
+                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
     }
 
     private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)

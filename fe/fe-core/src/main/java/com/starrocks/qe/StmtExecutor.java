@@ -1138,7 +1138,7 @@ public class StmtExecutor {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS(), tablePartitionIds, isExclusive);
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
             TransactionState txnState =
@@ -1149,14 +1149,6 @@ public class StmtExecutor {
             }
             if (targetTable instanceof OlapTable) {
                 txnState.addTableIndexes((OlapTable) targetTable);
-                if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
-                    InsertStmt insertStmt = (InsertStmt) parsedStmt;
-                    Map<Long, List<Long>> tableToOriginalTargetPartitionIds = Maps.newHashMap();
-                    tableToOriginalTargetPartitionIds.put(targetTable.getId(), insertStmt.getOriginalTargetPartitionIds());
-                    txnState.setOriginalTargetPartitions(tableToOriginalTargetPartitionIds);
-                    LOG.info("insert overwrite job:{} related transaction id:{}",
-                            insertStmt.getOverwriteJobId(), transactionId);
-                }
             }
         }
         // Every time set no send flag and clean all data in buffer

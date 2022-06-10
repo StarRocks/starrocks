@@ -34,7 +34,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.lock.Lock;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PublishVersionTask;
@@ -232,11 +231,6 @@ public class TransactionState implements Writable {
 
     private long lastErrTimeMs = 0;
 
-    Map<Long, List<Long>> originalTargetPartitions;
-
-    // transaction related locks
-    List<Lock> locks;
-
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();
@@ -278,24 +272,6 @@ public class TransactionState implements Writable {
         this.latch = new CountDownLatch(1);
         this.callbackId = callbackId;
         this.timeoutMs = timeoutMs;
-    }
-
-    public List<Long> getOriginalTargetPartitions(long tableId) {
-        return originalTargetPartitions.get(tableId);
-    }
-
-    public void setOriginalTargetPartitions(Map<Long, List<Long>> originalTargetPartitions) {
-        this.originalTargetPartitions = originalTargetPartitions;
-    }
-
-    public void setLocks(List<Lock> locks) {
-        this.locks = locks;
-    }
-
-    public void unlock() {
-        if (locks != null) {
-            GlobalStateMgr.getCurrentState().getLockManager().unlock(locks);
-        }
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
