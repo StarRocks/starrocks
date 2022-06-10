@@ -234,9 +234,6 @@ public class ReorderJoinRule extends Rule {
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();
-            } else if (joinOperator.getProjection() != null) {
-                Preconditions.checkState(
-                        newOutputColumns.cardinality() >= joinOperator.getProjection().getColumnRefMap().size());
             }
 
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
