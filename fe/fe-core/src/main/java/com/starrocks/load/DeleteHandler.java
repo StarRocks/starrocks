@@ -45,7 +45,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -169,10 +168,6 @@ public class DeleteHandler implements Writable {
                 Table table = db.getTable(tableName);
                 if (table == null) {
                     throw new DdlException("Table does not exist. name: " + tableName);
-                }
-
-                if (table instanceof MaterializedView) {
-                    throw new DdlException("not support MaterializedView");
                 }
 
                 if (table.getType() != Table.TableType.OLAP) {

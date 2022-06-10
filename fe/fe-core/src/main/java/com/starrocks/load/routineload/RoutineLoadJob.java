@@ -1029,7 +1029,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         if (table instanceof MaterializedView) {
-            throw new AnalysisException("not support MaterializedView");
+            throw new AnalysisException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    tblName, tblName));
         }
 
         if (table.getType() != Table.TableType.OLAP) {

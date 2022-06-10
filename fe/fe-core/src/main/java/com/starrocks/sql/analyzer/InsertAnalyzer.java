@@ -40,12 +40,15 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
 
-        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
-            throw unsupportedException("Only support insert into olap table or mysql table");
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
         }
 
-        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
-            throw unsupportedException("not support MaterializedView");
+        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+            throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();

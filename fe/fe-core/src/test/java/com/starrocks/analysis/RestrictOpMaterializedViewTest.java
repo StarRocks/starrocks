@@ -2,19 +2,15 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SqlParserUtils;
-import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -23,10 +19,9 @@ import org.junit.Test;
 
 import java.io.StringReader;
 import java.util.ArrayList;
-import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class RestrictOpMaterializedViewTest {
     private static StarRocksAssert starRocksAssert;
@@ -80,7 +75,7 @@ public class RestrictOpMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
             Assert.fail();
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "not support MaterializedView");
+            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
 
     }
@@ -97,7 +92,8 @@ public class RestrictOpMaterializedViewTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(insertStmt, ctx);
         } catch (Exception e) {
-            assertNotEquals(e.getMessage(), "not support MaterializedView");
+            assertFalse(
+                    e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
 
     }
@@ -111,7 +107,7 @@ public class RestrictOpMaterializedViewTest {
             deleteHandler.process((DeleteStmt) statementBase);
             Assert.fail();
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "not support MaterializedView");
+            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
 
     }
@@ -123,31 +119,22 @@ public class RestrictOpMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
             Assert.fail();
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "only support updating primary key table");
+            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
 
     }
 
     @Test
     public void testBrokerLoad() {
-        String sql1 = "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
+        String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
             SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));
             LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
-            List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
-                    "columnMappingList");
-
-            List<String> files = Lists.newArrayList("path/k2=1/file1");
-            List<String> columnNames = Lists.newArrayList("ss", "k2");
-            DataDescription desc = new DataDescription("mv1", null, files, columnNames,
-                    null, null, "ORC", Lists.newArrayList("k2"),
-                    false, columnMappingList, null);
-            BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
-            Database db1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1");
-            brokerFileGroup.parse(db1, desc);
+            Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));
+            loadStmt.analyze(AccessTestUtil.fetchAdminAnalyzer(true));
             Assert.fail();
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "not support MaterializedView");
+            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
     }
 
@@ -164,7 +151,7 @@ public class RestrictOpMaterializedViewTest {
             KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
             Assert.fail();
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "not support MaterializedView");
+            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
     }
 

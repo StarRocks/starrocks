@@ -1031,7 +1031,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new UserException("load table type is not OlapTable, type=" + table.getClass());
             }
             if (table instanceof MaterializedView) {
-                throw new UserException("not support MaterializedView");
+                throw new UserException(String.format(
+                        "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                                "and the data of materialized view must be consistent with the base table.",
+                        table.getName(), table.getName()));
             }
             StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);
