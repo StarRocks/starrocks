@@ -13,7 +13,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.common.TypeManager;
 
 import java.util.Arrays;
 import java.util.List;
@@ -50,6 +49,10 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP)
                     .add(FunctionSet.VARIANCE_SAMP).add(FunctionSet.VAR_SAMP).add(FunctionSet.STD)
                     .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STDDEV_SAMP).build();
+
+    public static final Set<String> DECIMAL_SUM_FUNCTION_TYPE =
+            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER).add(FunctionSet.SUM)
+                    .add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
@@ -185,11 +188,19 @@ public class DecimalV3FunctionAnalyzer {
             } else if (fn.functionName().equals(FunctionSet.AVG)) {
                 // avg on decimal complies with Snowflake-style
                 ScalarType decimal128p38s0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
-                TypeManager.TypeTriple triple = TypeManager.getReturnTypeOfDecimal(
-                        ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType, decimal128p38s0);
+                final ArithmeticExpr.TypeTriple triple =
+                        ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType,
+                                decimal128p38s0);
                 returnType = triple.returnType;
             } else if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fn.functionName())) {
                 returnType = argType;
+            } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {
+                // For decimal aggregation sum, there is a risk of overflow if the scale is too large,
+                // so we limit the maximum scale for this case
+                if (((ScalarType) argType).getScalarScale() > 18) {
+                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
+                    returnType = argType;
+                }
             }
         }
         AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,

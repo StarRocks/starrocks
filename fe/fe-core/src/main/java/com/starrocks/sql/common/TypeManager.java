@@ -2,11 +2,9 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -141,74 +139,4 @@ public class TypeManager {
         public ScalarType rhsTargetType;
     }
 
-    public static TypeTriple getReturnTypeOfDecimal(ArithmeticExpr.Operator op, ScalarType lhsType,
-                                                    ScalarType rhsType) {
-        Preconditions.checkState(lhsType.isDecimalV3() && rhsType.isDecimalV3(),
-                "Types of lhs and rhs must be DecimalV3");
-        final PrimitiveType lhsPtype = lhsType.getPrimitiveType();
-        final PrimitiveType rhsPtype = rhsType.getPrimitiveType();
-        final int lhsScale = lhsType.getScalarScale();
-        final int rhsScale = rhsType.getScalarScale();
-
-        // get the wider decimal type
-        PrimitiveType widerType = PrimitiveType.getWiderDecimalV3Type(lhsPtype, rhsPtype);
-        // compute arithmetic expr use decimal64 for both decimal32 and decimal64
-        widerType = PrimitiveType.getWiderDecimalV3Type(widerType, PrimitiveType.DECIMAL64);
-        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
-
-        TypeTriple result = new TypeTriple();
-        result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-        result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
-        int returnScale = 0;
-        switch (op) {
-            case ADD:
-            case SUBTRACT:
-            case MOD:
-                returnScale = Math.max(lhsScale, rhsScale);
-                break;
-            case MULTIPLY:
-                returnScale = lhsScale + rhsScale;
-                // promote type result type of multiplication if it is too narrow to hold all significant bits
-                if (returnScale > maxPrecision) {
-                    final int maxPrecisionOfDecimal128 =
-                            PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-                    // decimal128 is already the widest decimal types, so throw an error if scale of result exceeds 38
-                    Preconditions.checkState(widerType != PrimitiveType.DECIMAL128,
-                            String.format("Return scale(%d) exceeds maximum value(%d)", returnScale,
-                                    maxPrecisionOfDecimal128));
-                    widerType = PrimitiveType.DECIMAL128;
-                    maxPrecision = maxPrecisionOfDecimal128;
-                    result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-                    result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
-                }
-                break;
-            case INT_DIVIDE:
-            case DIVIDE:
-                if (lhsScale <= 6) {
-                    returnScale = lhsScale + 6;
-                } else if (lhsScale <= 12) {
-                    returnScale = 12;
-                } else {
-                    returnScale = lhsScale;
-                }
-                widerType = PrimitiveType.DECIMAL128;
-                maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
-                result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-                result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
-                int adjustedScale = returnScale + rhsScale;
-                if (adjustedScale > maxPrecision) {
-                    throw new SemanticException(
-                            String.format(
-                                    "Dividend fails to adjust scale to %d that exceeds maximum value(%d)",
-                                    adjustedScale,
-                                    maxPrecision));
-                }
-                break;
-            default:
-                Preconditions.checkState(false, "DecimalV3 only support operators: +-*/%");
-        }
-        result.returnType = op == ArithmeticExpr.Operator.INT_DIVIDE ? ScalarType.BIGINT :
-                ScalarType.createDecimalV3Type(widerType, maxPrecision, returnScale);
-        return result;
-    }
 }
