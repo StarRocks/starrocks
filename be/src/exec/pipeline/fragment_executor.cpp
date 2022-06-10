@@ -75,9 +75,11 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
         _query_ctx->set_total_fragments(params.instances_number);
     }
 
-    _query_ctx->set_expire_seconds(_calc_query_ctx_expired_seconds(request));
+    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_lifetime();
+    _query_ctx->extend_delivery_lifetime();
+    _query_ctx->extend_query_lifetime();
 
     return Status::OK();
 }
@@ -199,7 +201,7 @@ int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentPa
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
-int FragmentExecutor::_calc_query_ctx_expired_seconds(const TExecPlanFragmentParams& request) const {
+int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const {
     const auto& query_options = request.query_options;
 
     int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
@@ -214,6 +216,16 @@ int FragmentExecutor::_calc_query_ctx_expired_seconds(const TExecPlanFragmentPar
     }
 
     return std::max<int>(1, expired_seconds);
+}
+
+int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    if (query_options.__isset.query_timeout) {
+        return std::max<int>(1, query_options.query_timeout);
+    }
+
+    return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
