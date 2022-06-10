@@ -45,7 +45,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     TabletMetadataPB tablet_metadata_pb;
     tablet_metadata_pb.set_id(req.tablet_id);
     tablet_metadata_pb.set_version(1);
-    tablet_metadata_pb.set_next_rowset_id(2);
+    tablet_metadata_pb.set_next_rowset_id(1);
 
     // schema
     uint32_t next_unique_id = 0;
@@ -55,14 +55,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         col_idx_to_unique_id[col_idx] = col_idx;
     }
     RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(req.tablet_schema, next_unique_id, col_idx_to_unique_id,
-                                                             RowsetTypePB::BETA_ROWSET, tablet_metadata_pb.mutable_schema()));
-
-    // rowset metadata with version 1 and id 1
-    auto rowset_metadata_pb = tablet_metadata_pb.add_rowsets();
-    rowset_metadata_pb->set_id(1);
-    rowset_metadata_pb->set_overlapped(false);
-    rowset_metadata_pb->set_data_size(0);
-    rowset_metadata_pb->set_num_rows(0);
+                                                             RowsetTypePB::BETA_ROWSET,
+                                                             tablet_metadata_pb.mutable_schema()));
 
     // get shard group
     ASSIGN_OR_RETURN(auto group_path, _group_assigner->get_group(req.tablet_id));

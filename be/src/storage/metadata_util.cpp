@@ -199,7 +199,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
 
 Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                     RowsetTypePB rowset_type, TabletSchemaPB *schema) {
+                                     RowsetTypePB rowset_type, TabletSchemaPB* schema) {
     if (tablet_schema.__isset.id) {
         schema->set_id(tablet_schema.id);
     }
@@ -235,7 +235,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
         uint32_t col_unique_id = col_ordinal_to_unique_id.at(col_ordinal++);
-        ColumnPB *column = schema->add_column();
+        ColumnPB* column = schema->add_column();
 
         RETURN_IF_ERROR(t_column_to_pb_column(col_unique_id, tcolumn, field_version, column));
 
@@ -262,4 +262,4 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     return Status::OK();
 }
 
-}
+} // namespace starrocks
