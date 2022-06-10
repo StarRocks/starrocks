@@ -3,6 +3,8 @@
 #include "storage/array_type_info.h"
 
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
+#include "util/mem_util.hpp"
 
 namespace starrocks {
 

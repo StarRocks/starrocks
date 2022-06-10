@@ -210,10 +210,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         chunk->reset();
         auto& cols = chunk->columns();
-        for (auto j = 0; j < chunk_size; ++j) {
-            if (i * chunk_size + j >= num_rows) {
-                break;
-            }
+        for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
             cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
             cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
@@ -283,10 +280,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
@@ -304,10 +298,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
@@ -324,10 +315,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
@@ -409,10 +397,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
@@ -430,10 +415,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(data_strs[j % 8]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));

@@ -5,7 +5,9 @@
 #include <chrono>
 #include <thread>
 
+#include "common/config.h"
 #include "storage/compaction_candidate.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"

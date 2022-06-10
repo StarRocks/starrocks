@@ -41,7 +41,7 @@ public:
             : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
     ~StreamLoadPipe() override = default;
 
-    Status append(ByteBufferPtr&& buf) {
+    Status append(ByteBufferPtr&& buf) override {
         if (buf != nullptr && buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check

@@ -70,6 +70,8 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
@@ -86,6 +88,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -164,6 +167,8 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.parser.StarRocksParser.ModifyBackendHostClauseContext;
+import com.starrocks.sql.parser.StarRocksParser.ModifyFrontendHostClauseContext;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -261,6 +266,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowTableStmt(database, isVerbose, null);
         }
+    }
+
+    @Override
+    public ParseNode visitShowCreateTableStatement(StarRocksParser.ShowCreateTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        if (context.MATERIALIZED() != null && context.VIEW() != null) {
+            return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
+        }
+        if (context.VIEW() != null) {
+            return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.VIEW);
+        }
+        return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.TABLE);
     }
 
     @Override
@@ -617,6 +635,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitModifyBackendHostClause(ModifyBackendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1));
+    }
+
+    @Override
     public ParseNode visitAddFrontendClause(StarRocksParser.AddFrontendClauseContext context) {
         String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         if (context.FOLLOWER() != null) {
@@ -640,6 +665,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Preconditions.checkState(false, "frontend clause error.");
             return null;
         }
+    }
+
+    @Override
+    public ParseNode visitModifyFrontendHostClause(ModifyFrontendHostClauseContext context) {
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -1194,7 +1226,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitParenthesizedRelation(StarRocksParser.ParenthesizedRelationContext context) {
-        return visit(context.relation());
+        if (context.relation().size() == 1) {
+            return visit(context.relation().get(0));
+        } else {
+            List<Relation> relations = visit(context.relation(), Relation.class);
+            Iterator<Relation> iterator = relations.iterator();
+            Relation relation = iterator.next();
+            while (iterator.hasNext()) {
+                relation = new JoinRelation(null, relation, iterator.next(), null, false);
+            }
+            return relation;
+        }
     }
 
     @Override
@@ -1761,7 +1803,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
 
         if (context.over() != null) {

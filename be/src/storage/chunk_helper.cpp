@@ -2,7 +2,9 @@
 
 #include "storage/chunk_helper.h"
 
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
@@ -12,6 +14,7 @@
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/metrics.h"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 

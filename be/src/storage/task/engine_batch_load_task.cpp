@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_batch_load_task.h"
 
+#include <fmt/format.h>
+
 #include <ctime>
 #include <iostream>
 #include <string>

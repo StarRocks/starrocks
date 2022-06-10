@@ -33,7 +33,7 @@ public class StarOSAgent {
     public StarOSAgent() {
         serviceId = -1;
         // check if Config.starmanager_address == FE address
-        if (Config.integrate_staros) {
+        if (Config.integrate_starmgr) {
             String[] starMgrAddr = Config.starmgr_address.split(":");
             if (!starMgrAddr[0].equals("127.0.0.1")) {
                 LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
@@ -146,5 +146,16 @@ public class StarOSAgent {
         workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
+    }
+
+    public long getWorkerIdByBackendId(long backendId) {
+        long workerId = -1;
+        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+            if (entry.getValue() == backendId) {
+                workerId = entry.getKey();
+                break;
+            }
+        }
+        return workerId;
     }
 }
