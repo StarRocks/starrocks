@@ -1,6 +1,7 @@
 package com.starrocks.consistency;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -13,7 +14,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -23,7 +23,7 @@ import org.junit.Test;
 public class ConsistencyCheckerTest {
 
     @Test
-    public void testChooseTablets(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testChooseTablets(@Mocked Catalog catalog) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -54,15 +54,15 @@ public class ConsistencyCheckerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+                Catalog.getCurrentCatalog();
+                result = catalog;
                 minTimes = 0;
 
-                globalStateMgr.getDbIds();
+                catalog.getDbIds();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                globalStateMgr.getDb(dbId);
+                catalog.getDb(dbId);
                 result = database;
                 minTimes = 0;
             }
