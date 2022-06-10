@@ -22,8 +22,6 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
-    _stream_recvr->close();
-    _stream_recvr.reset();
     Operator::close(state);
 }
 
