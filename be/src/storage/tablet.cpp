@@ -754,6 +754,17 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
     return max_continuous_version;
 }
 
+int64_t Tablet::max_continuous_version() const {
+    std::shared_lock rdlock(_meta_lock);
+    if (_updates != nullptr) {
+        return _updates->max_version();
+    } else {
+        int64_t v = _timestamped_version_tracker.get_max_continuous_version();
+        DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        return v;
+    }
+}
+
 void Tablet::calculate_cumulative_point() {
     std::unique_lock wrlock(_meta_lock);
     if (_cumulative_point != kInvalidCumulativePoint) {
@@ -1070,10 +1081,10 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     if (_updates) {
         _updates->get_tablet_info_extra(tablet_info);
     } else {
-        Version version = _max_continuous_version_from_beginning_unlocked();
+        int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
         auto max_rowset = rowset_with_max_version();
         if (max_rowset != nullptr) {
-            if (max_rowset->version() != version) {
+            if (max_rowset->version().second != max_version) {
                 tablet_info->__set_version_miss(true);
             }
         } else {
@@ -1088,7 +1099,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
             // so if the task corresponding to this change hangs, when the task timeout, FE will know
             // and perform state modification operations.
         }
-        tablet_info->__set_version(version.second);
+        tablet_info->__set_version(max_version);
         tablet_info->__set_version_count(_tablet_meta->version_count());
         tablet_info->__set_row_count(_tablet_meta->num_rows());
         tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
