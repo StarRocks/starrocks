@@ -23,6 +23,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
 import com.google.common.collect.Sets;
@@ -45,14 +46,14 @@ import java.util.Set;
 public class RangePartitionPruner implements PartitionPruner {
     private static final Logger LOG = LogManager.getLogger(RangePartitionPruner.class);
 
-    private Map<Long, Range<PartitionKey>> partitionRangeMap;
-    private List<Column> partitionColumns;
-    private Map<String, PartitionColumnFilter> partitionColumnFilters;
+    private final Map<Long, Range<PartitionKey>> partitionRangeMap;
+    private final List<Column> partitionColumns;
+    private final Map<String, PartitionColumnFilter> partitionColumnFilters;
 
     public RangePartitionPruner(Map<Long, Range<PartitionKey>> rangeMap,
                                 List<Column> columns,
                                 Map<String, PartitionColumnFilter> filters) {
-        partitionRangeMap = rangeMap;
+        partitionRangeMap = Maps.newHashMap(rangeMap);
         partitionColumns = columns;
         partitionColumnFilters = filters;
     }
