@@ -301,9 +301,7 @@ public class SystemInfoServiceTest {
         }
 
         Config.integrate_starmgr = false;
-
     }
-
 
     @Test
     public void testSaveLoadBackend() throws Exception {

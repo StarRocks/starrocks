@@ -124,7 +124,6 @@ public class StarOSAgentTest {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
                 result = 6;
-
             }
         };
 

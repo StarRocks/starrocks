@@ -27,8 +27,8 @@ public class StarOSAgent {
 
     private StarClient client;
     private long serviceId;
-    private Map<String, Long> workerToId = Maps.newHashMap();
-    private Map<Long, Long> workerToBackend = Maps.newHashMap();
+    private Map<String, Long> workerToId;
+    private Map<Long, Long> workerToBackend;
 
     public StarOSAgent() {
         serviceId = -1;
@@ -42,6 +42,9 @@ public class StarOSAgent {
         }
         client = new StarClient();
         client.connectServer(Config.starmgr_address);
+
+        workerToId = Maps.newHashMap();
+        workerToBackend = Maps.newHashMap();
     }
 
     // for ut only
@@ -146,12 +149,10 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) {
-        LOG.info("enter removeWorker func");
         if (!workerToId.containsKey(workerIpPort)) {
             LOG.warn("worker {} not exist", workerIpPort);
             return;
         }
-        LOG.info("remove");
 
         long workerId = workerToId.get(workerIpPort);
         try {
