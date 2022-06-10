@@ -36,10 +36,7 @@ public:
         _chunks_sorter_partions.reserve(num_right_sinkers);
     }
 
-    void close(RuntimeState* state) override {
-        _chunks_sorter_partions.clear();
-        _merged_runs.clear();
-    }
+    void close(RuntimeState* state) override;
 
     void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
         _chunks_sorter_partions.push_back(chunks_sorter);
