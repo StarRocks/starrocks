@@ -85,7 +85,6 @@ private:
     bool _has_op_slot = false;
     std::unique_ptr<Column> _deletes;
 
-    bool _use_slot_desc = true;
     int64_t _max_buffer_size = config::write_buffer_size;
 
     // memory statistic
