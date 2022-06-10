@@ -59,6 +59,7 @@
       + [SET PROPERTY](/sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SHOW GRANTS](/sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
+      + [Java UDFs](/using_starrocks/Java-UDFs.md)
     + Cluster Management
       + [ADMIN CANCEL REPAIR](/sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](/sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
@@ -145,7 +146,7 @@
       + [SPARK LOAD](/sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
-    + Data Type
+    + Data Types
       + Numeric
         + [BIGINT](/sql-reference/sql-statements/data-types/BIGINT.md)
         + [LARGEINT](/sql-reference/sql-statements/data-types/LARGEINT.md)
@@ -166,6 +167,7 @@
       + Others
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
+        + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
     + Auxiliary Commands
       + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + Function Reference
@@ -327,6 +329,7 @@
   + [User Privilege](/administration/User_privilege.md)
   + [Authentication](/administration/Authentication.md)
   + Resource Management
+    + [Resource Group](/administration/resource_group.md)
     + [Query Management](/administration/Query_management.md)
     + [Blacklist](/administration/Blacklist.md)
     + [Memory Management](/administration/Memory_management.md)
