@@ -190,10 +190,15 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        if (params.profile != nullptr && params.profile->parent() != nullptr) {
-            RuntimeProfile* p = params.profile->parent()->create_child("MERGE", true, true);
-            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "sort");
-            RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "Sort");
+            RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "Aggr");
 
             if (_is_vertical_merge && !_is_key) {
                 _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
@@ -236,10 +241,15 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         int f = config::pre_aggregate_factor;
-        if (params.profile != nullptr && params.profile->parent() != nullptr) {
-            RuntimeProfile* p = params.profile->parent()->create_child("MERGE", true, true);
-            RuntimeProfile::Counter* union_timer = ADD_TIMER(p, "union");
-            RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* union_timer = ADD_TIMER(p, "Union");
+            RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "Aggr");
 
             _collect_iter = new_union_iterator(std::move(seg_iters));
             _collect_iter = timed_chunk_iterator(_collect_iter, union_timer);

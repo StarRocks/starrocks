@@ -179,6 +179,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
+    _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;

@@ -28,6 +28,7 @@ struct TabletReaderParams {
 
     ReaderType reader_type = READER_QUERY;
 
+    bool is_pipeline = false;
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
     // 1. when read column data page:
