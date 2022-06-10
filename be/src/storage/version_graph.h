@@ -80,8 +80,8 @@ private:
     // version.end_version + 1.
     // Use adjacency list to describe version graph.
     std::unordered_map<int64_t, std::unique_ptr<Vertex>> _version_graph;
-    // max continuous version from 0
-    int64_t _max_continuous_version{0};
+    // max continuous version from -1
+    int64_t _max_continuous_version{-1};
 };
 
 /// TimestampedVersion class which is implemented to maintain multi-version path of rowsets.

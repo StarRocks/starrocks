@@ -238,14 +238,14 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
 
 void VersionGraph::reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
     _version_graph.clear();
-    _max_continuous_version = 0;
+    _max_continuous_version = -1;
     construct_version_graph(rs_metas, max_version);
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
     _add_version_to_graph(version);
     if (version.first == _max_continuous_version + 1) {
-        _max_continuous_version = _get_max_continuous_version_from(_max_continuous_version);
+        _max_continuous_version = _get_max_continuous_version_from(_max_continuous_version + 1);
     }
 }
 
