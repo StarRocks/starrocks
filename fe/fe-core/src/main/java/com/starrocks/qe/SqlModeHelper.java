@@ -43,7 +43,7 @@ public class SqlModeHelper {
     //  really meaningful.
 
     /* When a new session is create, its sql mode is set to MODE_DEFAULT */
-    public static final long MODE_DEFAULT = 0L;
+    public static final long MODE_DEFAULT = 32L;
     /* Bits for different SQL MODE modes, you can add custom SQL MODE here */
     public static final long MODE_REAL_AS_FLOAT = 1L;
     public static final long MODE_PIPES_AS_CONCAT = 1L << 1;

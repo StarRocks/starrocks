@@ -74,6 +74,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
+    /**
+     * Because we modified the default value of sql_mode.
+     * The default value in v1 version is 0, and in v2 we support sql mode not set only_full_group_by.
+     * In order to ensure the consistency of logic,
+     * the storage name of sql_mode is changed here, in order to achieve compatibility
+     */
+    public static final String SQL_MODE_STORAGE_NAME = "sql_mode_v2";
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
@@ -263,7 +270,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean openProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
-    @VariableMgr.VarAttr(name = SQL_MODE)
+    @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
 
     // The specified resource group of this session
