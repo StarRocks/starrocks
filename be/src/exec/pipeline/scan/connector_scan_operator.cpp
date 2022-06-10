@@ -88,6 +88,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
     _data_source->close(state);
+    _chunk_buffer.clear();
 }
 
 bool ConnectorChunkSource::has_next_chunk() const {

@@ -385,6 +385,10 @@ void SortedRuns::resize(size_t size) {
     }
 }
 
+void SortedRuns::clear() {
+    chunks.clear();
+}
+
 bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
     for (int i = 0; i < chunks.size(); i++) {
         auto& run = chunks[i];

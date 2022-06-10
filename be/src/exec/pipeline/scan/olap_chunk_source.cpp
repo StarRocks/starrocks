@@ -42,6 +42,8 @@ void OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
+    _chunk_buffer.clear();
+    _chunk_buffer.shutdown();
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
