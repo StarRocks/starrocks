@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -97,9 +98,7 @@ public class EditLog {
 
     private BlockingQueue<JournalQueueEntity> logQueue;
 
-    /**
-     * for ut only
-     */
+    @VisibleForTesting
     public EditLog(Journal journal, BlockingQueue<JournalQueueEntity> logQueue) {
         this.journal = journal;
         this.logQueue = logQueue;

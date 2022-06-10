@@ -59,7 +59,7 @@ public class JournalWriter extends Daemon {
                 if (entity.getBetterCommitBeforeTime() > 0) {
                     long delayMillis = System.currentTimeMillis() - entity.getBetterCommitBeforeTime();
                     if (delayMillis >= 0) {
-                        LOG.info("log expect commit before {} is delayed {} mills, will commit now",
+                        LOG.warn("log expect commit before {} is delayed {} mills, will commit now",
                                 entity.getBetterCommitBeforeTime(), delayMillis);
                         break;
                     }
@@ -67,7 +67,7 @@ public class JournalWriter extends Daemon {
 
                 // 2.3 check uncommitted logs by count
                 if (staggingLogs.size() >= Config.batch_journal_cnt) {
-                    LOG.info("staggging log {} >= {}, will commit now",
+                    LOG.warn("staging log {} >= {}, will commit now",
                             staggingLogs.size(), Config.batch_journal_cnt);
                     break;
                 }
@@ -75,7 +75,7 @@ public class JournalWriter extends Daemon {
                 // 2.4 check uncommitted logs by size
                 uncommitedEstimatedBytes += entity.estimatedSizeByte();
                 if (uncommitedEstimatedBytes >= Config.batch_journal_size_mb * 1024 * 1024) {
-                    LOG.info("uncommited estimated bytes {} >= {}MB, will commit now",
+                    LOG.warn("uncommitted estimated bytes {} >= {}MB, will commit now",
                             uncommitedEstimatedBytes, Config.batch_journal_size_mb);
                     break;
                 }
@@ -97,8 +97,9 @@ public class JournalWriter extends Daemon {
             // 5. update metrics
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) staggingLogs.size());
-                MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(staggingLogs.size());
                 MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update((System.currentTimeMillis() - start));
+                MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(staggingLogs.size());
+                MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommitedEstimatedBytes);
                 MetricRepo.GAUGE_STACKED_EDIT_LOG_NUM.setValue((long) logQueue.size());
             }
             if (logQueue.size() > Config.batch_journal_cnt) {

@@ -21,6 +21,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
@@ -75,9 +76,7 @@ public class BDBJEJournal implements Journal {
     // This id can be access from other interfaces
     protected AtomicLong nextJournalId = new AtomicLong(1);
 
-    /**
-     * FOR UT ONLY
-     */
+    @VisibleForTesting
     public BDBJEJournal(BDBEnvironment bdbEnvironment, CloseSafeDatabase currentJournalDB, AtomicLong nextJournalId) {
         this.bdbEnvironment = bdbEnvironment;
         this.currentJournalDB = currentJournalDB;
