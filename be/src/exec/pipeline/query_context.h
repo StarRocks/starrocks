@@ -103,6 +103,9 @@ public:
     int64_t query_begin_time() const { return _query_begin_time; }
     void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
 
+public:
+    static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
+
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
@@ -111,7 +114,7 @@ private:
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
     int64_t _deadline;
-    seconds _expire_seconds;
+    seconds _expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
