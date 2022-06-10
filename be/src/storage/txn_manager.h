@@ -83,9 +83,6 @@ public:
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
 
-    // persist metadata of affected_dirs and make it crash-safe
-    static void flush_dirs(std::unordered_set<DataDir*>& affected_dirs);
-
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                         bool with_log = true);

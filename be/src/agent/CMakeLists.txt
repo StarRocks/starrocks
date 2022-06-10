@@ -30,5 +30,4 @@ add_library(Agent STATIC
     heartbeat_server.cpp
     task_worker_pool.cpp
     utils.cpp
-    publish_version.cpp
 )

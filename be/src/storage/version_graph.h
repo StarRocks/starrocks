@@ -57,22 +57,14 @@ public:
     void add_version_to_graph(const Version& version);
     /// Delete a version from graph. Notice that this del operation only remove this edges and
     /// remain the vertex.
-    /// NOTICE: we assume only redundant versions will be deleted, so deleting edge does not
-    /// move max_continuous_version backward
     Status delete_version_from_graph(const Version& version);
     /// Given a spec_version, this method can find a version path which is the shortest path
     /// in the graph. The version paths are added to version_path as return info.
     Status capture_consistent_versions(const Version& spec_version, std::vector<Version>* version_path) const;
 
-    // Get max continuous version from 0
-    int64_t max_continuous_version() const { return _max_continuous_version; }
-
 private:
     /// Private method add a version to graph.
     std::unique_ptr<Vertex>& _add_vertex_to_graph(int64_t vertex_value);
-
-    int64_t _get_max_continuous_version_from(int64_t version);
-    void _add_version_to_graph(const Version& version);
 
     // OLAP version contains two parts, [start_version, end_version]. In order
     // to construct graph, the OLAP version has two corresponding vertex, one
@@ -80,8 +72,6 @@ private:
     // version.end_version + 1.
     // Use adjacency list to describe version graph.
     std::unordered_map<int64_t, std::unique_ptr<Vertex>> _version_graph;
-    // max continuous version from 0
-    int64_t _max_continuous_version{0};
 };
 
 /// TimestampedVersion class which is implemented to maintain multi-version path of rowsets.
@@ -180,9 +170,6 @@ public:
     /// Get json document of _stale_version_path_map. Fill the path_id and version_path
     /// list in the document. The parameter path arr is used as return variable.
     void get_stale_version_path_json_doc(rapidjson::Document& path_arr);
-
-    // Get max continuous version from 0
-    int64_t get_max_continuous_version() const;
 
 private:
     /// Construct rowsets version tracker with stale rowsets.

@@ -1755,10 +1755,11 @@ Status SchemaChangeHandler::_init_column_mapping(ColumnMapping* column_mapping, 
 }
 
 Status SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
-    int64_t max_continuous_version = new_tablet->max_continuous_version();
+    Version max_continuous_version = new_tablet->max_continuous_version_from_beginning();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
-              << ", version=" << max_continuous_version;
-    if (max_continuous_version >= request.alter_version) {
+              << ", start_version=" << max_continuous_version.first
+              << ", end_version=" << max_continuous_version.second;
+    if (max_continuous_version.second >= request.alter_version) {
         return Status::OK();
     } else {
         return Status::InternalError("version missed");
