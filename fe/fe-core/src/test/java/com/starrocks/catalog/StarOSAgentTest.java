@@ -89,12 +89,16 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddWorker() throws Exception {
+    public void testAddAndRemoveWorker() throws Exception {
          new Expectations() {
              {
                  client.addWorker(1, "127.0.0.1:8090");
                  minTimes = 0;
                  result = 10;
+
+                 client.removeWorker(1, 10);
+                 minTimes = 0;
+                 result = null;
              }
          };
 
@@ -102,6 +106,9 @@ public class StarOSAgentTest {
         starosAgent.setServiceId(1);
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
+
+        starosAgent.removeWorker(workerHost);
+        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
 
