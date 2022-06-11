@@ -104,7 +104,7 @@ ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk
     }
     ColumnPtr res;
     auto call_udf = [&]() {
-        _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
+        res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
     call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
