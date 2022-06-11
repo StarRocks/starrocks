@@ -21,6 +21,7 @@ Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext
 }
 
 void ExceptContext::close(RuntimeState* state) {
+    _hash_set.reset();
     if (_build_pool != nullptr) {
         _build_pool->free_all();
     }
