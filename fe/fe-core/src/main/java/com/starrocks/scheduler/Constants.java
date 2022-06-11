@@ -13,4 +13,9 @@ public class Constants {
         SUCCESS,
     }
 
+    public enum TaskType {
+        MANUAL,
+        PERIODICAL
+    }
+
 }

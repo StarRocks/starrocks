@@ -134,4 +134,20 @@ public class TaskRunStatus implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
+    @Override
+    public String toString() {
+        return "TaskRunStatus{" +
+                "queryId='" + queryId + '\'' +
+                ", taskName='" + taskName + '\'' +
+                ", createTime=" + createTime +
+                ", finishTime=" + finishTime +
+                ", state=" + state +
+                ", dbName='" + dbName + '\'' +
+                ", definition='" + definition + '\'' +
+                ", errorCode=" + errorCode +
+                ", errorMessage='" + errorMessage + '\'' +
+                ", expireTime=" + expireTime +
+                '}';
+    }
 }
