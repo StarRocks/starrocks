@@ -25,6 +25,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "storage/task/engine_publish_version_task.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "util/cpu_info.h"
@@ -290,14 +291,15 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
-    auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
         const TabletInfo& tablet_info = tablet_rs.first;
         const RowsetSharedPtr& rowset = tablet_rs.second;
-        auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
+        EnginePublishVersionTask publish_task(2222, 10, version, tablet_info, rowset);
+        auto st = publish_task.execute();
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
     }
+    auto tablet = tablet_manager->get_tablet(12345);
     Version max_version = tablet->max_version();
     ASSERT_EQ(3, max_version.first);
 }
