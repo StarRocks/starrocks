@@ -109,6 +109,7 @@ add_library(Storage STATIC
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
+    task/engine_publish_version_task.cpp
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
     aggregate_iterator.cpp
