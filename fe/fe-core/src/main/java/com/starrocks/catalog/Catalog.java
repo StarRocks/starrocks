@@ -2626,6 +2626,7 @@ public class Catalog {
 
                 BDBHA ha = (BDBHA) haProtocol;
                 ha.removeUnstableNode(host, getFollowerCnt());
+                ha.removeHelperSocket(host, port);
             }
             editLog.logRemoveFrontend(fe);
         } finally {
