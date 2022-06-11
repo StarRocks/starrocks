@@ -100,10 +100,6 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
     }
 }
 
-int64_t TimestampedVersionTracker::get_max_continuous_version() const {
-    return _version_graph.max_continuous_version();
-}
-
 void TimestampedVersionTracker::add_version(const Version& version) {
     _version_graph.add_version_to_graph(version);
 }
@@ -227,29 +223,21 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
     // Create edges for version graph according to TabletMeta's versions.
     for (const auto& rs_meta : rs_metas) {
         // Versions in header are unique.
-        _add_version_to_graph(rs_meta->version());
+        add_version_to_graph(rs_meta->version());
 
         if (max_version != nullptr && *max_version < rs_meta->end_version()) {
             *max_version = rs_meta->end_version();
         }
     }
-    _max_continuous_version = _get_max_continuous_version_from(0);
 }
 
 void VersionGraph::reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
     _version_graph.clear();
-    _max_continuous_version = 0;
+
     construct_version_graph(rs_metas, max_version);
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
-    _add_version_to_graph(version);
-    if (version.first == _max_continuous_version + 1) {
-        _max_continuous_version = _get_max_continuous_version_from(_max_continuous_version);
-    }
-}
-
-void VersionGraph::_add_version_to_graph(const Version& version) {
     // Add version.first as new vertex of version graph if not exist.
     auto& start_vertex = _add_vertex_to_graph(version.first);
     // Add version.second + 1 as new vertex of version graph if not exist.
@@ -332,27 +320,6 @@ std::unique_ptr<Vertex>& VersionGraph::_add_vertex_to_graph(int64_t vertex_value
     return _version_graph[vertex_value];
 }
 
-int64_t VersionGraph::_get_max_continuous_version_from(int64_t version) {
-    auto iter = _version_graph.find(version);
-    if (iter == _version_graph.end()) {
-        // should not happen, just log error and return from version
-        LOG(ERROR) << "_get_max_continuous_version_from failed: from version not found " << version;
-        return version;
-    }
-    Vertex* cur = iter->second.get();
-    while (true) {
-        if (cur->edges.empty()) {
-            break;
-        }
-        auto largest_next = cur->edges.front();
-        if (largest_next->value < cur->value) {
-            break;
-        }
-        cur = largest_next;
-    }
-    return cur->value - 1;
-}
-
 Status VersionGraph::capture_consistent_versions(const Version& spec_version,
                                                  std::vector<Version>* version_path) const {
     if (spec_version.first > spec_version.second) {
@@ -381,8 +348,6 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
             }
 
             // cross edge
-            // NOTICE: we assume if a version can be reached, then every down path can lead to that version
-            // so using greedy algorithm is OK
             if (edge->value > end_value) {
                 continue;
             }

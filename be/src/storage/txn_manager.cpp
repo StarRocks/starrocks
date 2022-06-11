@@ -278,19 +278,6 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     return Status::OK();
 }
 
-void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
-    int64_t duration_ns = 0;
-    SCOPED_RAW_TIMER(&duration_ns);
-    for (auto dir : affected_dirs) {
-        auto st = dir->get_meta()->flush();
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to flush tablet meta, dir:" << dir->path() << " res:" << st;
-        }
-    }
-    StarRocksMetrics::instance()->txn_persist_total.increment(1);
-    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
-}
-
 // txn could be rollbacked if it does not have related rowset
 // if the txn has related rowset then could not rollback it, because it
 // may be committed in another thread and our current thread meets errors when writing to data file
