@@ -90,6 +90,7 @@ struct SortedRuns {
         }
         return res;
     }
+    void clear();
 
     bool is_sorted(const SortDescs& sort_desc) const;
     ChunkPtr assemble() const;
