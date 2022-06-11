@@ -60,7 +60,7 @@ INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
 INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false)); 
 ```
 
-> The PARSE_JSON function can interpret STRING data as JSON data. The JSON_OBJECT function can construct a JSON object or convert an existing table to a JSON document. For more information, see [PARSE_JSON](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md) and [JSON_OBJECT](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md).
+> The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON document. For more information, see [parse_json](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md).
 
 - Method 2: Use Stream Load to import a JSON document and store the document as JSON data. For more information, see the "Load JSON data by using a stream load" section of this topic.
 
@@ -239,7 +239,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 - The maximum length per JSON value is the same as the maximum length per STRING value.
 
-- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [CAST](https://docs.starrocks.com/zh-cn/2.2/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json).
+- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](https://docs.starrocks.com/zh-cn/2.2/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json).
 
 - JSON columns are supported only in tables that use the Duplicate Key model. Such JSON columns cannot be defined as sort keys in the tables to which they belong.
 

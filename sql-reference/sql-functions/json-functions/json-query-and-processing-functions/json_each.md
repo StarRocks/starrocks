@@ -1,4 +1,4 @@
-# JSON_EACH
+# json_each
 
 ## Description
 
@@ -7,7 +7,7 @@ Expands the outermost elements of a JSON object into a set of key-value pairs he
 ## Syntax
 
 ```Plain%20Text
-JSON_EACH(json_object_expr)
+json_each(json_object_expr)
 ```
 
 ## Parameters
@@ -20,7 +20,7 @@ Returns two columns: one named key and one named value. The key column stores VA
 
 ## Usage notes
 
-JSON_EACH is a table function that returns a table. The returned table is a result set that consists of multiple rows. Therefore, a lateral join must be used in the FROM clause to join the returned table to the original table. The lateral join is mandatory, but the LATERAL keyword is optional. The JSON_EACH function cannot be used in the SELECT clause.
+The json_each function is a table function that returns a table. The returned table is a result set that consists of multiple rows. Therefore, a lateral join must be used in the FROM clause to join the returned table to the original table. The lateral join is mandatory, but the LATERAL keyword is optional. The json_each function cannot be used in the SELECT clause.
 
 ## Examples
 
@@ -45,7 +45,7 @@ mysql> SELECT * FROM tj;
 
 -- Expand the j column of the tj table into two columns by key and value to obtain a result set that consists of multiple rows. In this example, the LATERAL keyword is used to join the result set to the tj table.
 
-mysql> SELECT * FROM tj, LATERAL JSON_EACH(j);
+mysql> SELECT * FROM tj, LATERAL json_each(j);
 
 +------+------------------+------+-------+
 

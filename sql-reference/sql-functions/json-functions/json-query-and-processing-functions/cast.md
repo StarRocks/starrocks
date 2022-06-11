@@ -1,4 +1,4 @@
-# CAST
+# cast
 
 ## Description
 
@@ -9,13 +9,13 @@ Converts a value between a JSON data type and an SQL data type.
 - Converts a value from a JSON data type to an SQL data type.
 
 ```SQL
-CAST(json_expr AS sql_data_type)
+cast(json_expr AS sql_data_type)
 ```
 
 - Converts a value from an SQL data type to a JSON data type.
 
 ```SQL
-CAST(sql_expr AS JSON)
+cast(sql_expr AS JSON)
 ```
 
 ## Parameters
@@ -28,25 +28,25 @@ CAST(sql_expr AS JSON)
 
 ## Return value
 
-- If you use the `CAST(json_expr AS sql_data_type)` syntax, the CAST function returns a value of the SQL data type that is specified by the `sql_data_type` parameter.
+- If you use the `cast(json_expr AS sql_data_type)` syntax, the cast function returns a value of the SQL data type that is specified by the `sql_data_type` parameter.
 
-- If you use the `CAST(sql_expr AS JSON)` syntax, the CAST function returns a JSON value.
+- If you use the `cast(sql_expr AS JSON)` syntax, the cast function returns a JSON value.
 
 ## Usage notes
 
 When you convert an SQL value to a JSON value, take note of the following points:
 
-- If the SQL value exceeds the precision that is supported by JSON, the CAST function returns `NULL` to prevent an arithmetic overflow.
+- If the SQL value exceeds the precision that is supported by JSON, the cast function returns `NULL` to prevent an arithmetic overflow.
 
-- If the SQL value is `NULL`, the CAST function does not convert the SQL value `NULL` to a JSON value of `NULL`. The return value is still an SQL value of `NULL`.
+- If the SQL value is `NULL`, the cast function does not convert the SQL value `NULL` to a JSON value of `NULL`. The return value is still an SQL value of `NULL`.
 
 When you convert a JSON value to an SQL value, take note of the following points:
 
-- The CAST function supports only conversions between compatible JSON and SQL data types. For example, you can convert a JSON string to an SQL string.
+- The cast function supports only conversions between compatible JSON and SQL data types. For example, you can convert a JSON string to an SQL string.
 
-- The CAST function does not support conversions between incompatible JSON and SQL data types. For example, if you convert a JSON number to an SQL string, the function returns `NULL`.
+- The cast function does not support conversions between incompatible JSON and SQL data types. For example, if you convert a JSON number to an SQL string, the function returns `NULL`.
 
-- If an arithmetic overflow occurs, the CAST function returns an SQL value of `NULL`.
+- If an arithmetic overflow occurs, the cast function returns an SQL value of `NULL`.
 
 - If you convert a JSON value of `NULL` to an SQL value, the function returns an SQL value of `NULL`.
 
@@ -63,7 +63,7 @@ mysql> select cast(parse_json('1') as int);
 
 +------------------------------+
 
-| CAST(parse_json('1') AS INT) |
+| cast(parse_json('1') AS INT) |
 
 +------------------------------+
 
@@ -79,7 +79,7 @@ mysql> select cast(parse_json('"star"') as varchar);
 
 +---------------------------------------+
 
-| CAST(parse_json('"star"') AS VARCHAR) |
+| cast(parse_json('"star"') AS VARCHAR) |
 
 +---------------------------------------+
 
@@ -95,7 +95,7 @@ mysql> select cast(parse_json('{"star": 1}') as varchar);
 
 +--------------------------------------------+
 
-| CAST(parse_json('{"star": 1}') AS VARCHAR) |
+| cast(parse_json('{"star": 1}') AS VARCHAR) |
 
 +--------------------------------------------+
 
@@ -111,7 +111,7 @@ mysql> select cast(parse_json('[1,2,3]') as varchar);
 
 +----------------------------------------+
 
-| CAST(parse_json('[1,2,3]') AS VARCHAR) |
+| cast(parse_json('[1,2,3]') AS VARCHAR) |
 
 +----------------------------------------+
 
@@ -129,7 +129,7 @@ mysql> select cast(1 as json);
 
 +-----------------+
 
-| CAST(1 AS JSON) |
+| cast(1 AS JSON) |
 
 +-----------------+
 
@@ -145,7 +145,7 @@ mysql> select cast("star" as json);
 
 +----------------------+
 
-| CAST('star' AS JSON) |
+| cast('star' AS JSON) |
 
 +----------------------+
 
@@ -161,7 +161,7 @@ mysql> select cast(true as json);
 
 +--------------------+
 
-| CAST(TRUE AS JSON) |
+| cast(TRUE AS JSON) |
 
 +--------------------+
 
