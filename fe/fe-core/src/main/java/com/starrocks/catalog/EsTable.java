@@ -359,7 +359,7 @@ public class EsTable extends Table {
                 }
             }
             if (tableContext.containsKey(WAN_ONLY)) {
-                wanOnly = Boolean.parseBoolean(tableContext.get(wanOnly));
+                wanOnly = Boolean.parseBoolean(tableContext.get(WAN_ONLY));
             } else {
                 wanOnly = false;
             }
