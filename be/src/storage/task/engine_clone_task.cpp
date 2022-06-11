@@ -518,7 +518,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         }
 
         // check disk capacity
-        if (data_dir->reach_capacity_limit(file_size)) {
+        if (data_dir->capacity_limit_reached(file_size)) {
             return Status::InternalError("Disk reach capacity limit");
         }
 
