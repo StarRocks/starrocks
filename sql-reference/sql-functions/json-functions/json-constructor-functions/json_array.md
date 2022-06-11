@@ -1,4 +1,4 @@
-# JSON_ARRAY
+# json_array
 
 ## Description
 
@@ -7,7 +7,7 @@ Converts each element of an SQL array to a JSON value and returns a JSON array t
 ## Syntax
 
 ```Plain%20Text
-JSON_ARRAY(value, ...)
+json_array(value, ...)
 ```
 
 ## Parameters
@@ -23,7 +23,7 @@ Returns a JSON array.
 Example 1: Construct a JSON array that consists of values of different data types.
 
 ```Plain%20Text
-mysql> SELECT JSON_ARRAY(1, true, 'starrocks', 1.1);
+mysql> SELECT json_array(1, true, 'starrocks', 1.1);
 
        -> [1, true, "starrocks", 1.1]
 ```
@@ -31,7 +31,7 @@ mysql> SELECT JSON_ARRAY(1, true, 'starrocks', 1.1);
 Example 2: Construct an empty JSON array.
 
 ```Plain%20Text
-mysql> SELECT JSON_ARRAY();
+mysql> SELECT json_array();
 
        -> []
 ```

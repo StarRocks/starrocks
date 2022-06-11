@@ -1,4 +1,4 @@
-# JSON_QUERY
+# json_query
 
 ## Description
 
@@ -7,7 +7,7 @@ Queries the value of an element that can be located by the `json_path` expressio
 ## Syntax
 
 ```Plain%20Text
-JSON_QUERY(json_object_expr, json_path)
+json_query(json_object_expr, json_path)
 ```
 
 ## Parameters
@@ -20,22 +20,22 @@ JSON_QUERY(json_object_expr, json_path)
 
 Returns a JSON value.
 
-> If the element does not exist, the JSON_QUERY function returns an SQL value of `NULL`.
+> If the element does not exist, the json_query function returns an SQL value of `NULL`.
 
 ## Examples
 
-Example 1: Query the value of an element that can be located by the `'$.a.b'` expression in the specified JSON object. In this example, the JSON_QUERY function returns a JSON value of `1`.
+Example 1: Query the value of an element that can be located by the `'$.a.b'` expression in the specified JSON object. In this example, the json_query function returns a JSON value of `1`.
 
 ```Plain%20Text
-mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
+mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
 
        -> 1
 ```
 
-Example 2: Query the value of an element that can be located by the `'$.a.c'` expression in the specified JSON object. In this example, the element does not exist. Therefore, the JSON_QUERY function returns an SQL value of `NULL`.
+Example 2: Query the value of an element that can be located by the `'$.a.c'` expression in the specified JSON object. In this example, the element does not exist. Therefore, the json_query function returns an SQL value of `NULL`.
 
 ```Plain%20Text
-mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
+mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 
        -> NULL
 ```
@@ -43,15 +43,15 @@ mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 Example 3: Query the value of an element that can be located by the `'$.a[2]'` expression in the specified JSON object. In this example, the JSON object, which is an array named a, contains an element at index 2, and the value of the element is 3. Therefore, the JSON_QUERY function returns a JSON value of `3`.
 
 ```Plain%20Text
-mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
+mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 
        -> 3
 ```
 
-Example 4: Query an element that can be located by the `'$.a[3]'` expression in the specified JSON object. In this example, the JSON object, which is an array named a, does not contain an element at index 3. Therefore, the JSON_QUERY function returns an SQL value of `NULL`.
+Example 4: Query an element that can be located by the `'$.a[3]'` expression in the specified JSON object. In this example, the JSON object, which is an array named a, does not contain an element at index 3. Therefore, the json_query function returns an SQL value of `NULL`.
 
 ```Plain%20Text
-mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
+mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
 
        -> NULL
 ```

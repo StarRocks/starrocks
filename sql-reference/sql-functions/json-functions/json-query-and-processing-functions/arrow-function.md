@@ -27,7 +27,7 @@ Returns a JSON value.
 Example 1: Query an element that can be located by the `'$.a.b'` expression in the specified JSON object.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('{"a": {"b": 1}}') -> '$.a.b';
+mysql> SELECT parse_json('{"a": {"b": 1}}') -> '$.a.b';
 
        -> 1
 ```
@@ -37,7 +37,7 @@ Example 2: Use nested arrow functions to query an element. The arrow function in
 > In this example, the root element $ is omitted from the `json_path` expression.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('{"a": {"b": 1}}')->'a'->'b';
+mysql> SELECT parse_json('{"a": {"b": 1}}')->'a'->'b';
 
        -> 1
 ```
@@ -47,7 +47,7 @@ Example 3: Query an element that can be located by the `'a'` expression in the s
 > In this example, the root element $ is omitted from the `json_path` expression.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('{"a": "b"}') -> 'a';
+mysql> SELECT parse_json('{"a": "b"}') -> 'a';
 
        -> "b"
 ```

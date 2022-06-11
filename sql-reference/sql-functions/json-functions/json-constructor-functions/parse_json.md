@@ -1,4 +1,4 @@
-# PARSE_JSON
+# parse_json
 
 ## Description
 
@@ -7,7 +7,7 @@ Converts a string to a JSON value.
 ## Syntax
 
 ```Plain%20Text
-PARSE_JSON(string_expr)
+parse_json(string_expr)
 ```
 
 ## Parameters
@@ -25,7 +25,7 @@ Returns a JSON value.
 Example 1: Convert a STRING value of `1` to a JSON value of `1`.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('1');
+mysql> SELECT parse_json('1');
 
        -> 1
 ```
@@ -33,7 +33,7 @@ mysql> SELECT PARSE_JSON('1');
 Example 2: Convert an array of the STRING data type to a JSON array.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('[1,2,3]');
+mysql> SELECT parse_json('[1,2,3]');
 
        -> [1, 2, 3]   
 ```
@@ -41,7 +41,7 @@ mysql> SELECT PARSE_JSON('[1,2,3]');
 Example 3: Convert an object of the STRING data type to a JSON object.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('{"star": "rocks"}');
+mysql> SELECT parse_json('{"star": "rocks"}');
 
        -> {"star": "rocks"}
 ```
@@ -49,7 +49,7 @@ mysql> SELECT PARSE_JSON('{"star": "rocks"}');
 Example 4: Construct a JSON value of `NULL`.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('null');
+mysql> SELECT parse_json('null');
 
        -> NULL
 ```
@@ -57,7 +57,7 @@ mysql> SELECT PARSE_JSON('null');
 Example 5: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. In this example, star is not enclosed in double quotation marks ("). Therefore, the PARSE_JSON function returns `NULL`.
 
 ```Plain%20Text
-mysql> SELECT PARSE_JSON('{star: "rocks"}');
+mysql> SELECT parse_json('{star: "rocks"}');
 
        -> NULL
 ```
