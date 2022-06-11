@@ -324,7 +324,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
     std::shared_lock rdlock(tablet->get_header_lock());
     for (int64_t v : delta_versions) {
         auto rowset = tablet->get_inc_rowset_by_version(Version{v, v});
-        if (rowset == nullptr && tablet->max_continuous_version_from_beginning().second >= v) {
+        if (rowset == nullptr && tablet->max_continuous_version() >= v) {
             return Status::VersionAlreadyMerged(strings::Substitute("version $0 has been merged", v));
         } else if (rowset == nullptr) {
             return Status::RuntimeError(strings::Substitute("no incremental rowset $0", v));
