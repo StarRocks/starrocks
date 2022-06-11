@@ -171,8 +171,10 @@ private:
         auto key = std::make_pair(type, encoding_type);
         DCHECK(_encoding_map.count(key) == 0);
 
-        _default_encoding_type_map[type] = encoding_type;
-        if (optimize_value_seek) {
+        if (_default_encoding_type_map.find(type) == _default_encoding_type_map.end()) {
+            _default_encoding_type_map[type] = encoding_type;
+        }
+        if (optimize_value_seek && _value_seek_encoding_map.find(type) == _value_seek_encoding_map.end()) {
             _value_seek_encoding_map[type] = encoding_type;
         }
         _encoding_map.emplace(key, new EncodingInfo(EncodingTraits<type, encoding_type>()));
@@ -241,11 +243,11 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, FOR_ENCODING, true>();
 
-    _add_map<OLAP_FIELD_TYPE_DECIMAL, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_DECIMAL, BIT_SHUFFLE, true>();
+    _add_map<OLAP_FIELD_TYPE_DECIMAL, PLAIN_ENCODING>();
 
-    _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, BIT_SHUFFLE, true>();
+    _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, PLAIN_ENCODING>();
 
     _add_map<OLAP_FIELD_TYPE_HLL, PLAIN_ENCODING>();
 
