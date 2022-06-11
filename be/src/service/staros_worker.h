@@ -25,6 +25,8 @@ public:
 
     StatusOr<ShardInfo> get_shard_info(ShardId id);
 
+    std::vector<ShardInfo> shards();
+
 private:
     std::mutex _mtx;
     std::unordered_map<ShardId, ShardInfo> _shards;
@@ -34,8 +36,6 @@ extern std::shared_ptr<StarOSWorker> g_worker;
 extern staros::starlet::Starlet* g_starlet;
 void init_staros_worker();
 void shutdown_staros_worker();
-
-StatusOr<std::string> get_staros_shard_path(int64_t shard_id);
 
 } // namespace starrocks
 #endif // USE_STAROS
