@@ -5,10 +5,12 @@
    </a>
 </p>
 <p align="center">
-  <a href="https://www.starrocks.com/en-US/download/community">Download</a> | <a href="https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro">Docs</a> | <a href="https://www.starrocks.com/en-us/blog/benchmark-test">Benchmarks</a>
+  <a href="https://www.starrocks.com/en-US/download/community">Download</a> | <a href="https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro">Docs</a> | <a href="https://www.starrocks.com/en-us/blog/benchmark-test">Benchmarks</a> | <a href="https://github.com/StarRocks/demo">Demo</a>
 </p>
 <p align="center">
 
+ <img src="https://img.shields.io/badge/Made%20with-Java-yellowgreen" alt="JAVA">
+    </a>
   <img src="https://img.shields.io/badge/Made%20with-C%2B%2B-red" alt="C++">
     <img src="https://img.shields.io/github/commit-activity/m/StarRocks/starrocks" alt="Commit Activities">
     </a>
@@ -32,28 +34,31 @@
 <div align="center"> 
 
   </div>
-StarRocks is a next-gen data platform for real-time data analytics. Its blazing-fast query speed is 5 to 10 times faster than previous systems. 
-StarRocks can smoothly integrate into your favorite BI tools by supporting MySQL protocols and standard SQL syntax.
-StarRocks can be easily deployed, maintained, and scaled out due to its simple architecture that doesn't rely on any external systems.
+StarRocks is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
+It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.
+
 
 <br>
 
 ## Features
 
 * **🚀 Native vectorized SQL engine:** StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses, which is 5 to 10 times faster than previous systems.
-* **🏠 Simple architecture:** StarRocks does not rely on any external systems. The simple architecture makes it easy to deploy, maintain and scale out. StarRocks also provides high availability, reliability, scalability and fault tolerance.
 * **📊 Standard SQL:** StarRocks supports ANSI SQL syntax (fully supported TPC-H and TPC-DS). It is also compatible with the MySQL protocol. Various clients and BI software can be used to access StarRocks.
 * **💡 Smart query optimization:** StarRocks can optimize complex queries through CBO (Cost Based Optimizer). With a better execution plan, the data analysis efficiency will be greatly improved.
 * **⚡ Real-time update:** The updated model of StarRocks can perform upsert/delete operations according to the primary key, and achieve efficient query while concurrent updates.
-* **✨ Intelligent materialized view:** The materialized view of StarRocks can be automatically updated during the data import and automatically selected when the query is executed.
-* **⏩ Convenient query federation:** StarRocks allows direct access to data from Hive, MySQL and Elasticsearch without importing.
+* **🪟 Intelligent materialized view:** The materialized view of StarRocks can be automatically updated during the data import and automatically selected when the query is executed.
+* **✨ Querying data in data lakes directly**: StarRocks allows direct access to data from Apache Hive™, Apache Iceberg™, and Apache Hudi™ without importing.
+* **💠 Easy to maintain**: Simple architecture makes StarRocks easy to deploy, maintain and scale out. StarRocks tunes its query plan agilely, balances the resources when the cluster is scaled in or out, and recovers the data replica under node failure automatically.
+
+
+
 
 <br>
   
 ## Architecture Overview
 
  <p align="center">
-    <img src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
+    <img height="400"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
    </a>
 </p>
 
@@ -72,6 +77,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules：Front
 | [Blogs](https://www.starrocks.com/en-US/blog) | StarRocks deep dive and user stories.  |
 
 ### ❓ Get support  
+[<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
 -  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)join technical discussions, ask questions, and meet other users!
 -  [YouTube channel:](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) subscribe to the latest video tutorials and webcasts.
 -  [GitHub issues:](https://github.com/StarRocks/starrocks/issues) report an issue with StarRocks.
@@ -90,7 +96,9 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-**[License]** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
+**📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
+
+**👥 Community Membership:** Learn more about different [contributor roles](https://github.com/kateshaowanjou/starrocks/blob/main/Community-Membership.md) in StarRocks community.
   
 <br>
   
