@@ -151,8 +151,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         ASSERT_FALSE(query_ctx->is_dead());
         query_ctx_mgr->remove(query_id);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
-        query_ctx->set_delivery_expire_seconds(60);
-        query_ctx->set_query_expire_seconds(300);
+        query_ctx->set_delivery_expire_seconds(1);
         query_ctx->extend_delivery_lifetime();
         query_ctx->extend_query_lifetime();
         sleep(2);
