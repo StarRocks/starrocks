@@ -2367,27 +2367,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
             }
-            long intervalVal = 0;
-            TimestampArithmeticExpr.TimeUnit timeUnit = null;
             if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
-                final UnitIdentifier unitIdentifier = intervalLiteral.getUnitIdentifier();
-                Expr expr = intervalLiteral.getValue();
-                if (expr instanceof IntLiteral) {
-                    intervalVal = ((IntLiteral) expr).getLongValue();
-                    if (intervalVal <= 0) {
-                        throw new IllegalArgumentException("Unsupported negative interval value: " + expr);
-                    }
-                } else {
-                    throw new IllegalArgumentException("Unsupported interval expr: " + expr);
-                }
-                if (unitIdentifier != null) {
-                    timeUnit = TimestampArithmeticExpr.TimeUnit.valueOf(unitIdentifier.getDescription().toUpperCase());
-                } else {
-                    throw new IllegalArgumentException("Unsupported interval expr: " + expr);
-                }
             }
-            return new AsyncRefreshSchemeDesc(startTime, intervalVal, timeUnit);
+            return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
             return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {

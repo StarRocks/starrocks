@@ -10,12 +10,12 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -36,10 +36,13 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
+import org.apache.commons.lang3.EnumUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +62,15 @@ public class MaterializedViewAnalyzer {
     }
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+
+        public enum TimeUnit {
+            YEAR,
+            MONTH,
+            WEEK,
+            DAY,
+            HOUR,
+            MINUTE
+        }
 
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
@@ -328,24 +340,37 @@ public class MaterializedViewAnalyzer {
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     LocalDateTime startTime = async.getStartTime();
-                    final long step = async.getStep();
-                    TimestampArithmeticExpr.TimeUnit timeUnit = async.getTimeUnit();
+                    final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
+                    //alter materialized view mv1 sync
+                    if (startTime == null && intervalLiteral == null) {
+                        async.setStartTime(LocalDateTime.now());
+                        return null;
+                    }
                     if (startTime != null) {
                         if (startTime.isBefore(LocalDateTime.now())) {
                             throw new SemanticException("Refresh start must be after current time");
                         }
-                        if (timeUnit == null) {
+                        if (intervalLiteral == null) {
                             throw new SemanticException("Please input interval clause");
                         }
                     } else {
                         async.setStartTime(LocalDateTime.now());
                     }
-                    if (timeUnit != null) {
+                    //alter materialized view mv1 sync start ('2022-06-10') every 1 minute
+                    final UnitIdentifier unitIdentifier = intervalLiteral.getUnitIdentifier();
+                    Expr expr = intervalLiteral.getValue();
+                    if (expr instanceof IntLiteral) {
+                        long step = ((IntLiteral) expr).getLongValue();
                         if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value");
+                            throw new IllegalArgumentException("Unsupported negative or zero step value: " + step);
                         }
-                        if (!async.getSupportedTimeUnitType().contains(timeUnit)) {
-                            throw new SemanticException("Unsupported time unit");
+                    } else {
+                        throw new IllegalArgumentException("Unsupported interval expr: " + expr);
+                    }
+                    if (unitIdentifier != null) {
+                        final String unit = unitIdentifier.getDescription().toUpperCase();
+                        if (!EnumUtils.isValidEnum(TimeUnit.class, unit)) {
+                            throw new IllegalArgumentException("Unsupported interval expr: " + unit);
                         }
                     }
                 }
