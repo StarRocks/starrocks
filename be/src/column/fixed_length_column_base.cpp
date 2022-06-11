@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
-    if (reach_capacity_limit()) {
+    if (capacity_limit_reached()) {
         return Status::InternalError("Size of FixedLengthColumn exceed the limit");
     } else {
         return nullptr;

@@ -610,7 +610,7 @@ bool BinaryColumnBase<T>::has_large_column() const {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::reach_capacity_limit(std::string* msg) const {
+bool BinaryColumnBase<T>::capacity_limit_reached(std::string* msg) const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     if constexpr (std::is_same_v<T, uint32_t>) {
         // The size limit of a single element is 2^32 - 1.

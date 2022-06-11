@@ -217,7 +217,7 @@ Status MemTable::flush() {
         return Status::OK();
     }
     std::string msg;
-    if (_result_chunk->reach_capacity_limit(&msg)) {
+    if (_result_chunk->capacity_limit_reached(&msg)) {
         return Status::InternalError(
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
