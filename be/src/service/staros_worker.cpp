@@ -43,6 +43,15 @@ StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId id) {
     return it->second;
 }
 
+std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() {
+    std::lock_guard l(_mtx);
+    std::vector<staros::starlet::ShardInfo> vec;
+    for (const auto& shard : _shards) {
+        vec.emplace_back(shard.second);
+    }
+    return vec;
+}
+
 absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() {
     staros::starlet::WorkerInfo worker_info;
     worker_info.worker_id = 1;
@@ -71,15 +80,6 @@ void shutdown_staros_worker() {
     delete g_starlet;
     g_starlet = nullptr;
     g_worker = nullptr;
-}
-
-static const char* const kStarletPrefix = "staros_";
-StatusOr<std::string> get_staros_shard_path(int64_t shard_id) {
-    if (g_worker == nullptr) {
-        return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
-    }
-    ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(shard_id));
-    return fmt::format("{}{}", kStarletPrefix, shardinfo.obj_store_info.uri);
 }
 
 } // namespace starrocks
