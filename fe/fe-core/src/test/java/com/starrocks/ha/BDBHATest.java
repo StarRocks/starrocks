@@ -1,6 +1,10 @@
 package com.starrocks.ha;
 
 import com.starrocks.catalog.Catalog;
+import java.net.InetSocketAddress;
+import java.util.Set;
+
+import com.google.common.collect.Sets;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.system.Frontend;
@@ -53,6 +57,11 @@ public class BDBHATest {
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
+        Set<InetSocketAddress> helperSocketsBefore = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
+        InetSocketAddress targetAddress = new InetSocketAddress("host1", 9010);
+        Assert.assertTrue(helperSocketsBefore.contains(targetAddress));        
+
+
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "host2", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
@@ -63,6 +72,10 @@ public class BDBHATest {
 
         // the other one is dropped
         Catalog.getCurrentCatalog().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
+
+        Set<InetSocketAddress> helperSocketsAfter = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
+        Assert.assertTrue(!helperSocketsAfter.contains(targetAddress));
+
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
     }
