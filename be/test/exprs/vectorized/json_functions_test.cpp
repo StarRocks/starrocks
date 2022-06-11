@@ -711,21 +711,17 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(JsonFunctionsTest, extract_from_object_test) {
     std::string output;
-    Status st;
 
-    st = test_extract_from_object(R"({"data" : 1})", "$.data", &output);
-    EXPECT_OK(st);
+    EXPECT_OK(test_extract_from_object(R"({"data" : 1})", "$.data", &output));
     EXPECT_STREQ(output.data(), "1");
 
-    st = test_extract_from_object(R"({"data" : 1})", "$.dataa", &output);
-    EXPECT_STATUS(Status::NotFound(""), st);
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data" : 1})", "$.dataa", &output));
 
-    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output);
-    EXPECT_OK(st);
+    EXPECT_OK(test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output));
     EXPECT_STREQ(output.data(), "2");
 
-    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output);
-    EXPECT_STATUS(Status::NotFound(""), st);
+    EXPECT_STATUS(Status::NotFound(""),
+                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
 }
 
 } // namespace vectorized
