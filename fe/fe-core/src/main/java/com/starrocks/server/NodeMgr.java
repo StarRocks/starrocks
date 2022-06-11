@@ -696,6 +696,7 @@ public class NodeMgr {
 
                 BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
                 ha.removeUnstableNode(host, getFollowerCnt());
+                ha.removeHelperSocket(host, port);
             }
             stateMgr.getEditLog().logRemoveFrontend(fe);
         } finally {
