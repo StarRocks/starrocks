@@ -131,7 +131,7 @@ public class StarOSAgent {
                 LOG.warn(e);
                 return;
             } else {
-                // get workerId from staros
+                // get workerId from starMgr
                 try {
                     WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                     workerId = workerInfo.getWorkerId();
@@ -148,18 +148,23 @@ public class StarOSAgent {
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 
-    public void removeWorker(String workerIpPort) {
-        if (!workerToId.containsKey(workerIpPort)) {
-            LOG.warn("worker {} not exist", workerIpPort);
+    public void removeWorker(String workerIpPort) throws StarClientException {
+        long workerId = -1;
+        // get workerId from starMgr
+        try {
+            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+            workerId = workerInfo.getWorkerId();
+        } catch (StarClientException e2) {
+            LOG.warn(e2);
             return;
         }
 
-        long workerId = workerToId.get(workerIpPort);
         try {
             client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
-            LOG.warn(e);
-            return;
+            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                throw new StarClientException(e.getCode(), "remove worker error");
+            }
         }
 
         workerToBackend.remove(workerId);

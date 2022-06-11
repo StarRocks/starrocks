@@ -22,6 +22,7 @@
 package com.starrocks.cluster;
 
 import com.google.common.collect.Lists;
+import com.staros.client.StarClientException;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DropBackendClause;
@@ -264,9 +265,13 @@ public class SystemInfoServiceTest {
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {
             {
-                starosAgent.removeWorker("192.168.0.1:1235");
-                minTimes = 0;
-                result = null;
+                try {
+                    starosAgent.removeWorker("192.168.0.1:1235");
+                    minTimes = 0;
+                    result = null;
+                } catch (StarClientException e) {
+                    e.printStackTrace();
+                }
             }
         };
 
@@ -291,7 +296,8 @@ public class SystemInfoServiceTest {
             GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt2);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assert.assertTrue(e.getMessage()
+                    .contains("starletPort has not been updated by heartbeat from this backend"));
         }
 
         try {
