@@ -23,7 +23,7 @@
 
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/type_utils.h"
 
 namespace starrocks {

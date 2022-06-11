@@ -20,6 +20,7 @@ statement
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
@@ -122,6 +123,10 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
+    ;
+
 showColumnStatement
     : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?
@@ -210,8 +215,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -234,12 +241,20 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
 
 dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -412,7 +427,8 @@ relation
             LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
     | left=relation outerAndSemiJoinType hint?
             LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | aliasedRelation                                                                    #relationDefault
+    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
+    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
     ;
 
 crossOrInnerJoinType
@@ -442,10 +458,6 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
-    ;
-
 columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
@@ -455,7 +467,6 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
-    | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 partitionNames

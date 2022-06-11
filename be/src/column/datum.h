@@ -10,7 +10,6 @@
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
 #include "util/int96.h"
-#include "util/percentile_value.h"
 #include "util/slice.h"
 
 namespace starrocks {

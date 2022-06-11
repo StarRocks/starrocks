@@ -71,7 +71,6 @@ private:
     pthread_t _cleaner_id = 0;
     std::string _error_log_dir;
     uint32_t _next_shard;
-    uint32_t _error_path_next_shard;
 };
 
 } // namespace starrocks

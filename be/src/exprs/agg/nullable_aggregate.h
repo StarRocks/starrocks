@@ -8,10 +8,12 @@
 
 #include <utility>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/maxmin.h"
 #include "simd/simd.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

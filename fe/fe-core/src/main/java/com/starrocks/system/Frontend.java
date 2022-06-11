@@ -111,6 +111,11 @@ public class Frontend implements Writable {
         return feVersion;
     }
 
+    public void updateHostAndEditLogPort(String host, int editLogPort) {
+        this.host = host;
+        this.editLogPort = editLogPort;
+    }
+
     /**
      * handle Frontend's heartbeat response.
      * Because the replayed journal id is very likely to be changed at each heartbeat response,

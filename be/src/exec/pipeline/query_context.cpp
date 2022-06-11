@@ -8,6 +8,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
 
 namespace starrocks::pipeline {

@@ -26,11 +26,15 @@
 
 #include "util/coding.h"
 #define private public
+#include "column/vectorized_fwd.h"
+#include "exprs/vectorized/bitmap_functions.h"
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
+#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+namespace vectorized {
 
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
@@ -337,8 +341,19 @@ TEST(BitmapValueTest, bitmap_single_convert) {
 }
 
 TEST(BitmapValueTest, bitmap_max) {
+    std::unique_ptr<FunctionContext> ctx_ptr;
+    FunctionContext* ctx;
+    ctx_ptr.reset(FunctionContext::create_test_context());
+    ctx = ctx_ptr.get();
+
     BitmapValue bitmap;
-    ASSERT_EQ(bitmap.max(), 0);
+    Columns columns;
+    auto s = BitmapColumn::create();
+    s->append(&bitmap);
+    columns.push_back(s);
+    auto column = BitmapFunctions::bitmap_max(ctx, columns);
+    ASSERT_TRUE(column->is_null(0));
+
     bitmap.add(0);
     ASSERT_EQ(bitmap.max(), 0);
     bitmap.add(1);
@@ -350,8 +365,19 @@ TEST(BitmapValueTest, bitmap_max) {
 }
 
 TEST(BitmapValueTest, bitmap_min) {
+    std::unique_ptr<FunctionContext> ctx_ptr;
+    FunctionContext* ctx;
+    ctx_ptr.reset(FunctionContext::create_test_context());
+    ctx = ctx_ptr.get();
+
     BitmapValue bitmap;
-    ASSERT_EQ(bitmap.min(), -1);
+    Columns columns;
+    auto s = BitmapColumn::create();
+    s->append(&bitmap);
+    columns.push_back(s);
+    auto column = BitmapFunctions::bitmap_min(ctx, columns);
+    ASSERT_TRUE(column->is_null(0));
+
     bitmap.add(std::numeric_limits<uint64_t>::max());
     ASSERT_EQ(bitmap.min(), std::numeric_limits<uint64_t>::max());
     bitmap.add(1);
@@ -381,4 +407,5 @@ TEST(BitmapValueTest, bitmap_xor) {
     }
 }
 
+} // namespace vectorized
 } // namespace starrocks

@@ -49,6 +49,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -81,7 +82,7 @@ import java.util.zip.Adler32;
  * Note: when you add a new olap table property, you should modify TableProperty class
  * ATTN: serialize by gson is used by MaterializedView
  */
-public class OlapTable extends Table {
+public class OlapTable extends Table implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
     public enum OlapTableState {
@@ -122,8 +123,6 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "idToPartition")
     protected Map<Long, Partition> idToPartition = new HashMap<>();
-
-    @SerializedName(value = "nameToPartition")
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     @SerializedName(value = "defaultDistributionInfo")
@@ -354,7 +353,7 @@ public class OlapTable extends Table {
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
         fullSchema.clear();
-        nameToColumn.clear();
+        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
             fullSchema.add(baseColumn);
             nameToColumn.put(baseColumn.getName(), baseColumn);
@@ -1231,6 +1230,20 @@ public class OlapTable extends Table {
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
+        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
+        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
+        rebuildFullSchema();
+
+        // Recover nameToPartition from idToPartition
+        nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Partition partition : idToPartition.values()) {
+            nameToPartition.put(partition.getName(), partition);
+        }
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {

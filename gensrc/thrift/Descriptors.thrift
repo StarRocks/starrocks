@@ -187,6 +187,7 @@ struct TOlapTablePartitionParam {
     6: required list<TOlapTablePartition> partitions
 
     7: optional list<string> partition_columns
+    8: optional list<Exprs.TExpr> partition_exprs
 }
 
 struct TOlapTableIndexSchema {

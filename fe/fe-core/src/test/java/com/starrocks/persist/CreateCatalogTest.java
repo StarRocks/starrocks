@@ -32,7 +32,7 @@ public class CreateCatalogTest {
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         String comment = "external catalog for hive";
-        Catalog catalog = new ExternalCatalog("catalog_name", comment, properties);
+        Catalog catalog = new ExternalCatalog(1000, "catalog_name", comment, properties);
         catalog.write(out);
         out.flush();
         out.close();

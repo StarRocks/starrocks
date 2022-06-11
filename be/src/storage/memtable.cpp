@@ -24,6 +24,15 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
+void MemTable::_init_aggregator_if_needed() {
+    if (_keys_type != KeysType::DUP_KEYS) {
+        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
+        // which is not suitable for obtaining Chunk from ColumnPool,
+        // otherwise it will take up a lot of memory and may not be released.
+        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
+    }
+}
+
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
@@ -42,13 +51,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
         _vectorized_schema.append(op_column);
         _has_op_slot = true;
     }
-
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
@@ -60,15 +63,9 @@ MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, 
           _keys_type(schema.keys_type()),
           _sink(sink),
           _aggregator(nullptr),
-          _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
           _mem_tracker(mem_tracker) {
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::~MemTable() = default;
@@ -107,7 +104,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
 
-    if (_use_slot_desc) {
+    if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
         // So the chunk can only be accessed by the subscript
@@ -161,7 +158,7 @@ Status MemTable::finalize() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
 
-        if (_keys_type != DUP_KEYS) {
+        if (_keys_type != KeysType::DUP_KEYS) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
                 _merge();

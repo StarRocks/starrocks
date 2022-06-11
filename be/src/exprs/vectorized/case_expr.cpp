@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"

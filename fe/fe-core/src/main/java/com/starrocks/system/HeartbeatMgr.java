@@ -184,6 +184,15 @@ public class HeartbeatMgr extends MasterDaemon {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
                         }
+                    } else {
+                        if (Config.integrate_starmgr) {
+                            // addWorker
+                            int starletPort = be.getStarletPort();
+                            if (starletPort != 0) {
+                                String starletHost = be.getHost() + ":" + starletPort;
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), starletHost);
+                            }
+                        }
                     }
                     return isChanged;
                 }
@@ -239,8 +248,12 @@ public class HeartbeatMgr extends MasterDaemon {
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
                     int brpcPort = -1;
+                    int starletPort = 0;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
+                    }
+                    if (tBackendInfo.isSetStarlet_port()) {
+                        starletPort = tBackendInfo.getStarlet_port();
                     }
                     String version = "";
                     if (tBackendInfo.isSetVersion()) {
@@ -254,8 +267,8 @@ public class HeartbeatMgr extends MasterDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, System.currentTimeMillis(),
-                            version, cpuCores);
+                    return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, starletPort,
+                            System.currentTimeMillis(), version, cpuCores);
                 } else {
                     return new BackendHbResponse(backendId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"

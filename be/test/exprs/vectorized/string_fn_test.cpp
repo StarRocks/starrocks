@@ -9,6 +9,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
+#include "runtime/large_int_value.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 

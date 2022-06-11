@@ -8,6 +8,7 @@ add_library(Column STATIC
         chunk.cpp
         column.cpp
         column_helper.cpp
+        column_viewer.cpp
         const_column.cpp
         datum_convert.cpp
         datum_tuple.cpp

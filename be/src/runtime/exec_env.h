@@ -26,8 +26,10 @@
 
 #include "common/status.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/runtime_filter_cache.h"
 #include "storage/options.h"
+// NOTE: Be careful about adding includes here. This file is included by many files.
+// Unnecssary includes will cause compilatio very slow.
+// So please consider use forward declaraion as much as possible.
 
 namespace starrocks {
 
@@ -59,6 +61,8 @@ class RoutineLoadTaskExecutor;
 class SmallFileMgr;
 class PluginMgr;
 class RuntimeFilterWorker;
+class RuntimeFilterCache;
+struct RfTracePoint;
 
 class BackendServiceClient;
 class FrontendServiceClient;
@@ -72,6 +76,11 @@ class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
 } // namespace pipeline
+
+namespace lake {
+class GroupAssigner;
+class TabletManager;
+} // namespace lake
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -174,6 +183,10 @@ public:
 
     int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
+    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
+
+    lake::GroupAssigner* lake_group_assigner() const { return _lake_group_assigner; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -259,6 +272,9 @@ private:
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
+
+    lake::TabletManager* _lake_tablet_manager = nullptr;
+    lake::GroupAssigner* _lake_group_assigner = nullptr;
 };
 
 template <>

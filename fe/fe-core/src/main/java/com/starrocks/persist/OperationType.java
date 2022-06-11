@@ -225,4 +225,8 @@ public class OperationType {
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
+
+    public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
+    // manage system node info 10100 ~ 10120
+    public static final short OP_UPDATE_FRONTEND = 10101;
 }

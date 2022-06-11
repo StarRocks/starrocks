@@ -23,8 +23,10 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <iostream>
 
+#include "column/column.h"
 #include "common/logging.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"

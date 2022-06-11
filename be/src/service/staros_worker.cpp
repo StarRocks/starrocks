@@ -73,13 +73,14 @@ void shutdown_staros_worker() {
     g_worker = nullptr;
 }
 
-StatusOr<staros::starlet::ShardInfo> get_shard_info(staros::starlet::ShardId shard_id) {
+static const char* const kStarletPrefix = "staros_";
+StatusOr<std::string> get_staros_shard_path(int64_t shard_id) {
     if (g_worker == nullptr) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
-    return g_worker->get_shard_info(shard_id);
+    ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(shard_id));
+    return fmt::format("{}{}", kStarletPrefix, shardinfo.obj_store_info.uri);
 }
 
 } // namespace starrocks
-
 #endif // USE_STAROS

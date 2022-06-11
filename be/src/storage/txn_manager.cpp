@@ -21,6 +21,8 @@
 
 #include "txn_manager.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <new>
 #include <queue>
@@ -30,6 +32,7 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -273,6 +276,19 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
     StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
     return Status::OK();
+}
+
+void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
+    int64_t duration_ns = 0;
+    SCOPED_RAW_TIMER(&duration_ns);
+    for (auto dir : affected_dirs) {
+        auto st = dir->get_meta()->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to flush tablet meta, dir:" << dir->path() << " res:" << st;
+        }
+    }
+    StarRocksMetrics::instance()->txn_persist_total.increment(1);
+    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
 }
 
 // txn could be rollbacked if it does not have related rowset

@@ -10,6 +10,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/http.h>
+#include <fmt/format.h>
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
@@ -421,7 +422,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         bb->pos = remove_bytes;
         bb->flip();
-        auto st = ctx->body_sink->append(bb);
+        auto st = ctx->body_sink->append(std::move(bb));
         if (!st.ok()) {
             LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
             ctx->status = st;

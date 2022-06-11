@@ -197,6 +197,10 @@ public:
 
     int32_t idle_timeout_sec = -1;
 
+    // buffer for reading data from ev_buffer
+    static constexpr size_t kDefaultBufferSize = 64 * 1024;
+    ByteBufferPtr buffer = nullptr;
+
 public:
     ExecEnv* exec_env() { return _exec_env; }
 

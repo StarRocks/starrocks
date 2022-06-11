@@ -36,6 +36,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;
@@ -200,6 +201,14 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getFullName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    break;
+                }
+                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
+                    CreateTableInfo info = (CreateTableInfo) journal.getData();
+                    LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                            + " create materialized view = " + info.getTable().getId()
+                            + " tableName = " + info.getTable().getName());
+                    globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -444,6 +453,11 @@ public class EditLog {
                         LOG.info("current fe " + fe + " is removed. will exit");
                         System.exit(-1);
                     }
+                    break;
+                }
+                case OperationType.OP_UPDATE_FRONTEND: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.replayUpdateFrontend(fe);
                     break;
                 }
                 case OperationType.OP_CREATE_USER: {
@@ -989,6 +1003,10 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_TABLE, info);
     }
 
+    public void logCreateMaterializedView(CreateTableInfo info) {
+        logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
+    }
+
     public void logWorkGroupOp(WorkGroupOpEntry op) {
         logEdit(OperationType.OP_WORKGROUP, op);
     }
@@ -1115,6 +1133,10 @@ public class EditLog {
 
     public void logRemoveFrontend(Frontend fe) {
         logEdit(OperationType.OP_REMOVE_FRONTEND, fe);
+    }
+
+    public void logUpdateFrontend(Frontend fe) {
+        logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
     }
 
     public void logFinishDelete(DeleteInfo info) {

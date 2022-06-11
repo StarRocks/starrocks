@@ -6,6 +6,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "pipeline_test_base.h"
+#include "util/defer_op.h"
 #include "util/thrift_util.h"
 
 #define ASSERT_COUNTER_CHUNK_NUM(counter, expected_push_chunk_num, expected_pull_chunk_num) \

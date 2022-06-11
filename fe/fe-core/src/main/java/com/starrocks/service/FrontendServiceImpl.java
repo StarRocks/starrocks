@@ -337,20 +337,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskInfo> tasksResult = Lists.newArrayList();
         result.setTasks(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
-
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<Task> taskList = taskManager.showTasks(params.db);
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<Task> taskList = taskManager.showTasks(null);
 
         for (Task task : taskList) {
+
+            Database db = globalStateMgr.getDb(task.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
@@ -371,19 +372,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
-            return result;
-        }
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(params.db);
         for (TaskRunStatus status : taskRunList) {
+
+            Database db = globalStateMgr.getDb(status.getDbName());
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+                continue;
+            }
+
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
             info.setTask_name(status.getTaskName());

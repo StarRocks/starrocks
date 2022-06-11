@@ -2419,15 +2419,6 @@ show_param ::=
     {:
         RESULT = new ShowAuthorStmt();
     :}
-    /* Create table */
-    | KW_CREATE KW_TABLE table_name:table
-    {:
-        RESULT = new ShowCreateTableStmt(table);
-    :}
-    | KW_CREATE KW_VIEW table_name:table
-    {:
-        RESULT = new ShowCreateTableStmt(table, true);
-    :}
     /* Create database */
     | KW_CREATE KW_DATABASE ident:db
     {:

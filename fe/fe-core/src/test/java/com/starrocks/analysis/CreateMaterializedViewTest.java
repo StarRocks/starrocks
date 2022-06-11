@@ -2,7 +2,14 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RefreshType;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -16,6 +23,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -164,6 +173,22 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl_for_count " +
+                        "(" +
+                        "   c_0_0 BIGINT NULL ," +
+                        "   c_0_1 DATE NOT NULL ," +
+                        "   c_0_2 DECIMAL(37, 5)  NOT NULL," +
+                        "   c_0_3 INT MAX NOT NULL , " +
+                        "   c_0_4 DATE REPLACE_IF_NOT_NULL NOT NULL ," +
+                        "   c_0_5 PERCENTILE PERCENTILE_UNION NOT NULL" +
+                        ") " +
+                        "AGGREGATE KEY (c_0_0,c_0_1,c_0_2) " +
+                        "PARTITION BY RANGE(c_0_1) " +
+                        "(" +
+                        "   START (\"2010-01-01\") END (\"2021-12-31\") EVERY (INTERVAL 219 day) " +
+                        ") " +
+                        "DISTRIBUTED BY HASH (c_0_2,c_0_1) BUCKETS 3 " +
+                        "properties(\"replication_num\"=\"1\") ;")
                 .useDatabase("test");
     }
 
@@ -222,6 +247,139 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSupportedProperties() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"SSD\",\n" +
+                "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
+        Database testDb = null;
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            testDb = currentState.getDb("default_cluster:test");
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            if (testDb != null) {
+                testDb.dropTable("mv1");
+            }
+        }
+    }
+
+    @Test
+    public void testUnSupportedProperties() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"short_key\" = \"20\"\n" +
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Unknown properties: {short_key=20}");
+        }
+    }
+
+    @Test
+    public void testNoDuplicateKey() {
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+
+        try {
+            FeConstants.shortkey_max_column_count = 0;
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "Data type of first column cannot be DATE");
+        } finally {
+            FeConstants.shortkey_max_column_count = 3;
+        }
+    }
+
+    @Test
+    public void testDistributeKeyIsNotKey() {
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+
+        try {
+            FeConstants.shortkey_max_column_count = 1;
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            FeConstants.shortkey_max_column_count = 3;
+        }
+    }
+
+    @Test
+    public void testFullCreate() {
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+        Database testDb = null;
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            testDb = currentState.getDb("default_cluster:test");
+            Table mv1 = testDb.getTable("mv1");
+            assertTrue(mv1 instanceof MaterializedView);
+
+            MaterializedView materializedView = (MaterializedView) mv1;
+            assertTrue(materializedView.getPartitionInfo() instanceof ExpressionRangePartitionInfo);
+            Set<Long> baseTableIds = materializedView.getBaseTableIds();
+            assertEquals(baseTableIds.size(), 1);
+            OlapTable baseTable = ((OlapTable) testDb.getTable(baseTableIds.iterator().next()));
+            assertEquals(baseTable.getRelatedMaterializedViews().size(), 1);
+            assertEquals(materializedView.getViewDefineSql(),
+                    "SELECT date_trunc('month', `test`.`tbl1`.`k1`) AS `s1`, `test`.`tbl1`.`k2` AS `s2` FROM `test`.`tbl1`");
+            TableProperty tableProperty = materializedView.getTableProperty();
+            assertEquals(tableProperty.getReplicationNum().shortValue(), 1);
+            assertEquals(materializedView.getState(), OlapTable.OlapTableState.NORMAL);
+            assertEquals(materializedView.getKeysType(), KeysType.DUP_KEYS);
+            assertEquals(materializedView.getType(), Table.TableType.MATERIALIZED_VIEW); //TableTypeMATERIALIZED_VIEW
+            assertEquals(materializedView.getRelatedMaterializedViews().size(), 0);
+            assertEquals(materializedView.getBaseSchema().size(), 2);
+            assertTrue(materializedView.isActive());
+            // todo test task after task framework is completed
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            if (testDb != null) {
+                testDb.dropTable("mv1");
+            }
         }
     }
 
@@ -492,7 +650,10 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            CreateMaterializedViewStatement statementBase =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Set<Long> baseTableIds = statementBase.getBaseTableIds();
+            assertEquals(baseTableIds.size(), 1);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -592,7 +753,7 @@ public class CreateMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select sqrt(tbl1.k1) s1, k2 from tbl1;";
+                "as select k2,sqrt(tbl1.k1) s1 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -662,7 +823,7 @@ public class CreateMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select sqrt(tbl1.k1) ss, k2 from tbl1;";
+                "as select k2, sqrt(tbl1.k1) ss from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -979,6 +1140,19 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             assertEquals(e.getMessage(),
                     "Do not support alter non-OLAP table[v1]");
+        }
+    }
+
+    @Test
+    public void testAggregateTableWithCount() {
+        String sql = "CREATE MATERIALIZED VIEW v0 AS SELECT t0_57.c_0_1," +
+                " COUNT(t0_57.c_0_0) , MAX(t0_57.c_0_2) , MAX(t0_57.c_0_3) , MIN(t0_57.c_0_4)" +
+                " FROM tbl_for_count AS t0_57 GROUP BY t0_57.c_0_1 ORDER BY t0_57.c_0_1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(),
+                    "Aggregate type table do not support count function in materialized view");
         }
     }
 }

@@ -25,6 +25,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
@@ -173,7 +174,7 @@ Status OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
+    exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
@@ -193,8 +194,10 @@ Status OlapScanNode::close(RuntimeState* state) {
 
     _dict_optimize_parser.close(state);
 
-    // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    if (runtime_state() != nullptr) {
+        // Reduce the memory usage if the the average string size is greater than 512.
+        release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    }
 
     return ScanNode::close(state);
 }
@@ -365,8 +368,7 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
-    // TODO: use LogicalSplitMorselQueue, when it can split tablet logically.
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,

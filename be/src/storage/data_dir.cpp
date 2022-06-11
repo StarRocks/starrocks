@@ -32,6 +32,7 @@
 #include <sstream>
 #include <utility>
 
+#include "common/config.h"
 #include "common/version.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -43,7 +44,9 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
 #include "util/defer_op.h"
 #include "util/errno.h"

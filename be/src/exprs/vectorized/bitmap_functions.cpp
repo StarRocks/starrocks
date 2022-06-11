@@ -13,6 +13,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 #include "util/string_parser.hpp"
 
@@ -385,13 +386,17 @@ ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_LARGEINT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
         } else {
-            int64_t value = viewer.value(row)->max();
-            builder.append(value);
+            if (auto max_value = viewer.value(row)->max(); max_value.has_value()) {
+                int128_t value128 = max_value.value();
+                builder.append(value128);
+            } else {
+                builder.append_null();
+            }
         }
     }
 
@@ -402,13 +407,17 @@ ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_LARGEINT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
         } else {
-            int64_t value = viewer.value(row)->min();
-            builder.append(value);
+            if (auto min_value = viewer.value(row)->min(); min_value.has_value()) {
+                int128_t value128 = min_value.value();
+                builder.append(value128);
+            } else {
+                builder.append_null();
+            }
         }
     }
 

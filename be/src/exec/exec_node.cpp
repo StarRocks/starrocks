@@ -313,7 +313,7 @@ Status ExecNode::close(RuntimeState* state) {
         return Status::OK();
     }
     _is_closed = true;
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
+    exec_debug_action(TExecNodePhase::CLOSE);
 
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);

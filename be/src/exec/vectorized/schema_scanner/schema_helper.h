@@ -6,6 +6,7 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
