@@ -204,8 +204,8 @@ Status ProjectNode::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
     _dict_optimize_parser.close(state);
-    RETURN_IF_ERROR(ExecNode::close(state));
-    return Status::OK();
+
+    return ExecNode::close(state);
 }
 
 void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {

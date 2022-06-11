@@ -119,6 +119,39 @@ public class CreateTableWithPartitionTest {
     }
 
     @Test
+    public void testCreateTableBatchPartitionWithDynamicPrefix() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionDay (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2014-01-01\") END (\"2014-01-04\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"dynamic_partition.prefix\" = \"p_\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140101 VALUES [('2014-01-01'), ('2014-01-02'))"));
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140102 VALUES [('2014-01-02'), ('2014-01-03'))"));
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140103 VALUES [('2014-01-03'), ('2014-01-04'))"));
+        Assert.assertFalse(
+                partitionDesc.toSql().contains("PARTITION p_20140104 VALUES [('2014-01-04'), ('2014-01-05'))"));
+
+    }
+
+    @Test
     public void testCreateTableBatchPartition5Day() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE testCreateTableBatchPartition5Day (\n" +

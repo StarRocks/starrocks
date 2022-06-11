@@ -4,7 +4,6 @@
 
 #include "common/object_pool.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "exprs/vectorized/in_iterator_predicate.hpp"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 
@@ -14,13 +13,6 @@ struct InConstPredicateBuilder {
     template <PrimitiveType ptype>
     Expr* operator()(const TExprNode& node) {
         return new VectorizedInConstPredicate<ptype>(node);
-    }
-};
-
-struct InIteratorBuilder {
-    template <PrimitiveType ptype>
-    Expr* operator()(const TExprNode& node) {
-        return new VectorizedInIteratorPredicate<ptype>(node);
     }
 };
 
@@ -38,7 +30,7 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
         return type_dispatch_basic(child_type, InConstPredicateBuilder(), node);
     case TExprOpcode::FILTER_NEW_IN:
     case TExprOpcode::FILTER_NEW_NOT_IN:
-        return type_dispatch_basic(child_type, InIteratorBuilder(), node);
+        // NOTE: These two opcode are deprecated
     default:
         LOG(WARNING) << "vectorized engine in predicate not support: " << node.opcode;
         return nullptr;

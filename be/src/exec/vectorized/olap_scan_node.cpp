@@ -174,7 +174,7 @@ Status OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
+    exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
@@ -194,8 +194,10 @@ Status OlapScanNode::close(RuntimeState* state) {
 
     _dict_optimize_parser.close(state);
 
-    // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    if (runtime_state() != nullptr) {
+        // Reduce the memory usage if the the average string size is greater than 512.
+        release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    }
 
     return ScanNode::close(state);
 }

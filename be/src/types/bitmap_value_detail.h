@@ -177,26 +177,26 @@ public:
      * Return the largest value (if not empty)
      *
      */
-    uint64_t maximum() const {
+    std::optional<uint64_t> maximum() const {
         for (auto roaring_iter = roarings.crbegin(); roaring_iter != roarings.crend(); ++roaring_iter) {
             if (!roaring_iter->second.isEmpty()) {
                 return uniteBytes(roaring_iter->first, roaring_iter->second.maximum());
             }
         }
-        return 0;
+        return {};
     }
 
     /**
      * Return the smallest value (if not empty)
      *
      */
-    int64_t minimum() const {
+    std::optional<uint64_t> minimum() const {
         for (const auto& roaring : roarings) {
             if (!roaring.second.isEmpty()) {
                 return uniteBytes(roaring.first, roaring.second.minimum());
             }
         }
-        return -1;
+        return {};
     }
 
     /**
