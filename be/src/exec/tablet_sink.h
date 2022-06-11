@@ -83,7 +83,7 @@ template <typename T>
 class ReusableClosure : public google::protobuf::Closure {
 public:
     ReusableClosure() : cid(INVALID_BTHREAD_ID), _refs(0) {}
-    ~ReusableClosure() { join(); }
+    ~ReusableClosure() {}
 
     int count() { return _refs.load(); }
 
@@ -105,6 +105,12 @@ public:
             return true;
         } else {
             return false;
+        }
+    }
+
+    void cancel() {
+        if (cid != INVALID_BTHREAD_ID) {
+            brpc::StartCancel(cid);
         }
     }
 

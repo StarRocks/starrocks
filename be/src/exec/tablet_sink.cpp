@@ -471,8 +471,11 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
-    // we don't need to wait last rpc finished, cause closure's release/reset will join.
-    // But do we need brpc::StartCancel(call_id)?
+    // cancel rpc request, accelerate the release of related resources
+    for (auto closure : _add_batch_closures) {
+        closure->cancel();
+    }
+
     _cancelled = true;
     _err_st = err_st;
 
