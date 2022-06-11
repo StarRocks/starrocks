@@ -94,6 +94,7 @@ set(RUNTIME_FILES
     global_dict/types.cpp
     current_thread.cpp
     runtime_filter_cache.cpp
+    lake_tablets_channel.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
