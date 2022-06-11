@@ -1,0 +1,7 @@
+#Thu Apr 28 12:47:07 UTC 2022
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanContext.java=1651129669082
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCUtil.java=1651129669082
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanner.java=1651129669082
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCBridge.java=1651129669082
+module-resource*?\:file\:/root/starrocks/jdbc_bridge/checkstyle-header.txt=4BB15A22DB63112AE43283C185CE549B157329
+configuration*?=B7022645120C35F5B7EEA190379970752F019593

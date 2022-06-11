@@ -1,0 +1,4 @@
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCBridge.java
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCUtil.java
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanContext.java
+/root/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanner.java
