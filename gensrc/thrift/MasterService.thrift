@@ -46,11 +46,6 @@ struct TTabletInfo {
     15: optional bool enable_persistent_index
 }
 
-struct TTabletVersionPair {
-    1: optional Types.TTabletId tablet_id
-    2: optional Types.TVersion version
-}
-
 struct TFinishTaskRequest {
     1: required Types.TBackend backend
     2: required Types.TTaskType task_type
@@ -68,7 +63,6 @@ struct TFinishTaskRequest {
     14: optional list<Types.TTabletId> downloaded_tablet_ids
     15: optional i64 copy_size
     16: optional i64 copy_time_ms
-    17: optional list<TTabletVersionPair> tablet_versions;
 }
 
 struct TTablet {
