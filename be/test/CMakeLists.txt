@@ -151,6 +151,7 @@ set(EXEC_FILES
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
+        storage/lake/group_assigner_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_writer_test.cpp
         ./storage/rowset_update_state_test.cpp
