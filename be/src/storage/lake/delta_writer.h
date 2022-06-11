@@ -38,9 +38,15 @@ public:
 
     [[nodiscard]] Status open();
 
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     [[nodiscard]] Status finish();
+
+    // Manual flush, mainly used in UT
+    [[nodiscard]] Status flush();
+
+    // Manual flush, mainly used in UT
+    [[nodiscard]] Status flush_async();
 
     void close();
 

@@ -44,6 +44,12 @@ public:
     StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
 
+    GroupAssigner* TEST_set_group_assigner(GroupAssigner* value) {
+        auto ret = _group_assigner;
+        _group_assigner = value;
+        return ret;
+    }
+
 private:
     std::string tablet_meta_path(const std::string& group, int64_t tablet_id, int64_t verson);
     std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
