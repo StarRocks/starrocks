@@ -29,12 +29,29 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
         : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
+<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.cpp
           _runtime_in_filters(op->runtime_in_filters()),
           _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
     _scan_range = scan_morsel->get_olap_scan_range();
+=======
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
+
+OlapChunkSource::~OlapChunkSource() {
+    _reader.reset();
+    _predicate_free_pool.clear();
+}
+
+void OlapChunkSource::close(RuntimeState* state) {
+    _update_counter();
+    _prj_iter->close();
+    _reader.reset();
+    _predicate_free_pool.clear();
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
+>>>>>>> 35b2c7ea5 ([Enhance] try to release chunks of operator when close (#7086)):be/src/exec/pipeline/scan/olap_chunk_source.cpp
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {

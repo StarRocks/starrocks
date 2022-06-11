@@ -2,9 +2,75 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+<<<<<<< HEAD
 namespace starrocks {
 namespace pipeline {
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
+=======
+#include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/merge.h"
+#include "exec/vectorized/sorting/sorting.h"
+
+namespace starrocks::pipeline {
+
+using vectorized::Permutation;
+using vectorized::Columns;
+using vectorized::SortedRun;
+using vectorized::SortedRuns;
+
+void SortContext::close(RuntimeState* state) {
+    _chunks_sorter_partions.clear();
+    _merged_runs.clear();
+}
+
+StatusOr<ChunkPtr> SortContext::pull_chunk() {
+    if (!_is_merge_finish) {
+        _merge_inputs();
+        _is_merge_finish = true;
+    }
+    if (_merged_runs.num_chunks() == 0) {
+        return nullptr;
+    }
+    size_t required_rows = _state->chunk_size();
+    required_rows = std::min<size_t>(required_rows, _total_rows);
+    if (_limit > 0 && _topn_type == TTopNType::ROW_NUMBER) {
+        required_rows = std::min<size_t>(required_rows, _limit);
+    }
+
+    SortedRun& run = _merged_runs.front();
+    ChunkPtr res = run.steal_chunk(required_rows);
+    if (res != nullptr) {
+        RETURN_IF_ERROR(res->downgrade());
+    }
+
+    if (run.empty()) {
+        _merged_runs.pop_front();
+    }
+    return res;
+}
+
+Status SortContext::_merge_inputs() {
+    int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
+
+    // Keep all the data if topn type is RANK or DENSE_RANK
+    int64_t require_rows = total_rows;
+    if (_topn_type == TTopNType::ROW_NUMBER) {
+        require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
+    }
+
+    std::vector<SortedRuns> partial_sorted_runs;
+    for (int i = 0; i < _num_partition_sinkers; ++i) {
+        auto& partition_sorter = _chunks_sorter_partions[i];
+        partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
+    }
+
+    return merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &_merged_runs, require_rows);
+}
+
+SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
+                                       int64_t limit, int32_t num_right_sinkers,
+                                       const std::vector<ExprContext*>& sort_exprs,
+>>>>>>> 35b2c7ea5 ([Enhance] try to release chunks of operator when close (#7086))
                                        const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
           _is_merging(is_merging),

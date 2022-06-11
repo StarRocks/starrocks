@@ -35,7 +35,7 @@ public:
         _data_segment_heaps.reserve(num_right_sinkers);
     }
 
-    void close(RuntimeState* state) override {}
+    void close(RuntimeState* state) override;
 
     void finish_partition(uint64_t partition_rows) {
         _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
