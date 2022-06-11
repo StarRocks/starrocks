@@ -67,6 +67,7 @@ Status GeneralTabletWriter::reset_segment_writer() {
     SegmentWriterOptions opts;
     opts.storage_format_version = 2;
     _seg_writer = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
+    RETURN_IF_ERROR(_seg_writer->init());
     _files.emplace_back(std::move(name));
     return Status::OK();
 }
