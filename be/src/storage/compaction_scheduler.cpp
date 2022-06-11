@@ -182,7 +182,7 @@ bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidat
     std::shared_ptr<CompactionTask> tmp_task = tablet->get_compaction(candidate.type, true);
     if (tmp_task) {
         DataDir* data_dir = tablet->data_dir();
-        if (data_dir->reach_capacity_limit(tmp_task->input_rowsets_size())) {
+        if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
             LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
                          << " because data dir reaches capacity limit. input rowsets size:"
                          << tmp_task->input_rowsets_size();

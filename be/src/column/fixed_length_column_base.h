@@ -203,7 +203,7 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use index of uint32_t to
     // access the item, so we should use 2^32 as the limit
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
         if (_data.size() > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("row count of fixed length column exceend the limit: " +

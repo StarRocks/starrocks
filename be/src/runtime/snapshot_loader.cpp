@@ -300,7 +300,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             size_t file_len = file_stat.size;
 
             // check disk capacity
-            if (data_dir->reach_capacity_limit(file_len)) {
+            if (data_dir->capacity_limit_reached(file_len)) {
                 return Status::InternalError("capacity limit reached");
             }
 

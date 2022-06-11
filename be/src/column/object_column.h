@@ -197,7 +197,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("row count of object column exceed the limit: " +

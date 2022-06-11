@@ -29,7 +29,7 @@
 namespace starrocks::vectorized {
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->reach_capacity_limit())) {                                     \
+    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
