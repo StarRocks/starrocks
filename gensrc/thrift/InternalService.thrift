@@ -161,6 +161,15 @@ struct TQueryOptions {
   // For pipeline query engine
   55: optional TPipelineProfileLevel pipeline_profile_level;
   57: optional i64 runtime_filter_scan_wait_time_ms;
+<<<<<<< HEAD
+=======
+
+  58: optional i64 query_mem_limit;
+
+  59: optional bool enable_tablet_internal_parallel;
+
+  60: optional i32 query_delivery_timeout;
+>>>>>>> df222b21b ([Enhancement] replace query context expired timeout with query_delivery_timeout (#7085))
 }
 
 

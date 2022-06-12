@@ -66,6 +66,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
+<<<<<<< HEAD
     const auto& coord = request.coord;
     const auto& query_options = request.query_options;
     const auto& query_globals = request.query_globals;
@@ -74,6 +75,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& fragment = request.fragment;
 
     RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+=======
+>>>>>>> df222b21b ([Enhancement] replace query context expired timeout with query_delivery_timeout (#7085))
 
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
@@ -97,14 +100,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
-    if (query_options.__isset.query_timeout) {
-        _query_ctx->set_expire_seconds(std::max<int>(query_options.query_timeout, 1));
-    } else {
-        _query_ctx->set_expire_seconds(300);
-    }
 
+    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_lifetime();
+    _query_ctx->extend_delivery_lifetime();
+    _query_ctx->extend_query_lifetime();
 
     auto fragment_ctx = std::make_unique<FragmentContext>();
 
@@ -192,6 +193,52 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     }
     runtime_state->set_desc_tbl(desc_tbl);
+<<<<<<< HEAD
+=======
+
+    return Status::OK();
+}
+
+int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    return exec_env->calc_pipeline_dop(degree_of_parallelism);
+}
+
+int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    if (query_options.__isset.query_delivery_timeout) {
+        if (query_options.__isset.query_timeout) {
+            expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
+        } else {
+            expired_seconds = query_options.query_delivery_timeout;
+        }
+    } else if (query_options.__isset.query_timeout) {
+        expired_seconds = query_options.query_timeout;
+    }
+
+    return std::max<int>(1, expired_seconds);
+}
+
+int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    if (query_options.__isset.query_timeout) {
+        return std::max<int>(1, query_options.query_timeout);
+    }
+
+    return QueryContext::DEFAULT_EXPIRE_SECONDS;
+}
+
+Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* obj_pool = runtime_state->obj_pool();
+    const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
+    const auto& params = request.params;
+    const auto& fragment = request.fragment;
+
+>>>>>>> df222b21b ([Enhancement] replace query context expired timeout with query_delivery_timeout (#7085))
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &fragment_ctx->plan()));
     ExecNode* plan = fragment_ctx->plan();

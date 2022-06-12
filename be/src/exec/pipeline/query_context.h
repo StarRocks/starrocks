@@ -40,18 +40,28 @@ public:
 
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
-    void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
-    inline int get_expire_seconds() { return _expire_seconds.count(); }
+    void set_delivery_expire_seconds(int expire_seconds) { _delivery_expire_seconds = seconds(expire_seconds); }
+    void set_query_expire_seconds(int expire_seconds) { _query_expire_seconds = seconds(expire_seconds); }
+    inline int get_query_expire_seconds() const { return _query_expire_seconds.count(); }
     // now time point pass by deadline point.
-    bool is_expired() {
+    bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _deadline;
+        return now > _delivery_deadline;
+    }
+    bool is_query_expired() const {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now > _query_deadline;
     }
 
     bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
-    void extend_lifetime() {
-        _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _expire_seconds).count();
+    void extend_delivery_lifetime() {
+        _delivery_deadline =
+                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _delivery_expire_seconds).count();
+    }
+    void extend_query_lifetime() {
+        _query_deadline =
+                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     FragmentContextManager* fragment_mgr();
 
@@ -83,6 +93,21 @@ public:
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
     int64_t get_scan_bytes() const { return _cur_scan_bytes; }
 
+<<<<<<< HEAD
+=======
+    // Record the cpu time of the query run, for big query checking
+    int64_t init_wg_cpu_cost() const { return _init_wg_cpu_cost; }
+    void set_init_wg_cpu_cost(int64_t wg_cpu_cost) { _init_wg_cpu_cost = wg_cpu_cost; }
+
+    // Query start time, used to check how long the query has been running
+    // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
+    int64_t query_begin_time() const { return _query_begin_time; }
+    void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
+
+public:
+    static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
+
+>>>>>>> df222b21b ([Enhancement] replace query context expired timeout with query_delivery_timeout (#7085))
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
@@ -90,8 +115,10 @@ private:
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
-    int64_t _deadline;
-    seconds _expire_seconds;
+    int64_t _delivery_deadline = 0;
+    int64_t _query_deadline = 0;
+    seconds _delivery_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
+    seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;

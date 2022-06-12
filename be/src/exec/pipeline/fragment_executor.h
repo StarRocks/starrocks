@@ -24,6 +24,28 @@ public:
 
 private:
     void _fail_cleanup();
+<<<<<<< HEAD
+=======
+    int32_t _calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const;
+    int _calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const;
+    int _calc_query_expired_seconds(const TExecPlanFragmentParams& request) const;
+
+    // Several steps of prepare a fragment
+    // 1. query context
+    // 2. fragment context
+    // 3. workgroup
+    // 4. runtime state
+    // 5. exec plan
+    // 6. pipeline driver
+    Status _prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_fragment_ctx(const TExecPlanFragmentParams& request);
+    Status _prepare_workgroup(const TExecPlanFragmentParams& request);
+    Status _prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+    Status _prepare_global_dict(const TExecPlanFragmentParams& request);
+    Status _prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+
+>>>>>>> df222b21b ([Enhancement] replace query context expired timeout with query_delivery_timeout (#7085))
     void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
                                           const TDataSink& t_datasink, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
