@@ -3,7 +3,12 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -166,15 +171,35 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testGroupBy2() throws Exception {
         String queryStr = "select avg(v2) from t0 group by v2";
-        String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  2:Project\n"
-                + "  |  <slot 4> : 4: avg\n"
-                + "  |  \n"
-                + "  1:AGGREGATE (update finalize)\n"
-                + "  |  output: avg(2: v2)\n"
-                + "  |  group by: 2: v2\n"
-                + "  |  \n"
-                + "  0:OlapScanNode"));
+
+        try {
+            BackendCoreStat.setDefaultCoresOfBe(8);
+            Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
+            String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(explainString.contains("  2:Project\n"
+                    + "  |  <slot 4> : 4: avg\n"
+                    + "  |  \n"
+                    + "  1:AGGREGATE (update finalize)\n"
+                    + "  |  output: avg(2: v2)\n"
+                    + "  |  group by: 2: v2\n"
+                    + "  |  \n"
+                    + "  0:OlapScanNode"));
+
+            PlanFragment aggPlan = plan.second.getFragments().get(0);
+            String aggPlanStr = aggPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(aggPlanStr, aggPlanStr.contains("  2:Project\n"
+                    + "  |  <slot 4> : 4: avg\n"
+                    + "  |  \n"
+                    + "  1:AGGREGATE (update finalize)\n"
+                    + "  |  output: avg(2: v2)\n"
+                    + "  |  group by: 2: v2\n"
+                    + "  |  \n"
+                    + "  0:OlapScanNode"));
+            Assert.assertEquals(4, aggPlan.getParallelExecNum());
+            Assert.assertEquals(1, aggPlan.getPipelineDop());
+        } finally {
+            BackendCoreStat.setDefaultCoresOfBe(1);
+        }
     }
 
     @Test
