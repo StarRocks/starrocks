@@ -694,7 +694,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
     const auto& slots = tuple_desc->slots();
 
     std::unordered_set<std::string> unused_output_column_set;
-    for (const auto& column : unused_output_column_set) {
+    for (const auto& column : _unused_output_columns) {
         unused_output_column_set.emplace(column);
     }
 
