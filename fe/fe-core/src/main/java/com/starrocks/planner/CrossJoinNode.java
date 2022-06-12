@@ -24,9 +24,11 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -37,6 +39,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**

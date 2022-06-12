@@ -41,8 +41,6 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.UnitIdentifier;
-import org.apache.commons.lang3.EnumUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -341,36 +339,16 @@ public class MaterializedViewAnalyzer {
                     AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     LocalDateTime startTime = async.getStartTime();
                     final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
-                    //alter materialized view mv1 sync
-                    if (startTime == null && intervalLiteral == null) {
-                        async.setStartTime(LocalDateTime.now());
-                        return null;
-                    }
-                    if (startTime != null) {
-                        if (startTime.isBefore(LocalDateTime.now())) {
-                            throw new SemanticException("Refresh start must be after current time %s", startTime);
-                        }
-                        if (intervalLiteral == null) {
-                            throw new SemanticException("Please input interval clause");
-                        }
-                    } else {
-                        async.setStartTime(LocalDateTime.now());
-                    }
-                    //alter materialized view mv1 sync start ('2022-06-10') every 1 minute
-                    final UnitIdentifier unitIdentifier = intervalLiteral.getUnitIdentifier();
-                    Expr expr = intervalLiteral.getValue();
-                    if (expr instanceof IntLiteral) {
-                        long step = ((IntLiteral) expr).getLongValue();
+                    if (intervalLiteral != null) {
+                        long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
                         if (step <= 0) {
-                            throw new IllegalArgumentException("Unsupported negative or zero step value: " + step);
+                            throw new SemanticException("Unsupported negative or zero step value: %s", step);
                         }
-                    } else {
-                        throw new IllegalArgumentException("Unsupported interval expr: " + expr);
-                    }
-                    if (unitIdentifier != null) {
-                        final String unit = unitIdentifier.getDescription().toUpperCase();
-                        if (!EnumUtils.isValidEnum(TimeUnit.class, unit)) {
-                            throw new IllegalArgumentException("Unsupported interval expr: " + unit);
+                        final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
+                        try {
+                            TimeUnit.valueOf(unit);
+                        } catch (IllegalArgumentException e) {
+                            throw new SemanticException("Unsupported interval expr: %s", unit);
                         }
                     }
                 }

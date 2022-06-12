@@ -2353,22 +2353,35 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
-        LocalDateTime startTime = null;
+        LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         if (context.ASYNC() != null) {
+            if (context.START() != null && context.interval() == null) {
+                throw new SemanticException("Please input interval clause");
+            }
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
-                DateTimeFormatter dateTimeFormatter;
+                DateTimeFormatter dateTimeFormatter = null;
                 try {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
+                    LocalDateTime tempStartTime = DateUtils.
+                            parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                    if (tempStartTime.isBefore(LocalDateTime.now())) {
+                        throw new IllegalArgumentException("Refresh start must be after current time");
+                    }
+                    startTime = tempStartTime;
                 } catch (AnalysisException e) {
                     throw new IllegalArgumentException(
-                            "Refresh start " + stringLiteral.getStringValue() + " is incorrect");
+                            "Refresh start " +
+                                    stringLiteral.getStringValue() + " is incorrect");
                 }
-                startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
             }
             if (context.interval() != null) {
                 intervalLiteral = (IntervalLiteral) visit(context.interval());
+                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                    throw new IllegalArgumentException(
+                            "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+                }
             }
             return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
