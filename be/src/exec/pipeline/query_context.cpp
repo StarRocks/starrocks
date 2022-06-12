@@ -15,8 +15,7 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0),
-          _deadline(0) {}
+          _num_active_fragments(0) {}
 
 QueryContext::~QueryContext() {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
@@ -122,7 +121,7 @@ void QueryContextManager::_clean_slot_unlocked(size_t i) {
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
-        if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
+        if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
             sc_it = sc_map.erase(sc_it);
         } else {
             ++sc_it;
@@ -260,7 +259,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished
         auto ctx = std::move(it->second);
-        ctx->extend_lifetime();
+        ctx->extend_delivery_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
         return false;

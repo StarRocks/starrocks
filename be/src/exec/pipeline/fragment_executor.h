@@ -27,6 +27,8 @@ public:
 private:
     void _fail_cleanup();
     int32_t _calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const;
+    int _calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const;
+    int _calc_query_expired_seconds(const TExecPlanFragmentParams& request) const;
 
     // Several steps of prepare a fragment
     // 1. query context

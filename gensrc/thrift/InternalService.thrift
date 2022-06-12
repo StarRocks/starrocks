@@ -167,6 +167,8 @@ struct TQueryOptions {
   58: optional i64 query_mem_limit;
 
   59: optional bool enable_tablet_internal_parallel;
+
+  60: optional i32 query_delivery_timeout;
 }
 
 
