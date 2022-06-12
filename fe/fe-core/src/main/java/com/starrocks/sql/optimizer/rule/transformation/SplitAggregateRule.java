@@ -356,7 +356,8 @@ public class SplitAggregateRule extends TransformationRule {
         // build projection for DISTINCT_GLOBAL aggregate node
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         distinctGlobal.getGroupingKeys().forEach(k -> columnRefMap.put(k, k));
-        columnRefMap.putAll(distinctGlobal.getAggregations());
+        distinctGlobal.getAggregations().keySet().forEach(key -> columnRefMap.put(key, key));
+
         Projection childProjection = input.getInputs().get(0).getOp().getProjection();
         if (childProjection != null) {
             childProjection.getColumnRefMap().entrySet().stream()
