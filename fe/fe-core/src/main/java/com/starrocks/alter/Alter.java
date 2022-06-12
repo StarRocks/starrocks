@@ -32,6 +32,7 @@ import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -75,8 +76,8 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
-import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -245,16 +246,13 @@ public class Alter {
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-        final String refreshType = refreshSchemeDesc.getType().name();
-
-        if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-            throw new DdlException("Unsupported change to SYNC refresh type");
-        } else if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             asyncRefreshContext.setIntervalLiteral(asyncRefreshSchemeDesc.getIntervalLiteral());
         }
+        final String refreshType = refreshSchemeDesc.getType().name();
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
 
@@ -304,11 +302,13 @@ public class Alter {
         newMvRefreshScheme.setType(refreshType);
         newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
         oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
+        final IntervalLiteral intervalLiteral = asyncRefreshContext.getIntervalLiteral();
         LOG.info(
                 "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                        "interval to {}, id: {}",
+                        "interval step to {}, timeunit to {}, id: {}",
                 oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
-                asyncRefreshContext.getIntervalLiteral().toString(), oldMaterializedView.getId());
+                ((IntLiteral) (intervalLiteral.getValue())).getLongValue(),
+                intervalLiteral.getUnitIdentifier().getDescription(), oldMaterializedView.getId());
     }
 
     public void processAlterTable(AlterTableStmt stmt) throws UserException {
