@@ -331,7 +331,7 @@ public class MaterializedViewAnalyzer {
             final String newMvName = statement.getNewMvName();
             if (newMvName != null) {
                 if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name");
+                    throw new SemanticException("Same materialized view name %s", newMvName);
                 }
             } else if (refreshSchemeDesc != null) {
                 if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
@@ -348,7 +348,7 @@ public class MaterializedViewAnalyzer {
                     }
                     if (startTime != null) {
                         if (startTime.isBefore(LocalDateTime.now())) {
-                            throw new SemanticException("Refresh start must be after current time");
+                            throw new SemanticException("Refresh start must be after current time %s", startTime);
                         }
                         if (intervalLiteral == null) {
                             throw new SemanticException("Please input interval clause");

@@ -40,7 +40,6 @@ import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -254,14 +253,7 @@ public class Alter {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            final long step = asyncRefreshSchemeDesc.getStep();
-            final TimestampArithmeticExpr.TimeUnit timeUnit = asyncRefreshSchemeDesc.getTimeUnit();
-            if (timeUnit != null && step <= 0) {
-                throw new DdlException("Unsupported negative or zero step value");
-            }
-            asyncRefreshContext.setStep(step);
-
-            asyncRefreshContext.setTimeUnit(timeUnit);
+            asyncRefreshContext.setIntervalLiteral(asyncRefreshSchemeDesc.getIntervalLiteral());
         }
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
@@ -272,9 +264,6 @@ public class Alter {
 
     private void processRenameMaterializedView(String oldMvName, String newMvName, Database db,
                                                MaterializedView materializedView) throws DdlException {
-        if (oldMvName.equals(newMvName)) {
-            throw new DdlException("Same materialized view name");
-        }
         if (db.getTable(newMvName) != null) {
             throw new DdlException("Materialized view [" + newMvName + "] is already used");
         }
@@ -317,9 +306,9 @@ public class Alter {
         oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
         LOG.info(
                 "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                        "interval step to {}, time unit to {}, id: {}",
+                        "interval to {}, id: {}",
                 oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
-                asyncRefreshContext.getStep(), asyncRefreshContext.getTimeUnit(), id);
+                asyncRefreshContext.getIntervalLiteral().toString(), oldMaterializedView.getId());
     }
 
     public void processAlterTable(AlterTableStmt stmt) throws UserException {

@@ -901,8 +901,6 @@ public class CreateMaterializedViewTest {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
             assertNull(asyncRefreshSchemeDesc.getStartTime());
-            assertEquals((asyncRefreshSchemeDesc.getStep()), 2);
-            assertEquals(asyncRefreshSchemeDesc.getTimeUnit(), TimestampArithmeticExpr.TimeUnit.MINUTE);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

@@ -4,11 +4,11 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -37,17 +37,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "starTime")
         private long startTime;
 
-        @SerializedName(value = "step")
-        private long step;
-
-        @SerializedName(value = "timeUnit")
-        TimestampArithmeticExpr.TimeUnit timeUnit;
+        @SerializedName(value = "intervalLiteral")
+        private IntervalLiteral intervalLiteral;
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
-            this.step = 0;
-            this.timeUnit = TimestampArithmeticExpr.TimeUnit.MINUTE;
+            this.intervalLiteral = null;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -66,20 +62,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.startTime = startTime;
         }
 
-        public long getStep() {
-            return step;
+        public IntervalLiteral getIntervalLiteral() {
+            return intervalLiteral;
         }
 
-        public void setStep(long step) {
-            this.step = step;
-        }
-
-        public TimestampArithmeticExpr.TimeUnit getTimeUnit() {
-            return timeUnit;
-        }
-
-        public void setTimeUnit(TimestampArithmeticExpr.TimeUnit timeUnit) {
-            this.timeUnit = timeUnit;
+        public void setIntervalLiteral(IntervalLiteral intervalLiteral) {
+            this.intervalLiteral = intervalLiteral;
         }
     }
 

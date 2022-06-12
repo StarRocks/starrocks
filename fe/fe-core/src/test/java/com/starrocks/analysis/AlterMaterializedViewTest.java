@@ -5,9 +5,9 @@ import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -71,11 +71,15 @@ public class AlterMaterializedViewTest {
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         final RefreshSchemeDesc asyncRefreshSchemeDesc = alterMvStmt.getRefreshSchemeDesc();
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
+        AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc;
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
-        assertNotNull(((AsyncRefreshSchemeDesc)asyncRefreshSchemeDesc).getStartTime());
-        assertEquals((((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStep()), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getTimeUnit(),
-                TimestampArithmeticExpr.TimeUnit.HOUR);
+        assertNotNull((async.getStartTime()));
+        final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
+        final Expr expr = intervalLiteral.getValue();
+
+        long step = ((IntLiteral) expr).getLongValue();
+        assertEquals(step, 1);
+        assertEquals(intervalLiteral.getUnitIdentifier().getDescription(), "HOUR");
     }
 
     @Test
@@ -87,9 +91,7 @@ public class AlterMaterializedViewTest {
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
         assertTrue(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime().compareTo(LocalDateTime.now()) <= 0);
-        assertEquals((((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStep()), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getTimeUnit(),
-                TimestampArithmeticExpr.TimeUnit.HOUR);
+        assertNotNull(asyncRefreshSchemeDesc);
     }
 
     @Test(expected= AnalysisException.class)
@@ -108,11 +110,10 @@ public class AlterMaterializedViewTest {
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
         assertTrue(
                 ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime().compareTo(LocalDateTime.now()) <= 0);
-        assertEquals((((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStep()), 0);
-        assertNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getTimeUnit());
+        assertNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral());
     }
 
-    @Test(expected= AnalysisException.class)
+    @Test(expected= IllegalArgumentException.class)
     public void testIllegalTimeUnit() throws Exception {
         String alterMvSql = "alter materialized view mv1 refresh async every (interval 1 second)";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
