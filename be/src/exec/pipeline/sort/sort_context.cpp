@@ -4,6 +4,7 @@
 
 namespace starrocks {
 namespace pipeline {
+
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
                                        const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),

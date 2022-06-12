@@ -467,6 +467,8 @@ void OlapChunkSource::close(RuntimeState* state) {
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
