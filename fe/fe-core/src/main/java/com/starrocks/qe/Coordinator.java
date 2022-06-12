@@ -1220,10 +1220,8 @@ public class Coordinator {
                 }
 
                 if (dopAdaptionEnabled) {
-                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     maxParallelism = hostSet.size();
-                    fragment.setPipelineDop(degreeOfParallelism);
                 }
 
                 // AddAll() soft copy()
@@ -1310,16 +1308,6 @@ public class Coordinator {
                             }
                         }
                     }
-                }
-                // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-                if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
-                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
-                    FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
-                    int numBackends = param.scanRangeAssignment.size();
-                    int numInstances = param.instanceExecParams.size();
-                    int pipelineDop =
-                            Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-                    param.fragment.setPipelineDop(pipelineDop);
                 }
             }
 
@@ -1532,17 +1520,6 @@ public class Coordinator {
                 }
                 params.instanceExecParams.add(instanceParam);
             }
-        }
-        boolean dopAdaptionEnabled = connectContext != null &&
-                connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                params.fragment.getPlanRoot().canUsePipeLine();
-        // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-        if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
-            int numInstances = params.instanceExecParams.size();
-            int numBackends = addressToScanRanges.size();
-            int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
-            int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
-            params.fragment.setPipelineDop(pipelineDop);
         }
     }
 
