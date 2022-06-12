@@ -654,6 +654,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    _buffer.reset();
     Expr::close(_partition_expr_ctxs, state);
     OperatorFactory::close(state);
 }
