@@ -24,6 +24,10 @@ public:
 
 private:
     void _fail_cleanup();
+
+    int _calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const;
+    int _calc_query_expired_seconds(const TExecPlanFragmentParams& request) const;
+
     void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
                                           const TDataSink& t_datasink, DataSink* datasink);
     QueryContext* _query_ctx = nullptr;
