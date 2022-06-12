@@ -1259,6 +1259,13 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
+
+        sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 5:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  <slot 20> : 20: count");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
