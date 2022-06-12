@@ -344,8 +344,10 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     }
     if (*expr == nullptr) {
-        LOG(WARNING) << "Vectorized engine node type return nullptr: " + std::to_string(texpr_node.node_type);
-        return Status::InternalError("Vectorized engine does not support the operator");
+        std::string err_msg =
+                fmt::format("Vectorized engine does not support the operator, node_type: {}", texpr_node.node_type);
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
     }
 
     return Status::OK();
