@@ -467,6 +467,7 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
             // execute all instances from up to bottom
@@ -566,8 +567,8 @@ public class Coordinator {
                         TStatusCode code;
                         String errMsg = null;
                         try {
-                            PExecPlanFragmentResult result = pair.second.get(queryOptions.query_timeout * 1000L,
-                                    TimeUnit.MILLISECONDS);
+                            PExecPlanFragmentResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
                             code = TStatusCode.findByValue(result.status.statusCode);
                             if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
                                 errMsg = result.status.errorMsgs.get(0);
