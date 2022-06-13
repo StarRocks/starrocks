@@ -128,7 +128,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
@@ -818,10 +817,10 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        if (engineName.equals("olap")) {
+        if (engineName.equalsIgnoreCase("olap")) {
             createOlapTable(db, stmt);
             return;
-        } else if (engineName.equals("mysql")) {
+        } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
@@ -862,12 +861,11 @@ public class LocalMetastore implements ConnectorMetadata {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase =
-                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(createTableStmt.get(0),
+                    ConnectContext.get().getSessionVariable().getSqlMode()).get(0);
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
-                CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -878,7 +876,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
-                    e.getMessage());
+                    e.getMessage(), e);
         }
     }
 
