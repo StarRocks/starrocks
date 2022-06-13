@@ -235,14 +235,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_START_ROLLUP:
-            case OperationType.OP_FINISHING_ROLLUP:
-            case OperationType.OP_FINISHING_SCHEMA_CHANGE:
-            case OperationType.OP_FINISH_ROLLUP:
-            case OperationType.OP_CANCEL_ROLLUP:
-            case OperationType.OP_START_SCHEMA_CHANGE:
-            case OperationType.OP_FINISH_SCHEMA_CHANGE:
-            case OperationType.OP_CANCEL_SCHEMA_CHANGE:
             case OperationType.OP_START_DECOMMISSION_BACKEND:
             case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
                 data = AlterJob.read(in);
