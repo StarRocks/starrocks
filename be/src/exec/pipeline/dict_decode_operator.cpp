@@ -13,6 +13,7 @@ Status DictDecodeOperator::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperator::close(RuntimeState* state) {
+    _cur_chunk.reset();
     Operator::close(state);
 }
 
