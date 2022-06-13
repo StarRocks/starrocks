@@ -10,6 +10,7 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -148,28 +149,28 @@ public class StarOSAgent {
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 
-    public void removeWorker(String workerIpPort) throws StarClientException {
+    public void removeWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
         // get workerId from starMgr
         try {
             WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
             workerId = workerInfo.getWorkerId();
-        } catch (StarClientException e2) {
-            LOG.warn(e2);
-            return;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to get worker id from starMgr. error: "
+                    + e.getMessage());
         }
 
         try {
             client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
-                throw new StarClientException(e.getCode(), "remove worker error");
+                throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
 
         workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
-        LOG.info("remove worker {} success in StarOSAgent", workerIpPort);
+        LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
     public long getWorkerIdByBackendId(long backendId) {

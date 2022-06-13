@@ -269,7 +269,7 @@ public class SystemInfoServiceTest {
                     starosAgent.removeWorker("192.168.0.1:1235");
                     minTimes = 0;
                     result = null;
-                } catch (StarClientException e) {
+                } catch (DdlException e) {
                     e.printStackTrace();
                 }
             }
