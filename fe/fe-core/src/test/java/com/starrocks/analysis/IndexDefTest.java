@@ -18,7 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -32,12 +32,12 @@ public class IndexDefTest {
     }
 
     @Test
-    public void testAnalyzeNormal() throws AnalysisException {
+    public void testAnalyzeNormal() {
         def.analyze();
     }
 
     @Test
-    public void testAnalyzeExpection() throws AnalysisException {
+    public void testAnalyzeExpection() {
         try {
             def = new IndexDef(
                     "index1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxxxxxxxxxxxxxindex1xxxxxx"
@@ -49,15 +49,15 @@ public class IndexDefTest {
                     "balabala");
             def.analyze();
             Assert.fail("No exception throws.");
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e instanceof AnalysisException);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e instanceof SemanticException);
         }
         try {
             def = new IndexDef("", Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala");
             def.analyze();
             Assert.fail("No exception throws.");
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e instanceof AnalysisException);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e instanceof SemanticException);
         }
     }
 

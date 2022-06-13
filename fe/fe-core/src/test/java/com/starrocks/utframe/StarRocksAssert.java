@@ -139,7 +139,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }
