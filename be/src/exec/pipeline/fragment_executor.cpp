@@ -342,6 +342,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 void FragmentExecutor::_fail_cleanup() {
     if (_query_ctx) {
         if (_fragment_ctx != nullptr) {
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
             _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
         }
         if (_query_ctx->count_down_fragments()) {
