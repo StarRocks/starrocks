@@ -161,6 +161,8 @@ struct TQueryOptions {
   // For pipeline query engine
   55: optional TPipelineProfileLevel pipeline_profile_level;
   57: optional i64 runtime_filter_scan_wait_time_ms;
+
+  60: optional i32 query_delivery_timeout;
 }
 
 

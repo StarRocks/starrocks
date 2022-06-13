@@ -97,14 +97,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
-    if (query_options.__isset.query_timeout) {
-        _query_ctx->set_expire_seconds(std::max<int>(query_options.query_timeout, 1));
-    } else {
-        _query_ctx->set_expire_seconds(300);
-    }
 
+    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_lifetime();
+    _query_ctx->extend_delivery_lifetime();
+    _query_ctx->extend_query_lifetime();
 
     auto fragment_ctx = std::make_unique<FragmentContext>();
 
@@ -457,6 +455,33 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             fragment_ctx->pipelines().emplace_back(pp);
         }
     }
+}
+
+int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    if (query_options.__isset.query_delivery_timeout) {
+        if (query_options.__isset.query_timeout) {
+            expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
+        } else {
+            expired_seconds = query_options.query_delivery_timeout;
+        }
+    } else if (query_options.__isset.query_timeout) {
+        expired_seconds = query_options.query_timeout;
+    }
+
+    return std::max<int>(1, expired_seconds);
+}
+
+int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    if (query_options.__isset.query_timeout) {
+        return std::max<int>(1, query_options.query_timeout);
+    }
+
+    return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
 } // namespace starrocks::pipeline
