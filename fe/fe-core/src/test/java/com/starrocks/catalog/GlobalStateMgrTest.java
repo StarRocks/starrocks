@@ -187,54 +187,6 @@ public class GlobalStateMgrTest {
         deleteDir(dir);
     }
 
-    @Test
-    public void testSaveLoadSchemaChangeJob() throws Exception {
-        String dir = "testLoadSchemaChangeJob";
-        mkdir(dir);
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        MetaContext.get().setMetaVersion(FeConstants.meta_version);
-        Field field = globalStateMgr.getClass().getDeclaredField("load");
-        field.setAccessible(true);
-        field.set(globalStateMgr, new Load());
-
-        Database db1 = new Database(10000L, "testCluster.db1");
-        db1.setClusterName("testCluster");
-        final Cluster cluster = new Cluster("testCluster", 10001L);
-        MaterializedIndex baseIndex = new MaterializedIndex(20000L, IndexState.NORMAL);
-        Partition partition = new Partition(2000L, "single", baseIndex, new RandomDistributionInfo(10));
-        List<Column> baseSchema = new LinkedList<Column>();
-        OlapTable table = new OlapTable(2L, "base", baseSchema, KeysType.AGG_KEYS,
-                new SinglePartitionInfo(), new RandomDistributionInfo(10));
-        table.addPartition(partition);
-        db1.createTable(table);
-
-        globalStateMgr.addCluster(cluster);
-        globalStateMgr.unprotectCreateDb(db1);
-        SchemaChangeJob job1 = new SchemaChangeJob(db1.getId(), table.getId(), null, table.getName(), 2022);
-
-        globalStateMgr.getSchemaChangeHandler().replayInitJob(job1, globalStateMgr);
-        long checksum1 = globalStateMgr.saveAlterJob(dos, 0, JobType.SCHEMA_CHANGE);
-        globalStateMgr.clear();
-        globalStateMgr = null;
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        globalStateMgr = GlobalStateMgr.getCurrentState();
-        long checksum2 = globalStateMgr.loadAlterJob(dis, 0, JobType.SCHEMA_CHANGE);
-        Assert.assertEquals(checksum1, checksum2);
-        Map<Long, AlterJob> map = globalStateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs();
-        Assert.assertEquals(1, map.size());
-        SchemaChangeJob job2 = (SchemaChangeJob) map.get(table.getId());
-        Assert.assertEquals(job1.getTransactionId(), (job2.getTransactionId()));
-        dis.close();
-
-        deleteDir(dir);
-    }
-
-
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
