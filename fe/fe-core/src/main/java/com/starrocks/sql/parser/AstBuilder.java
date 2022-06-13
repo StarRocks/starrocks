@@ -30,6 +30,7 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -1197,7 +1198,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
+<<<<<<< HEAD
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
+=======
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
+>>>>>>> 917df959e ([feature] Support the use of cross-database use of UDF (#6865))
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
 
         if (context.over() != null) {
