@@ -9,6 +9,7 @@ import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
 import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -23,7 +24,7 @@ public class StarOSAgentTest {
         starosAgent = new StarOSAgent();
     }
 
-    /*
+
     @Test
     public void testRegisterAndBootstrapService() throws Exception {
         new Expectations() {
@@ -118,7 +119,6 @@ public class StarOSAgentTest {
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
-
     @Test
     public void testAddWorkerException() throws Exception  {
         new Expectations() {
@@ -141,8 +141,6 @@ public class StarOSAgentTest {
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
     }
 
-     */
-
     @Test
     public void testRemoveWorkerException() throws Exception {
         new Expectations() {
@@ -154,7 +152,7 @@ public class StarOSAgentTest {
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1);
+        Deencapsulation.setField(starosAgent, "serviceId", 1L);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
