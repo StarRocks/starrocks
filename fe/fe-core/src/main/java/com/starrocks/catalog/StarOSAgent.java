@@ -165,8 +165,6 @@ public class StarOSAgent {
                             + e.getMessage());
                 }
 
-                workerToBackend.remove(workerId);
-                workerToId.remove(workerIpPort);
                 LOG.info("worker {} not exist.", workerIpPort);
                 return;
             }
