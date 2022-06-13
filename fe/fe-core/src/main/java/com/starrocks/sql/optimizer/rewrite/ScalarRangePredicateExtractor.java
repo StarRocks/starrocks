@@ -69,7 +69,7 @@ public class ScalarRangePredicateExtractor {
             for (ScalarOperator key : decimalKeys) {
                 ValueDescriptor vd = extractMap.get(key);
                 vd.toScalarOperator().forEach(s -> Preconditions.checkState(
-                        s.getChildren().stream().allMatch(c -> c.getType().equals(key.getType()))));
+                        s.getChildren().stream().allMatch(c -> c.getType().matchesType(key.getType()))));
             }
         }
 
