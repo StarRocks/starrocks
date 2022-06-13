@@ -84,7 +84,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     if (iter.is_queue_stopped()) {
         return 0;
     }
-    auto tablet_writer = async_writer->_writer.get();
+    auto delta_writer = async_writer->_writer.get();
     for (; iter; ++iter) {
         // It's safe to run without checking `_closed` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->_closed.load(std::memory_order_acquire)) {
@@ -93,10 +93,10 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         Status st;
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
-            st = tablet_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
+            st = delta_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
         }
         if (st.ok() && iter->finish_after_write) {
-            st = tablet_writer->finish();
+            st = delta_writer->finish();
         }
         iter->cb(st);
     }
