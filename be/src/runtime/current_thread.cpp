@@ -24,4 +24,8 @@ starrocks::MemTracker* CurrentThread::mem_tracker() {
     return tls_mem_tracker;
 }
 
+CurrentThread& CurrentThread::current() {
+    return tls_thread_status;
+}
+
 } // namespace starrocks
