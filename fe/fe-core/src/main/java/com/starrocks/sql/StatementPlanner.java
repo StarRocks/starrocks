@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -193,6 +194,7 @@ public class StatementPlanner {
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt
                 || statement instanceof CreateCatalogStmt
+                || statement instanceof CreateTableStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateMaterializedViewStatement
                 || statement instanceof CreateMaterializedViewStmt
