@@ -17,6 +17,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/group_concat.h"
+#include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
@@ -223,6 +224,11 @@ AggregateFunctionPtr AggregateFactory::MakeLastValueWindowFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeLeadLagWindowFunction() {
     return std::make_shared<LeadLagWindowFunction<PT>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeHistogramAggregationFunction() {
+    return std::make_shared<HistogramAggregationFunction<PT>>();
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -523,6 +529,8 @@ public:
             return AggregateFactory::MakeRowNumberWindowFunction();
         } else if (name == "ntile") {
             return AggregateFactory::MakeNtileWindowFunction();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -586,6 +594,8 @@ public:
             return AggregateFactory::MakeFirstValueWindowFunction<ArgPT>();
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -923,6 +933,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
+
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("histogram");
 }
 
 #undef ADD_ALL_TYPE

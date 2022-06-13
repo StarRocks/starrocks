@@ -847,6 +847,9 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
         }
 
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
     }
 
     public List<Function> getBuiltinFunctions() {

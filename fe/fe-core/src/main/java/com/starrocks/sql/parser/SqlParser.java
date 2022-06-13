@@ -36,11 +36,15 @@ public class SqlParser {
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);
             } catch (ParsingException parsingException) {
-                StatementBase statement = parseWithOldParser(sql, sqlMode, 0);
-                if (StatementPlanner.supportedByNewPlanner(statement) || statement instanceof QueryStmt) {
+                try {
+                    StatementBase statement = parseWithOldParser(sql, sqlMode, 0);
+                    if (StatementPlanner.supportedByNewPlanner(statement) || statement instanceof QueryStmt) {
+                        throw parsingException;
+                    }
+                    statements.add(statement);
+                } catch (Throwable e) {
                     throw parsingException;
                 }
-                statements.add(statement);
             }
         }
 
@@ -49,8 +53,9 @@ public class SqlParser {
 
     /**
      * parse sql to expression, only supports new parser
+     *
      * @param expressionSql expression sql
-     * @param sqlMode sqlMode
+     * @param sqlMode       sqlMode
      * @return Expr
      */
     public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
@@ -64,26 +69,19 @@ public class SqlParser {
         return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
     }
 
-    public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {
+    public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) throws AnalysisException {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
         com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);
         try {
             return SqlParserUtils.getStmt(parser, idx);
-        } catch (Error e) {
-            throw new ParsingException("Please check your sql, we meet an error when parsing.");
         } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            if (errorMessage == null) {
-                throw new ParsingException(e.getMessage());
-            } else {
-                throw new ParsingException(errorMessage);
-            }
-        } catch (Exception e) {
+            throw e;
+        } catch (Throwable e) {
             String errorMessage = e.getMessage();
             if (errorMessage == null) {
-                throw new ParsingException("Internal Error");
+                throw new AnalysisException("Internal Error");
             } else {
-                throw new ParsingException("Internal Error: " + errorMessage);
+                throw new AnalysisException("Internal Error: " + errorMessage);
             }
         }
     }
