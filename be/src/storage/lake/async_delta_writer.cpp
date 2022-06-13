@@ -33,7 +33,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(AsyncDeltaWriterImpl);
 
-    Status open();
+    [[nodiscard]] Status open();
 
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
@@ -41,11 +41,11 @@ public:
 
     void close();
 
-    int64_t tablet_id() const { return _writer->tablet_id(); }
+    [[nodiscard]] int64_t tablet_id() const { return _writer->tablet_id(); }
 
-    int64_t partition_id() const { return _writer->partition_id(); }
+    [[nodiscard]] int64_t partition_id() const { return _writer->partition_id(); }
 
-    int64_t txn_id() const { return _writer->txn_id(); }
+    [[nodiscard]] int64_t txn_id() const { return _writer->txn_id(); }
 
 private:
     struct Task {
@@ -76,7 +76,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     for (; iter; ++iter) {
         Status st;
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
-            st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
+            st = writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
         }
         if (st.ok() && iter->finish_after_write) {
             st = writer->finish();
