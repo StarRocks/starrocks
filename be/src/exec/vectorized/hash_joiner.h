@@ -192,6 +192,11 @@ private:
     }
 
     void _short_circuit_break() {
+        if (_phase == HashJoinPhase::EOS) {
+            set_builder_finished();
+            return;
+        }
+
         // special cases of short-circuit break.
         if (_ht.get_row_count() == 0 &&
             (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
@@ -199,6 +204,7 @@ private:
              _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
             _phase = HashJoinPhase::EOS;
             set_builder_finished();
+            return;
         }
 
         if (_ht.get_row_count() > 0) {
