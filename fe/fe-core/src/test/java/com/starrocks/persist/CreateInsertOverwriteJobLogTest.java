@@ -3,6 +3,7 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.journal.JournalEntity;
 import org.junit.Assert;
 import org.junit.Test;
@@ -13,19 +14,20 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
-public class CreateInsertOverwriteJobInfoTest {
+public class CreateInsertOverwriteJobLogTest {
     @Test
     public void testBasic() throws IOException {
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L);
-        CreateInsertOverwriteJobInfo jobInfo = new CreateInsertOverwriteJobInfo(100L, 101L, 102L, targetPartitionIds);
+        CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(100L, 101L, 102L, targetPartitionIds);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         jobInfo.write(dataOutputStream);
 
         ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
         DataInputStream dataInputStream = new DataInputStream(inputStream);
-        CreateInsertOverwriteJobInfo newJobInfo = CreateInsertOverwriteJobInfo.read(dataInputStream);
+        CreateInsertOverwriteJobLog newJobInfo = CreateInsertOverwriteJobLog.read(dataInputStream);
         Assert.assertEquals(100L, newJobInfo.getJobId());
         Assert.assertEquals(101L, newJobInfo.getDbId());
         Assert.assertEquals(102L, newJobInfo.getTableId());
@@ -45,11 +47,18 @@ public class CreateInsertOverwriteJobInfoTest {
         journalEntity2.readFields(dataInputStream2);
 
         Assert.assertEquals(OperationType.OP_CREATE_INSERT_OVERWRITE, journalEntity2.getOpCode());
-        Assert.assertTrue(journalEntity2.getData() instanceof CreateInsertOverwriteJobInfo);
-        CreateInsertOverwriteJobInfo newJobInfo2 = (CreateInsertOverwriteJobInfo) journalEntity2.getData();
+        Assert.assertTrue(journalEntity2.getData() instanceof CreateInsertOverwriteJobLog);
+        CreateInsertOverwriteJobLog newJobInfo2 = (CreateInsertOverwriteJobLog) journalEntity2.getData();
         Assert.assertEquals(100L, newJobInfo2.getJobId());
         Assert.assertEquals(101L, newJobInfo2.getDbId());
         Assert.assertEquals(102L, newJobInfo2.getTableId());
         Assert.assertEquals(targetPartitionIds, newJobInfo2.getTargetPartitionIds());
+    }
+
+    @Test
+    public void testMap() {
+        Map<String, String> map = Maps.newHashMap();
+        String value = map.getOrDefault("hello", "");
+        System.out.println("map size:" + map.size());
     }
 }

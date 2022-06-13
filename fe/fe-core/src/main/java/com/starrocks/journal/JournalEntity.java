@@ -63,7 +63,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ClusterInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
-import com.starrocks.persist.CreateInsertOverwriteJobInfo;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
@@ -641,7 +641,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_CREATE_INSERT_OVERWRITE: {
-                data = CreateInsertOverwriteJobInfo.read(in);
+                data = CreateInsertOverwriteJobLog.read(in);
                 isRead = true;
                 break;
             }

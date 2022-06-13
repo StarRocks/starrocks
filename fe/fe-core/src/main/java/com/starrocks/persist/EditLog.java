@@ -880,7 +880,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
-                    CreateInsertOverwriteJobInfo jobInfo = (CreateInsertOverwriteJobInfo) journal.getData();
+                    CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
                     break;
                 }
@@ -1511,7 +1511,7 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_CATALOG, log);
     }
 
-    public void logCreateInsertOverwrite(CreateInsertOverwriteJobInfo info) {
+    public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {
         logEdit(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
     }
 

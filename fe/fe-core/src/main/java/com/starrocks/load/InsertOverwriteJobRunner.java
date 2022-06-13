@@ -4,19 +4,13 @@ package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
-import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -29,6 +23,14 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.stream.Collectors;
 
+// InsertOverwriteJobRunner will execute the insert overwrite.
+// The main idea is that:
+//     1. create temporary partitions as target partitions
+//     2. insert selected data into temporary partitions. This is done by modifying the
+//          insert target partition names of InsertStmt and replan.
+//     3. if insert successfully, swap the temporary partitions with source partitions
+//     4. if insert failed, remove the temporary partitions created
+//     5. if FE restart, the insert overwrite job will fail.
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
@@ -141,8 +143,8 @@ public class InsertOverwriteJobRunner {
         // state can not be PENDING here
         switch (info.getToState()) {
             case OVERWRITE_RUNNING:
-                job.setSourcePartitionNames(info.getSourcePartitionNames());
-                job.setNewPartitionNames(info.getNewPartitionsName());
+                job.setSourcePartitionIds(info.getSourcePartitionIds());
+                job.setTmpPartitionIds(info.getTmpPartitionIds());
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
                 break;
             case OVERWRITE_FAILED:
@@ -167,7 +169,7 @@ public class InsertOverwriteJobRunner {
         }
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
-                        job.getSourcePartitionNames(), job.getNewPartitionNames());
+                        job.getSourcePartitionIds(), job.getTmpPartitionIds());
         GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         job.setJobState(state);
         handle();
@@ -175,11 +177,12 @@ public class InsertOverwriteJobRunner {
 
     private void prepare() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PENDING);
-        List<Partition> sourcePartitions = job.getOriginalTargetPartitionIds().stream()
-                .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
-        List<String> sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
-        job.setSourcePartitionNames(sourcePartitionNames);
-        job.setNewPartitionNames(sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList()));
+        // get tmpPartitionIds first because they used to drop created partitions when restart.
+        List<Long> tmpPartitionIds = Lists.newArrayList();
+        for (int i = 0; i < job.getSourcePartitionIds().size(); ++i) {
+            tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
+        }
+        job.setTmpPartitionIds(tmpPartitionIds);
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
@@ -198,45 +201,9 @@ public class InsertOverwriteJobRunner {
     private void createTempPartitions() {
         try {
             long createPartitionStartTimestamp = System.currentTimeMillis();
-            List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                    db, targetTable, postfix, job.getOriginalTargetPartitionIds());
-            db.writeLock();
-            try {
-                List<Partition> sourcePartitions = job.getOriginalTargetPartitionIds().stream()
-                        .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
-                PartitionInfo partitionInfo = targetTable.getPartitionInfo();
-                List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
-                for (int i = 0; i < newTempPartitions.size(); i++) {
-                    targetTable.addTempPartition(newTempPartitions.get(i));
-                    long sourcePartitionId = sourcePartitions.get(i).getId();
-                    partitionInfo.addPartition(newTempPartitions.get(i).getId(),
-                            partitionInfo.getDataProperty(sourcePartitionId),
-                            partitionInfo.getReplicationNum(sourcePartitionId),
-                            partitionInfo.getIsInMemory(sourcePartitionId));
-                    Partition partition = newTempPartitions.get(i);
-                    // range is null for UNPARTITIONED type
-                    Range<PartitionKey> range = null;
-                    if (partitionInfo.getType() == PartitionType.RANGE) {
-                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                        rangePartitionInfo.setRange(partition.getId(), true,
-                                rangePartitionInfo.getRange(sourcePartitionId));
-                        range = rangePartitionInfo.getRange(partition.getId());
-                    }
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                    range,
-                                    partitionInfo.getDataProperty(partition.getId()),
-                                    partitionInfo.getReplicationNum(partition.getId()),
-                                    partitionInfo.getIsInMemory(partition.getId()),
-                                    true);
-                    partitionInfoList.add(info);
-                }
-                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
-            } finally {
-                createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
-                db.writeUnlock();
-            }
+            PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
+                    job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
         } catch (Throwable t) {
             LOG.warn("create temp partitions failed", t);
             throw t;
@@ -247,15 +214,15 @@ public class InsertOverwriteJobRunner {
         LOG.info("start to garbage collect");
         db.writeLock();
         try {
-            if (job.getNewPartitionNames() != null) {
-                for (String partitionName : job.getNewPartitionNames()) {
-                    LOG.info("drop partition:{}", partitionName);
+            if (job.getTmpPartitionIds() != null) {
+                for (Long pid : job.getTmpPartitionIds()) {
+                    LOG.info("drop temp partition:{}", pid);
 
-                    Partition partition = targetTable.getPartition(partitionName, true);
+                    Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        targetTable.dropTempPartition(partitionName, true);
+                        targetTable.dropTempPartition(partition.getName(), true);
                     } else {
-                        LOG.warn("partition is null for name:{}", partitionName);
+                        LOG.warn("partition {} is null", pid);
                     }
                 }
             }
@@ -269,16 +236,21 @@ public class InsertOverwriteJobRunner {
     private void doCommit() {
         db.writeLock();
         try {
+            List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .collect(Collectors.toList());
+            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .collect(Collectors.toList());
             if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                targetTable.replaceTempPartitions(job.getSourcePartitionNames(), job.getNewPartitionNames(), true, false);
+
+                targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
             } else {
-                targetTable.replacePartition(job.getSourcePartitionNames().get(0), job.getNewPartitionNames().get(0));
+                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}," +
-                            " sourcePartitionNames:{}, newPartitionNames:{}", job.getTargetDbId(), job.getTargetTableId(),
-                    job.getSourcePartitionNames().stream().collect(Collectors.joining(",")),
-                    job.getNewPartitionNames().stream().collect(Collectors.joining(",")), e);
+                    " sourcePartitionNames:{}, newPartitionNames:{}", job.getTargetDbId(), job.getTargetTableId(), e);
             throw new RuntimeException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
@@ -291,13 +263,14 @@ public class InsertOverwriteJobRunner {
         try {
             db.readLock();
             try {
-                List<Long> newPartitionIds = job.getNewPartitionNames().stream()
-                        .map(partitionName -> targetTable.getPartition(partitionName, true).getId())
+                List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
+                        .map(partitionId -> targetTable.getPartition(partitionId).getName())
                         .collect(Collectors.toList());
-                PartitionNames partitionNames = new PartitionNames(true, job.getNewPartitionNames());
-                insertStmt.setOriginalTargetPartitionIds(insertStmt.getTargetPartitionIds());
+                PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
+                // change the TargetPartitionNames from source partitions to new tmp partitions
+                // should replan when load data
                 insertStmt.setTargetPartitionNames(partitionNames);
-                insertStmt.setTargetPartitionIds(newPartitionIds);
+                insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
             } finally {
                 db.readUnlock();
             }

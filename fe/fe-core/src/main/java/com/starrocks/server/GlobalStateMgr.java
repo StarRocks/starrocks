@@ -2981,8 +2981,9 @@ public class GlobalStateMgr {
     }
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
-                                                              String namePostfix, List<Long> sourcePartitionIds) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds);
+                                                              String namePostfix, List<Long> sourcePartitionIds,
+                                                              List<Long> tmpPartitionIds) {
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

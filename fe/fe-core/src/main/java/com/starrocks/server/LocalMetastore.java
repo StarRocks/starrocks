@@ -4313,10 +4313,12 @@ public class LocalMetastore implements ConnectorMetadata {
     @VisibleForTesting
     public List<Partition> getNewPartitionsFromPartitions(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                                           Map<Long, String> origPartitions, OlapTable copiedTbl,
-                                                          String namePostfix, Set<Long> tabletIdSet) throws DdlException {
+                                                          String namePostfix, Set<Long> tabletIdSet, List<Long> tmpPartitionIds)
+            throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
-        for (Long sourcePartitionId : sourcePartitionIds) {
-            long newPartitionId = getNextId();
+        for (int i = 0; i < sourcePartitionIds.size(); ++i) {
+            long newPartitionId = tmpPartitionIds.get(i);
+            long sourcePartitionId = sourcePartitionIds.get(i);
             String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
             if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
                 // to prevent creating the same partitions when failover
@@ -4341,7 +4343,8 @@ public class LocalMetastore implements ConnectorMetadata {
     // create new partitions from source partitions.
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
-                                                              String namePostfix, List<Long> sourcePartitionIds) {
+                                                              String namePostfix, List<Long> sourcePartitionIds,
+                                                              List<Long> tmpPartitionIds) {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Map<Long, String> origPartitions = Maps.newHashMap();
@@ -4353,7 +4356,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
-                    copiedTbl, namePostfix, tabletIdSet);
+                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds);
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (Exception e) {
             // create partition failed, remove all newly created tablets

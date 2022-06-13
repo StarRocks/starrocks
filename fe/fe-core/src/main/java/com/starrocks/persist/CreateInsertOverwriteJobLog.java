@@ -11,7 +11,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-public class CreateInsertOverwriteJobInfo implements Writable {
+public class CreateInsertOverwriteJobLog implements Writable {
     @SerializedName(value = "jobId")
     private long jobId;
 
@@ -24,7 +24,7 @@ public class CreateInsertOverwriteJobInfo implements Writable {
     @SerializedName(value = "targetPartitionIds")
     private List<Long> targetPartitionIds;
 
-    public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
+    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
@@ -62,8 +62,8 @@ public class CreateInsertOverwriteJobInfo implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static CreateInsertOverwriteJobInfo read(DataInput in) throws IOException {
+    public static CreateInsertOverwriteJobLog read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, CreateInsertOverwriteJobInfo.class);
+        return GsonUtils.GSON.fromJson(json, CreateInsertOverwriteJobLog.class);
     }
 }

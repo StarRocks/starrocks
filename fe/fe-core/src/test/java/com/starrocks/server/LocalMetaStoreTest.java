@@ -56,8 +56,9 @@ public class LocalMetaStoreTest {
         OlapTable olapTable = (OlapTable) table;
         Partition sourcePartition = olapTable.getPartition("t1");
         List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
-        Optional<ConnectorMetadata> metadataOpt =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        List<Long> tmpPartitionIds = Lists.newArrayList(connectContext.getGlobalStateMgr().getNextId());
+        Optional<ConnectorMetadata> metadataOpt = connectContext.getGlobalStateMgr()
+                .getMetadataMgr().getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         Assert.assertTrue(metadataOpt.isPresent());
         ConnectorMetadata metadata = metadataOpt.get();
         Assert.assertTrue(metadata instanceof LocalMetastore);
@@ -67,7 +68,7 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet);
+                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);

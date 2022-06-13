@@ -16,23 +16,27 @@ import java.util.List;
 public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "jobId")
     private long jobId;
+
     @SerializedName(value = "fromState")
     private InsertOverwriteJobState fromState;
+
     @SerializedName(value = "toState")
     private InsertOverwriteJobState toState;
-    @SerializedName(value = "sourcePartitionName")
-    private List<String> sourcePartitionNames;
-    @SerializedName(value = "newPartitionNames")
-    private List<String> newPartitionNames;
+
+    @SerializedName(value = "sourcePartitionIds")
+    private List<Long> sourcePartitionIds;
+
+    @SerializedName(value = "tmpPartitionIds")
+    private List<Long> tmpPartitionIds;
 
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
                                           InsertOverwriteJobState toState,
-                                          List<String> sourcePartitionNames, List<String> newPartitionNames) {
+                                          List<Long> sourcePartitionIds, List<Long> tmpPartitionIds) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
-        this.sourcePartitionNames = sourcePartitionNames;
-        this.newPartitionNames = newPartitionNames;
+        this.sourcePartitionIds = sourcePartitionIds;
+        this.tmpPartitionIds = tmpPartitionIds;
     }
 
     public long getJobId() {
@@ -47,12 +51,12 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         return toState;
     }
 
-    public List<String> getSourcePartitionNames() {
-        return sourcePartitionNames;
+    public List<Long> getSourcePartitionIds() {
+        return sourcePartitionIds;
     }
 
-    public List<String> getNewPartitionsName() {
-        return newPartitionNames;
+    public List<Long> getTmpPartitionIds() {
+        return tmpPartitionIds;
     }
 
     @Override
@@ -61,8 +65,8 @@ public class InsertOverwriteStateChangeInfo implements Writable {
                 "jobId=" + jobId +
                 ", fromState=" + fromState +
                 ", toState=" + toState +
-                ", sourcePartitionNames=" + sourcePartitionNames +
-                ", newPartitionNames=" + newPartitionNames +
+                ", sourcePartitionIds=" + sourcePartitionIds +
+                ", tmpPartitionIds=" + tmpPartitionIds +
                 '}';
     }
 

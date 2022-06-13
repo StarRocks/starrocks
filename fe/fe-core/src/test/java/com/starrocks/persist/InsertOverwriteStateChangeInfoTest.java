@@ -18,8 +18,8 @@ import java.util.List;
 public class InsertOverwriteStateChangeInfoTest {
     @Test
     public void testBasic() throws IOException {
-        List<String> sourcePartitionNames = Lists.newArrayList("p1", "p2");
-        List<String> newPartitionNames = Lists.newArrayList("p1_100", "p2_100");
+        List<Long> sourcePartitionNames = Lists.newArrayList(100L, 101L);
+        List<Long> newPartitionNames = Lists.newArrayList(1000L, 1001L);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
                 sourcePartitionNames, newPartitionNames);
@@ -33,8 +33,8 @@ public class InsertOverwriteStateChangeInfoTest {
         Assert.assertEquals(100L, newStateChangeInfo.getJobId());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, newStateChangeInfo.getFromState());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, newStateChangeInfo.getToState());
-        Assert.assertEquals(sourcePartitionNames, newStateChangeInfo.getSourcePartitionNames());
-        Assert.assertEquals(newPartitionNames, newStateChangeInfo.getNewPartitionsName());
+        Assert.assertEquals(sourcePartitionNames, newStateChangeInfo.getSourcePartitionIds());
+        Assert.assertEquals(newPartitionNames, newStateChangeInfo.getTmpPartitionIds());
 
         JournalEntity journalEntity = new JournalEntity();
         journalEntity.setOpCode(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE);
@@ -54,7 +54,7 @@ public class InsertOverwriteStateChangeInfoTest {
         Assert.assertEquals(100L, newStateChangeInfo2.getJobId());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, newStateChangeInfo2.getFromState());
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, newStateChangeInfo2.getToState());
-        Assert.assertEquals(sourcePartitionNames, newStateChangeInfo2.getSourcePartitionNames());
-        Assert.assertEquals(newPartitionNames, newStateChangeInfo2.getNewPartitionsName());
+        Assert.assertEquals(sourcePartitionNames, newStateChangeInfo2.getSourcePartitionIds());
+        Assert.assertEquals(newPartitionNames, newStateChangeInfo2.getTmpPartitionIds());
     }
 }

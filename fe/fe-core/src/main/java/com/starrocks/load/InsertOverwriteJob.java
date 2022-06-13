@@ -14,11 +14,11 @@ public class InsertOverwriteJob {
     @SerializedName(value = "jobState")
     private InsertOverwriteJobState jobState;
 
-    @SerializedName(value = "sourcePartitionNames")
-    private List<String> sourcePartitionNames;
+    @SerializedName(value = "sourcePartitionIds")
+    private List<Long> sourcePartitionIds;
 
-    @SerializedName(value = "newPartitionNames")
-    private List<String> newPartitionNames;
+    @SerializedName(value = "tmpPartitionIds")
+    private List<Long> tmpPartitionIds;
 
     @SerializedName(value = "targetDbId")
     private long targetDbId;
@@ -26,26 +26,23 @@ public class InsertOverwriteJob {
     @SerializedName(value = "targetTableId")
     private long targetTableId;
 
-    @SerializedName(value = "originalTargetPartitionIds")
-    private List<Long> originalTargetPartitionIds;
-
     private InsertStmt insertStmt;
 
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId, long targetTableId) {
         this.jobId = jobId;
         this.insertStmt = insertStmt;
-        this.originalTargetPartitionIds = insertStmt.getTargetPartitionIds();
+        this.sourcePartitionIds = insertStmt.getTargetPartitionIds();
         this.jobState = InsertOverwriteJobState.OVERWRITE_PENDING;
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
     }
 
     // used to replay InsertOverwriteJob
-    public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId, List<Long> targetPartitionIds) {
+    public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId, List<Long> sourcePartitionIds) {
         this.jobId = jobId;
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
-        this.originalTargetPartitionIds = targetPartitionIds;
+        this.sourcePartitionIds = sourcePartitionIds;
         this.jobState = InsertOverwriteJobState.OVERWRITE_PENDING;
     }
 
@@ -65,20 +62,20 @@ public class InsertOverwriteJob {
         jobState = newState;
     }
 
-    public List<String> getSourcePartitionNames() {
-        return sourcePartitionNames;
+    public List<Long> getSourcePartitionIds() {
+        return sourcePartitionIds;
     }
 
-    public void setSourcePartitionNames(List<String> sourcePartitionNames) {
-        this.sourcePartitionNames = sourcePartitionNames;
+    public void setSourcePartitionIds(List<Long> sourcePartitionIds) {
+        this.sourcePartitionIds = sourcePartitionIds;
     }
 
-    public List<String> getNewPartitionNames() {
-        return newPartitionNames;
+    public List<Long> getTmpPartitionIds() {
+        return tmpPartitionIds;
     }
 
-    public void setNewPartitionNames(List<String> newPartitionNames) {
-        this.newPartitionNames = newPartitionNames;
+    public void setTmpPartitionIds(List<Long> tmpPartitionIds) {
+        this.tmpPartitionIds = tmpPartitionIds;
     }
 
     public long getTargetDbId() {
@@ -87,10 +84,6 @@ public class InsertOverwriteJob {
 
     public long getTargetTableId() {
         return targetTableId;
-    }
-
-    public List<Long> getOriginalTargetPartitionIds() {
-        return originalTargetPartitionIds;
     }
 
     public boolean isFinished() {

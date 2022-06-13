@@ -81,7 +81,6 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -1045,14 +1044,9 @@ public class StmtExecutor {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
         insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
-        // add edit log
-        CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
-                insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
-                insertOverwriteJob.getOriginalTargetPartitionIds());
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         try {
             InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-            manager.submitJob(context, this, insertOverwriteJob);
+            manager.executeJob(context, this, insertOverwriteJob);
         } catch (Exception e) {
             LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
             throw new RuntimeException("insert overwrite failed", e);
