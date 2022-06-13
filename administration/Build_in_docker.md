@@ -1,15 +1,24 @@
-# dev-env image 使用说明
+# 通过源码编译 StarRocks
 
-## image 下载
+本文介绍如何通过 Docker 镜像编译 StarRocks。
+
+## 前提条件
+
+在编译 StarRocks 之前，请确保您已安装 [Docker](https://www.docker.com/get-started/)。
+
+## 下载镜像
+
+从 Docker Hub 下载开发环境的镜像文件。该镜像中集成了 LLVM 及 Clang 作为第三方工具。
 
 ```shell
-# 从 dockerhub 上下载 image
-docker pull starrocks/dev-env:{version}
+docker pull starrocks/dev-env:{branch-name}
 ```
 
-## starrocks 与 image 对应关系
+> 说明：请使用下表中相应的镜像 Tag 替换命令中的 `{branch-name}`。
 
-| starrocks branch | image tag                     |
+StarRocks 版本分支与开发环境镜像版本的对应关系如下所示：
+
+| StarRocks 版本    | 镜像 Tag                      |
 | ---------------- | ------------------------------|
 | main             | starrocks/dev-env:main        |
 | StarRocks-2.2.*  | starrocks/dev-env:branch-2.2  |
@@ -17,41 +26,36 @@ docker pull starrocks/dev-env:{version}
 | StarRocks-2.0.*  | starrocks/dev-env:branch-2.0  |
 | StarRocks-1.19.* | starrocks/dev-env:branch-1.19 |
 
-## 使用方式
+## 编译 StarRocks
 
-- 不挂载本地盘
+您可以通过挂载本地存储（推荐）或拷贝 GitHub 代码库的方式编译 StarRocks。
+
+- 挂载本地存储编译 StarRocks。
 
   ```shell
-  docker run -it --name {container-name} -d starrocks/dev-env:{version}
-  
-  docker exec -it {container-name} /bin/bash
-  
-  # 在 container 内任意路径下执行 git clone starrocks
+  mkdir {local-path}
+  cd {local-path}
+
   git clone https://github.com/StarRocks/starrocks.git
-  
-  cd starrocks
-  
-  ./build.sh
-  ```
+  git checkout {branch-name}
 
-- 挂载本地盘（建议使用）
-
-  - 避免在 container 内重新下载 .m2 内 java dependency
-  - 不用从 container 内 copy starrocks/output 内编译好的二进制包
-  
-  ```shell
-  docker run -it \
-  -v /{local-path}/.m2:/root/.m2 \
-  -v /{local-path}/starrocks:/root/starrocks \
-  --name {container-name} \
-  -d starrocks/dev-env:{version}
+  docker run -it -v /{local-path}/.m2:/root/.m2 -v /{local-path}/starrocks:/root/starrocks --name {container-name} -d starrocks/dev-env:{branch-name}
+  docker exec -it {container-name} /root/starrocks/build.sh
   
   docker exec -it {container-name} /root/starrocks/build.sh
   ```
 
-## 三方工具
+  > 注意：请避免在 Docker 容器中重复下载 **.m2** 内的 Java 依赖。您无需从 Docker 容器中复制 **starrocks/output** 内已编译好的二进制包。
 
-image 内集安装的三方工具
+- 不使用本地存储编译 StarRocks。
 
-- llvm
-- clang
+  ```shell
+  docker run -it --name {container-name} -d starrocks/dev-env:{branch-name}
+  docker exec -it {container-name} /bin/bash
+  
+  # 下载 StarRocks 代码。
+  git clone https://github.com/StarRocks/starrocks.git
+  
+  cd starrocks
+  sh /build.sh
+  ```
