@@ -269,6 +269,7 @@ PROPERTIES (
     | FLOAT | FLOAT|
     | DECIMAL | DECIMAL |
     | ARRAY | ARRAY |
+    | BOOLEAN | BOOLEAN |
 
     说明：
 
