@@ -24,7 +24,6 @@ public class StarOSAgentTest {
         starosAgent = new StarOSAgent();
     }
 
-
     @Test
     public void testRegisterAndBootstrapService() throws Exception {
         new Expectations() {
