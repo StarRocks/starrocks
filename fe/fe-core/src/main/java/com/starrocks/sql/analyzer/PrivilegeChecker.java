@@ -7,6 +7,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -70,6 +71,16 @@ public class PrivilegeChecker {
     private static class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         public void check(StatementBase statement, ConnectContext session) {
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
+            String dbName = statement.getDbTbl().getDb();
+            String tableName = statement.getDbTbl().getTbl();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+            }
+            return null;
         }
 
         @Override

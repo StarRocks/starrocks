@@ -22,7 +22,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
@@ -251,13 +250,8 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view should contain distribution desc");
                 }
             }
-            try {
-                distributionDesc.analyze(
-                        mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
-            } catch (AnalysisException e) {
-                LOG.error("distributionDesc " + distributionDesc + "analyze failed", e);
-                throw new SemanticException(e.getMessage());
-            }
+            distributionDesc.analyze(
+                    mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
         }
 
         @Override
