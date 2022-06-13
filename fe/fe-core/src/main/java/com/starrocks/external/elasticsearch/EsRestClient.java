@@ -35,10 +35,19 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.SerializationConfig;
 
 import java.io.IOException;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 public class EsRestClient {
 
@@ -55,10 +64,19 @@ public class EsRestClient {
             .readTimeout(10, TimeUnit.SECONDS)
             .build();
 
+    private static OkHttpClient sslNetworkClient;
+
     private final Request.Builder builder;
     private final String[] nodes;
     private String currentNode;
     private int currentNodeIndex = 0;
+
+    private boolean sslEnabled;
+
+    public EsRestClient(String[] nodes, String authUser, String authPassword, boolean sslEnabled) {
+        this(nodes, authUser, authPassword);
+        this.sslEnabled = sslEnabled;
+    }
 
     public EsRestClient(String[] nodes, String authUser, String authPassword) {
         this.nodes = nodes;
@@ -153,6 +171,12 @@ public class EsRestClient {
     private String execute(String path) throws StarRocksESException {
         int retrySize = nodes.length;
         StarRocksESException scratchExceptionForThrow = null;
+        OkHttpClient client;
+        if (sslEnabled) {
+            client = getOrCreateSSLClient();
+        } else {
+            client = networkClient;
+        }
         for (int i = 0; i < retrySize; i++) {
             // maybe should add HTTP schema to the address
             // actually, at this time we can only process http protocol
@@ -172,7 +196,7 @@ public class EsRestClient {
                 LOG.trace("es rest client request URL: {}", currentNode + "/" + path);
             }
             try {
-                response = networkClient.newCall(request).execute();
+                response = client.newCall(request).execute();
                 if (response.isSuccessful()) {
                     return response.body().string();
                 }
@@ -208,5 +232,40 @@ public class EsRestClient {
             throw new StarRocksESException(ex.getMessage());
         }
         return (T) (key != null ? map.get(key) : map);
+    }
+
+    private synchronized OkHttpClient getOrCreateSSLClient() {
+        if (sslNetworkClient == null) {
+            sslNetworkClient = new OkHttpClient.Builder()
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .sslSocketFactory(createSSLSocketFactory(), new TrustAllCerts())
+                    .hostnameVerifier(new TrustAllHostnameVerifier())
+                    .build();
+        }
+        return sslNetworkClient;
+    }
+    private static class TrustAllCerts implements X509TrustManager {
+        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {}
+
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {}
+
+        public X509Certificate[] getAcceptedIssuers() {return new X509Certificate[0];}
+    }
+
+    private static class TrustAllHostnameVerifier implements HostnameVerifier {
+        public boolean verify(String hostname, SSLSession session) {
+            return true;
+        }
+    }
+    private static SSLSocketFactory createSSLSocketFactory() {
+        SSLSocketFactory ssfFactory;
+        try {
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, new TrustManager[]{new TrustAllCerts()}, new SecureRandom());
+            ssfFactory = sc.getSocketFactory();
+        } catch (Exception e) {
+            throw new StarRocksESException("Errors happens when create ssl socket");
+        }
+        return ssfFactory;
     }
 }
