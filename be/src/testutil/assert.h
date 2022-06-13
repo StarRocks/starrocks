@@ -4,34 +4,34 @@
 
 #include "gutil/macros.h"
 
-#define CHECK_OK(stmt)        \
-    do {                      \
-        auto&& st = (stmt);   \
-        CHECK(st.ok()) << st; \
+#define CHECK_OK(stmt)            \
+    do {                          \
+        auto&& st__ = (stmt);     \
+        CHECK(st__.ok()) << st__; \
     } while (0)
 
-#define ASSERT_OK(stmt)             \
-    do {                            \
-        auto&& st = (stmt);         \
-        ASSERT_TRUE(st.ok()) << st; \
+#define ASSERT_OK(stmt)                 \
+    do {                                \
+        auto&& st__ = (stmt);           \
+        ASSERT_TRUE(st__.ok()) << st__; \
     } while (0)
 
-#define ASSERT_ERROR(stmt)     \
-    do {                       \
-        auto&& st = (stmt);    \
-        ASSERT_FALSE(st.ok()); \
+#define ASSERT_ERROR(stmt)       \
+    do {                         \
+        auto&& st__ = (stmt);    \
+        ASSERT_FALSE(st__.ok()); \
     } while (0)
 
-#define EXPECT_OK(stmt)             \
-    do {                            \
-        Status st = (stmt);         \
-        EXPECT_TRUE(st.ok()) << st; \
+#define EXPECT_OK(stmt)                 \
+    do {                                \
+        Status st__ = (stmt);           \
+        EXPECT_TRUE(st__.ok()) << st__; \
     } while (0)
 
-#define EXPECT_ERROR(stmt)     \
-    do {                       \
-        auto&& st = (stmt);    \
-        EXPECT_TRUE(!st.ok()); \
+#define EXPECT_ERROR(stmt)       \
+    do {                         \
+        auto&& st__ = (stmt);    \
+        EXPECT_TRUE(!st__.ok()); \
     } while (0)
 
 #define EXPECT_STATUS(expect, stmt)                                  \
