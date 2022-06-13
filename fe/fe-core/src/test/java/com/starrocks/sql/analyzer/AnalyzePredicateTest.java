@@ -24,4 +24,10 @@ public class AnalyzePredicateTest {
         analyzeFail("select * from tarray where v3 in ([1,2,3], [4,5,6])",
                 "HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
     }
+
+
+    @Test
+    public void testInPredicate() {
+        analyzeSuccess("select * from t0 where TIMEDIFF('1970-01-16', '1969-12-24') in( cast (1.2 as decimal))");
+    }
 }
