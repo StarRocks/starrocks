@@ -12,6 +12,14 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
+    PassThroughSenderChannel() = default;
+
+    ~PassThroughSenderChannel() {
+        if (_physical_bytes > 0) {
+            CurrentThread::mem_tracker()->consume(_physical_bytes);
+        }
+    }
+
     void append_chunk(const vectorized::Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
         // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
