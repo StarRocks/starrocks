@@ -2,7 +2,7 @@
 
 ## 2.0.7
 
-Release date: June 10, 2022
+Release date: June 13, 2022
 
 ### Bug Fixes
 
