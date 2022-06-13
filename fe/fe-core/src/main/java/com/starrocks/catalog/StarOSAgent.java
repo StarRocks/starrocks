@@ -160,14 +160,14 @@ public class StarOSAgent {
                 throw new DdlException("Failed to get worker id from starMgr. error: "
                         + e.getMessage());
             }
+            LOG.warn("worker {} not exist.", workerIpPort);
+            return;
         }
 
         try {
             client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
-                throw new DdlException("Failed to remove worker. error: " + e.getMessage());
-            }
+            throw new DdlException("Failed to remove worker. error: " + e.getMessage());
         }
 
         workerToBackend.remove(workerId);

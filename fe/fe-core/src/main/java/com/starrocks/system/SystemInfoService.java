@@ -269,8 +269,8 @@ public class SystemInfoService {
                 if (starletPort == 0) {
                     throw new DdlException("starletPort has not been updated by heartbeat from this backend");
                 }
-                String staretAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(staretAddr);
+                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
             }
 
             cluster.removeBackend(droppedBackend.getId());
