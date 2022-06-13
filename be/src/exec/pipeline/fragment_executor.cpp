@@ -343,6 +343,8 @@ void FragmentExecutor::_fail_cleanup() {
     if (_query_ctx) {
         if (_fragment_ctx != nullptr) {
             _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
+            _fragment_ctx.reset();
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
