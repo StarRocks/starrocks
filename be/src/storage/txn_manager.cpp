@@ -28,6 +28,7 @@
 #include <queue>
 #include <set>
 
+#include "common/tracer.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
@@ -53,12 +54,16 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                const PUniqueId& load_id) {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_prepare", transaction_id, tablet->tablet_id()));
     return prepare_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
                        load_id);
 }
 
 Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
     return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
 }
@@ -66,6 +71,8 @@ Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& 
 // delete the txn from manager if it is not committed(not have a valid rowset)
 Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                 bool with_log) {
+    auto scoped = trace::Scope(
+            Tracer::Instance().start_trace_txn_tablet("txn_rollback", transaction_id, tablet->tablet_id()));
     return rollback_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
                         with_log);
 }
@@ -204,6 +211,9 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset) {
+    auto span = Tracer::Instance().start_trace_txn_tablet("txn_publish", transaction_id, tablet->tablet_id());
+    span->SetAttribute("version", version);
+    auto scoped = trace::Scope(span);
     {
         std::lock_guard txn_lock(_get_txn_lock(transaction_id));
         if (tablet->updates() != nullptr) {
