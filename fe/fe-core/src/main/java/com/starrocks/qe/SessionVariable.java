@@ -70,6 +70,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
     public static final String QUERY_TIMEOUT = "query_timeout";
+
+    public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
@@ -249,6 +251,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    // Execution of a query contains two phase.
+    // 1. Deliver all the fragment instances to BEs.
+    // 2. Pull data from BEs, after all the fragments are prepared and ready to execute in BEs.
+    // queryDeliveryTimeoutS is the timeout of the first phase.
+    @VariableMgr.VarAttr(name = QUERY_DELIVERY_TIMEOUT)
+    private int queryDeliveryTimeoutS = 300;
 
     // query timeout in millisecond, currently nouse, only for compatible.
     @VariableMgr.VarAttr(name = MAX_EXECUTION_TIME)
@@ -687,8 +696,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop * parallelExecInstanceNum;
             }
-            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
-            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+            return BackendCoreStat.getDefaultDOP();
         } else {
             return parallelExecInstanceNum;
         }
@@ -1016,6 +1024,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setBuffer_pool_limit(maxExecMemByte);
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
+        tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
         tResult.setBatch_size(chunkSize);

@@ -55,6 +55,10 @@ Status MessageBodyFileSink::append(const char* data, size_t size) {
     return Status::InternalError("fail to write file");
 }
 
+Status MessageBodyFileSink::append(ByteBufferPtr&& buf) {
+    return append(buf->ptr, buf->pos);
+}
+
 Status MessageBodyFileSink::finish() {
     if (::close(_fd) < 0) {
         PLOG(WARNING) << "fail to close " << _path;

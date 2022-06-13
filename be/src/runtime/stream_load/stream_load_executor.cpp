@@ -176,12 +176,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
     request.__isset.commitInfos = true;
-
-    size_t timeout =
-            std::max<size_t>((size_t)config::txn_commit_rpc_timeout_ms,
-                             (ctx->timeout_second * 1000) - ((MonotonicNanos() - ctx->begin_txn_ts) / MICROS_PER_SEC));
-
-    request.__set_thrift_rpc_timeout_ms(timeout);
+    request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -196,7 +191,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            timeout));
+            config::txn_commit_rpc_timeout_ms));
 #else
     result = k_stream_load_commit_result;
 #endif

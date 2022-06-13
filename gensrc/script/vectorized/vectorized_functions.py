@@ -474,8 +474,8 @@ vectorized_functions = [
     [90300, 'bitmap_xor', 'BITMAP', ['BITMAP', 'BITMAP'], 'BitmapFunctions::bitmap_xor', False],
     [90400, 'bitmap_remove', 'BITMAP', ['BITMAP', 'BIGINT'], 'BitmapFunctions::bitmap_remove', False],
     [90500, 'bitmap_to_array', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array', False],
-    [90600, 'bitmap_max', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
-    [90700, 'bitmap_min', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
+    [90600, 'bitmap_max', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
+    [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
     [90900, 'array_to_bitmap', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::array_to_bitmap', False],
 

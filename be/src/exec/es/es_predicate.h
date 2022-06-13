@@ -20,17 +20,14 @@
 // under the License.
 
 #pragma once
+
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "cctz/time_zone.h"
-#include "column/column.h"
-#include "column/column_viewer.h"
-#include "column/const_column.h"
+#include "column/vectorized_fwd.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "types/date_value.h"
@@ -50,34 +47,8 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column) {
-        DCHECK(!column->empty());
-        // We need to convert the predicate column into the corresponding string.
-        // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
-        if (type == TYPE_DATE) {
-            vectorized::ColumnViewer<TYPE_DATE> viewer(column);
-            DCHECK(!viewer.is_null(0));
-            _value = viewer.value(0).to_string();
-        } else if (type == TYPE_DATETIME) {
-            vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
-            DCHECK(!viewer.is_null(0));
-            vectorized::TimestampValue datetime_value = viewer.value(0);
-            // convert convert default timezone to UTC;
-            cctz::time_zone defaut_timezone;
-            TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, defaut_timezone);
-            int64_t offsets = TimezoneUtils::to_utc_offset(defaut_timezone);
-            _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
-        } else if (type == TYPE_BOOLEAN) {
-            vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
-            if (viewer.value(0)) {
-                _value = "true";
-            } else {
-                _value = "false";
-            }
-        } else {
-            _value = _value_to_string(column);
-        }
-    }
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column);
+
     VExtLiteral() = default;
     const std::string& to_string() const override { return _value; }
 

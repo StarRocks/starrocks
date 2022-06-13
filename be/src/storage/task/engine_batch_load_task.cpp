@@ -109,7 +109,7 @@ AgentStatus EngineBatchLoadTask::_init() {
     }
 
     // check disk capacity
-    if (tablet->data_dir()->reach_capacity_limit(_push_req.__isset.http_file_size)) {
+    if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
         return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
     }
     DCHECK(!_push_req.__isset.http_file_path);

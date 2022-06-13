@@ -80,7 +80,6 @@ set(EXEC_FILES
         ./exprs/vectorized/hyperloglog_functions_test.cpp
         ./exprs/vectorized/if_expr_test.cpp
         ./exprs/vectorized/function_helper_test.cpp
-        ./exprs/vectorized/in_iterator_predicate_test.cpp
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
         ./exprs/vectorized/json_functions_test.cpp
@@ -152,7 +151,11 @@ set(EXEC_FILES
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
+        ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/delta_writer_test.cpp
+        ./storage/lake/group_assigner_test.cpp
         ./storage/lake/tablet_manager_test.cpp
+        ./storage/lake/tablet_writer_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -174,7 +177,6 @@ set(EXEC_FILES
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/index_page_test.cpp
-        ./storage/async_delta_writer_executor_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp

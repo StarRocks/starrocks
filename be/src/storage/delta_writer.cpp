@@ -2,6 +2,7 @@
 
 #include "storage/delta_writer.h"
 
+#include "common/tracer.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -269,6 +270,8 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {

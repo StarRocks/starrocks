@@ -30,7 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -66,6 +65,7 @@ import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
+import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
@@ -204,6 +204,7 @@ import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
@@ -781,44 +782,7 @@ public class GlobalStateMgr {
         // 0. get local node and helper node info
         nodeMgr.initialize(args);
 
-        // 1. check and create dirs and files
-        //      if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
-        //      we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
-        //      and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
-        //      we need to let users keep only one to avoid starting from outdated metadata.
-        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
-        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
-        if (metaDir.equals(newDefaultMetaDir)) {
-            File oldMeta = new File(oldDefaultMetaDir);
-            File newMeta = new File(newDefaultMetaDir);
-            if (oldMeta.exists() && newMeta.exists()) {
-                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                                "Please make sure {} has the latest data, and remove the another one.",
-                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
-                System.exit(-1);
-            }
-        }
-
-        File meta = new File(metaDir);
-        if (!meta.exists()) {
-            // If metaDir is not the default config, it means the user has specified the other directory
-            // We should not use the oldDefaultMetaDir.
-            // Just exit in this case
-            if (!metaDir.equals(newDefaultMetaDir)) {
-                LOG.error("meta dir {} dose not exist, will exit", metaDir);
-                System.exit(-1);
-            }
-            File oldMeta = new File(oldDefaultMetaDir);
-            if (oldMeta.exists()) {
-                // For backward compatible
-                Config.meta_dir = oldDefaultMetaDir;
-                setMetaDir();
-            } else {
-                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
-                System.exit(-1);
-            }
-        }
-
+        // 1. create dirs and files
         if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
             File bdbDir = new File(this.bdbDir);
             if (!bdbDir.exists()) {
@@ -1424,43 +1388,20 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
         if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
         } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
         }
 
-        // alter jobs
-        int size = alterJobs.size();
+        // alter jobs just for compatibility
+        int size = 0;
         checksum ^= size;
         dos.writeInt(size);
-        for (Entry<Long, AlterJob> entry : alterJobs.entrySet()) {
-            long tableId = entry.getKey();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            entry.getValue().write(dos);
-        }
-
-        // finished or cancelled jobs
-        size = finishedOrCancelledAlterJobs.size();
+        // finished or cancelled jobs just for compatibility
         checksum ^= size;
         dos.writeInt(size);
-        for (AlterJob alterJob : finishedOrCancelledAlterJobs) {
-            long tableId = alterJob.getTableId();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            alterJob.write(dos);
-        }
 
         // alter job v2
         size = alterJobsV2.size();
@@ -1748,6 +1689,10 @@ public class GlobalStateMgr {
         nodeMgr.addFrontend(role, host, editLogPort);
     }
 
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
+        nodeMgr.modifyFrontendHost(modifyFrontendAddressClause);
+    }
+
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
         nodeMgr.dropFrontend(role, host, port);
     }
@@ -1880,7 +1825,14 @@ public class GlobalStateMgr {
         StringBuilder sb = new StringBuilder();
 
         // 1. create table
-        // 1.1 view
+        // 1.1 materialized view
+        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+            MaterializedView mv = (MaterializedView) table;
+            sb.append(mv.getViewDefineSql());
+            createTableStmt.add(sb.toString());
+            return;
+        }
+        // 1.2 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
             sb.append("CREATE VIEW `").append(table.getName()).append("` (");
@@ -1903,7 +1855,7 @@ public class GlobalStateMgr {
             return;
         }
 
-        // 1.2 other table type
+        // 1.3 other table type
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
@@ -2275,6 +2227,10 @@ public class GlobalStateMgr {
 
     public void replayAddFrontend(Frontend fe) {
         nodeMgr.replayAddFrontend(fe);
+    }
+
+    public void replayUpdateFrontend(Frontend frontend) {
+        nodeMgr.replayUpdateFrontend(frontend);
     }
 
     public void replayDropFrontend(Frontend frontend) {
@@ -2734,8 +2690,8 @@ public class GlobalStateMgr {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public void alterCluster(AlterSystemStmt stmt) throws UserException {
-        this.alter.processAlterCluster(stmt);
+    public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
+        return this.alter.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {

@@ -16,10 +16,12 @@ statement
     : queryStatement                                                                        #query
 
     // Table Statement
+    | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
@@ -85,7 +87,80 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
+
+
 // ------------------------------------------- Table Statement ---------------------------------------------------------
+
+createTableStatement
+    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+          '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
+          engineDesc?
+          charsetDesc?
+          keyDesc?
+          comment?
+          partitionDesc?
+          distributionDesc?
+          rollupDesc?
+          properties?
+          extProperties?
+     ;
+
+columnDesc
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    ;
+
+charsetName
+    : CHAR SET identifier
+    | CHARSET identifier
+    ;
+
+defaultDesc
+    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
+    ;
+
+indexDesc
+    : INDEX indexName=identifier identifierList indexType? comment?
+    ;
+
+engineDesc
+    : ENGINE EQ identifier
+    ;
+
+charsetDesc
+    : DEFAULT? CHARSET EQ? identifierOrString
+    ;
+
+
+keyDesc
+    : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+aggDesc
+    : SUM
+    | MAX
+    | MIN
+    | REPLACE
+    | HLL_UNION
+    | BITMAP_UNION
+    | PERCENTILE_UNION
+    | REPLACE_IF_NOT_NULL
+    ;
+
+rollupDesc
+    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    ;
+
+addRollupClause
+    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    ;
+
+dupKeys
+    : DUPLICATE KEY identifierList
+    ;
+
+fromRollup
+    : FROM identifier
+    ;
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
@@ -120,6 +195,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
 
 showColumnStatement
@@ -210,8 +289,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -234,12 +315,20 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
 
 dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -666,7 +755,25 @@ explainDesc
     ;
 
 partitionDesc
-    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    ;
+
+listPartitionDesc
+    : singleItemListPartitionDesc
+    | multiItemListPartitionDesc
+    ;
+
+singleItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    ;
+
+multiItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    ;
+
+stringList
+    : '(' string (',' string)* ')'
     ;
 
 rangePartitionDesc
@@ -675,7 +782,7 @@ rangePartitionDesc
     ;
 
 singleRangePartition
-    : PARTITION identifier VALUES partitionKeyDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc propertyList?
     ;
 
 multiRangePartition
@@ -685,7 +792,7 @@ multiRangePartition
 
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
-    | '[' partitionValueList ',' partitionValueList ']'
+    | '[' partitionValueList ',' partitionValueList ')'
     ;
 
 partitionValueList
@@ -708,6 +815,14 @@ refreshSchemeDesc
 
 properties
     : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+extProperties
+    : BROKER properties
+    ;
+
+propertyList
+    : '(' property (',' property)* ')'
     ;
 
 property
@@ -753,7 +868,7 @@ unitIdentifier
 
 type
     : baseType
-    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | decimalType
     | arrayType
     ;
 
@@ -767,12 +882,13 @@ typeParameter
 
 baseType
     : BOOLEAN
-    | TINYINT
-    | SMALLINT
-    | INT
-    | INTEGER
-    | BIGINT
-    | LARGEINT
+    | TINYINT typeParameter?
+    | SMALLINT typeParameter?
+    | SIGNED INT?
+    | INT typeParameter?
+    | INTEGER typeParameter?
+    | BIGINT typeParameter?
+    | LARGEINT typeParameter?
     | FLOAT
     | DOUBLE
     | DATE
@@ -788,7 +904,7 @@ baseType
     ;
 
 decimalType
-    : DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128) ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
 qualifiedName

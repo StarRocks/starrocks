@@ -183,7 +183,7 @@ public class DdlExecutor {
             globalStateMgr.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterSystemStmt) {
             AlterSystemStmt stmt = (AlterSystemStmt) ddlStmt;
-            globalStateMgr.alterCluster(stmt);
+            return globalStateMgr.alterCluster(stmt);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
             globalStateMgr.cancelAlterCluster(stmt);

@@ -2,6 +2,7 @@
 
 #include "rowset_update_state.h"
 
+#include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -48,6 +49,8 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
 }
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load",
+                                                                              rowset->txn_id(), tablet->tablet_id()));
     _tablet_id = tablet->tablet_id();
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;

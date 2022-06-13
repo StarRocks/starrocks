@@ -284,4 +284,24 @@ TEST(VersionGraphTest, remove_version) {
     EXPECT_EQ(graph._version_graph.size(), 0);
 }
 
+TEST(VersionGraphTest, max_continuous_version) {
+    VersionGraph graph;
+    auto gen_meta = [&](const std::vector<std::pair<int64_t, int64_t>>& versions) {
+        std::vector<RowsetMetaSharedPtr> rs_meta;
+        for (auto& version : versions) {
+            rs_meta.emplace_back(std::make_shared<RowsetMeta>());
+            rs_meta.back()->set_start_version(version.first);
+            rs_meta.back()->set_end_version(version.second);
+        }
+        return rs_meta;
+    };
+    auto input1 = gen_meta({{0, 1}, {2, 2}, {3, 3}, {4, 4}, {6, 6}});
+    graph.construct_version_graph(input1, NULL);
+    EXPECT_EQ(graph.max_continuous_version(), 4);
+    graph.add_version_to_graph(Version(5, 5));
+    EXPECT_EQ(graph.max_continuous_version(), 6);
+    graph.add_version_to_graph(Version(7, 7));
+    EXPECT_EQ(graph.max_continuous_version(), 7);
+}
+
 } // namespace starrocks::vectorized
