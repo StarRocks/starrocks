@@ -156,8 +156,10 @@ public class StarOSAgent {
             WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
             workerId = workerInfo.getWorkerId();
         } catch (StarClientException e) {
-            throw new DdlException("Failed to get worker id from starMgr. error: "
-                    + e.getMessage());
+            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                throw new DdlException("Failed to get worker id from starMgr. error: "
+                        + e.getMessage());
+            }
         }
 
         try {
