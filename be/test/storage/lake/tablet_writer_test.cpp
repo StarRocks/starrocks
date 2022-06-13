@@ -17,10 +17,11 @@
 #include "storage/lake/group_assigner.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/test_group_assigner.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "storage/vector_chunk_iterator.h"
 #include "testutil/assert.h"
 
 namespace starrocks::lake {
@@ -29,23 +30,6 @@ using namespace starrocks::vectorized;
 
 using VSchema = starrocks::vectorized::Schema;
 using VChunk = starrocks::vectorized::Chunk;
-
-class TestGroupAssigner : public GroupAssigner {
-public:
-    TestGroupAssigner(std::string path) : _path(std::move(path)) {}
-
-    ~TestGroupAssigner() override = default;
-
-    StatusOr<std::string> get_group(int64_t tablet_id) override { return _path; }
-
-    Status list_group(std::vector<std::string>* groups) override {
-        groups->emplace_back(_path);
-        return Status::OK();
-    }
-
-private:
-    std::string _path;
-};
 
 class DuplicateTabletWriterTest : public testing::Test {
 public:
@@ -85,7 +69,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _s_schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
@@ -104,7 +88,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _s_schema;
+    std::shared_ptr<VSchema> _schema;
 };
 
 TEST_F(DuplicateTabletWriterTest, test_write_success) {
@@ -123,8 +107,8 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _s_schema);
-    VChunk chunk1({c2, c3}, _s_schema);
+    VChunk chunk0({c0, c1}, _schema);
+    VChunk chunk1({c2, c3}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -164,8 +148,8 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     opts.chunk_size = 1024;
 
     auto check_segment = [&](SegmentSharedPtr segment) {
-        ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_s_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_s_schema, 1024);
+        ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
         for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -191,6 +175,7 @@ TEST_F(DuplicateTabletWriterTest, test_open_fail) {
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
     ASSERT_OK(fs::remove_all(kTestGroupPath));
     ASSERT_ERROR(writer->open());
+    writer->close();
 }
 
 TEST_F(DuplicateTabletWriterTest, test_write_fail) {
@@ -203,7 +188,7 @@ TEST_F(DuplicateTabletWriterTest, test_write_fail) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _s_schema);
+    VChunk chunk0({c0, c1}, _schema);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
@@ -222,7 +207,7 @@ TEST_F(DuplicateTabletWriterTest, test_close_without_finish) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _s_schema);
+    VChunk chunk0({c0, c1}, _schema);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer());

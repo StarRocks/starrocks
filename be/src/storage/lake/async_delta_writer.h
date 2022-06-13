@@ -22,7 +22,6 @@ class Chunk;
 namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl;
-class CommittedRowsetInfo;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
@@ -37,13 +36,13 @@ public:
     static Ptr create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
 
-    AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
+    explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
     ~AsyncDeltaWriter();
 
     DISALLOW_COPY_AND_MOVE(AsyncDeltaWriter);
 
-    Status open();
+    [[nodiscard]] Status open();
 
     // REQUIRE:
     //  - this AsyncDeltaWriter not `close()`ed
@@ -65,11 +64,11 @@ public:
     // [NOT thread-safe]
     void close();
 
-    int64_t tablet_id() const;
+    [[nodiscard]] int64_t tablet_id() const;
 
-    int64_t partition_id() const;
+    [[nodiscard]] int64_t partition_id() const;
 
-    int64_t txn_id() const;
+    [[nodiscard]] int64_t txn_id() const;
 
 private:
     AsyncDeltaWriterImpl* _impl;
