@@ -23,7 +23,6 @@ package com.starrocks.load.routineload;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -45,7 +44,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private static final Logger LOG = LogManager.getLogger(KafkaTaskInfo.class);
@@ -169,8 +170,13 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     protected String getTaskDataSourceProperties() {
-        Gson gson = new Gson();
-        return gson.toJson(partitionIdToOffset);
+        StringJoiner joiner = new StringJoiner(",", "{", "}");
+        List<String> list = new ArrayList<>();
+        for (Integer key : partitionIdToOffset.keySet().stream().sorted().collect(Collectors.toList())) {
+            list.add(String.format("\"%d\":%d", key, partitionIdToOffset.get(key)));
+        }
+        list.forEach(joiner::add);
+        return joiner.toString();
     }
 
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
