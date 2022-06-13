@@ -43,9 +43,6 @@ public class FieldReference extends Expr {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
-            return false;
-        }
         FieldReference that = (FieldReference) o;
         return fieldIndex == that.fieldIndex && Objects.equals(tblName, that.tblName);
     }
