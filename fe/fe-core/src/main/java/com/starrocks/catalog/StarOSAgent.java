@@ -151,25 +151,33 @@ public class StarOSAgent {
 
     public void removeWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
-        // get workerId from starMgr
-        try {
-            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
-            workerId = workerInfo.getWorkerId();
-        } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
-                throw new DdlException("Failed to get worker id from starMgr. error: "
-                        + e.getMessage());
-            }
+        if (workerToId.containsKey(workerIpPort)) {
+            workerId = workerToId.get(workerIpPort);
+        } else {
+            // When FE && staros restart, workerToId is Empty, but staros already persisted
+            // worker infos, so we need to get workerId from starMgr
+            try {
+                WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                workerId = workerInfo.getWorkerId();
+            } catch (StarClientException e) {
+                if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                    throw new DdlException("Failed to get worker id from starMgr. error: "
+                            + e.getMessage());
+                }
 
-            workerToBackend.remove(workerId);
-            workerToId.remove(workerIpPort);
-            LOG.info("worker {} not exist.", workerIpPort);
-            return;
+                workerToBackend.remove(workerId);
+                workerToId.remove(workerIpPort);
+                LOG.info("worker {} not exist.", workerIpPort);
+                return;
+            }
         }
 
         try {
             client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
+            // when multi threads remove this worker, maybe we would get "NOT_EXIST"
+            // but it is right, so only need to throw exception
+            // if code is not StarClientException.ExceptionCode.NOT_EXIST
             if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
