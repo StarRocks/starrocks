@@ -897,8 +897,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // collect table-level metrics
         Table tbl = db.getTable(request.getTbl());
-        if (tbl == null) {
-            throw new UserException("unknown table, table=" + request.getTbl());
+        if (null == tbl) {
+            return ret;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
