@@ -51,7 +51,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STDDEV_SAMP).build();
 
     public static final Set<String> DECIMAL_SUM_FUNCTION_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER).add(FunctionSet.SUM)
+            new ImmutableSortedSet.Builder<>(String::compareTo).add(FunctionSet.SUM)
                     .add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION =

@@ -141,14 +141,18 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
+    // For decimal addition, to avoid overflow, we adopt this scaling strategy:
+    // as much as possible to ensure correctness
+    // result precision is maximum integer part width + maximum fractional part width + 1
+    // This can be fully guaranteed correctness in case of sufficient precision
     public static void getAddReturnTypeOfDecimal(TypeTriple triple, ScalarType lhsType, ScalarType rhsType) {
         final int lhsPrecision = lhsType.getPrecision();
         final int rhsPrecision = rhsType.getPrecision();
         final int lhsScale = lhsType.getScalarScale();
         final int rhsScale = rhsType.getScalarScale();
 
-        // decimal(p1, s1) - decimal(p2, s2)
-        //  result type = decimal(max(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2)) + 1
+        // decimal(p1, s1) + decimal(p2, s2)
+        // result type = decimal(max(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2)) + 1
         int maxIntLength = Math.max(lhsPrecision - lhsScale, rhsPrecision - rhsScale);
         int retPrecision = maxIntLength + Math.max(lhsScale, rhsScale) + 1;
         int retScale = Math.max(lhsScale, rhsScale);
@@ -271,8 +275,11 @@ public class ArithmeticExpr extends Expr {
     private void rewriteDecimalDecimalOperation() throws AnalysisException {
         final Type lhsOriginType = getChild(0).type;
         final Type rhsOriginType = getChild(1).type;
-        // TODO:
 
+        // if both of left child and right child are implict cast.
+        // It means ArithmeticExpr has been applied rewriteDecimalDecimalOperation.
+        // so we don't have to rewrite again.
+        // TODO:
         if (getChild(0).isImplicitCast() && getChild(1).isImplicitCast()) {
             return;
         }
