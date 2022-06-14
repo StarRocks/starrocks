@@ -423,7 +423,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
                              std::pair<int, int> range, const bool build_tie, const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
-    
+
     for (auto& col : columns) {
         if (col->is_nullable()) {
             ColumnHelper::as_column<NullableColumn>(col)->update_null_as_default();
