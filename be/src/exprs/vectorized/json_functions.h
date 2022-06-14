@@ -124,14 +124,14 @@ public:
     /**
      * @param: [json_column]
      * @paramType: [JsonColumn]
-     * @return: BinaryColumn
+     * @return: Int32Column
      */
     DEFINE_VECTORIZED_FN(json_int);
 
     /**
      * @param: [json_column]
      * @paramType: [JsonColumn]
-     * @return: BinaryColumn
+     * @return: DoubleColumn
      */
     DEFINE_VECTORIZED_FN(json_double);
 
@@ -211,24 +211,8 @@ public:
     }
 
 private:
-#define APPEND_NULL_AND_RETURN_IF_ERROR(builder, err) \
-    do {                                              \
-        const simdjson::error_code& e = err;          \
-        if (UNLIKELY(e)) {                            \
-            builder.append_null();                    \
-            return;                                   \
-        }                                             \
-    } while (false)
-
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
-
-    /* Following functions are only used in test. */
-    template <PrimitiveType primitive_type>
-    static ColumnPtr _raw_json_query(FunctionContext* context, const Columns& columns);
-
-    template <PrimitiveType primitive_type>
-    static void _build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value);
 };
 
 } // namespace vectorized

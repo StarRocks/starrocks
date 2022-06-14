@@ -200,53 +200,6 @@ JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
-template <>
-void JsonFunctions::_build_column(ColumnBuilder<TYPE_INT>& result, simdjson::ondemand::value& value) {
-    int64_t i64;
-    auto err = value.get_int64().get(i64);
-    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
-
-    result.append(i64);
-    return;
-}
-
-template <>
-void JsonFunctions::_build_column(ColumnBuilder<TYPE_DOUBLE>& result, simdjson::ondemand::value& value) {
-    double d;
-    auto err = value.get_double().get(d);
-    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
-
-    result.append(d);
-    return;
-}
-
-template <>
-void JsonFunctions::_build_column(ColumnBuilder<TYPE_VARCHAR>& result, simdjson::ondemand::value& value) {
-    simdjson::ondemand::json_type tp;
-    auto err = value.type().get(tp);
-    APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
-
-    if (tp == simdjson::ondemand::json_type::string) {
-        std::string_view sv;
-        auto err = value.get_string().get(sv);
-        APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
-
-        result.append(Slice{sv.data(), sv.size()});
-    } else {
-        // For compatible consideration, format json in non-string type as string.
-        std::string_view sv = simdjson::to_json_string(value);
-        std::unique_ptr<char[]> buf{new char[sv.size()]};
-        size_t new_length{};
-
-        auto err = simdjson::minify(sv.data(), sv.size(), buf.get(), new_length);
-        APPEND_NULL_AND_RETURN_IF_ERROR(result, err);
-
-        result.append(Slice{buf.get(), new_length});
-    }
-
-    return;
-}
-
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
     auto jsons = string_json(context, columns);
     auto paths = columns[1];
