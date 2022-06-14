@@ -334,7 +334,7 @@ modifyFrontendHostClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT INTO qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -961,7 +961,7 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN
+    | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA

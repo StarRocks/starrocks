@@ -280,7 +280,14 @@ public class OlapTableSink extends DataSink {
                 Preconditions.checkArgument(table.getPartitions().size() == 1,
                         "Number of table partitions is not 1 for unpartitioned table, partitionNum="
                                 + table.getPartitions().size());
-                Partition partition = table.getPartitions().iterator().next();
+                Partition partition = null;
+                if (partitionIds != null) {
+                    Preconditions.checkState(partitionIds.size() == 1,
+                            "invalid partitionIds size:{}", partitionIds.size());
+                    partition = table.getPartition(partitionIds.get(0));
+                } else {
+                    partition = table.getPartitions().iterator().next();
+                }
 
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());
