@@ -20,7 +20,3 @@ mysql> select time_to_sec('12:13:14');
 |                        43994|
 +-----------------------------+
 ```
-
-## keyword
-
-`TIME_TO_SEC`

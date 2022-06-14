@@ -140,7 +140,3 @@
   +------+------+---------------+----------------+
   9 rows in set (0.02 sec)
   ```
-
-## 关键字(keywords)
-
-GROUP, GROUPING, GROUPING_ID, GROUPING_SETS, GROUPING SETS, CUBE, ROLLUP

@@ -51,7 +51,3 @@ mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 mysql> SELECT JSON_QUERY(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
        -> NULL
 ```
-
-## 关键词
-
-JSON, JSON_QUERY

@@ -9,7 +9,3 @@
 ```sql
 SHOW RESOURCES;
 ```
-
-## 关键字(keywords)
-
-SHOW RESOURCES

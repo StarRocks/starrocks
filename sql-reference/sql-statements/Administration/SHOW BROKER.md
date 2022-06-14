@@ -16,7 +16,3 @@ SHOW BROKER;
 2. LastHeartbeat 表示最近一次心跳。
 3. Alive 表示节点是否存活。
 4. ErrMsg 用于显示心跳失败时的错误信息。
-
-## 关键字(keywords)
-
-SHOW， BROKER

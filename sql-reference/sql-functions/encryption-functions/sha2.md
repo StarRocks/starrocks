@@ -47,7 +47,3 @@ mysql> select sha2('abc', 1),sha2('abc', null), sha2(null, 384);
 +----------------+-------------------+-----------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-SHA2, ENCRYPTION

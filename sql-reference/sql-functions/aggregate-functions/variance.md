@@ -40,7 +40,3 @@ group by datetime;
 |   5.6230744719006163 |
 +----------------------+
 ```
-
-## 关键词
-
-VARIANCE, VAR_POP, VARIANCE_POP, VAR, POP

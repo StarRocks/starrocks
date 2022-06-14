@@ -49,7 +49,3 @@ from (
     group by tag, date) a
 group by tag;
 ```
-
-## keyword
-
-BITMAP_INTERSECT, BITMAP

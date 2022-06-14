@@ -49,7 +49,3 @@ mysql> select array_join([1, 3, 5, null], '_', 'NULL');
 | 1_3_5_NULL                            |
 +---------------------------------------+
 ```
-
-## 关键词
-
-ARRAY_JOIN, ARRAY

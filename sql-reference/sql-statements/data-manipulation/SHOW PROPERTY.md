@@ -38,7 +38,3 @@ SHOW PROPERTY [FOR user] [LIKE key];
     ```sql
     SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%';
     ```
-
-## 关键字(keywords)
-
-SHOW, PROPERTY

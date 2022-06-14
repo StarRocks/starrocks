@@ -29,7 +29,3 @@ mysql> select log10(100);
 +------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-LOG10

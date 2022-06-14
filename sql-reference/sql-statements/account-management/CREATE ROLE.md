@@ -19,7 +19,3 @@ CREATE ROLE role1;
   ```sql
   CREATE ROLE role1;
   ```
-
-## 关键字(keywords)
-
-CREATE, ROLE

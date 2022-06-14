@@ -70,7 +70,3 @@ select percentile_approx_raw(percentile_union(sale_amt_per), 0.99) from sales_re
 ```sql
 curl --location-trusted -u root -H "columns: record_id, seller_id, store_id,tmp, sale_amt_per =percentile_hash(tmp)" -H "column_separator:," -T a http://ip:port/api/test/sales_records/_stream_load
 ```
-
-## 关键词
-
-PERCENTILE_UNION

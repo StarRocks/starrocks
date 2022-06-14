@@ -28,7 +28,3 @@ DISTRIBUTED BY HASH(dt) BUCKETS 2;
 BITMAP 类型的详细使用方法，如向表中插入 bitmap value 请参考 [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)。
 
 BITMAP 类型的字段支持多种 BITMAP 函数，如 bitmap_and，bitmap_andnot 等。具体的函请参考 [bitmap-functions](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
-
-## 关键字
-
-BITMAP BITMAP_UNION

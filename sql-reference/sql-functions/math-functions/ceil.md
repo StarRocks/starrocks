@@ -29,7 +29,3 @@ mysql> select ceil(3.14);
 +------------+
 1 row in set (0.15 sec)
 ```
-
-## 关键词
-
-CEIL

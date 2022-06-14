@@ -34,7 +34,3 @@ MySQL > select bitmap_count(bitmap_empty());
 |                            0 |
 +------------------------------+
 ```
-
-## 关键词
-
-BITMAP_EMPTY, BITMAP

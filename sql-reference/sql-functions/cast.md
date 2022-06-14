@@ -60,7 +60,3 @@ cast(input as type)
     +----------------------------------------+
     1 row in set (0.00 sec)
     ```
-
-## keyword
-
-CAST

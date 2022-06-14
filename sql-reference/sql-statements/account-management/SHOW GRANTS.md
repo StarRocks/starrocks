@@ -37,7 +37,3 @@ SHOW [ALL] GRANTS [FOR user_identity];
     ```sql
     SHOW GRANTS;
     ```
-
-## 关键字(keywords)
-
-SHOW, GRANTS

@@ -36,7 +36,3 @@ SET PASSWORD [FOR user_identity] =
     SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456')
     SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
     ```
-
-## 关键字(keywords)
-
-SET, PASSWORD

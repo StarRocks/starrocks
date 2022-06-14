@@ -19,7 +19,3 @@ CANCEL DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
     ```sql
     CANCEL DECOMMISSION BACKEND "host1:port", "host2:port";
     ```
-
-## 关键字(keywords)
-
-CANCEL，DECOMMISSION，BACKEND

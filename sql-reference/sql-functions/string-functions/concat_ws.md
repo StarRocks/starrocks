@@ -45,7 +45,3 @@ MySQL > select concat_ws("r", "sta", NULL,"rocks");
 | starrocks                           |
 +-------------------------------------+
 ```
-
-## 关键词
-
-CONCAT_WS, CONCAT, WS

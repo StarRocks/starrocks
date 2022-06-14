@@ -44,7 +44,3 @@ MySQL > select group_concat(value, " ") from test;
 | a b c                      |
 +----------------------------+
 ```
-
-## 关键词
-
-GROUP_CONCAT, GROUP, CONCAT

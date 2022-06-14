@@ -30,7 +30,3 @@ group by datetime;
 |        2.372044195280762 |
 +--------------------------+
 ```
-
-## 关键词
-
-STDDEV_SAMP, STDDEV, SAMP

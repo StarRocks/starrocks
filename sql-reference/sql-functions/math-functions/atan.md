@@ -29,7 +29,3 @@ mysql> select atan(2.5);
 +--------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-ATAN

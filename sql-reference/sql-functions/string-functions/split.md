@@ -42,7 +42,3 @@ mysql> select split("abc","");
 | ["a","b","c"]    |
 +------------------+
 ```
-
-## 关键词
-
-SPLIT, PART

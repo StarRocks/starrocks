@@ -30,7 +30,3 @@ MySQL > select find_in_set("b", "a,b,c");
 |                         2 |
 +---------------------------+
 ```
-
-## 关键词
-
-FIND_IN_SET, FIND, IN, SET

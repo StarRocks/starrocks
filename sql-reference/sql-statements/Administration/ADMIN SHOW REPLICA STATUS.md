@@ -45,7 +45,3 @@ MISSING:        replica 不存在
     ADMIN SHOW REPLICA STATUS FROM tbl1
     WHERE STATUS != "OK";
     ```
-
-## 关键字(keywords)
-
-ADMIN，SHOW，REPLICA，STATUS

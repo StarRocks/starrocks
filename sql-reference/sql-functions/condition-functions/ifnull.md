@@ -33,7 +33,3 @@ mysql> select ifnull(NULL,2);
 +-----------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-IFNULL

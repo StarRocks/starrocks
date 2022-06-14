@@ -52,7 +52,3 @@ mysql> select array_concat(["sql",null], [null], ["Vectorized", null]);
 | ["sql",null,null,"Vectorized",null]                     |
 +---------------------------------------------------------+
 ```
-
-## 关键词
-
-ARRAY_CONCAT

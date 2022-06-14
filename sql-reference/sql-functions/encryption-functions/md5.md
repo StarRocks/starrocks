@@ -29,7 +29,3 @@ mysql> select md5('abc');
 +----------------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-MD5, ENCRYPTION

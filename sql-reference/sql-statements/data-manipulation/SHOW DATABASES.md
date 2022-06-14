@@ -9,7 +9,3 @@
 ```sql
 SHOW DATABASES;
 ```
-
-## 关键字(keywords)
-
-SHOW,DATABASES

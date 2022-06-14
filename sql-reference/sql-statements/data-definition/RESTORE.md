@@ -69,7 +69,3 @@ PROPERTIES ("key"="value", ...);
         "backup_timestamp"="2018-05-04-17-11-01"
     );
     ```
-
-## 关键字(keywords)
-
-RESTORE

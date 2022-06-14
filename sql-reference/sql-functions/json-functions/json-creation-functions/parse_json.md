@@ -56,7 +56,3 @@ mysql> SELECT PARSE_JSON('null');
 mysql> SELECT PARSE_JSON('{star: "rocks"}');
        -> NULL
 ```
-
-## 关键词
-
-JSON, PARSE_JSON

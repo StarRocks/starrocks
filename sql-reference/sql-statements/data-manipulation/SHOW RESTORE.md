@@ -48,7 +48,3 @@ Timeout：                作业超时时间，单位秒
 ```sql
 SHOW RESTORE FROM example_db;
 ```
-
-## 关键字(keywords)
-
-SHOW, RESTORE

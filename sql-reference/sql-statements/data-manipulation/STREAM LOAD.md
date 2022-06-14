@@ -308,7 +308,3 @@ curl --location-trusted -u root \
 -H "columns: category, price, author" -H "label:123" -H "format: json" -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" -H "strip_outer_array: true" -H "json_root: $.RECORDS" -T testData \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
-
-## 关键字(keywords)
-
-STREAM, LOAD

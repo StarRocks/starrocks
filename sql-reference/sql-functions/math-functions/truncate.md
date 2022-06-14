@@ -31,7 +31,3 @@ mysql> select truncate(3.14,1);
 +-------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-TRUNCATE

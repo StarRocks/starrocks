@@ -27,7 +27,3 @@ MySQL > SELECT CURDATE() + 0;
 |      20191220 |
 +---------------+
 ```
-
-## keyword
-
-CURDATE

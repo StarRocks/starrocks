@@ -36,7 +36,3 @@ MySQL > select char_length("中国");
 |                    2 |
 +----------------------+
 ```
-
-## 关键词
-
-CHAR_LENGTH, CHARACTER_LENGTH

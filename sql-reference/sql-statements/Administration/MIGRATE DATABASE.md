@@ -18,7 +18,3 @@ MIGRATE DATABASE src_cluster_name.src_db_name des_cluster_name.des_db_name
     ```sql
     MIGRATE DATABASE test_clusterA.test_db test_clusterB.link_test_db;
     ```
-
-## 关键字(keywords)
-
-MIGRATE，DATABASE

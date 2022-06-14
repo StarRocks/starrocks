@@ -54,7 +54,3 @@ WHERE
     ```sql
     SHOW EXPORT FROM example_db WHERE STATE = "exporting" ORDER BY StartTime DESC;
     ```
-
-## 关键字(keywords)
-
-SHOW,EXPORT

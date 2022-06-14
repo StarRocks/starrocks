@@ -37,7 +37,3 @@ MySQL > select ends_with("Hello starrocks", "Hello");
 |                                 0 |
 +-----------------------------------+
 ```
-
-## 关键词
-
-ENDS_WITH

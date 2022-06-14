@@ -31,7 +31,3 @@ group by datetime;
 |    5.6227132145741789 |
 +-----------------------+
 ```
-
-## 关键词
-
-VAR_SAMP, VARIANCE_SAMP, VAR, SAMP, VARIANCE

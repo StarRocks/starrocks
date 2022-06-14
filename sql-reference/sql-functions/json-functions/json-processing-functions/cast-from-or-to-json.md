@@ -114,7 +114,3 @@ mysql> select cast(true as json);
 | true               |
 +--------------------+
 ```
-
-## 关键词
-
-JSON,CAST

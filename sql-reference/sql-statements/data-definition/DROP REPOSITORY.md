@@ -23,7 +23,3 @@ DROP REPOSITORY `repo_name`;
     ```sql
     DROP REPOSITORY `bos_repo`;
     ```
-
-## 关键字(keywords)
-
-DROP REPOSITORY

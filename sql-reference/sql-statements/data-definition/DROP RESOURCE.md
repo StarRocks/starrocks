@@ -25,7 +25,3 @@ DROP RESOURCE 'resource_name';
     ```SQL
     DROP RESOURCE 'hive0';
     ```
-
-## 关键字(keywords)
-
-DROP RESOURCE

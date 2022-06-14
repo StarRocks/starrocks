@@ -54,7 +54,3 @@ get_json_string(json_str, json_path)
     | v1                                                                    |
     +-----------------------------------------------------------------------+
     ```
-
-## 关键词
-
-GET_JSON_STRING, GET, JSON, STRING

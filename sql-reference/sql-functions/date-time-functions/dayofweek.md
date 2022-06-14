@@ -29,7 +29,3 @@ MySQL > select dayofweek(cast(20190625 as date));
 |                                 3 |
 +-----------------------------------+
 ```
-
-## keyword
-
-DAYOFWEEK

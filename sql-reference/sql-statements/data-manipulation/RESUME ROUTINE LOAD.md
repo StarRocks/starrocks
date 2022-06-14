@@ -11,7 +11,3 @@
 ```sql
     RESUME ROUTINE LOAD FOR test1;
 ```
-
-## 关键字(keywords)
-
-RESUME, ROUTINE, LOAD

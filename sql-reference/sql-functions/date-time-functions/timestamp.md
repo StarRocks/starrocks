@@ -29,7 +29,3 @@ mysql> select timestamp("2019-05-27");
 +-------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-TIMESTAMP

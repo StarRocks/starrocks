@@ -29,7 +29,3 @@ mysql>select bin(3);
 +--------+
 1 row in set (0.02 sec)
 ```
-
-## 关键词
-
-BIN

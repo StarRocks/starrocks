@@ -11,7 +11,3 @@
     ```sql
     SHOW ROUTINE LOAD TASK WHERE JobName = "test1";
     ```
-
-## 关键字(keywords)
-
-SHOW, ROUTINE, LOAD, TASK

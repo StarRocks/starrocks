@@ -30,7 +30,3 @@ MySQL > select strleft("Hello starrocks",5);
 | Hello                   |
 +-------------------------+
 ```
-
-## keyword
-
-STRLEFT

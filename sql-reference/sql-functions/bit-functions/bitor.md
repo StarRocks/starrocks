@@ -33,7 +33,3 @@ mysql> select bitor(3,0);
 +-------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-BITOR

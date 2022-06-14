@@ -627,7 +627,3 @@ SWAP WITH table_name;
     ```sql
     ALTER TABLE table1 SWAP WITH table2;
     ```
-
-## 关键字(keywords)
-
-ALTER，TABLE，ROLLUP，COLUMN，PARTITION，RENAME，SWAP

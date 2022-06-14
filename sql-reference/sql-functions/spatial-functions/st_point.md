@@ -30,7 +30,3 @@ MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
 | POINT (24.7 56.7)               |
 +---------------------------------+
 ```
-
-## 关键词
-
-ST_POINT, ST, POINT

@@ -39,7 +39,3 @@ MySQL > SELECT regexp_replace('a b c','(b)','<\\1>');
 | a <b> c                                |
 +----------------------------------------+
 ```
-
-## 关键词
-
-REGEXP_REPLACE, REGEXP, REPLACE

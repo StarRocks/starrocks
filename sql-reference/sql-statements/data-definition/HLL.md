@@ -93,7 +93,3 @@ select dt, HLL_CARDINALITY(uv_set) from test_uv;
 select dt, HLL_CARDINALITY(uv) from (select dt, HLL_RAW_AGG(set1) as uv from test group by dt) tmp;
 select dt, HLL_UNION_AGG(set1) as uv from test group by dt;
 ```
-
-## 关键字(keywords)
-
-HLL

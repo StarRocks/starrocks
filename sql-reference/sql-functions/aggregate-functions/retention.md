@@ -170,7 +170,3 @@ mysql> SELECT lo_custkey,
 ```
 
 可以看到 `327825` 对应结果的第二位变为了1。
-
-## 关键字
-
-RETENTION

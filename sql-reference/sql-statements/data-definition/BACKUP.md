@@ -51,7 +51,3 @@ PROPERTIES ("key"="value", ...);
     example_tbl2
     );
     ```
-
-## 关键字(keywords)
-
-BACKUP

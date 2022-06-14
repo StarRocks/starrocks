@@ -36,7 +36,3 @@ mysql> SELECT PARSE_JSON('{"a": 1, "c": 2}') < PARSE_JSON('{"b": 1, "a": 1}');
 mysql> SELECT PARSE_JSON('"a"') < PARSE_JSON('{"a": 1, "c": 2}');
        -> 0
 ```
-
-## 关键词
-
-JSON, JSON OPERATORS

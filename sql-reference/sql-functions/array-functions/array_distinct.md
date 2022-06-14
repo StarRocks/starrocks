@@ -50,7 +50,3 @@ mysql> select c1, array_distinct(c2) from test;
 |    4 | [null]               |
 +------+----------------------+
 ```
-
-## 关键词
-
-ARRAY_DISTINCT, ARRAY

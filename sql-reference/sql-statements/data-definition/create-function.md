@@ -96,7 +96,3 @@ RETURNS ret_type
     "object_file" = "http://host:port/libmyStrConcat.so"
     );
     ```
-
-## 关键字(keywords)
-
-CREATE，FUNCTION

@@ -29,7 +29,3 @@ mysql> select coalesce(3,NULL,1,1);
 +-------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-COALESCE

@@ -23,7 +23,3 @@ ADMIN CANCEL REPAIR TABLE table_name[ PARTITION (p1,...)];
     ```sql
     ADMIN CANCEL REPAIR TABLE tbl PARTITION(p1);
     ```
-
-## 关键字(keywords)
-
-ADMIN，CANCEL， REPAIR

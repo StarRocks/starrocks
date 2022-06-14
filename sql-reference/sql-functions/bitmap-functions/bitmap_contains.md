@@ -37,7 +37,3 @@ MySQL > select bitmap_contains(to_bitmap(1),1) cnt;
 |    1 |
 +------+
 ```
-
-## 关键词
-
-BITMAP_CONTAINS, BITMAP

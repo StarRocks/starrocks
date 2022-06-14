@@ -29,7 +29,3 @@ ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
     ```sql
     ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
     ```
-
-## 关键字(keywords)
-
-ADMIN，SHOW，REPLICA，DISTRIBUTION

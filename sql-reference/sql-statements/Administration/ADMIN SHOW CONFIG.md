@@ -44,7 +44,3 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
     +--------------------+-------+---------+-----------+------------+---------+
     1 row in set (0.00 sec)
     ```
-
-## 关键字(keywords)
-
-ADMIN，SHOW，CONFIG

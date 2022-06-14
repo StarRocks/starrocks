@@ -29,7 +29,3 @@ mysql> SELECT rtrim('   ab d   ');
 +---------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-RTRIM

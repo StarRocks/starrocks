@@ -29,7 +29,3 @@ mysql> select acos(0.25);
 +-------------------+
 1 row in set (0.02 sec)
 ```
-
-## 关键词
-
-ACOS

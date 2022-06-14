@@ -26,7 +26,3 @@ CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'
     ```sql
     CREATE INDEX index_name ON table1 (siteid) USING BITMAP COMMENT 'balabala';
     ```
-
-## 关键字(keywords)
-
-CREATE，INDEX

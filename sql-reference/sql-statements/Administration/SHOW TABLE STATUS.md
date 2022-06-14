@@ -32,7 +32,3 @@ SHOW TABLE STATUS
     ```SQL
     SHOW TABLE STATUS FROM db LIKE "%example%";
     ```
-
-## 关键字(keywords)
-
-SHOW，TABLE，STATUS

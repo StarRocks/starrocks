@@ -37,7 +37,3 @@ DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
     ```sql
     DROP TABLE my_table FORCE;
     ```
-
-## 关键字(keywords）
-
-DROP，TABLE

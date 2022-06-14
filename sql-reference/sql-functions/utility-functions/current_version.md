@@ -39,7 +39,3 @@ mysql> select @@version_comment;
 +-------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-CURRENT_VERSION

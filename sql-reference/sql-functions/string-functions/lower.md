@@ -28,7 +28,3 @@ MySQL > SELECT lower("AbC123");
 | abc123          |
 +-----------------+
 ```
-
-## 关键词
-
-LOWER

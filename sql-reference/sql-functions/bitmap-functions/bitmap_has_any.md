@@ -37,7 +37,3 @@ MySQL > select bitmap_has_any(to_bitmap(1),to_bitmap(1)) cnt;
 |    1 |
 +------+
 ```
-
-## 关键词
-
-BITMAP_HAS_ANY, BITMAP

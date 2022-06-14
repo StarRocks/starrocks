@@ -37,7 +37,3 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name LIKE [database.]ta
     ```sql
     CREATE TABLE test1.table2 LIKE test1.table1;
     ```
-
-## keyword
-
-CREATE, TABLE, LIKE

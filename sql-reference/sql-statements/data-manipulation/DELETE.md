@@ -53,7 +53,3 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
     DELETE FROM my_table
     WHERE  k2 in ("abc", "cba");
     ```
-
-## 关键字(keywords)
-
-DELETE

@@ -44,7 +44,3 @@ mysql> SELECT JSON_OBJECT('k1', 1, 'k2', json_object('k2', 2), 'k3', json_array(
 mysql> SELECT JSON_OBJECT();
        -> {}
 ```
-
-## 关键词
-
-JSON, JSON_OBJECT

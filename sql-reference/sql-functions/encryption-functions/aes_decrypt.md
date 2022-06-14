@@ -31,7 +31,3 @@ mysql> select AES_DECRYPT(from_base64('uv/Lhzm74syo8JlfWarwKA==  '),'F3229A0B371
 +--------------------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-AES_DECRYPT

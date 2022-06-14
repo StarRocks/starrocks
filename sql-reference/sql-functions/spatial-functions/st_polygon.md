@@ -28,7 +28,3 @@ MySQL > SELECT ST_AsText(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"));
 | POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))                          |
 +------------------------------------------------------------------+
 ```
-
-## 关键词
-
-ST_POLYGON, ST_POLYFROMTEXT, ST_POLYGONFROMTEXT, ST, POLYGON, POLYFROMTEXT, POLYGONFROMTEXT

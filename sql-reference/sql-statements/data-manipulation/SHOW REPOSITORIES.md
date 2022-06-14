@@ -33,7 +33,3 @@ ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题�
     ```sql
     SHOW REPOSITORIES;
     ```
-
-## 关键字(keywords)
-
-SHOW, REPOSITORY, REPOSITORIES

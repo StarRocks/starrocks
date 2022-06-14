@@ -89,7 +89,3 @@ MySQL > select date_trunc("hour", "2020-11-04 11:12:13")
 
 2020-11-04 11:00:00
 ```
-
-## keyword
-
-DATE_TRUNC,DATE

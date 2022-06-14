@@ -43,7 +43,3 @@
     ```sql
     SHOW ALL ROUTINE LOAD FOR example_db.test1;
     ```
-
-## 关键字(keywords)
-
-SHOW, ROUTINE, LOAD

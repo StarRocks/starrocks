@@ -65,7 +65,3 @@ PROPERTIES ("key"="value", ...);
         "password" = "password"
     );
     ```
-
-## 关键字(keywords)
-
-CREATE REPOSITORY

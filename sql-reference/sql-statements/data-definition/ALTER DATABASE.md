@@ -58,7 +58,3 @@ ALTER DATABASE db_name SET REPLICA QUOTA quota;
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
-
-## 关键字(keywords)
-
-ALTER，DATABASE，RENAME

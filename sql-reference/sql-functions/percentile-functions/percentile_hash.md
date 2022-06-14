@@ -29,7 +29,3 @@ mysql> select percentile_approx_raw(percentile_hash(234.234), 0.99);
 +-------------------------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-PERCENTILE_HASH

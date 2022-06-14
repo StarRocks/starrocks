@@ -35,7 +35,3 @@ mysql> select array_append([1, 2], NULL);
 1 row in set (0.01 sec)
 
 ```
-
-## keyword
-
-ARRAY_APPEND,ARRAY

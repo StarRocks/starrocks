@@ -35,7 +35,3 @@ MySQL > select bitmap_count(bitmap_hash('hello'));
 |                                  1 |
 +------------------------------------+
 ```
-
-## 关键词
-
-BITMAP_HASH, BITMAP

@@ -61,7 +61,3 @@ mysql> select array_agg(c2) from test where c1>4;
 | NULL            |
 +-----------------+
 ```
-
-## 关键词
-
-ARRAY_AGG, ARRAY

@@ -21,7 +21,3 @@ DISTRIBUTED BY HASH(pk) BUCKETS 4;
 ```
 
 表创建成功后通过 `desc tablename;` 查看表可以看到 STRING 类型为 `VARCHAR(65533)`。StarRocks 2.1 版本之后大字符串支持到 1MB。
-
-## 关键字
-
-STRING

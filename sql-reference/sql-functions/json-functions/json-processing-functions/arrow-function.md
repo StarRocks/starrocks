@@ -48,7 +48,3 @@ mysql> SELECT PARSE_JSON('{"a": {"b": 1}}')->'a'->'b';
 mysql> SELECT PARSE_JSON('{"a": "b"}') -> 'a';
        -> "b"
 ```
-
-## 关键词
-
-JSON, ARROW FUNCTION

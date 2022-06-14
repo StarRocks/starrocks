@@ -39,7 +39,3 @@ PROPERTIES ("key" = "value", ...);
     ```sql
     ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "ok");
     ```
-
-## 关键字(keywords)
-
-ADMIN，SET，REPLICA，STATUS

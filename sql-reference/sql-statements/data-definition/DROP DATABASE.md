@@ -26,7 +26,3 @@ DROP DATABASE [IF EXISTS] db_name [FORCE];
     ```sql
     DROP DATABASE db_test;
     ```
-
-## 关键字(keywords)
-
-DROP, DATABASE

@@ -17,7 +17,3 @@ ENTER cluster_name;
     ```sql
     ENTER test_cluster;
     ```
-
-## 关键字(keywords)
-
-ENTER

@@ -68,7 +68,3 @@ state，同时支持按照任意字段进行排序，并且提供 limit 限制�
     ```sql
         SHOW TABLET FROM example_db.table_name where indexname="t1_rollup";
     ```
-
-## 关键字(keywords)
-
-SHOW, TABLET, LIMIT

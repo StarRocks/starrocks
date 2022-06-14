@@ -468,7 +468,3 @@ json数据格式:
 ]
 }
 ```
-
-## 关键字(keywords)
-
-CREATE, ROUTINE, LOAD

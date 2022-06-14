@@ -19,7 +19,3 @@ SHOW PLUGINS;
     ```sql
     SHOW PLUGINS;
     ```
-
-## 关键字(keywords)
-
-SHOW PLUGINS

@@ -30,7 +30,3 @@ mysql> select bitmap_to_string(bitmap_xor(bitmap_from_string('1, 3'), bitmap_fro
 |1,2,3 |
 +------+
 ```
-
-## 关键词
-
-BITMAP_XOR,  BITMAP

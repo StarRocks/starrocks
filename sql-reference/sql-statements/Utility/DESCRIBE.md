@@ -27,7 +27,3 @@ DESC[RIBE] [db_name.]table_name [ALL];
     ```sql
     DESC db1.table_name ALL;
     ```
-
-## 关键字 (keywords)
-
-DESCRIBE, DESC

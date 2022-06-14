@@ -29,7 +29,3 @@ mysql> select last_query_id();
 +--------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-LAST_QUERY_ID

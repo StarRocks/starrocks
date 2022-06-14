@@ -26,7 +26,3 @@ PROPERTIES("type" = "...");
     ADMIN CHECK TABLET (10000, 10001)
     PROPERTIES("type" = "consistency");
     ```
-
-## 关键字(keywords)
-
-ADMIN, CHECK, TABLET

@@ -24,7 +24,3 @@ MySQL > select utc_timestamp(),utc_timestamp() + 1;
 | 2019-07-10 12:31:18 |      20190710123119 |
 +---------------------+---------------------+
 ```
-
-## keyword
-
-UTC_TIMESTAMP,UTC,TIMESTAMP

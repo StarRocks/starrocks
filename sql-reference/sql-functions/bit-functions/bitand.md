@@ -33,7 +33,3 @@ mysql> select bitand(3,0);
 +--------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-BITAND

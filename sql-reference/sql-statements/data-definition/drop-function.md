@@ -25,7 +25,3 @@ DROP FUNCTION function_name (arg_type [, ...]);
     ```sql
     DROP FUNCTION my_add(INT, INT)
     ```
-
-## 关键字(keywords)
-
-DROP，FUNCTION

@@ -30,7 +30,3 @@ MySQL > select right("Hello starrocks",5);
 | rocks                   |
 +-------------------------+
 ```
-
-## 关键词
-
-RIGHT

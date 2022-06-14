@@ -35,7 +35,3 @@ from test_uv;;
 | 17721                   |
 +-------------------------+
 ```
-
-## 关键词
-
-HLL_UNION_AGG, HLL, UNION, AGG

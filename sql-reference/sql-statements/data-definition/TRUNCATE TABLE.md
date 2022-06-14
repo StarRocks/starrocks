@@ -33,7 +33,3 @@ TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)];
     ```sql
     TRUNCATE TABLE tbl PARTITION(p1, p2);
     ```
-
-## 关键字(keywords)
-
-TRUNCATE，TABLE

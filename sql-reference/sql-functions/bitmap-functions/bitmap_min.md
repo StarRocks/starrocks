@@ -38,7 +38,3 @@ MySQL > select bitmap_min(bitmap_empty());
 |                               -1 |
 +----------------------------------+
 ```
-
-## 关键词
-
-BITMAP_MIN, BITMAP

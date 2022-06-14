@@ -42,7 +42,3 @@ MySQL > select murmur_hash3_32("hello", "world");
 |                         984713481 |
 +-----------------------------------+
 ```
-
-## 关键词
-
-MURMUR_HASH3_32, HASH

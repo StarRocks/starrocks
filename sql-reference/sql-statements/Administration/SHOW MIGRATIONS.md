@@ -9,9 +9,3 @@
 ```sql
 SHOW MIGRATIONS；
 ```
-
-## 关键字(keywords)
-
-```sql
-SHOW，MIGRATIONS
-```

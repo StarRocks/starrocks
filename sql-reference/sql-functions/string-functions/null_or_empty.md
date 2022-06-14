@@ -42,7 +42,3 @@ MySQL > select null_or_empty("a");
 |                  0 |
 +--------------------+
 ```
-
-## 关键词
-
-NULL_OR_EMPTY

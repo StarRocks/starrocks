@@ -49,7 +49,3 @@ INSTALL PLUGIN FROM [source] [PROPERTIES ("key"="value", ...)]
     ```sql
     INSTALL PLUGIN FROM "http://mywebsite.com/plugin.zip" PROPERTIES("md5sum" = "73877f6029216f4314d712086a146570");
     ```
-
-## 关键字(keywords)
-
-INSTALL，PLUGIN

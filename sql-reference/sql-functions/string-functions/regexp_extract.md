@@ -39,7 +39,3 @@ MySQL > SELECT regexp_extract('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 2);
 | d                                                           |
 +-------------------------------------------------------------+
 ```
-
-## 关键词
-
-REGEXP_EXTRACT, REGEXP, EXTRACT

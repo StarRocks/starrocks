@@ -39,7 +39,3 @@ mysql> select fmod(3,6);
 +------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-FMOD

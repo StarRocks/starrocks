@@ -37,7 +37,3 @@ mysql> select greatest(3,4,5,5,6);
 +-------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-GREATEST

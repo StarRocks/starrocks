@@ -35,7 +35,3 @@ mysql> select bitmap_to_array(NULL);
 | NULL                  |
 +-----------------------+
 ```
-
-## 关键词
-
-BITMAP_TO_ARRAY, BITMAP

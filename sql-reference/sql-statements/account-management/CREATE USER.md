@@ -107,7 +107,3 @@ auth_option: {
     ```sql
     CREATE USER 'jack'@'%' IDENTIFIED BY '12345' DEFAULT ROLE 'my_role';
     ```
-
-## 关键字(keywords)
-
-CREATE, USER

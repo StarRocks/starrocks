@@ -85,7 +85,3 @@ mysql> desc all_type_table all;
     ```
 
     存在则删除，不存在则不报错。
-
-## 关键字(keywords)
-
-DROP， MATERIALIZED， VIEW

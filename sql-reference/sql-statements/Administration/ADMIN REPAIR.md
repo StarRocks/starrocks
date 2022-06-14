@@ -30,7 +30,3 @@ ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)];
     ```sql
     ADMIN REPAIR TABLE tbl1 PARTITION (p1, p2);
     ```
-
-## 关键字(keywords)
-
-ADMIN, REPAIR

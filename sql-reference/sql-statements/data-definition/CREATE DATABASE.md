@@ -19,7 +19,3 @@ CREATE DATABASE [IF NOT EXISTS] db_name;
     ```sql
     CREATE DATABASE db_test;
     ```
-
-## 关键字(keywords)
-
-CREATE， DATABASE

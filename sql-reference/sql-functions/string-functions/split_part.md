@@ -53,7 +53,3 @@ MySQL > select split_part("abca", "a", 1);
 |                            |
 +----------------------------+
 ```
-
-## 关键词
-
-SPLIT_PART, SPLIT, PART

@@ -30,7 +30,3 @@ mysql> select array_remove([1,2,3,null,3], 3);
 +---------------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-ARRAY_REMOVE, ARRAY

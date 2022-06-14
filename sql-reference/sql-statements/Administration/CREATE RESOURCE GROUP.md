@@ -37,7 +37,3 @@ with (
     'type' = 'normal'
 );
 ```
-
-## 关键字(keywords)
-
-CREATE，RESOURCE GROUP

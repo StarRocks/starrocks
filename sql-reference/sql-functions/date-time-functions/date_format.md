@@ -103,7 +103,3 @@ MySQL > select date_format('2006-06-01', '%%%d');
 | %01                                        |
 +--------------------------------------------+
 ```
-
-## keyword
-
-DATE_FORMAT,DATE,FORMAT

@@ -53,7 +53,3 @@ mysql> select array_contains([[1,2,3], [4,5,6]], [4,6,5]);
 +--------------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## keyword
-
-ARRAY_CONTAINS,ARRAY

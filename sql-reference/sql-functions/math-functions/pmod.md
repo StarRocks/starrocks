@@ -39,7 +39,3 @@ mysql> select pmod(3,9);
 +------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-PMOD

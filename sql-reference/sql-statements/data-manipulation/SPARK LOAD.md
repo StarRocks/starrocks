@@ -285,7 +285,3 @@ uuid=bitmap_dict(uuid)
 )
 WITH RESOURCE 'my_spark';
 ```
-
-## 关键字(keywords)
-
-SPARK, LOAD

@@ -28,7 +28,3 @@ MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));
 | LINESTRING (1 1, 2 2)                                   |
 +---------------------------------------------------------+
 ```
-
-## 关键词
-
-ST_LINEFROMTEXT, ST_LINESTRINGFROMTEXT, ST, LINEFROMTEXT, LINESTRINGFROMTEXT

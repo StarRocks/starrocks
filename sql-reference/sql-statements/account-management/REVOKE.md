@@ -34,7 +34,3 @@ REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_na
     ```sql
     REVOKE USAGE_PRIV ON RESOURCE 'spark_resource' FROM 'jack'@'192.%';
     ```
-
-## 关键字(keywords)
-
-REVOKE

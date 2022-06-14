@@ -156,7 +156,3 @@ FROM data_source
     WHERE a > 0
     PARTITION (p1)
     ```
-
-## 关键字(keywords)
-
-ALTER, ROUTINE, LOAD

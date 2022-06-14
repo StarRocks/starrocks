@@ -19,7 +19,3 @@ SHOW DELETE [FROM db_name];
 ```sql
 SHOW DELETE FROM database;
 ```
-
-## 关键字(keywords)
-
-SHOW, DELETE

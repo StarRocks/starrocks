@@ -72,7 +72,3 @@ IDENTIFIED WITH auth_plugin AS 'auth_string'
     ```SQL
     ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com'
     ```
-
-## 关键字(keywords)
-
-ALTER, USER

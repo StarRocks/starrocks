@@ -29,7 +29,3 @@ mysql> select array_length([[1,2], [3,4]]);
 +-----------------------------+
 1 row in set (0.01 sec)
 ```
-
-## keyword
-
-ARRAY_LENGTH,ARRAY

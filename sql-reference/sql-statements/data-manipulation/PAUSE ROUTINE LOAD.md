@@ -11,7 +11,3 @@
     ```sql
     PAUSE ROUTINE LOAD FOR test1;
     ```
-
-## 关键字(keywords)
-
-PAUSE, ROUTINE, LOAD

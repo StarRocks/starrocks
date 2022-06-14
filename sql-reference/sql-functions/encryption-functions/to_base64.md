@@ -29,7 +29,3 @@ mysql> select to_base64("starrocks");
 +------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-TO_BASE64

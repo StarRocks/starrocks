@@ -85,7 +85,3 @@ hint: 用于指示 `INSERT` 执行行为的一些指示符。`streaming` 和 默
     异步的导入其实是，一个同步的导入封装成了异步。填写 streaming 和不填写的 **执行效率是一样** 的。
 
     由于 StarRocks 之前的导入方式都是异步导入方式，为了兼容旧有的使用习惯，不加 streaming 的 `INSERT` 语句依旧会返回一个 label，用户需要通过 `SHOW LOAD` 命令查看此 `label` 导入作业的状态。
-
-## 关键字(keywords)
-
-INSERT

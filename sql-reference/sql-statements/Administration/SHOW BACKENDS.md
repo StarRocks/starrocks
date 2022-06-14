@@ -24,7 +24,3 @@ SHOW BACKENDS;
 10. **UsedPct** 表示磁盘已使用量百分比。
 11. **ErrMsg** 用于显示心跳失败时的错误信息。
 12. **Status** 用于以 JSON 格式显示 BE 的一些状态信息, 目前包括最后一次 BE 汇报其 tablet 的时间信息。
-
-## 关键字(keywords)
-
-SHOW， BACKENDS

@@ -37,7 +37,3 @@ mysql> select positive(cast(3.14 as decimalv2));
 +--------------------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-POSITIVE

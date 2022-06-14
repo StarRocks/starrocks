@@ -17,7 +17,3 @@ SHOW FULL COLUMNS FROM tbl;
     ```sql
     SHOW FULL COLUMNS FROM tbl;
     ```
-
-## 关键字(keywords)
-
-SHOW，TABLE，STATUS

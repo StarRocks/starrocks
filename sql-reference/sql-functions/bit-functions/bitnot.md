@@ -29,7 +29,3 @@ mysql> select bitnot(3);
 +-----------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-BITNOT

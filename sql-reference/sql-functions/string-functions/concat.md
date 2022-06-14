@@ -42,7 +42,3 @@ MySQL > select concat("a", null, "c");
 | NULL                   |
 +------------------------+
 ```
-
-## 关键词
-
-CONCAT

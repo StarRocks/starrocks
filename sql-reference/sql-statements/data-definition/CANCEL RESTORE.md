@@ -20,7 +20,3 @@ CANCEL RESTORE FROM db_name;
     ```sql
     CANCEL RESTORE FROM example_db;
     ```
-
-## 关键字(keywords)
-
-CANCEL, RESTORE

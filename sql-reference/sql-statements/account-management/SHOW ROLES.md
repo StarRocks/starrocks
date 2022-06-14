@@ -17,7 +17,3 @@ SHOW ROLES;
     ```sql
     SHOW ROLES;
     ```
-
-## 关键字(keywords)
-
-SHOW, ROLES

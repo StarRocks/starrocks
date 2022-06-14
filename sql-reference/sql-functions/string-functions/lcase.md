@@ -28,7 +28,3 @@ mysql> SELECT lcase("AbC123");
 |abc123           |
 +-----------------+
 ```
-
-## 关键词
-
-LCASE

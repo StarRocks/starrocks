@@ -149,7 +149,3 @@ WITH BROKER "broker_name"
 "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
 );
 ```
-
-## 关键字(keywords)
-
-EXPORT

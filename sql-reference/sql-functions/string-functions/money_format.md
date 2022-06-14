@@ -42,7 +42,3 @@ MySQL > select money_format(1123.4);
 | 1,123.40             |
 +----------------------+
 ```
-
-## 关键词
-
-MONEY_FORMAT, MONEY, FORMAT

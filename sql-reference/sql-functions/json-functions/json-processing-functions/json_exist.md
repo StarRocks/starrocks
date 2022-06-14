@@ -49,7 +49,3 @@ mysql> SELECT JSON_EXISTS(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 mysql> SELECT JSON_EXISTS(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
        -> 0
 ```
-
-## 关键词
-
-JSON, JSON_EXISTS

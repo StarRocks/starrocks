@@ -38,7 +38,3 @@ SHOW PARTITIONS FROM example_db.table_name WHERE PartitionName = "p1";
 ```sql
 SHOW PARTITIONS FROM example_db.table_name ORDER BY PartitionId DESC LIMIT 1;
 ```
-
-## 关键字(keywords)
-
-SHOW, PARTITIONS

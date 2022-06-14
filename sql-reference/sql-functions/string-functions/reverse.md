@@ -48,7 +48,3 @@ MYSQL> SELECT REVERSE([4,1,5,8]);
 | [8,5,1,4]          |
 +--------------------+
 ```
-
-## keyword
-
-REVERSE, ARRAY

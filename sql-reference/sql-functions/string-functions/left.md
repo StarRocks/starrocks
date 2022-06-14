@@ -30,7 +30,3 @@ MySQL > select left("Hello starrocks",5);
 | Hello                  |
 +------------------------+
 ```
-
-## 关键词
-
-LEFT

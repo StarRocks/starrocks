@@ -31,7 +31,3 @@ mysql> select microseconds_sub('2010-11-30 23:50:50', 2);
 +--------------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-MICROSECONDS_SUB

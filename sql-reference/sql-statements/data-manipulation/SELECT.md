@@ -337,7 +337,7 @@ query_1 UNION [DISTINCT | ALL] query_2
 
 使用说明：
 
-只使用 union 关键词和使用 union disitnct 的效果是相同的。由于去重工作是比较耗费内存的，
+只使用 union 关键词和使用 union distinct 的效果是相同的。由于去重工作是比较耗费内存的，
 
 因此使用 union all 操作查询速度会快些，耗费内存会少些。如果用户想对返回结果集进行 order by 和 limit 操作，
 
@@ -404,7 +404,7 @@ select distinct tiny_column from big_table limit 2;
 select distinct tiny_column, int_column from big_table limit 2;
 ```
 
-distinct 可以和聚合函数(通常是 count 函数)一同使用，count(disitnct)用于计算出一个列或多个列上包含多少不同的组合。
+distinct 可以和聚合函数(通常是 count 函数)一同使用，count(distinct)用于计算出一个列或多个列上包含多少不同的组合。
 
 ```SQL
 -- Counts the unique values from one column.
@@ -729,7 +729,3 @@ select sum(tiny_column) as total_count from big_table;
 
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
-
-## 关键字(keywords)
-
-SELECT

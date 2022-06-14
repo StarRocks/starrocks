@@ -53,7 +53,3 @@ mysql> SELECT array_intersect(["SQL", null, "storage"], ["mysql", null], [null])
 | [null]       |
 +--------------+
 ```
-
-## 关键字
-
-ARRAY_INTERSECT

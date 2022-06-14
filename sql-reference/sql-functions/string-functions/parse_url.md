@@ -31,7 +31,3 @@ mysql> select  parse_url('https://www.starrocks.com/zh-CN/index', 'HOST');
 +------------------------------------------------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-PARSE_URL

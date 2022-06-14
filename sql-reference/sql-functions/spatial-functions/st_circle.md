@@ -32,7 +32,3 @@ MySQL > SELECT ST_AsText(ST_Circle(111, 64, 10000));
 | CIRCLE ((111 64), 10000)                   |
 +--------------------------------------------+
 ```
-
-## 关键词
-
-ST_CIRCLE, ST, CIRCLE

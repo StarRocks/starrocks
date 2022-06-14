@@ -108,7 +108,3 @@ USAGE_PRIV: 对指定资源的使用权限
     ```sql
     GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
     ```
-
-## 关键字(keywords)
-
-GRANT

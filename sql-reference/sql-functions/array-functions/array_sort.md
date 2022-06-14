@@ -52,7 +52,3 @@ mysql> select c1, array_sort(c2) from test;
 |    4 | [1,4,5,8]        |
 +------+------------------+
 ```
-
-## 关键词
-
-ARRAY_SORT, ARRAY

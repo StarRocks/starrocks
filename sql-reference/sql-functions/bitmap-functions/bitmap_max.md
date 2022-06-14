@@ -40,7 +40,3 @@ MySQL > select bitmap_max(bitmap_empty());
 |                  0               |
 +----------------------------------+
 ```
-
-## 关键词
-
-BITMAP_MAX, BITMAP

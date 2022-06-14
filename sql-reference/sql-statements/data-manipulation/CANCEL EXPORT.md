@@ -21,7 +21,3 @@ WHERE QUERYID = "your_query_id";
     ```sql
     CANCEL EXPORT FROM example_db WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
     ```
-
-## 关键字(keywords)
-
-CANCEL, EXPORT

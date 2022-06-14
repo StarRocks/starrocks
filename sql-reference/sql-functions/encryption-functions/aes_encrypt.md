@@ -31,7 +31,3 @@ mysql> select to_base64(AES_ENCRYPT('starrocks','F3229A0B371ED2D9441B830D21A390C
 +-------------------------------------------------------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-AES_ENCRYPT

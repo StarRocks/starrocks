@@ -25,7 +25,3 @@ WHERE LABEL = "load_label";
     FROM example_db
     WHERE LABEL = "example_db_test_load_label";
     ```
-
-## 关键字(keywords)
-
-CANCEL, LOAD

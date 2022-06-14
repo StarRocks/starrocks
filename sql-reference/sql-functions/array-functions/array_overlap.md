@@ -64,7 +64,3 @@ mysql> select arrays_overlap([9, 3, "SQL", 2], [null, "SQL"]);
 |                                          1 |
 +--------------------------------------------+
 ```
-
-## 关键词
-
-ARRAYS_OVERLAP

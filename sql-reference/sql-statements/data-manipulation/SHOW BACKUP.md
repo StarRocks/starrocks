@@ -46,7 +46,3 @@ Timeout：                作业超时时间，单位秒
 ```sql
 SHOW BACKUP FROM example_db;
 ```
-
-## 关键字(keywords)
-
-SHOW, BACKUP

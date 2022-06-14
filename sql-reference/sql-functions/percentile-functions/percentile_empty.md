@@ -46,7 +46,3 @@ PROPERTIES (
 ```sql
 insert into aggregate_tbl values (5, '2020-02-23', 'city_code', 555, percentile_empty());
 ```
-
-## 关键词
-
-PERCENTILE_EMPTY

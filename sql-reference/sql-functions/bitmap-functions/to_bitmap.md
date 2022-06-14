@@ -35,7 +35,3 @@ MySQL > select bitmap_count(to_bitmap(10));
 |                           1 |
 +-----------------------------+
 ```
-
-## 关键词
-
-TO_BITMAP, BITMAP

@@ -47,7 +47,3 @@ AS query_stmt;
     SELECT c1 as k1, k2, k3, SUM(v1) FROM example_table
     WHERE k1 = 20160112 GROUP BY k1,k2,k3;
     ```
-
-## 关键字(keywords)
-
-CREATE，VIEW

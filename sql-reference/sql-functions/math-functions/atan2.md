@@ -31,7 +31,3 @@ mysql> select atan2(-0.8,2);
 +---------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-ATAN2

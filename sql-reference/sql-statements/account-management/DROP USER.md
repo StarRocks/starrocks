@@ -25,7 +25,3 @@ user_identity:user@'host'
     ```sql
     DROP USER 'jack'@'192.%'
     ```
-
-## 关键字(keywords)
-
-DROP, USER

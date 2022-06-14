@@ -50,7 +50,3 @@ quota.low: low级别的资源分配。
     ```SQL
     SET PROPERTY FOR 'jack' 'quota.normal' = '400';
     ```
-
-## 关键字(keywords)
-
-SET, PROPERTY

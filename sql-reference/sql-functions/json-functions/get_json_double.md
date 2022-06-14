@@ -54,7 +54,3 @@ get_json_double(json_str, json_path)
     |                                                                 1.1 |
     +---------------------------------------------------------------------+
     ```
-
-## 关键词
-
-GET_JSON_DOUBLE, GET, JSON, DOUBLE

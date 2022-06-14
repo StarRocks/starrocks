@@ -29,7 +29,3 @@ mysql> select sqrt(3.14);
 +-------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-SQRT, DSQRT

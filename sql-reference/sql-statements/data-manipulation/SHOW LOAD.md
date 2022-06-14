@@ -84,7 +84,3 @@ SHOW LOAD FROM example_db ORDER BY LoadStartTime DESC limit 10 offset 5;
 curl --location-trusted -u {user}:{passwd} \
     http://{hostname}:{port}/api/{database}/_load_info?label={labelname}
 ```
-
-## 关键字(keywords)
-
-SHOW, LOAD

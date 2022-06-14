@@ -28,7 +28,3 @@ MySQL > SELECT ltrim('   ab d');
 | ab d             |
 +------------------+
 ```
-
-## 关键词
-
-LTRIM

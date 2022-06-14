@@ -209,7 +209,3 @@ mysql> desc duplicate_table;
     |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
-
-## 关键字(keywords)
-
-CREATE， MATERIALIZED， VIEW

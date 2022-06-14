@@ -29,7 +29,3 @@ mysql> select radians(90);
 +--------------------+
 1 row in set (0.00 sec)
 ```
-
-## 关键词
-
-RADIANS

@@ -44,7 +44,3 @@ mysql> SELECT * FROM tj, LATERAL JSON_EACH(j);
 |    3 | {"a": 3}         | a    | 3     |
 +------+------------------+------+-------+
 ```
-
-## 关键词
-
-JSON, JSON_EACH

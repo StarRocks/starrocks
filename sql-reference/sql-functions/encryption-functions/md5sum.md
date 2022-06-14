@@ -37,7 +37,3 @@ mysql> select md5sum("starrocks","star");
 +----------------------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-MD5SUM

@@ -29,7 +29,3 @@ mysql> select sign(3.14159);
 +---------------+
 1 row in set (0.02 sec)
 ```
-
-## 关键词
-
-SIGN

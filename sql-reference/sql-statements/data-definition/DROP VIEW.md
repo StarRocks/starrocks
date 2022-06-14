@@ -21,7 +21,3 @@ DROP VIEW [IF EXISTS] [db_name.]view_name;
     ```sql
     DROP VIEW IF EXISTS example_db.example_view;
     ```
-
-## 关键字(keywords)
-
-DROP，VIEW

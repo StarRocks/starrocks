@@ -63,7 +63,3 @@ mysql> select percentile_approx_raw(precent, 0.5) from aggregate_tbl;
 +-------------------------------------+
 1 row in set (0.03 sec)
 ```
-
-## 关键词
-
-PERCENTILE_APPROX_RAW

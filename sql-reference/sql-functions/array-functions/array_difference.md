@@ -62,7 +62,3 @@ mysql> SELECT array_difference([false, true, false]);
 +----------------------------------------+
 | [0,1,-1]                               |
 +----------------------------------------+
-
-## 关键字
-
-ARRAY_DIFFERENCE

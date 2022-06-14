@@ -51,7 +51,3 @@ RECOVER PARTITION partition_name FROM [db_name.]table_name;
     ```sql
     RECOVER PARTITION p1 FROM example_tbl;
     ```
-
-## 关键字(keywords)
-
-RECOVER

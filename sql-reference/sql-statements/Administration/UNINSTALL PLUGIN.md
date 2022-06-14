@@ -21,7 +21,3 @@ plugin_name 可以通过 `SHOW PLUGINS;` 命令查看。
     ```SQL
     UNINSTALL PLUGIN auditdemo;
     ```
-
-## 关键字(keywords)
-
-UNINSTALL，PLUGIN

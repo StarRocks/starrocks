@@ -45,7 +45,3 @@ group by `table`;
 | test     |                                        54.21 |
 +----------+----------------------------------------------+
 ```
-
-## 关键词
-
-PERCENTILE_APPROX, PERCENTILE, APPROX

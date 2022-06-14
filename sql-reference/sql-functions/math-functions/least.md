@@ -37,7 +37,3 @@ mysql> select least(3,4,5,5,6);
 +----------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-LEAST

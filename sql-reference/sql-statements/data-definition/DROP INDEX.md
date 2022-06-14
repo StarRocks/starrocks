@@ -9,7 +9,3 @@
 ```sql
 DROP INDEX index_name ON [db_name.]table_name;
 ```
-
-## 关键字(keywords)
-
-DROP, INDEX

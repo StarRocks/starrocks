@@ -46,7 +46,3 @@ MySQL > SELECT LOCATE('bar', 'foobarbar', 5);
 |                             7 |
 +-------------------------------+
 ```
-
-## 关键词
-
-LOCATE

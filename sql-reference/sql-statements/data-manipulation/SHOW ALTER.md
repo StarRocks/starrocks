@@ -35,7 +35,3 @@ SHOW ALTER [TABLE [COLUMN | ROLLUP] [FROM db_name]];
     ```sql
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ````
-
-## 关键词
-
-SHOW, ALTER

@@ -29,7 +29,3 @@ mysql> select exp(3.14);
 +--------------------+
 1 row in set (0.01 sec)
 ```
-
-## 关键词
-
-EXP

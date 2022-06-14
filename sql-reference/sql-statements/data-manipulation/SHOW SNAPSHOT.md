@@ -47,7 +47,3 @@ SHOW SNAPSHOT ON example_repo WHERE SNAPSHOT = "backup1";
 ```sql
 SHOW SNAPSHOT ON example_repo WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
 ```
-
-## 关键字(keywords)
-
-SHOW, SNAPSHOT

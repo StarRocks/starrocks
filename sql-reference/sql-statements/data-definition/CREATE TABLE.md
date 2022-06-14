@@ -722,7 +722,3 @@ PROPERTIES
     "hive.metastore.uris" = "thrift://127.0.0.1: 9083"
 );
 ```
-
-## 关键字(keywords)
-
-CREATE, TABLE

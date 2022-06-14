@@ -26,7 +26,3 @@ LINK DATABASE src_cluster_name.src_db_name des_cluster_name.des_db_name
     ```sql
     DROP DATABASE link_test_db;
     ```
-
-## 关键字(keywords)
-
-LINK，DATABASE

@@ -37,7 +37,3 @@ mysql> select starts_with("hello world","world");
 | 0                                   |
 +-------------------------------------+
 ```
-
-## 关键词
-
-START_WITH
