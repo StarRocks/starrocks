@@ -216,14 +216,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor->initialize(_max_executor_threads);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-#ifndef USE_STAROS
-    _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
-#else
-    _lake_group_assigner = new lake::StarletGroupAssigner();
-#endif
-    // TODO: cache capacity configurable
-    _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
-
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
@@ -269,6 +261,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
             exit(-1);
         }
+#ifndef USE_STAROS
+        _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
+#else
+        CHECK(false) << "_lake_group_assigner not implemented";
+#endif
+        // TODO: cache capacity configurable
+        _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
     }
     _broker_mgr->init();
     _small_file_mgr->init();
