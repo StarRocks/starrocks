@@ -1,63 +1,51 @@
-# 时区
+# 设置时区
 
-StarRocks 支持多时区设置
+本文介绍了如何设置时区。
 
-## 基本概念
+## 设置会话/全局时区
 
-StarRocks 内部存在多个时区相关参数
+您可以通过以下参数设置时区：
 
-* system_time_zone: 当服务器启动时，会根据机器设置时区自动设置，设置后不可修改。
+`time_zone`: FE 时区。您可以指定会话级 (session) 时区或全局 (global) 时区。
 
-* time_zone: 服务器当前时区，区分session级别和global级别
+- 如指定会话级时区，执行命令 `SET time_zone = 'xxx'`。不同会话可以指定不同的时区。如果您断开和FE的连接，时区设置将会失效。
 
-## 具体操作
+- 如指定全局时区，执行命令 `SET global time_zone = 'xxx'`。FE会将该时区设置持久化，与 FE 连接断开后该设置仍有效。
 
-1. SHOW variables like '%time_zone%'
+> 说明：在导入数据前，需确保 FE 时区和部署 FE 的机器的时区是一致的。否则导入后表中 DATE 数据类型字段的值会异常。`system_time_zone` 参数即表示部署FE机器的时区。机器启动时，机器的时区会被自动设为该参数的值且不能手动修改。
 
-    查看当前时区相关配置
+### 时区格式
 
-2. SET time_zone = 'Asia/Shanghai'
+时区值不区分大小写，支持以下格式：
 
-    该命令可以设置session级别的时区，连接断开后失效
+| **格式**     | **示例**                                                     |
+| ------------ | ------------------------------------------------------------ |
+| UTC偏移量    | `SET time_zone = '+10:00'` `SET global time_zone = '-6:00'`  |
+| 标准时区格式 | `SET time_zone = 'Asia/Shanghai'` `SET global time_zone = 'America/Los_Angeles'` |
 
-3. SET global time_zone = 'Asia/Shanghai'
+更多时区值的格式说明，参见 [List of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)。
 
-    该命令可以设置global级别的时区参数，fe会将参数持久化，连接断开后不失效
+> 说明：缩写时区格式仅支持 CST，StarRocks 会将 CST 转为标准时区 Asia/Shanghai。
 
-## 时区的影响
+### 默认时区
 
-时区设置会影响对时区敏感的时间值的显示和存储。
+`time_zone` 参数的默认值为 `Asia/Shanghai`。
 
-包括NOW()或CURTIME()等时间函数显示的值，也包括show load, show backends中的时间值。
+## 查看时区设置
 
-但不会影响 create table 中时间类型分区列的 less than 值，也不会影响存储为 date/datetime 类型的值的显示。
+如要查看时区设置，执行命令 `SHOW variables like '%time_zone%'`。
 
-受时区影响的函数：
+## 时区设置的影响
 
-* FROM_UNIXTIME：给定一个 UTC 时间戳，返回指定时区的日期时间：如 `FROM_UNIXTIME(0)`， 返回 CST 时区：`1970-01-01 08:00:00`。
-* UNIX_TIMESTAMP：给定一个指定时区日期时间，返回 UTC 时间戳：如 CST 时区 `UNIX_TIMESTAMP('1970-01-01 08:00:00')`，返回：`0`。
-* CURTIME：返回当前时区时间：如`CURTIME()`，返回：`16:34:05`。
-* NOW：返回当前时区日期时间：如`NOW()`，返回：`2021-02-11 16:34:13`。
-* CONVERT_TZ：将一个日期时间从一个指定时区转换到另一个指定时区。如`CONVERT_TZ('2021-08-01 11:11:11', 'Asia/Shanghai', 'America/Los_Angeles');`返回：`2021-07-31 20:11:11`。
+- 时区设置会影响 SHOW LOAD 和 SHOW BACKENDS 语句返回的时间值，但并不影响 CREATE TABLE 语句中数据类型为 DATE 或 DATETIME 分区列中的 `LESS THAN` 的值，以及存储为 DATE 或 DATETIME 数据类型的值的显示。
 
-## 使用限制
+- 受时区设置影响的函数包括：
+  - `FROM_UNIXTIME`：给定一个UTC时间戳，返回指定时区的日期时间。如 `time_zone` 参数的值为 `Asia/Shanghai`，`FROM_UNIXTIME(0)` 返回 `1970-01-01 08:00:00`。
 
-时区值可以使用几种格式给出，不区分大小写:
+- `UNIX_TIMESTAMP`：给定一个指定时区的日期时间，返回 UTC 时间戳。如 `time_zone` 参数的值为 `Asia/Shanghai`，`UNIX_TIMESTAMP('1970-01-01 08:00:00')` 返回 `0`。
 
-* 表示UTC偏移量的字符串，如'+10:00'或'-6:00'
+- `CURTIME`：返回指定时区的当前时间。如某时区当前时间为 16:34:05，`CURTIME()` 返回 `16:34:05`。
 
-* 标准时区格式，如"Asia/Shanghai"、"America/Los_Angeles"
+- `NOW`：返回指定时区的当前日期和时间。如某时区的当前日期和时间为 2021-02-11 16:34:13，`NOW()` 返回 `2021-02-11 16:34:13`。
 
-* 不支持缩写时区格式，如"MET"、"CTT"。因为缩写时区在不同场景下存在歧义。
-
-* 为了兼容StarRocks，支持CST缩写时区，内部会将CST转移为"Asia/Shanghai"的中国标准时区
-
-## 默认时区
-
-系统default timezone为"Asia/Shanghai"，当导入时，如果服务器时区为其他时区，需要指定相应时区，否则日期字段会不一致。
-
-例如系统时区为UTC时，未指定情况下导入结果的日期字段会出现+8h的异常结果，需要在导入的参数部分指定时区，具体参数指定参考对应Load章节的参数说明。
-
-## 时区格式列表
-
-[List of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+- `CONVERT_TZ`：将一个指定时区的日期和时间转换到另一个指定时区。如指定 `CONVERT_TZ('2021-08-01 11:11:11', 'Asia/Shanghai', 'America/Los_Angeles')` 会返回 `2021-07-31 20:11:11`。

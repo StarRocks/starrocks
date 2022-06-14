@@ -1,221 +1,225 @@
-# 其他常见问题
+# 其他
 
-## 建表时，varchar(32)和string占用的存储空间是否相同？查询时的性能是否相同？
+本文汇总了使用 StarRocks 时的其他常见问题。
 
-都是变长存储的，查询性能一样。
+## VARCHAR(32) 和 STRING 占用的存储空间相同吗？
 
-## Oracle导出的txt文件，修改文件的字符集utf-8后还是乱码，如何处理？
+VARCHAR(32) 和 STRING 都是变长数据类型。当储存相同长度的数据时，VARCHAR(32) 和 STRING 占用的储存空间相同。
 
-可以尝试将文件字符集视为gbk进行字符集转换。
-以文件“origin.txt”为例，假设用命令查看其字符集得到其当前字符集为iso-8859-1：
+## 查询时，VARCHAR(32) 和 STRING 的性能相同吗？
 
-```plain text
-file --mime-encoding origin.txt
-返回值[假设]：iso-8859-1
-```
+相同。
 
-使用iconv命令转换，将文件字符集转换为utf-8：
+## Oracle 导出的 TXT 文件，在将其字符集修改成 UTF-8 后仍然乱码，如何处理？
 
-```shell
-iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
-```
+将文件字符集视为 GBK 进行字符集转换，步骤如下：
 
-若此时发现转换后得到的origin_utf-8.txt文件中还存在乱码，我们就可以将origin.txt的原字符集视为gbk，重新转换：
+1. 例如，一个名为 **origin** 的文件乱码，用以下命令查看到其字符集为 ISO-8859-1。
 
-```shell
-iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
-```
+    ```Plain%20Text
+    file --mime-encoding origin.txt
+    origin.txt：iso-8859-1
+    ```
 
-## MySQL中定义字符串长度跟StarRocks定义的是否一致？
+2. 使用`iconv`命令将文件的字符集转换为 UTF-8。
 
-目前StarRocks中varchar(n)，n限制的是字节数，MySQL限制的是字符数，所以对应MySQL那边的表，n可以给3倍或者4倍，一般也不会占更多存储。
+    ```Plain%20Text
+    iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
+    ```
 
-## 表的分区字段是否可以使用float、double、decimal浮点数类型来分区？
+3. 若转换后得到的文件还存在乱码，那么将文件的字符集视为 GBK，再转换成 UTF-8。
 
-不可以，只能是date、datetime或int整型。
+    ```Shell
+    iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
+    ```
+
+## MySQL 中定义的字符串长度跟 StarRocks 定义的是一致的吗？
+
+在 StarRocks 中，VARCHAR(n) 中的n代表字节数，而在 MySQL 中，VARCHAR(n) 中的 n 代表字符数。根据 UTF-8，1 个汉字等于 3 个字节。当 StarRocks 和 MySQL 将 n 定义成相同数字时，MySQL 保存的字符数是 StarRocks 的 3 倍。
+
+## 表的分区字段可以是 FLOAT、DOUBLE、或 DECIMAL 数据类型吗？
+
+不可以，仅支持 DATE， DATETIME 和 INT 数据类型。
 
 ## 如何查看表中的数据占了多大的存储？
 
-`show data`可以看到，可展示数据量、副本数量以及统计行数。注意数据统计，有一定的时间延迟。
+执行 SHOW DATA 语句查看数据所占存储空间以及数据量、副本数量和行数。
 
-## 如果数据超过了这个quota的量会怎么样？这个值可以做更改吗？
+> 说明：数据导入非实时更新，在导入后 1 分钟左右可以查看到最新的数据。
 
-```sql
+## 如何调整 StarRocks 数据库配额 (quota)?
+
+运行如下代码调整数据库配额：
+
+```SQL
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-改动db的quota，调整这个db的容量上限。
+## StarRocks 支持通过 UPSERT 语法实现部分字段更新吗？
 
-## StarRocks有没有upsert这样的语法，就是更新表中某几个字段，没指定更新的字段，值不变化？
+StarRocks 2.2 及以上版本可以通过主键 (Primary Key) 模型实现部分字段更新。StarRocks 1.9 及以上版本可以通过主键 (Primary Key) 模型实现全部字段更新。更多信息，参见 StarRocks 2.2 版本的[主键模型](https://docs.starrocks.com/zh-cn/2.2/table_design/Data_model#%E4%B8%BB%E9%94%AE%E6%A8%A1%E5%9E%8B)。
 
-目前没有upsert语法，无法更新表中单独的几个字段，暂时只能通过「更新表模型」或者「delete+insert」来实现全字段的更新。
+## 如何使用原子替换表和原子替换分区功能？
 
-## [数据恢复]中原子替换表/分区功能使用方法
+执行 SWAP WITH 语句实现原子替换表和原子替换分区功能。SWAP WITH 语句要比 INSERT OVERWRITE 语句更安全。原子替换前可以先检查数据，以便核对替换后的数据和替换前的数据是否相同。
 
-类似CK的分区卸载、装载，跨表分区移动等功能。
-下面以原子替换表 table1 的数据，或 table1 的分区数据，为例。可能比insert overwrite更安全些，可以先检查下数据。
+- 原子替换表：例如，有一张表名为 `table1`。如果要用另一张表原子替换 `table1`，操作如下：
 
-### 原子替换「表」
+    1. 创建一张新表名为 `table2`。
 
-1. 创建一张新表table2;
+        ```SQL
+        create table2 like table1;
+        ```
 
-    ```SQL
-    create table2 like table1;
-    ```
+    2. 使用 Stream Load、Broker Load、或 Insert Into 等方式将 `table1` 的数据导入到新表`table2` 中。
+    3. 原子替换 `table1` 与 `table2`。
 
-2. 使用stream load / broker load /insert into 等方式导入数据到新表 table2 中；
+        ```SQL
+        ALTER TABLE table1 SWAP WITH table2;
+        ```
 
-3. 原子替换 table1 与 table2：
+    这样做，数据就会精准的导入到 `table1` 中。
 
-    ```SQL
-    ALTER TABLE table1 SWAP WITH table2;
-    ```
+- 原子替换分区：例如，有一个表名为 `table1`。如果想要原子替换 `table1` 中的分区数据，操作如下：
 
-这样就可以进行表的原子替换。
+    1. 创建临时分区。
 
-### 原子替换「分区」
+        ```SQL
+        ALTER TABLE table1
 
-同样可以用「导入临时分区」的方式进行替换。
+        ADD TEMPORARY PARTITION tp1
 
-1. 创建临时分区:
+        VALUES LESS THAN("2020-02-01");
+        ```
 
-    ```SQL
-    ALTER TABLE table1
-    ADD TEMPORARY PARTITION tp1
-    VALUES LESS THAN("2020-02-01");
-    ```
+    2. 将 `table1` 中的分区数据导入到临时分区。
+    3. 原子替换分区。
 
-2. 向临时分区导入数据;
+        ```SQL
+        ALTER TABLE table1
 
-3. 原子替换「分区」:
+        REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
+        ```
 
-    ```SQL
-    ALTER TABLE table1
-    REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
-    ```
+## 重启FE时报错 "error to open replicated environment, will exit"
 
-这样可以导入数据后做一定的验证以后再替换,可以进行临时分区的原子替换。
+该错误是 BDBJE 的漏洞导致的，将 BDBJE 升级到 1.17 或更高版本可修复此问题。
 
-## fe重启报错:error to open replicated environment，will exit
+## 查询新创建的 Apache Hive™ 表时报错 "Broker list path exception"
 
-**问题描述：**
+### **问题描述**
 
-重启集群fe后报该错且fe无法启动。
-
-**解决方案：**
-
-是bdbje的一个bug，社区版和1.17版本（不含此版本）以前重启会小概率触发该bug，可以升级到1.17及更高版本，已修复该问题。
-
-## 创建hive表，查询报错:Broker list path exception
-
-**问题描述：**
-
-```plain text
+```Plain%20Text
 msg:Broker list path exception
+
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
 ```
 
-**解决方案：**
+### **解决方案**
 
-namenode的地址和端口跟运维人员确认是否正确，权限有没有开启
+和 StarRocks 的技术支持确认 namenode 的地址和端口是否正确以及您是否有权限访问 namenode 的地址和端口。
 
-## 创建hive表，查询报错:get hive partition meta data failed
+## 查询新创建的 Apache Hive™ 表时报错 "get hive partition meta data failed"
 
-**问题描述：**
+### **问题描述**
 
-```plain text
+```Plain%20Text
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
-**解决方案：**
+### **解决方案**
 
-需要把集群里的host文件传一份到每个BE机器上，并确认网络是通的。
+确认有网络连接并给每个 BE 机器传一份集群里的 **host** 文件。
 
-## hive外表orc访问失败：do_open failed. reason = Invalid ORC postscript length
+## 访问 Apache Hive™ 的 ORC 外表报错 "do_open failed. reason = Invalid ORC postscript length"
 
-**问题描述：**
+### **问题描述**
 
-查询同一sql前几次查询还行，后面报错了，重新建表后没报错了。
+Apache Hive™ 的元数据会缓存在 StarRocks 的 FE 中，但是 StarRocks 更新元数据有两个小时的时间差。在 StarRocks 完成更新之前，如果在 Apache Hive™ 表中插入新数据或更新数据，那么 BE 扫描的 HDFS 中的数据和 FE 获得的数据不一致就会发生这个错误。
 
-```plain text
+```Plain%20Text
 MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
+
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
 ```
 
-**解决方案：**
+### **解决方案**
 
-目前的版本fe和hive的信息同步是有时差的2h，期间表数据有更新或者插入，会导致scan的数据和fe的判断不一致，导致出现这个错。新版本增加手动reflush功能，可以刷新表结构信息同步。
+解决方案有以下两种：
 
-## mysql外表连接失败：caching_sha2_password cannot be loaded
+- 将 StarRocks 升级到 2.2 或更高版本。
+- 手动刷新 Apache Hive™ 表。更多信息，参见[更新缓存](../using_starrocks/External_table#%E7%BC%93%E5%AD%98%E6%9B%B4%E6%96%B0)。
 
-**问题描述：**
+## 连接 MySQL 外表报错 "caching_sha2_password cannot be loaded"
 
-MySQL8.0版本默认的认证方式是caching_sha2_password
-MySQL5.7版本默认则为mysql_native_password
-认证方式不同，外表链接出错。
+### **问题描述**
 
-**解决方案：**
+MySQL 5.7 版本默认的认证方式为 mysql_native_password，如使用 MySQL 8.0 版本默认的认证方式  caching_sha2_password 来进行认证会导致连接报错。
 
-两种方案：
+### **解决方案**
 
-* 连接终端
+解决方案有以下两种：
 
-```sql
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
-```
+- 设置 root 用户
 
-* 修改my.cnf文件
+    ```Plain%20Text
+    ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
+    ```
 
-```plain text
-vim my.cnf
-[mysqld]
-default_authentication_plugin=mysql_native_password
-```
+- 修改 **my.cnf** 文件
 
-## drop table 后磁盘空间没有立即释放
+    ```Plain%20Text
+    vim my.cnf
 
-执行drop table时磁盘空间会过一会释放,如果想要快速释放磁盘空间可以使用drop table force,使用force会有短暂的等待时间,如果执行 drop table force,则系统不会检查该表是否存在未完成的事务,表将直接被删除并且不能被恢复,一般不建议执行此操作。
+    [mysqld]
 
-## 怎么查看StarRocks版本
+    default_authentication_plugin=mysql_native_password
+    ```
 
-可以通过`select current_version();`或者CLI执行`sh bin/show_fe_version.sh`查看版本
+## 为什么删除一张表后磁盘空间没有立即释放？
 
-## fe内存大小如何设置
+执行 DROP TABLE 语句删表后需等待磁盘空间释放。如果想要快速释放磁盘空间可以使用 DROP TABLE FORCE 语句。执行 DROP TABLE FORCE 语句删除表时不会检查该表是否存在未完成的事务，而是直接将表删除。建议谨慎使用 DROP TABLE FORCE 语句，因为使用该语句删除的表不能恢复。
 
-可以参考tablet数量,元数据信息都保存在fe的内存,一千万个tablet内存使用在20G左右,目前支持的meta上限约为该级别。
+## 如何查看StarRocks的版本？
 
-## StarRocks查询时间是如何计算的
+执行`select current_version();`命令或者CLI`sh bin/show_fe_version.sh`命令查看版本。
 
-StarRocks是多线程计算,查询时间是查询线程所用的时间,ScanTime是所有线程使用的时间加起来的时间,查询时间可以通过执行计划下的Query下的Total查看。
+## 如何设置FE的内存大小？
 
-## export目前是否支持导出数据到本地时设置路径
+元数据信息都保存在 FE 的内存中。可以参考 Tablet 的数量来设置 FE 的内存大小。一千万个 Tablet 内存使用在 20 GB左右。FE 的内存最多可设置为 20 GB。
 
-不支持
+## StarRocks如何计算查询时间?
 
-## StarRocks的并发是什么量级
+StarRocks 是多线程计算，查询时间即为查询最慢的线程所用的时间。
 
-StarRocks的并发量级建议根据业务场景,或模拟业务场景实际测试一下。在客户的一些场景下,压到过2、3万的QPS。
+## StarRocks 支持导出数据到本地时设置路径吗？
 
-## StarRocks的ssb测试为什么第一次执行速度较慢,后面较快
+不支持。
 
-第一次查询读盘跟磁盘性能相关,第一次后操作系统的pagecache生效,再次查询会先扫描pagecache,速度提升
+## StarRocks 的并发量级是多少？
 
-## 集群BE最小配置数量是多少,是否支持单节点部署
+建议根据业务场景或模拟业务场景测试 StarRocks 的并发量级。在部分客户的并发量级最高达到 20,000 QPS 或 30,000 QPS。
 
-BE节点最小配置个数是1个,支持单节点部署,推荐集群部署性能更好,be节点需要支持avx2,推荐配置8核16G及以上机器配置
+## 为什么 StarRocks 的 SSB 测试首次执行速度较慢，后续执行较快？
 
-## superset+StarRocks如何配置数据权限
+第一次查询读盘跟磁盘性能相关。第一次查询后系统的页面缓存生效，后续查询会先扫描页面缓存，所以速度有所提升。
 
-可以通过创建单独用户后,创建View授权给用户进行数据权限控制
+## 一个集群最少可以配置多少个 BE？
 
-## set is_report_success = true;后profile不显示
+StarRocks 支持单节点部署，所以 BE 最小配置个数是 1 个。BE 需要支持 AVX2 指令集，所以推荐部署 BE 的机器配置在 8 核 16 GB及以上。建议正常应用环境配置 3 个 BE。
 
-只有leader所在fe可以查看，因为report信息只汇报给leader节点。
+## 使用 Apache Superset 框架呈现 StarRocks 中的数据时，如何进行数据权限配置？
 
-## 给字段加了注释，表里面怎么看呀，没有显示注释一栏，starrocks支持么？
+创建一个新用户，然后通过给该用户授予表查询权限进行数据权限控制。
 
-可以通过 `show create table xxx` 查看。
+## 为什么将 `is_report_success` 指定为 `true` 后 profile 无法显示？
 
-## 建表的时候列不能指定now()这种函数默认值？
+因为报告信息只汇报给主 FE，只有主 FE 可以查看报告信息。
 
-目前暂时不支持函数默认值，需要写成常量。
+## 如何查看 StarRocks 表里的字段注释？
+
+可以通过 `show create table xxx` 命令查看。
+
+## 建表时可以指定 now() 函数的默认值吗？
+
+StarRocks 2.1 及更高版本支持为函数指定默认值。低于 StarRocks 2.1 的版本仅支持为函数指定常量。

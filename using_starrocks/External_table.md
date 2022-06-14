@@ -269,7 +269,7 @@ PROPERTIES (
     | FLOAT | FLOAT|
     | DECIMAL | DECIMAL |
     | ARRAY | ARRAY |
-
+    | BOOLEAN | BOOLEAN |
     说明：
 
   * Hive表Schema变更**不会自动同步**，需要在StarRocks中重建Hive外表。
