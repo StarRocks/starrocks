@@ -5,19 +5,18 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public abstract class PartitionPersistInfoV2 implements Writable {
-
-    public static final  short UN_PARTITION_TYPE = 0;
-    public static final  short LIST_PARTITION_TYPE = 1;
-    public static final  short RANGE_PARTITION_TYPE = 2;
+public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, GsonPostProcessable {
 
     @SerializedName("dbId")
     private Long dbId;
@@ -33,9 +32,8 @@ public abstract class PartitionPersistInfoV2 implements Writable {
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
-
-    public PartitionPersistInfoV2() {
-    }
+    @SerializedName("partitionType")
+    private PartitionType partitionType;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
@@ -47,6 +45,21 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
+        this.initPartitionType();
+    }
+
+    private void initPartitionType() {
+        if (this.isListPartitionPersistInfo()) {
+            this.partitionType = PartitionType.LIST;
+        } else if (this.isRangePartitionPersistInfo()) {
+            this.partitionType = PartitionType.RANGE;
+        } else {
+            this.partitionType = PartitionType.UNPARTITIONED;
+        }
+    }
+
+    public PartitionType getPartitionType() {
+        return this.partitionType;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -65,36 +78,20 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         return (RangePartitionPersistInfo) this;
     }
 
-    public abstract PartitionPersistInfoV2 readFieldIn(DataInput in) throws IOException;
-
     @Override
     public void write(DataOutput out) throws IOException {
-        if (this.isListPartitionPersistInfo()) {
-            out.writeShort(LIST_PARTITION_TYPE);
-        } else if (this.isRangePartitionPersistInfo()) {
-            out.writeShort(RANGE_PARTITION_TYPE);
-        } else {
-            out.writeShort(UN_PARTITION_TYPE);
-        }
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
     public static PartitionPersistInfoV2 read(DataInput in) throws IOException {
-        short partitionType = in.readShort();
-        PartitionPersistInfoV2 info;
-        switch (partitionType) {
-            case LIST_PARTITION_TYPE:
-                info = new ListPartitionPersistInfo();
-                break;
-            case RANGE_PARTITION_TYPE:
-                info = new RangePartitionPersistInfo();
-                break;
-            default:
-                info = new UnPartitionPersistInfo();
-                break;
+        String json = Text.readString(in);
+        ListPartitionPersistInfo info = GsonUtils.GSON.fromJson(json, ListPartitionPersistInfo.class);
+        if (info.getPartitionType() != PartitionType.LIST) {
+            return GsonUtils.GSON.fromJson(json, RangePartitionPersistInfo.class);
+        } else {
+            return info;
         }
-        return info.readFieldIn(in);
     }
 
     public Long getDbId() {
@@ -125,4 +122,13 @@ public abstract class PartitionPersistInfoV2 implements Writable {
         return this.isTempPartition;
     }
 
+    @Override
+    public void gsonPostProcess() throws IOException {
+
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+
+    }
 }

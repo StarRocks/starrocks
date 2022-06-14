@@ -40,7 +40,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testWriteOutAndReadIn(@Mocked GlobalStateMgr globalStateMgr) throws IOException,
+    public void testWriteOutAndReadIn() throws IOException,
             NotImplementedException, ParseException {
         // Write objects to file
         File file = new File("./test_serial.log");
@@ -52,11 +52,6 @@ public class ListPartitionInfoTest {
         this.listPartitionInfo.write(out);
         out.flush();
         out.close();
-
-        new Expectations() {{
-            GlobalStateMgr.getCurrentStateJournalVersion();
-            result = FeMetaVersion.VERSION_CURRENT;
-        }};
 
         // Read object from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
@@ -94,7 +89,6 @@ public class ListPartitionInfoTest {
             Assert.assertEquals(valuesFromGet.get(i), values.get(i));
         }
     }
-
 
     @Test
     public void testToSqlForSingle() {

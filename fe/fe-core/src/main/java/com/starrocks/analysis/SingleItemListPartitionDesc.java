@@ -13,7 +13,6 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -104,17 +103,8 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
-        this.analyzeValues();
         this.analyzeProperties(tableProperties);
         this.columnDefList = columnDefList;
-    }
-
-    private void analyzeValues() throws AnalysisException {
-        for (String value : this.values) {
-            if (StringUtils.isBlank(value)){
-                throw new AnalysisException("Partition value should not have blank item");
-            }
-        }
     }
 
     private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
