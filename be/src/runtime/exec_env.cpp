@@ -264,7 +264,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 #ifndef USE_STAROS
         _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
 #else
-        CHECK(false) << "_lake_group_assigner not implemented";
+        _lake_group_assigner = new lake::StarletGroupAssigner();
 #endif
         // TODO: cache capacity configurable
         _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
