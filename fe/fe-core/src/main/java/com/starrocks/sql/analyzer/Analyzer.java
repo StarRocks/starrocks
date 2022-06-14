@@ -19,6 +19,7 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -95,9 +96,8 @@ public class Analyzer {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
             QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
             Analyzer.analyze(queryStatement, context);
-            String sqlText = "CREATE TABLE " +
-                    createTableAsSelectStmt.getCreateTableStmt().getDbTbl().toSql() + " AS " +
-                    ViewDefBuilder.build(queryStatement);
+            OriginStatement origStmt = statement.getOrigStmt();
+            String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
             TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
             return null;

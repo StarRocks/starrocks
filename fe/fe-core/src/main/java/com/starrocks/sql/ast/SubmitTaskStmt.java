@@ -15,15 +15,18 @@ public class SubmitTaskStmt extends DdlStmt {
 
     private Map<String, String> properties;
 
+    private int sqlBeginIndex;
+
     private String sqlText;
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
 
-    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties,
+    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
                           CreateTableAsSelectStmt createTableAsSelectStmt) {
         this.dbName = dbName;
         this.taskName = taskName;
         this.properties = properties;
+        this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
     }
 
@@ -41,6 +44,14 @@ public class SubmitTaskStmt extends DdlStmt {
 
     public void setTaskName(String taskName) {
         this.taskName = taskName;
+    }
+
+    public int getSqlBeginIndex() {
+        return sqlBeginIndex;
+    }
+
+    public void setSqlBeginIndex(int sqlBeginIndex) {
+        this.sqlBeginIndex = sqlBeginIndex;
     }
 
     public Map<String, String> getProperties() {
