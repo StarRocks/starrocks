@@ -138,4 +138,4 @@ Bitmap 仅支持 TINYINT，SMALLINT，INT，BIGINT（注意不支持 LARGEINT）
 
 对于普通列，用户还可以使用 NDV 函数进行近似去重计算。NDV 函数返回值是 COUNT(DISTINCT col) 结果的近似值聚合函数，底层实现将数据存储类型转为 HyperLogLog 类型进行计算。但 NDV 函数在计算的时候比较消耗资源，不适合于并发高的场景。
 
-如果应用场景为用户行为分析，建议使用 IntersectCount 或者自定义 UDAF 去重。
+如果应用场景为用户行为分析，建议使用 INTERSECT_COUNT 或者自定义 UDAF 去重。
