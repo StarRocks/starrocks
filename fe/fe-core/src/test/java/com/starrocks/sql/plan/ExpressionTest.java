@@ -1016,4 +1016,15 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("<slot 2> : '2010-11-30 23:59:59'"));
     }
 
+    @Test
+    public void testMultiStarItem() throws Exception {
+        String sql = "select *,v1,* from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 1: v1 | 2: v2 | 3: v3"));
+
+        sql = "select *,* from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 2: v2 | 3: v3"));
+    }
+
 }
