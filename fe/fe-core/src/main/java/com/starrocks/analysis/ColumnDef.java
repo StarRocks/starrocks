@@ -225,6 +225,11 @@ public class ColumnDef {
             throw new AnalysisException("charset name " + charsetName + " is not supported yet in column definition");
         }
 
+        if (getAggregateType() == AggregateType.SUM) {
+            // For the decimal type we extend to decimal128 to avoid overflow
+            typeDef.setType(AggregateType.extendedPrecision(typeDef.getType()));
+        }
+
         typeDef.analyze(null);
 
         Type type = typeDef.getType();
