@@ -29,7 +29,7 @@ HyperLogLog 是一种近似的去重算法，能够使用极少的存储空间�
 
 HLL 为了使结果更加精确，用修正因子和估算结果相乘，得出最终结果。
 
-为了方面读者的理解，我们参考文章[https://gist.github.com/avibryant/8275649,](https://gist.github.com/avibryant/8275649) 用 StarRocks 的 SQL 语句实现 HLL 去重算法:
+为了方便读者的理解，我们参考文章[https://gist.github.com/avibryant/8275649,](https://gist.github.com/avibryant/8275649) 用 StarRocks 的 SQL 语句实现 HLL 去重算法:
 
 ~~~sql
 SELECT floor((0.721 * 1024 * 1024) / (sum(pow(2, m * -1)) + 1024 - count(*))) AS estimate
