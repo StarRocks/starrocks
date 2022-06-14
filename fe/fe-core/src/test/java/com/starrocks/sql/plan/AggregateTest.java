@@ -1256,6 +1256,46 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultiAvgDistinctWithNoneGroup() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select avg(distinct t1b) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "19:Project\n" +
+                "  |  <slot 11> : CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE)");
+
+        sql = "select avg(distinct t1b), count(distinct t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "19:Project\n" +
+                "  |  <slot 11> : CAST(14: sum AS DOUBLE) / CAST(12: count AS DOUBLE)\n" +
+                "  |  <slot 12> : 12: count");
+
+        sql = "select avg(distinct t1b), count(distinct t1b), sum(distinct t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9:Project\n" +
+                "  |  <slot 11> : CAST(13: sum AS DOUBLE) / CAST(12: count AS DOUBLE)\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  <slot 13> : 13: sum");
+
+        sql = "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 27:Project\n" +
+                "  |  <slot 12> : CAST(14: sum AS DOUBLE) / CAST(13: count AS DOUBLE)\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  <slot 14> : 14: sum\n" +
+                "  |  <slot 15> : 15: count");
+
+        sql = "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "47:Project\n" +
+                "  |  <slot 12> : CAST(19: sum AS DOUBLE) / CAST(21: count AS DOUBLE)\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  <slot 14> : 14: sum\n" +
+                "  |  <slot 15> : 15: count\n" +
+                "  |  <slot 16> : 16: sum");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
     public void testSumString() throws Exception {
         String sql = "select sum(N_COMMENT) from nation";
         String plan = getFragmentPlan(sql);
