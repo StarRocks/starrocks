@@ -16,4 +16,19 @@ CurrentThread::~CurrentThread() {
     tls_is_thread_status_init = false;
 }
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+starrocks::MemTracker* CurrentThread::mem_tracker() {
+    if (UNLIKELY(tls_mem_tracker == nullptr)) {
+        tls_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
+    }
+    return tls_mem_tracker;
+}
+
+CurrentThread& CurrentThread::current() {
+    return tls_thread_status;
+}
+
+} // namespace starrocks
+>>>>>>> ba1b9acc0 ([BugFix] fix memory statistic in local passthrough (#7183))
