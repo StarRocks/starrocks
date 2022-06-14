@@ -268,7 +268,6 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-
 ColumnPtr JsonFunctions::json_int(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_INT> result(columns[0]->size());
@@ -289,7 +288,6 @@ ColumnPtr JsonFunctions::json_int(FunctionContext* context, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-
 ColumnPtr JsonFunctions::json_double(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_DOUBLE> result(columns[0]->size());
@@ -309,7 +307,6 @@ ColumnPtr JsonFunctions::json_double(FunctionContext* context, const Columns& co
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
-
 
 ColumnPtr JsonFunctions::string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
