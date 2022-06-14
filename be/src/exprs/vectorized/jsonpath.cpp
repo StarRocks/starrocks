@@ -109,6 +109,8 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
 }
 
 Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_paths) {
+    if (path_string.size() == 0) return Status::InvalidArgument(strings::Substitute("Empty json path"));
+
     // split path by ".", and escape quota by "\"
     // eg:
     //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
