@@ -259,15 +259,16 @@ PROPERTIES (
 
     |  Hive列类型   | StarRocks列类型    | 描述 |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
-    |   TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区DATETIME|
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
+    | INT/INTEGER | INT    |
+    | BIGINT  | BIGINT    |
+    | TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区DATETIME|
+    | STRING  | VARCHAR   |
+    | VARCHAR  | VARCHAR   |
+    | CHAR  | CHAR   |
+    | DOUBLE | DOUBLE |
     | FLOATE | FLOAT|
     | DECIMAL | DECIMAL |
+    | BOOLEAN | BOOLEAN |
 
     说明：
 
