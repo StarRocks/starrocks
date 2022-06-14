@@ -16,4 +16,8 @@ CurrentThread::~CurrentThread() {
     tls_is_thread_status_init = false;
 }
 
+CurrentThread& CurrentThread::current() {
+    return tls_thread_status;
+}
+
 } // namespace starrocks
