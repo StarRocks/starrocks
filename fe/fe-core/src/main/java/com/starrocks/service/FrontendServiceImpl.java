@@ -342,6 +342,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                            UserIdentity currentUser, String dbName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
+            LOG.warn("database not exists: {}", dbName);
             return;
         }
         db.readLock();

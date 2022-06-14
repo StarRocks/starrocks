@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -69,6 +70,19 @@ public class ShowMaterializedViewTest {
         Assert.assertEquals("bcd", stmt.getPattern());
         Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:abc LIKE 'bcd'", stmt.toString());
         Assert.assertEquals("testCluster:abc", stmt.getDb());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+
+        stmt = (ShowMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
+        Assert.assertEquals("testCluster:abc", stmt.getDb());
+        Assert.assertEquals(
+                "SELECT id AS id, name AS name, database_name AS database_name, text AS text, rows AS rows FROM information_schema.materialized_views WHERE name = 'mv1'",
+                AST2SQL.toString(stmt.toSelectStmt()));
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());

@@ -93,9 +93,30 @@ public class ShowMaterializedViewStmt extends ShowStmt {
         if (where == null) {
             return null;
         }
+        // Columns
         SelectList selectList = new SelectList();
-        SelectListItem item = new SelectListItem(TABLE_NAME);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        // id
+        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "id"), "id");
         selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "id"), item.getExpr().clone(null));
+        // name
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "name"), "name");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "name"), item.getExpr().clone(null));
+        // database_name
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "database_name"), "database_name");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "database_name"), item.getExpr().clone(null));
+        // text
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "text"), "text");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "text"), item.getExpr().clone(null));
+        // rows
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "rows"), "rows");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "rows"), item.getExpr().clone(null));
+        where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
     }
