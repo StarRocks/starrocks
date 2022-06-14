@@ -101,14 +101,20 @@ public:
         col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
 
         col_cust_key_2->append_datum(Datum(int32_t(69)));
-        col_nation_2->append_datum(Datum());
-        col_region_2->append_datum(Datum());
-        col_mkt_sgmt_2->append_datum(Datum());
+        col_nation_2->append_datum(Datum(Slice("null0")));
+        col_region_2->append_datum(Datum(Slice("null0")));
+        col_mkt_sgmt_2->append_datum(Datum(Slice("null0")));
+        col_nation_2->set_null(col_nation_2->size() - 1);
+        col_region_2->set_null(col_region_2->size() - 1);
+        col_mkt_sgmt_2->set_null(col_mkt_sgmt_2->size() - 1);
 
         col_cust_key_3->append_datum(Datum(int32_t(70)));
-        col_nation_3->append_datum(Datum());
-        col_region_3->append_datum(Datum());
-        col_mkt_sgmt_3->append_datum(Datum());
+        col_nation_3->append_datum(Datum(Slice("null1")));
+        col_region_3->append_datum(Datum(Slice("null1")));
+        col_mkt_sgmt_3->append_datum(Datum(Slice("null1")));
+        col_nation_3->set_null(col_nation_3->size() - 1);
+        col_region_3->set_null(col_region_3->size() - 1);
+        col_mkt_sgmt_3->set_null(col_mkt_sgmt_3->size() - 1);
 
         col_cust_key_1->append_datum(Datum(int32_t(71)));
         col_nation_1->append_datum(Datum());
