@@ -165,6 +165,7 @@ public class WorkGroupStmtTest {
                 () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
     }
 
+
     @Test
     public void testCreateResourceGroup() throws Exception {
         createResourceGroups();
@@ -260,6 +261,21 @@ public class WorkGroupStmtTest {
         }
     }
 
+    @Test
+    public void testQueryType() throws Exception {
+        String sql1 = "create resource group rg_insert\n" +
+                "to (user='rg_user3', query_type in ('insert')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
+        try {
+            starRocksAssert.executeWorkGroupDdlSql(sql1);
+            Assert.fail("should throw error");
+        } catch (Exception e) {
+            Assert.assertEquals("Unsupported query_type: 'insert'", e.getMessage());
+        }
+
+        String sql2 = "create resource group rg_insert\n" +
+                "to (user='rg_user3', query_type in ('select')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
+        starRocksAssert.executeWorkGroupDdlSql(sql2);
+    }
 
     @Test
     public void testAlterResourceGroupDropManyClassifiers() throws Exception {
