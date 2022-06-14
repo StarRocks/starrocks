@@ -599,16 +599,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         CreateTableAsSelectStmt createTableAsSelectStmt =
                 (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-
+        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
         if (qualifiedName == null) {
             return new SubmitTaskStmt(null, null,
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 1) {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
             return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, createTableAsSelectStmt);
+                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");
         }
