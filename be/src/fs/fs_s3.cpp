@@ -137,7 +137,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     } else {
         // To use implicit endpoint.
         config.scheme = Aws::Http::Scheme::HTTP;
-        if (config::object_storage_endpoint_use_ssl) {
+        if (config::object_storage_endpoint_use_https) {
             config.scheme = Aws::Http::Scheme::HTTPS;
         }
     }
