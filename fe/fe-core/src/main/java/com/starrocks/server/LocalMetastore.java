@@ -2901,8 +2901,13 @@ public class LocalMetastore implements ConnectorMetadata {
         validateColumns(baseSchema);
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
-        Map<String, Long> partitionNameToId = Maps.newHashMap();
-        PartitionInfo partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+        PartitionInfo partitionInfo;
+        if (partitionDesc != null) {
+            Map<String, Long> partitionNameToId = Maps.newHashMap();
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
