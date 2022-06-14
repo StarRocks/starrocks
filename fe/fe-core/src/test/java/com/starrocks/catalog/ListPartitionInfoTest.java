@@ -90,7 +90,6 @@ public class ListPartitionInfoTest {
         }
     }
 
-
     @Test
     public void testToSqlForSingle() {
         List<Long> partitionId = Lists.newArrayList(10001L, 10002L);

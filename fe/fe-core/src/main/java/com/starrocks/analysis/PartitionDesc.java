@@ -58,19 +58,19 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public boolean isSetIfNotExists()  throws NotImplementedException{
+    public boolean isSetIfNotExists() throws NotImplementedException {
         throw new NotImplementedException();
     }
 
-    public Map<String, String> getProperties()  throws NotImplementedException {
+    public Map<String, String> getProperties() throws NotImplementedException {
         throw new NotImplementedException();
     }
 
-    public short getReplicationNum()  throws NotImplementedException{
+    public short getReplicationNum() throws NotImplementedException {
         throw new NotImplementedException();
     }
 
-    public DataProperty getPartitionDataProperty()  throws NotImplementedException {
+    public DataProperty getPartitionDataProperty() throws NotImplementedException {
         throw new NotImplementedException();
     }
 

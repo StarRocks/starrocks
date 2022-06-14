@@ -96,9 +96,7 @@ public class CatalogUtils {
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     for (LiteralExpr value : allLiteralExprValues) {
                         if (item.getStringValue().equals(value.getStringValue())) {
-                            ErrorReport.reportDdlException(ErrorCode.ERR_SAME_VALUE_PARTITION,
-                                    "Duplicated value " + value.getStringValue());
-                            break;
+                            throw new DdlException("Duplicate partition value %s");
                         }
                     }
                 }
@@ -123,7 +121,7 @@ public class CatalogUtils {
                             List<String> msg = itemExpr.stream()
                                     .map(value -> ("\"" + value.getStringValue() + "\""))
                                     .collect(Collectors.toList());
-                            ErrorReport.reportDdlException(ErrorCode.ERR_SAME_VALUE_PARTITION, "Duplicate values " +
+                            throw new DdlException("Duplicate values " +
                                     "(" + String.join(",", msg) + ") ");
                         }
                     }

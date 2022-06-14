@@ -51,7 +51,6 @@ public class OperationType {
     public static final short OP_MODIFY_VIEW_DEF = 119;
     public static final short OP_REPLACE_TEMP_PARTITION = 210;
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
-    public static final short OP_ADD_PARTITION_V2 = 212;
 
     // 20~29 120~129 220~229 ...
     @Deprecated
@@ -248,4 +247,7 @@ public class OperationType {
     // shard operate 10221 ~ 10240
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
+
+    // new operator for add partition 10321 ~ 10330
+    public static final short OP_ADD_PARTITION_V2 = 10321;
 }

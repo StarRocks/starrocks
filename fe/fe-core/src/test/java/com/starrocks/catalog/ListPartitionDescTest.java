@@ -48,8 +48,8 @@ public class ListPartitionDescTest {
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
 
-
-    private ListPartitionDesc findListMultiPartitionDesc(String colNames, String pName1, String pName2, Map<String, String> partitionProperties) {
+    private ListPartitionDesc findListMultiPartitionDesc(String colNames, String pName1, String pName2,
+                                                         Map<String, String> partitionProperties) {
         List<String> partitionColNames = Lists.newArrayList(colNames.split(","));
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, pName1,
                 Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
@@ -61,7 +61,8 @@ public class ListPartitionDescTest {
         return new ListPartitionDesc(partitionColNames, partitionDescs);
     }
 
-    private ListPartitionDesc findListSinglePartitionDesc(String colNames, String pName1, String pName2, Map<String, String> partitionProperties) {
+    private ListPartitionDesc findListSinglePartitionDesc(String colNames, String pName1, String pName2,
+                                                          Map<String, String> partitionProperties) {
         List<String> partitionColNames = Lists.newArrayList(colNames.split(","));
         SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, pName1,
                 Lists.newArrayList("guangdong", "tianjin"), partitionProperties);
