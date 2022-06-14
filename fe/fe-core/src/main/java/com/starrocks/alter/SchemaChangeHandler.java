@@ -1518,6 +1518,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+                // because insert overwrite will create tmp partitions
+                throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
+                        "please start schema change after insert overwrite");
+            }
             // the following operations can not be done when there are temp partitions exist.
             if (olapTable.existTempPartitions()) {
                 throw new DdlException("Can not alter table when there are temp partitions in table");

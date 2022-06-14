@@ -1670,6 +1670,31 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
+    // used for unpartitioned table in insert overwrite
+    // replace partition with temp partition
+    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+        if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
+            return;
+        }
+        // drop source partition
+        Partition srcPartition = nameToPartition.get(sourcePartitionName);
+        if (srcPartition != null) {
+            idToPartition.remove(srcPartition.getId());
+            nameToPartition.remove(sourcePartitionName);
+            partitionInfo.dropPartition(srcPartition.getId());
+            GlobalStateMgr.getCurrentState().onErasePartition(srcPartition);
+        }
+
+        Partition partition = tempPartitions.getPartition(tempPartitionName);
+        // add
+        addPartition(partition);
+        // drop
+        tempPartitions.dropPartition(tempPartitionName, false);
+
+        // rename partition
+        renamePartition(tempPartitionName, sourcePartitionName);
+    }
+
     public void addTempPartition(Partition partition) {
         tempPartitions.addPartition(partition);
     }
