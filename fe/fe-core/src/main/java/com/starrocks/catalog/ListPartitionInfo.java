@@ -115,9 +115,6 @@ public class ListPartitionInfo extends PartitionInfo {
      */
     @Override
     public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        //target to serialize member partitionColumns,idToMultiValues,idToValues
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
@@ -129,19 +126,8 @@ public class ListPartitionInfo extends PartitionInfo {
      * @throws IOException
      */
     public static PartitionInfo read(DataInput in) throws IOException {
-        PartitionInfo list = new ListPartitionInfo();
-        list.readFields(in);
-
-        //target to deserialize member partitionColumns,idToMultiValues,idToValues
         String json = Text.readString(in);
         ListPartitionInfo partitionInfo = GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
-        list.idToInMemory.forEach((k, v) -> partitionInfo.setIsInMemory(k, v));
-        list.idToDataProperty.forEach((k, v) -> partitionInfo.setDataProperty(k, v));
-        list.idToReplicationNum.forEach((k, v) -> partitionInfo.setReplicationNum(k, v));
-        list.idToTabletType.forEach((k, v) -> partitionInfo.setTabletType(k, v));
-        partitionInfo.setIsMultiColumnPartition();
-        partitionInfo.type = list.getType();
-
         try {
             Map<Long, List<String>> idToValuesMap = partitionInfo.getIdToValues();
             for (Map.Entry<Long, List<String>> entry : idToValuesMap.entrySet()) {
