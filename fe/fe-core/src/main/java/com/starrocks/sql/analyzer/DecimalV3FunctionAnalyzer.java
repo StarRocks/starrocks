@@ -20,24 +20,24 @@ import java.util.Set;
 
 public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.ABS).add(FunctionSet.POSITIVE).add(FunctionSet.NEGATIVE)
                     .add(FunctionSet.MONEY_FORMAT).build();
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULL_IF)
                     .add(FunctionSet.IF_NULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
                     .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.COUNT).add(FunctionSet.SUM).add(FunctionSet.SUM_DISTINCT)
                     .add(FunctionSet.MULTI_DISTINCT_SUM).add(FunctionSet.AVG).add(FunctionSet.VARIANCE)
                     .add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP).add(FunctionSet.VARIANCE_SAMP)
@@ -45,7 +45,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.STDDEV_SAMP).build();
 
     public static final Set<String> DECIMAL_AGG_VARIANCE_STDDEV_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP)
                     .add(FunctionSet.VARIANCE_SAMP).add(FunctionSet.VAR_SAMP).add(FunctionSet.STD)
                     .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STDDEV_SAMP).build();
@@ -55,7 +55,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .addAll(DECIMAL_AGG_FUNCTION_SAME_TYPE)
                     .addAll(DECIMAL_AGG_FUNCTION_WIDER_TYPE).build();
 
