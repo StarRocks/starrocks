@@ -163,7 +163,7 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
+        expectedEx.expectMessage("Column '`test`.`t2`.`v7`' cannot be resolved");
         getFragmentPlan(sql);
     }
 
@@ -245,5 +245,30 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  cross join:");
         }
         FeConstants.runningUnitTest = false;
+    }
+
+
+    @Test
+    public void testCTEAnchorProperty() throws Exception {
+        String sql = "explain SELECT\n" +
+                "max (t0_2.v1 IN (SELECT t0_2.v1 FROM  t0 AS t0_2 where abs(2) < 1) )\n" +
+                "FROM\n" +
+                "  t0 AS t0_2\n" +
+                "GROUP BY\n" +
+                "  ( CAST(t0_2.v1 AS INT) - NULL ) IN (SELECT subt0.v1  FROM  t1 AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
+                "  t0_2.v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  30:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: v1 = 1: v1\n" +
+                "  |  \n" +
+                "  |----29:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 16: v1\n" +
+                "  |  \n" +
+                "  4:EXCHANGE");
     }
 }

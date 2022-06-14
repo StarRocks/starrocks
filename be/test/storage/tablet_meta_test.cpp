@@ -25,6 +25,9 @@
 
 #include <string>
 
+#include "runtime/decimalv2_value.h"
+#include "runtime/mem_tracker.h"
+
 namespace starrocks {
 
 // NOLINTNEXTLINE

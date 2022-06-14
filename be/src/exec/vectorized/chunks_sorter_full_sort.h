@@ -28,8 +28,7 @@ public:
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
-    void get_next(ChunkPtr* chunk, bool* eos) override;
-    bool pull_chunk(ChunkPtr* chunk) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
@@ -52,7 +51,8 @@ private:
     SortedRuns _merged_runs;              // After merge
 
     // TODO: further tunning the buffer parameter
-    static constexpr size_t kMaxBufferedChunkSize = 1024000;
+    static constexpr size_t kMaxBufferedChunkSize = 1024000;   // Max buffer 1024000 rows
+    static constexpr size_t kMaxBufferedChunkBytes = 16 << 20; // Max buffer 16MB bytes
 };
 
 } // namespace vectorized

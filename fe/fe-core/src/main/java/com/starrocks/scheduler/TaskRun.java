@@ -81,7 +81,7 @@ public class TaskRun {
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext newCtx = new ConnectContext();
         newCtx.setCluster(ctx.getClusterName());
-        newCtx.setCatalog(ctx.getGlobalStateMgr());
+        newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
         newCtx.setDatabase(ctx.getDatabase());
         newCtx.setQualifiedUser(ctx.getQualifiedUser());
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());

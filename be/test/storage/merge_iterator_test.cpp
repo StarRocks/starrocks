@@ -263,4 +263,94 @@ TEST_F(MergeIteratorTest, mask_merge) {
     }
 }
 
+TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
+    std::vector<int32_t> v1;
+    std::vector<int32_t> v2;
+    std::vector<int32_t> v3;
+    std::vector<int32_t> v4;
+    std::vector<int32_t> expected;
+    std::vector<RowSourceMask> source_masks;
+    std::vector<uint16_t> expected_sources;
+
+    for (int i = 0; i < 2048; i++) {
+        v1.push_back(0);
+        expected.push_back(0);
+        expected_sources.push_back(0);
+    }
+
+    for (int i = 0; i < 4096; i++) {
+        v2.push_back(1);
+        expected.push_back(1);
+        expected_sources.push_back(1);
+    }
+
+    for (int i = 0; i < 1024; i++) {
+        v1.push_back(2);
+        expected.push_back(2);
+        expected_sources.push_back(0);
+    }
+
+    for (int i = 0; i < 1000; i++) {
+        v3.push_back(3);
+        expected.push_back(3);
+        expected_sources.push_back(2);
+    }
+
+    for (int i = 0; i < 1024; i++) {
+        v1.push_back(4);
+        expected.push_back(4);
+        expected_sources.push_back(0);
+    }
+
+    for (int i = 0; i < 2000; i++) {
+        v3.push_back(5);
+        expected.push_back(5);
+        expected_sources.push_back(2);
+    }
+
+    for (int i = 0; i < 4096; i++) {
+        v4.push_back(6);
+        expected.push_back(6);
+        expected_sources.push_back(3);
+    }
+
+    for (size_t i = 0; i < expected_sources.size(); ++i) {
+        source_masks.emplace_back(RowSourceMask(expected_sources[i], false));
+    }
+
+    auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v1));
+    auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v2));
+    auto sub3 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v3));
+    auto sub4 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v4));
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    mask_buffer.write(source_masks);
+    mask_buffer.flush();
+    mask_buffer.flip_to_read();
+    source_masks.clear();
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3, sub4}, &mask_buffer);
+    iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+
+    std::vector<int32_t> real;
+    ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
+        ColumnPtr& c = chunk->get_column_by_index(0);
+        for (size_t i = 0; i < c->size(); i++) {
+            real.push_back(c->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    ASSERT_EQ(expected.size(), real.size());
+    for (size_t i = 0; i < expected.size(); i++) {
+        ASSERT_EQ(expected[i], real[i]);
+    }
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get(), &source_masks).is_end_of_file());
+
+    // check source masks
+    for (size_t i = 0; i < expected_sources.size(); i++) {
+        ASSERT_EQ(expected_sources[i], source_masks.at(i).get_source_num());
+    }
+}
+
 } // namespace starrocks::vectorized

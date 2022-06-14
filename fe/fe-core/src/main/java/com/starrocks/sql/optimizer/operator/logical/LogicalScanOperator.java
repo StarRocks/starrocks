@@ -52,7 +52,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
 
         this.columnFilters = ImmutableMap.copyOf(
-                ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(predicate)));
+                ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(predicate), table));
     }
 
     public Table getTable() {

@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "runtime/primitive_type.h"
+#include "udf/udf.h"
 #include "util/random.h"
 #include "util/time.h"
 

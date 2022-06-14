@@ -46,7 +46,7 @@ public class MergeProjectWithChildRule extends TransformationRule {
                 Maps.newHashMap()));
 
         if (logicalProjectOperator.hasLimit()) {
-            builder.setLimit(logicalProjectOperator.getLimit());
+            builder.setLimit(Math.min(logicalProjectOperator.getLimit(), child.getLimit()));
         } else {
             builder.setLimit(child.getLimit());
         }

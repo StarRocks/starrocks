@@ -27,10 +27,12 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -42,8 +44,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -267,6 +269,10 @@ public class OlapTableSink extends DataSink {
                         }
                     }
                 }
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+                    ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo)rangePartitionInfo;
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
+                }
                 break;
             }
             case UNPARTITIONED: {
@@ -274,7 +280,14 @@ public class OlapTableSink extends DataSink {
                 Preconditions.checkArgument(table.getPartitions().size() == 1,
                         "Number of table partitions is not 1 for unpartitioned table, partitionNum="
                                 + table.getPartitions().size());
-                Partition partition = table.getPartitions().iterator().next();
+                Partition partition = null;
+                if (partitionIds != null) {
+                    Preconditions.checkState(partitionIds.size() == 1,
+                            "invalid partitionIds size:{}", partitionIds.size());
+                    partition = table.getPartition(partitionIds.get(0));
+                } else {
+                    partition = table.getPartitions().iterator().next();
+                }
 
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());
@@ -308,7 +321,7 @@ public class OlapTableSink extends DataSink {
                 for (Tablet tablet : index.getTablets()) {
                     if (useStarOS) {
                         locationParam.addToTablets(new TTabletLocation(
-                                tablet.getId(), Lists.newArrayList(((StarOSTablet) tablet).getPrimaryBackendId())));
+                                tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load

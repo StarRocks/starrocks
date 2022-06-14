@@ -8,7 +8,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,10 +57,6 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
-    public static boolean isUseStarOS(TStorageMedium storageMedium) {
-        return storageMedium == TStorageMedium.S3;
-    }
-
     // Used to temporarily disable some command on StarOS table and remove later.
     public static void checkOlapTableHasStarOSPartition(String dbName, String tableName) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -72,7 +67,7 @@ public class CatalogUtils {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (table == null || !(table instanceof OlapTable)) {
+            if (!(table instanceof OlapTable)) {
                 return;
             }
             OlapTable olapTable = (OlapTable) table;

@@ -32,10 +32,11 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "simd/simd.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
 #include "util/defer_op.h"
@@ -470,8 +471,11 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
-    // we don't need to wait last rpc finished, cause closure's release/reset will join.
-    // But do we need brpc::StartCancel(call_id)?
+    // cancel rpc request, accelerate the release of related resources
+    for (auto closure : _add_batch_closures) {
+        closure->cancel();
+    }
+
     _cancelled = true;
     _err_st = err_st;
 
@@ -589,6 +593,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(_vectorized_partition->prepare(state));
 
     // get table's tuple descriptor
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_desc_id);
@@ -688,6 +693,7 @@ Status OlapTableSink::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(_vectorized_partition->open(state));
 
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
@@ -766,8 +772,8 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         SCOPED_TIMER(_pack_chunk_timer);
         uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
         int invalid_row_index = 0;
-        _vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
-                                            &invalid_row_index);
+        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
+                                                            &invalid_row_index));
 
         // Note: must padding char column after find_tablets.
         _padding_char_column(chunk);
@@ -944,6 +950,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     }
 
     Expr::close(_output_expr_ctxs, state);
+    _vectorized_partition->close(state);
     return status;
 }
 

@@ -43,7 +43,7 @@ public class ShowCatalogsStmtTest {
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
 
         ctx = new ConnectContext(null);
-        ctx.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
     }
 
     @Test
@@ -59,10 +59,10 @@ public class ShowCatalogsStmtTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assert.assertEquals(metaData.getColumn(0).getName(), "Catalog");
-        Assert.assertEquals(metaData.getColumn(1).getName(), "Type");
-        Assert.assertEquals(metaData.getColumn(2).getName(), "Comment");
-        Assert.assertEquals(resultSet.getResultRows().get(0).toString(), "[default, default, internal catalog]");
-        Assert.assertEquals(resultSet.getResultRows().get(1).toString(), "[hive_catalog_1, hive, hive_catalog]");
+        Assert.assertEquals("Catalog", metaData.getColumn(0).getName());
+        Assert.assertEquals("Type", metaData.getColumn(1).getName());
+        Assert.assertEquals("Comment", metaData.getColumn(2).getName());
+        Assert.assertEquals("[default_catalog, Internal, Internal Catalog]", resultSet.getResultRows().get(0).toString());
+        Assert.assertEquals("[hive_catalog_1, hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
     }
 }

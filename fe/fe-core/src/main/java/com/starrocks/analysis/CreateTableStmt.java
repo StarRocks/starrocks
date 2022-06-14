@@ -44,6 +44,7 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
@@ -258,6 +259,10 @@ public class CreateTableStmt extends DdlStmt {
 
     public String getEngineName() {
         return engineName;
+    }
+
+    public void setEngineName(String engineName) {
+        this.engineName = engineName;
     }
 
     public String getCharsetName() {
@@ -599,7 +604,7 @@ public class CreateTableStmt extends DdlStmt {
         if (engineName != null) {
             sb.append(" ENGINE = ").append(engineName);
         }
-        sb.append("\n)");
+        sb.append("\n");
         if (charsetName != null) {
             sb.append(" CHARSET = ").append(charsetName);
         }
@@ -659,4 +664,10 @@ public class CreateTableStmt extends DdlStmt {
     public boolean needAuditEncryption() {
         return !engineName.equals("olap");
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateTableStatement(this, context);
+    }
+
 }

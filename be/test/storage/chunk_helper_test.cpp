@@ -8,6 +8,7 @@
 #include "column/field.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/schema.h"

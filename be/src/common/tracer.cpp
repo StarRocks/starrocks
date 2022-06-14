@@ -3,13 +3,14 @@
 #include "common/tracer.h"
 
 #include <opentelemetry/exporters/jaeger/jaeger_exporter.h>
+#include <opentelemetry/sdk/trace/simple_processor.h>
+#include <opentelemetry/sdk/trace/tracer_provider.h>
+#include <opentelemetry/trace/provider.h>
 
 #include "common/config.h"
+#include "gutil/strings/split.h"
 
 namespace starrocks {
-
-namespace sdktrace = opentelemetry::sdk::trace;
-namespace trace = opentelemetry::trace;
 
 Tracer::~Tracer() {
     shutdown();
@@ -25,7 +26,16 @@ Tracer& Tracer::Instance() {
 void Tracer::init(const std::string& service_name) {
     if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
-        opts.endpoint = config::jaeger_endpoint;
+        vector<string> host_port = strings::Split(config::jaeger_endpoint, ":");
+        if (host_port.size() != 2) {
+            LOG(WARNING) << "bad jaeger_endpoint " << config::jaeger_endpoint;
+            return;
+        }
+        opts.endpoint = host_port[0];
+        long port = strtol(host_port[1].c_str(), NULL, 10);
+        if (port > 0 && port <= USHRT_MAX) {
+            opts.server_port = (uint16_t)port;
+        }
         auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
                 new opentelemetry::exporter::jaeger::JaegerExporter(opts));
         auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
@@ -50,6 +60,25 @@ bool Tracer::is_enabled() const {
 
 Span Tracer::start_trace(const std::string& trace_name) {
     return _tracer->StartSpan(trace_name);
+}
+
+Span Tracer::start_trace_txn(const std::string& trace_name, int64_t txn_id) {
+    auto ret = _tracer->StartSpan(trace_name);
+    ret->SetAttribute("txn_id", txn_id);
+    return ret;
+}
+
+Span Tracer::start_trace_tablet(const std::string& trace_name, int64_t tablet_id) {
+    auto ret = _tracer->StartSpan(trace_name);
+    ret->SetAttribute("tablet_id", tablet_id);
+    return ret;
+}
+
+Span Tracer::start_trace_txn_tablet(const std::string& trace_name, int64_t txn_id, int64_t tablet_id) {
+    auto ret = _tracer->StartSpan(trace_name);
+    ret->SetAttribute("txn_id", txn_id);
+    ret->SetAttribute("tablet_id", tablet_id);
+    return ret;
 }
 
 Span Tracer::add_span(const std::string& span_name, const Span& parent_span) {

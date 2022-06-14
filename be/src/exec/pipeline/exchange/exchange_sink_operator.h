@@ -66,6 +66,11 @@ public:
     void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
 
 private:
+    bool _is_large_chunk(size_t sz) const {
+        // ref olap_scan_node.cpp release_large_columns
+        return sz > runtime_state()->chunk_size() * 512;
+    }
+
     class Channel;
 
     static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
@@ -102,7 +107,6 @@ private:
     // Only used when broadcast
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
-    size_t _request_bytes_threshold = config::max_transmit_batched_bytes;
 
     bool _is_first_chunk = true;
 

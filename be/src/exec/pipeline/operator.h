@@ -148,7 +148,7 @@ public:
         return res;
     }
 
-    RuntimeState* runtime_state();
+    RuntimeState* runtime_state() const;
 
 protected:
     OperatorFactory* _factory;
@@ -264,7 +264,7 @@ public:
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }
 
-    RuntimeState* runtime_state() { return _state; }
+    RuntimeState* runtime_state() const { return _state; }
 
     RowDescriptor* row_desc() { return &_row_desc; }
 

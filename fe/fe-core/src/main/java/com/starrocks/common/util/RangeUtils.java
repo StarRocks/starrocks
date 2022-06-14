@@ -123,6 +123,12 @@ public class RangeUtils {
         boolean hasLowerBound = false;
         boolean hasUpperBound = false;
 
+        if (range == null) {
+            out.writeBoolean(hasLowerBound);
+            out.writeBoolean(hasUpperBound);
+            return;
+        }
+
         // write lower bound if lower bound exists
         hasLowerBound = range.hasLowerBound();
         out.writeBoolean(hasLowerBound);

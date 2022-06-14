@@ -41,7 +41,6 @@ public class PublishVersionTask extends AgentTask {
     private long transactionId;
     private List<TPartitionVersionInfo> partitionVersionInfos;
     private List<Long> errorTablets;
-    private boolean isFinished;
     private long commitTimestamp;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,

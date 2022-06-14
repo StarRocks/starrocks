@@ -44,7 +44,6 @@ set(RUNTIME_FILES
     plan_fragment_executor.cpp
     primitive_type.cpp
     raw_value.cpp
-    raw_value_ir.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
@@ -83,15 +82,16 @@ set(RUNTIME_FILES
     mysql_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
-    date_value.cpp
-    timestamp_value.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
     statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
-    global_dicts.cpp
+    global_dict/decoder.cpp
+    global_dict/parser.cpp
+    global_dict/miscs.cpp
+    global_dict/types.cpp
     current_thread.cpp
     runtime_filter_cache.cpp
 )

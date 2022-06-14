@@ -2,6 +2,7 @@
 
 #include "runtime/statistic_result_writer.h"
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/expr.h"

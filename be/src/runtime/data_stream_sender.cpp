@@ -22,6 +22,7 @@
 #include "runtime/data_stream_sender.h"
 
 #include <arpa/inet.h>
+#include <fmt/format.h>
 
 #include <functional>
 #include <iostream>

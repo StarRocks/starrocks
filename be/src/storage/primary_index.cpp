@@ -4,6 +4,8 @@
 
 #include <mutex>
 
+#include "common/tracer.h"
+#include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
@@ -909,6 +911,8 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
+    auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());
+    auto scoped_span = trace::Scope(span);
     MonotonicStopWatch timer;
     timer.start();
 
@@ -1029,6 +1033,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
               << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size() << " capacity:" << capacity()
               << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+    span->SetAttribute("memory", memory_usage());
+    span->SetAttribute("size", size());
     return Status::OK();
 }
 

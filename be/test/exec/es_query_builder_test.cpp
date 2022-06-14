@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "column/column_helper.h"
 #include "common/logging.h"
 #include "exec/es/es_predicate.h"
 #include "rapidjson/document.h"

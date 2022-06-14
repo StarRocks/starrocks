@@ -67,7 +67,7 @@ public class ConnectSchedulerTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
 
         ConnectContext context = new ConnectContext(socketChannel);
-        context.setCatalog(AccessTestUtil.fetchAdminCatalog());
+        context.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         context.setQualifiedUser("root");
         Assert.assertTrue(scheduler.submit(context));
         Assert.assertEquals(0, context.getConnectionId());

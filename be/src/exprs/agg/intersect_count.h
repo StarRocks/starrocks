@@ -10,9 +10,9 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "types/bitmap_value.h"
 #include "udf/udf.h"
 #include "util/bitmap_intersect.h"
-#include "util/bitmap_value.h"
 
 namespace starrocks::vectorized {
 template <PrimitiveType PT, typename = guard::Guard>

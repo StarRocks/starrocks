@@ -357,9 +357,13 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         DCHECK_GT(min_chunk.remaining_rows(), 0);
 
         size_t offset = min_chunk.compared_row();
-        // check whether |min_chunk| has overlapping with others.
         size_t min_chunk_num_rows = min_chunk._chunk->num_rows();
-        if (offset == 0 && _mask_buffer->has_same_source(child, min_chunk_num_rows)) {
+        size_t append_row_num = 0;
+        size_t max_same_source_count = _mask_buffer->max_same_source_count(child, min_chunk.remaining_rows());
+        if (max_same_source_count == min_chunk_num_rows) {
+            DCHECK(offset == 0);
+            // all rows in |min_chunk| are from the same source chunk and |min_chunk|'s current offset is 0,
+            // so here we swap the whole min_chunk out.
             if (rows == 0) {
                 chunk->swap_chunk(*min_chunk._chunk);
                 for (int i = 0; i < min_chunk_num_rows; ++i) {
@@ -371,13 +375,27 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                 // retrieve |min_chunk| next time to avoid memory copy.
                 break;
             }
+        } else {
+            // `max_same_source_count` rows in |min_chunk| are from the same source chunk,
+            // here we append the `max_same_source_count` in |min_chunk| to the chunk.
+            if (rows + max_same_source_count <= _chunk_size) {
+                append_row_num = max_same_source_count;
+            } else {
+                append_row_num = _chunk_size - rows;
+            }
         }
 
-        chunk->append(*min_chunk._chunk, offset, 1);
-        min_chunk.advance(1);
-        rows += 1;
-        source_masks->emplace_back(mask);
-        _mask_buffer->advance();
+        DCHECK_GT(append_row_num, 0);
+        chunk->append(*min_chunk._chunk, offset, append_row_num);
+        min_chunk.advance(append_row_num);
+        rows += append_row_num;
+        for (size_t i = 0; i < append_row_num; ++i) {
+            source_masks->emplace_back(_mask_buffer->current());
+            _mask_buffer->advance();
+        }
+
+        DCHECK_LE(rows, _chunk_size);
+
         if (min_chunk.remaining_rows() == 0) {
             st = fill(child);
             if (!st.ok()) {

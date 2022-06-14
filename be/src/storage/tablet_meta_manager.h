@@ -21,6 +21,12 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <rapidjson/document.h>
+DIAGNOSTIC_POP
+
 #include <string>
 
 #include "gen_cpp/persistent_index.pb.h"

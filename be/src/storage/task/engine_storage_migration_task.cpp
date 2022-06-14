@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include <fmt/format.h>
+
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -52,7 +54,7 @@ Status EngineStorageMigrationTask::execute() {
 
     // check disk capacity
     int64_t tablet_size = tablet->tablet_footprint();
-    if (_dest_store->reach_capacity_limit(tablet_size)) {
+    if (_dest_store->capacity_limit_reached(tablet_size)) {
         LOG(WARNING) << "No space left to migration. tablet_id: " << _tablet_id
                      << ", dest_path: " << _dest_store->path();
         return Status::IOError(fmt::format("No space left to migration. tablet_id: {}, dest_path: {}", _tablet_id,

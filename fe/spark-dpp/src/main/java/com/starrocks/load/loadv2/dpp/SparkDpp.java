@@ -373,12 +373,16 @@ public final class SparkDpp implements java.io.Serializable {
                                                                     List<String> parentRollupKeyColumns,
                                                                     List<String> parentRollupValueColumns)
             throws SparkDppException {
+        List<String> parentRollupColumns = new ArrayList<>();
+        parentRollupColumns.addAll(parentRollupKeyColumns);
+        parentRollupColumns.addAll(parentRollupValueColumns);
+
         List<Integer> keyMap = new ArrayList<>();
         List<Integer> valueMap = new ArrayList<>();
         // find column index in parent rollup schema
         for (int i = 0; i < childRollupKeyColumns.size(); i++) {
-            for (int j = 0; j < parentRollupKeyColumns.size(); j++) {
-                if (StringUtils.equalsIgnoreCase(childRollupKeyColumns.get(i), parentRollupKeyColumns.get(j))) {
+            for (int j = 0; j < parentRollupColumns.size(); j++) {
+                if (StringUtils.equalsIgnoreCase(childRollupKeyColumns.get(i), parentRollupColumns.get(j))) {
                     keyMap.add(j);
                     break;
                 }
@@ -386,8 +390,8 @@ public final class SparkDpp implements java.io.Serializable {
         }
 
         for (int i = 0; i < childRollupValueColumns.size(); i++) {
-            for (int j = 0; j < parentRollupValueColumns.size(); j++) {
-                if (StringUtils.equalsIgnoreCase(childRollupValueColumns.get(i), parentRollupValueColumns.get(j))) {
+            for (int j = 0; j < parentRollupColumns.size(); j++) {
+                if (StringUtils.equalsIgnoreCase(childRollupValueColumns.get(i), parentRollupColumns.get(j))) {
                     valueMap.add(j);
                     break;
                 }

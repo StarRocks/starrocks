@@ -212,8 +212,8 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
-        RETURN_IF_UNLIKELY(_data->reach_capacity_limit(msg), true);
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        RETURN_IF_UNLIKELY(_data->capacity_limit_reached(msg), true);
         if (_size > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("Row count of const column reach limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));

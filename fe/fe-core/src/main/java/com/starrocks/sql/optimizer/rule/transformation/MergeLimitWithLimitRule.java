@@ -64,7 +64,6 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
         Preconditions.checkState(!l1.hasOffset());
-        Preconditions.checkState(!l2.hasOffset());
 
         // l2 range
         long l2Max = l2.getLimit();
@@ -80,9 +79,9 @@ public class MergeLimitWithLimitRule extends TransformationRule {
 
         Operator result;
         if (l1.getLimit() <= l2.getLimit()) {
-            result = LogicalLimitOperator.local(limit);
+            result = LogicalLimitOperator.local(limit, l2.getOffset());
         } else {
-            result = LogicalLimitOperator.init(limit);
+            result = LogicalLimitOperator.init(limit, l2.getOffset());
         }
 
         return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));

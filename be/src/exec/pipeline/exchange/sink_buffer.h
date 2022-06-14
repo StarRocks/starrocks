@@ -9,7 +9,12 @@
 #include <queue>
 #include <unordered_set>
 
-#include "bthread/mutex.h"
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
@@ -157,8 +162,8 @@ private:
     std::atomic<int64_t> _request_sent = 0;
 
     int64_t _pending_timestamp = -1;
-    mutable int64_t _last_full_timestamp = -1;
-    mutable int64_t _full_time = 0;
+    mutable std::atomic<int64_t> _last_full_timestamp = -1;
+    mutable std::atomic<int64_t> _full_time = 0;
 }; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline

@@ -45,7 +45,7 @@ public class MetadataMgrTest {
         };
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> internalListDbs = metadataMgr.listDbNames("default");
+        List<String> internalListDbs = metadataMgr.listDbNames("default_catalog");
         Assert.assertTrue(internalListDbs.contains("default_cluster:db1"));
 
         List<String> externalListDbs = metadataMgr.listDbNames("hive_catalog");
@@ -64,9 +64,9 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        List<String> internalTables = metadataMgr.listTableNames("default", "default_cluster:db1");
+        List<String> internalTables = metadataMgr.listTableNames("default_catalog", "default_cluster:db1");
         Assert.assertTrue(internalTables.contains("tbl1"));
-        Assert.assertTrue(metadataMgr.listTableNames("default", "default_cluster:db2").isEmpty());
+        Assert.assertTrue(metadataMgr.listTableNames("default_catalog", "default_cluster:db2").isEmpty());
 
         List<String> externalTables = metadataMgr.listTableNames("hive_catalog", "db2");
         Assert.assertTrue(externalTables.contains("tbl2"));
@@ -85,9 +85,9 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        com.starrocks.catalog.Database database = metadataMgr.getDb("default", "default_cluster:db1");
+        com.starrocks.catalog.Database database = metadataMgr.getDb("default_catalog", "default_cluster:db1");
         Assert.assertNotNull(database);
-        Assert.assertNull(metadataMgr.getDb("default", "db1"));
+        Assert.assertNull(metadataMgr.getDb("default_catalog", "db1"));
 
         com.starrocks.catalog.Database database1 = metadataMgr.getDb("hive_catalog", "db2");
         Assert.assertNotNull(database1);
@@ -121,10 +121,10 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default", "default_cluster:db1", "tbl1");
+        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "default_cluster:db1", "tbl1");
         Assert.assertNotNull(internalTable);
-        Assert.assertNull(metadataMgr.getTable("default", "not_exist_db", "xxx"));
-        Assert.assertNull(metadataMgr.getTable("default", "db1", "not_exist_table"));
+        Assert.assertNull(metadataMgr.getTable("default_catalog", "not_exist_db", "xxx"));
+        Assert.assertNull(metadataMgr.getTable("default_catalog", "db1", "not_exist_table"));
 
         com.starrocks.catalog.Table tbl1 = metadataMgr.getTable("hive_catalog", "hive_db", "hive_table");
         Assert.assertNotNull(tbl1);

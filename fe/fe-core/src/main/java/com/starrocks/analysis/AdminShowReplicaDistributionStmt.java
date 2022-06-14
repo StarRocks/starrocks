@@ -35,6 +35,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // admin show replica distribution from tbl [partition(p1, p2, ...)]
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
@@ -75,6 +76,10 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         return tblRef.getName().getDb();
     }
 
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
+    }
+
     public String getTblName() {
         return tblRef.getName().getTbl();
     }
@@ -99,5 +104,10 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         } else {
             return RedirectStatus.NO_FORWARD;
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminShowReplicaDistributionStatement(this, context);
     }
 }

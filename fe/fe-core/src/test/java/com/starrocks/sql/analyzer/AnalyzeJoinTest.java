@@ -1,8 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -71,7 +74,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
-        analyzeSuccess("select * from (t0 join tnotnull using(v1)) t , t1");
+        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "Syntax error");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
@@ -123,5 +126,66 @@ public class AnalyzeJoinTest {
     public void testJoinPreceding() {
         QueryStatement query = ((QueryStatement) analyzeSuccess("select * from t0,t1 inner join t2 on v4 = v7"));
         System.out.println(AST2SQL.toString(query));
+    }
+
+    @Test
+    public void testParenthesizedRelation() {
+        String sql = "select * from (t0 a, t0 b)";
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
+        Relation relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+        Assert.assertTrue(relation instanceof JoinRelation);
+        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+
+        sql = "select * from (t0 a, (t0))";
+        queryStatement = (QueryStatement) analyzeSuccess(sql);
+        relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+        Assert.assertTrue(relation instanceof JoinRelation);
+        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+        analyzeFail("select * from (t0 a, (t0)) b");
+
+        sql = "select * from (t0 a, (t1))";
+        queryStatement = (QueryStatement) analyzeSuccess(sql);
+        relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+        Assert.assertTrue(relation instanceof JoinRelation);
+        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+
+        sql = "select * from (t0 a, t1)";
+        queryStatement = (QueryStatement) analyzeSuccess(sql);
+        relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+        Assert.assertTrue(relation instanceof JoinRelation);
+        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+
+        sql = "select * from (t0 a, (select * from t1) b)";
+        queryStatement = (QueryStatement) analyzeSuccess(sql);
+        relation = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+        Assert.assertTrue(relation instanceof JoinRelation);
+        Assert.assertTrue(((JoinRelation) relation).getJoinOp().isCrossJoin());
+
+        sql = "select * from (t0 a, (t1 b, t1 c))";
+        analyzeSuccess(sql);
+
+        sql = "select * from t0, (t1 cross join t2)";
+        analyzeSuccess(sql);
+
+        sql = "select * from (t0 a, (t1) b)";
+        analyzeFail(sql, "Syntax error");
+
+        sql = "select * from (t0 a, t1 a)";
+        analyzeFail(sql, "Not unique table/alias: 'a'");
+
+        sql = "select * from (t0 a, (select * from t1))";
+        analyzeFail(sql, "Every derived table must have its own alias");
+
+        sql = "select * from t0, t0";
+        analyzeFail(sql, "Not unique table/alias: 't0'");
+
+        sql = "select * from (t0 join t1) ,t1";
+        analyzeFail(sql, "Not unique table/alias: 't1'");
+
+        sql = "select * from (t0 join t1) t,t1";
+        analyzeFail(sql, "Syntax error");
+
+        sql = "select * from (t0 join t1 t) ,t1";
+        analyzeSuccess(sql);
     }
 }

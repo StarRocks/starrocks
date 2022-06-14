@@ -5,11 +5,14 @@
 #include <chrono>
 #include <thread>
 
+#include "common/config.h"
 #include "storage/compaction_candidate.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "util/defer_op.h"
 
 using namespace std::chrono_literals;
 
@@ -179,7 +182,7 @@ bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidat
     std::shared_ptr<CompactionTask> tmp_task = tablet->get_compaction(candidate.type, true);
     if (tmp_task) {
         DataDir* data_dir = tablet->data_dir();
-        if (data_dir->reach_capacity_limit(tmp_task->input_rowsets_size())) {
+        if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
             LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
                          << " because data dir reaches capacity limit. input rowsets size:"
                          << tmp_task->input_rowsets_size();

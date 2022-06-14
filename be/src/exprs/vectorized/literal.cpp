@@ -2,6 +2,7 @@
 
 #include "exprs/vectorized/literal.h"
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -9,6 +10,7 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
+#include "types/constexpr.h"
 
 namespace starrocks::vectorized {
 
