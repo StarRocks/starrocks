@@ -177,8 +177,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.sql.parser.StarRocksParser.ModifyBackendHostClauseContext;
-import com.starrocks.sql.parser.StarRocksParser.ModifyFrontendHostClauseContext;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -804,7 +802,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyBackendHostClause(ModifyBackendHostClauseContext context) {
+    public ParseNode visitModifyBackendHostClause(StarRocksParser.ModifyBackendHostClauseContext context) {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1));
@@ -837,7 +835,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyFrontendHostClause(ModifyFrontendHostClauseContext context) {
+    public ParseNode visitModifyFrontendHostClause(StarRocksParser.ModifyFrontendHostClauseContext context) {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new ModifyFrontendAddressClause(clusters.get(0), clusters.get(1));
