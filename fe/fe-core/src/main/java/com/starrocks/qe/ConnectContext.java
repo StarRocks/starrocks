@@ -160,10 +160,6 @@ public class ConnectContext {
         threadLocalInfo.remove();
     }
 
-    public void setIsSend(boolean isSend) {
-        this.isSend = isSend;
-    }
-
     public boolean isSend() {
         return this.isSend;
     }

@@ -23,7 +23,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -59,16 +58,12 @@ import com.starrocks.thrift.TTypeNode;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
 
 public class StreamLoadScanNodeTest {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadScanNodeTest.class);
-
     @Mocked
     GlobalStateMgr globalStateMgr;
 
@@ -78,8 +73,6 @@ public class StreamLoadScanNodeTest {
     @Injectable
     OlapTable dstTable;
 
-    @Mocked
-    CastExpr castExpr;
 
     TStreamLoadPutRequest getBaseRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
@@ -742,6 +735,12 @@ public class StreamLoadScanNodeTest {
                 result = columns.get(3);
             }
         };
+
+        new Expectations() {{
+            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+            result = new ScalarFunction(new FunctionName(FunctionSet.ADD), Lists.newArrayList(), Type.BIGINT,
+                    false);
+        }};
 
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
