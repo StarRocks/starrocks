@@ -84,7 +84,6 @@ private:
         }
 
         void add_finished_tablet(int64_t tablet_id) {
-            DCHECK(_response != nullptr);
             std::lock_guard l(_mtx);
             _response->add_tablet_vec()->set_tablet_id(tablet_id);
         }
