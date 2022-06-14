@@ -99,10 +99,6 @@ public class StarOSAgentTest {
                  minTimes = 0;
                  result = 10;
 
-                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
-                 minTimes = 0;
-                 result = 10;
-
                  client.removeWorker(1, 10);
                  minTimes = 0;
                  result = null;
