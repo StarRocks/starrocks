@@ -44,7 +44,7 @@ public class FieldReference extends Expr {
             return false;
         }
         FieldReference that = (FieldReference) o;
-        return fieldIndex == that.fieldIndex && tblName.equals(that.tblName);
+        return fieldIndex == that.fieldIndex && Objects.equals(tblName, that.tblName);
     }
 
     @Override
