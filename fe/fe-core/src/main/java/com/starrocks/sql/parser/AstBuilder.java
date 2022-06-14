@@ -2170,14 +2170,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDoubleValue(StarRocksParser.DoubleValueContext context) {
         try {
-            BigDecimal decimal = new BigDecimal(context.getText());
-            int precision = DecimalLiteral.getRealPrecision(decimal);
-            int scale = DecimalLiteral.getRealScale(decimal);
-            int integerPartWidth = precision - scale;
-            if (integerPartWidth > 38) {
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(context.getText());
+            } else {
+                BigDecimal decimal = new BigDecimal(context.getText());
+                int precision = DecimalLiteral.getRealPrecision(decimal);
+                int scale = DecimalLiteral.getRealScale(decimal);
+                int integerPartWidth = precision - scale;
+                if (integerPartWidth > 38) {
+                    return new FloatLiteral(context.getText());
+                }
+                return new DecimalLiteral(decimal);
             }
-            return new DecimalLiteral(decimal);
+
         } catch (AnalysisException | NumberFormatException e) {
             throw new ParsingException(e.getMessage());
         }
@@ -2186,7 +2191,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDecimalValue(StarRocksParser.DecimalValueContext context) {
         try {
-            return new DecimalLiteral(context.getText());
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
+                return new FloatLiteral(context.getText());
+            } else {
+                return new DecimalLiteral(context.getText());
+            }
         } catch (AnalysisException e) {
             throw new ParsingException(e.getMessage());
         }

@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -435,5 +436,21 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains("  |  4 <-> round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
     }
+
+    @Test
+    public void testDoubleLiteralMul() throws Exception {
+        String sql;
+        String plan;
+        sql = "select 123456789000000000000000000000000000.00 * 123456789.123456789 * 123456789.123456789;";
+        final long sqlMode = ctx.getSessionVariable().getSqlMode();
+        final long code = SqlModeHelper.encode("MODE_DOUBLE_LITERAL");
+        ctx.getSessionVariable().setSqlMode(code|sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 1.8816763755525075E51"));
+        ctx.getSessionVariable().setSqlMode(sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 123456789000000000000000000000000000 * 123456789.123456789 * 123456789.123456789"));
+    }
+
 }
 
