@@ -49,6 +49,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -66,6 +67,7 @@ import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUniqueId;
+import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -378,6 +380,8 @@ public class DatabaseTransactionMgr {
             throw new TransactionCommitFailedException(
                     transactionState == null ? "transaction not found" : transactionState.getReason());
         }
+        Span txnSpan = transactionState.getTxnSpan();
+        txnSpan.addEvent("commit_start");
 
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
@@ -468,7 +472,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
         for (long tableId : tableToPartition.keySet()) {
@@ -552,6 +555,8 @@ public class DatabaseTransactionMgr {
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform
         boolean txnOperated = false;
+
+        Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedCommitTransaction", txnSpan);
         writeLock();
         try {
             unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition,
@@ -560,12 +565,18 @@ public class DatabaseTransactionMgr {
             txnOperated = true;
         } finally {
             writeUnlock();
+            unprotectedCommitSpan.end();
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        updateCatalogAfterCommitted(transactionState, db);
+        Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
+        try {
+            updateCatalogAfterCommitted(transactionState, db);
+        } finally {
+            updateCatalogAfterCommittedSpan.end();
+        }
         LOG.info("transaction:[{}] successfully committed", transactionState);
     }
 
@@ -702,8 +713,8 @@ public class DatabaseTransactionMgr {
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
                                         ++successHealthyReplicaNum;
-                                    // replica report version has greater cur transaction commit version
-                                    // This can happen when the BE publish succeeds but fails to send a response to FE
+                                        // replica report version has greater cur transaction commit version
+                                        // This can happen when the BE publish succeeds but fails to send a response to FE
                                     } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
@@ -728,7 +739,7 @@ public class DatabaseTransactionMgr {
                             if (successHealthyReplicaNum != replicaNum
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
-                                            - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
+                                    - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
                                 return false;
                             }
                         }
@@ -771,6 +782,7 @@ public class DatabaseTransactionMgr {
                 writeUnlock();
             }
         }
+        Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         db.writeLock();
         try {
             boolean hasError = false;
@@ -908,9 +920,15 @@ public class DatabaseTransactionMgr {
                 writeUnlock();
                 transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
             }
-            updateCatalogAfterVisible(transactionState, db);
+            Span updateCatalogSpan = TraceManager.startSpan("updateCatalogAfterVisible", finishSpan);
+            try {
+                updateCatalogAfterVisible(transactionState, db);
+            } finally {
+                updateCatalogSpan.end();
+            }
         } finally {
             db.writeUnlock();
+            finishSpan.end();
         }
         LOG.info("finish transaction {} successfully", transactionState);
     }
