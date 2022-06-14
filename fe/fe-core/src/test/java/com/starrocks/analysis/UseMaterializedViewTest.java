@@ -94,26 +94,6 @@ public class UseMaterializedViewTest {
         }
     }
 
-    @Test
-    public void testUpdate() {
-        String sql = "update mv1 set k2 = 2";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            assertEquals(e.getMessage(),"only support updating primary key table");
-        }
-    }
-
-    @Test
-    public void testDelete() {
-        String sql = "delete from mv1 where k2 = 2";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
-    }
-
 
 
 }
