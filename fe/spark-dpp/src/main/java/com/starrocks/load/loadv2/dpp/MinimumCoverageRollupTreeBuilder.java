@@ -21,7 +21,9 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // Build RollupTree by using minimum coverage strategy,
 // which is to find the index with the minimum columns that
@@ -36,12 +38,12 @@ import java.util.List;
 // then the result tree is:
 //          index1
 //      |     \      \
-//  index2  index4   index5
-//    |
-//  index3
+//  index2  index5   index4
+//            |
+//          index3
 // Now, if there are more than one indexes meet the column coverage requirement,
 // have the same column size(eg: index2 vs index5), child rollup is preferred
-// builded from the front index(eg: index3 is the child of index2). This can be
+// builded from the back index(eg: index3 is the child of index5). This can be
 // further optimized based on the row number of the index.
 public class MinimumCoverageRollupTreeBuilder implements RollupTreeBuilder {
     public RollupTreeNode build(EtlJobConfig.EtlTable tableMeta) {
@@ -108,7 +110,10 @@ public class MinimumCoverageRollupTreeBuilder implements RollupTreeBuilder {
         }
 
         // find suitable parent rollup from current node
-        if (root.keyColumnNames.containsAll(keyColumns) && root.valueColumnNames.containsAll(valueColumns)) {
+        Set<String> allColumnNames = new HashSet<>();
+        allColumnNames.addAll(root.keyColumnNames);
+        allColumnNames.addAll(root.valueColumnNames);
+        if (allColumnNames.containsAll(keyColumns) && allColumnNames.containsAll(valueColumns)) {
             if (root.children == null) {
                 root.children = new ArrayList<>();
             }

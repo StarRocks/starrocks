@@ -707,16 +707,20 @@ Status JsonReader::_read_and_parse_json() {
     StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        RETURN_IF_ERROR(stream_file->pipe()->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
-                                                              simdjson::SIMDJSON_PADDING));
-        if (_parser_buf_sz == 0) {
-            return Status::EndOfFile("EOF of reading file");
+        ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
+
+        if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
+            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+            // Hence, a re-allocation is needed if the space is not enough.
+            auto buf = ByteBuffer::allocate(_parser_buf->remaining() + simdjson::SIMDJSON_PADDING);
+            buf->put_bytes(_parser_buf->ptr, _parser_buf->remaining());
+            buf->flip();
+            std::swap(buf, _parser_buf);
         }
     }
 
-    data = _parser_buf.get();
-    length = _parser_buf_sz;
+    data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
+    length = _parser_buf->remaining();
 
 #endif
 

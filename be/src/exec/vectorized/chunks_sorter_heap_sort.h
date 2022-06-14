@@ -222,7 +222,7 @@ public:
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
-    void get_next(ChunkPtr* chunk, bool* eos) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
     int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
             return 0;
@@ -230,7 +230,6 @@ public:
         int first_rows = _sort_heap->top().data_segment()->chunk->num_rows();
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
-    bool pull_chunk(ChunkPtr* chunk) override;
 
     SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;

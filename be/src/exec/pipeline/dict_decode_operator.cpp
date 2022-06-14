@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "common/logging.h"
+#include "runtime/global_dict/decoder.h"
 
 namespace starrocks::pipeline {
 
@@ -13,6 +14,7 @@ Status DictDecodeOperator::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperator::close(RuntimeState* state) {
+    _cur_chunk.reset();
     Operator::close(state);
 }
 
@@ -98,9 +100,9 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
         if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
-        vectorized::DefaultDecoderPtr decoder = std::make_unique<vectorized::DefaultDecoder>();
         // TODO : avoid copy dict
-        decoder->dict = dict_iter->second.second;
+        vectorized::GlobalDictDecoderPtr decoder = vectorized::create_global_dict_decoder(dict_iter->second.second);
+
         _decoders.emplace_back(std::move(decoder));
     }
 

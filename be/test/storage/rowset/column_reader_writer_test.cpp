@@ -32,7 +32,6 @@
 #include "column/vectorized_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_block.h"
@@ -49,6 +48,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "types/date_value.h"
 
 using std::string;
 

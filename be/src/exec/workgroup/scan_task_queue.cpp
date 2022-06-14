@@ -3,6 +3,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 
 #include "exec/workgroup/work_group.h"
+#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks::workgroup {
 
@@ -160,7 +161,7 @@ void ScanTaskQueueWithWorkGroup::_maybe_adjust_weight() {
 }
 
 WorkGroupPtr ScanTaskQueueWithWorkGroup::_select_next_wg(int worker_id) {
-    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id);
+    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(_type, worker_id);
 
     WorkGroupPtr max_owner_wg = nullptr;
     WorkGroupPtr max_other_wg = nullptr;

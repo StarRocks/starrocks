@@ -30,7 +30,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_meta.h"
 
 namespace starrocks {
@@ -47,6 +46,9 @@ class TabletSchema;
 namespace vectorized {
 class RowsetReadOptions;
 class Schema;
+
+class ChunkIterator;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 } // namespace vectorized
 
 // the rowset state transfer graph:

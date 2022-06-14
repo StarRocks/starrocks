@@ -164,8 +164,8 @@ public class DescribeStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTableName.getTbl());
             }
 
-            if (table.getType() == TableType.HIVE || table.getType() == TableType.HUDI) {
-                // Reuse the logic of `desc <table_name>` because hive/hudi external table doesn't support view.
+            if (table.getType() == TableType.HIVE || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG) {
+                // Reuse the logic of `desc <table_name>` because hive/hudi/iceberg external table doesn't support view.
                 isAllTables = false;
             }
 

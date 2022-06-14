@@ -54,6 +54,7 @@ import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -426,6 +427,8 @@ public class HiveMetaClient {
         List<Partition> partitions;
         try (AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tableName, partNames);
+        } catch (TTransportException te) {
+            partitions = getPartitionsWithRetry(dbName, tableName, partNames, 1);
         } catch (Exception e) {
             LOG.warn("get table level column stats for partition table failed", e);
             throw new DdlException("get partitions from hive metastore failed: " + e.getMessage());
@@ -564,6 +567,45 @@ public class HiveMetaClient {
         }
 
         return result;
+    }
+
+    /**
+     * When the query scans many partitions in the table or the 'hive.metastore.try.direct.sql' in
+     * hive metastore is false. The hive metastore will throw StackOverFlow exception.
+     * We solve this problem by get partitions information multiple times.
+     * Each retry reduces the number of partitions fetched by half until only one partition is fetched at a time.
+     * @return Hive table partitions
+     * @throws DdlException If there is an exception with only one partition at a time when get partition,
+     * then we determine that there is a bug with the user's hive metastore.
+     */
+    private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
+                                                   List<String> partNames, int retryNum) throws DdlException {
+        int subListSize = (int) Math.pow(2, retryNum);
+        int subListNum = partNames.size() / subListSize;
+        List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
+        List<Partition> partitions = Lists.newArrayList();
+
+        LOG.warn("Execute getPartitionsByNames on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+                dbName, tableName, retryNum, subListSize, partNames.size());
+
+        try (AutoCloseClient client = getClient()) {
+            for (List<String> parts : partNamesList) {
+                partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
+            }
+            LOG.info("Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+                    dbName, tableName, retryNum, subListSize, partNames.size());
+            return partitions;
+        } catch (TTransportException te) {
+            if (subListNum > 1) {
+                return getPartitionsWithRetry(dbName, tableName, partNames, retryNum + 1);
+            } else {
+                throw new DdlException(String.format("" +
+                        "Failed to getPartitionsByNames on [%s.%s] with slice size is %d", dbName, tableName, subListNum));
+            }
+        } catch (Exception e) {
+            throw new DdlException(String.format("Failed to getPartitionsNames on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage()));
+        }
     }
 
     private boolean isStringType(String hiveType) {

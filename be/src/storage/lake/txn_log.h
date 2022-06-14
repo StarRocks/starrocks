@@ -2,9 +2,14 @@
 
 #pragma once
 
+#include <memory>
+
+#include "gen_cpp/starlake.pb.h"
+
 namespace starrocks::lake {
 
-// TODO
-class TxnLog {};
+using TxnLog = TxnLogPB;
+using TxnLogPtr = std::shared_ptr<const TxnLog>;
+using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
 
 } // namespace starrocks::lake

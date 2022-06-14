@@ -307,6 +307,10 @@ void Analytor::close(RuntimeState* state) {
         return;
     }
 
+    while (!_buffer.empty()) {
+        _buffer.pop();
+    }
+    _input_chunks.clear();
     _is_closed = true;
 
     auto agg_close = [this, state]() {

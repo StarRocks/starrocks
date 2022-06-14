@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -154,12 +155,13 @@ public class StatisticExecutor {
                 .max(Long::compareTo).orElse(0L);
         String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
         String tableName = db.getTable(tableId).getName();
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
         String sql = "select cast(" + Constants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + "`" + column +
                 "`) as _dict_merge_" + column +
-                " from " + dbName + "." + tableName + " [_META_]";
+                " from " + catalogName + "." + dbName + "." + tableName + " [_META_]";
 
         Map<String, Database> dbs = Maps.newHashMap();
         ConnectContext context = StatisticUtils.buildConnectContext();

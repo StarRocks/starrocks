@@ -467,6 +467,7 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
             // execute all instances from up to bottom
@@ -490,7 +491,7 @@ public class Coordinator {
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                // shuffle partitions'ordinals in DataStreamSink. backendIds of Fragment instances that
+                // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
                 // contains shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
@@ -566,8 +567,8 @@ public class Coordinator {
                         TStatusCode code;
                         String errMsg = null;
                         try {
-                            PExecPlanFragmentResult result = pair.second.get(queryOptions.query_timeout * 1000L,
-                                    TimeUnit.MILLISECONDS);
+                            PExecPlanFragmentResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
                             code = TStatusCode.findByValue(result.status.statusCode);
                             if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
                                 errMsg = result.status.errorMsgs.get(0);
@@ -1220,10 +1221,8 @@ public class Coordinator {
                 }
 
                 if (dopAdaptionEnabled) {
-                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
                     maxParallelism = hostSet.size();
-                    fragment.setPipelineDop(degreeOfParallelism);
                 }
 
                 // AddAll() soft copy()
@@ -1311,16 +1310,6 @@ public class Coordinator {
                         }
                     }
                 }
-                // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-                if (dopAdaptionEnabled && fragment.isNeedsLocalShuffle()) {
-                    int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
-                    FragmentExecParams param = fragmentExecParamsMap.get(fragment.getFragmentId());
-                    int numBackends = param.scanRangeAssignment.size();
-                    int numInstances = param.instanceExecParams.size();
-                    int pipelineDop =
-                            Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
-                    param.fragment.setPipelineDop(pipelineDop);
-                }
             }
 
             if (params.instanceExecParams.isEmpty()) {
@@ -1338,6 +1327,7 @@ public class Coordinator {
     }
 
     static final int BUCKET_ABSENT = 2147483647;
+
     public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
         Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
@@ -1532,17 +1522,6 @@ public class Coordinator {
                 params.instanceExecParams.add(instanceParam);
             }
         }
-        boolean dopAdaptionEnabled = connectContext != null &&
-                connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                params.fragment.getPlanRoot().canUsePipeLine();
-        // ensure numInstances * pipelineDop = degreeOfParallelism when dop adaptation is enabled
-        if (dopAdaptionEnabled && params.fragment.isNeedsLocalShuffle()) {
-            int numInstances = params.instanceExecParams.size();
-            int numBackends = addressToScanRanges.size();
-            int degreeOfParallelism = connectContext.getSessionVariable().getDegreeOfParallelism();
-            int pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / numBackends));
-            params.fragment.setPipelineDop(pipelineDop);
-        }
     }
 
     // Populates scan_range_assignment_.
@@ -1590,13 +1569,12 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        if (params.backend_num >= backendExecStates.size()) {
-            LOG.warn("unknown backend number: {}, expected less than: {}",
-                    params.backend_num, backendExecStates.size());
+        BackendExecState execState = backendExecStates.get(params.backend_num);
+        if (execState == null) {
+            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
+                    backendExecStates.keySet());
             return;
         }
-
-        BackendExecState execState = backendExecStates.get(params.backend_num);
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1797,6 +1775,10 @@ public class Coordinator {
 
             for (int j = 0; !found && j < profile.getChildList().size(); j++) {
                 RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
+                if (pipelineProfile.getChildList().isEmpty()) {
+                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
+                    continue;
+                }
                 RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
                 if (operatorProfile.getName().contains("RESULT_SINK")) {
                     long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
@@ -2076,7 +2058,6 @@ public class Coordinator {
             return this.rpcParams.params.getFragment_instance_id();
         }
     }
-
 
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,

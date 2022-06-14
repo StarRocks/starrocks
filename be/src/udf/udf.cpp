@@ -27,7 +27,7 @@
 #include "common/logging.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/types.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "udf/udf_internal.h"
 
 #if STARROCKS_UDF_SDK_BUILD

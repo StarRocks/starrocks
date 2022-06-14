@@ -30,6 +30,7 @@ import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
@@ -49,13 +50,20 @@ import java.util.concurrent.TimeUnit;
 public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
-            .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
-            .add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
-            .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
-            .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-            .add("DataUsedPct").add("CpuCores").build();
+    public static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("BackendId").add("Cluster").add("Host").add("HeartbeatPort")
+                .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
+                .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
+                .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
+                .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
+                .add("DataUsedPct").add("CpuCores");
+        if (Config.integrate_starmgr) {
+            builder.add("StarletPort").add("WorkerId");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private SystemInfoService clusterInfoService;
 
@@ -186,6 +194,11 @@ public class BackendsProcDir implements ProcDirInterface {
 
             // Num CPU cores
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+            if (Config.integrate_starmgr) {
+                backendInfo.add(String.valueOf(backend.getStarletPort()));
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
+                backendInfo.add(String.valueOf(workerId));
+            }
 
             comparableBackendInfos.add(backendInfo);
         }

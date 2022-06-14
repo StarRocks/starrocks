@@ -169,20 +169,15 @@ private:
     template <FieldType type, EncodingTypePB encoding_type, bool optimize_value_seek = false>
     void _add_map() {
         auto key = std::make_pair(type, encoding_type);
-        auto it = _encoding_map.find(key);
-        if (it != _encoding_map.end()) {
-            return;
-        }
+        DCHECK(_encoding_map.count(key) == 0);
 
-        EncodingTraits<type, encoding_type> traits;
-        std::unique_ptr<EncodingInfo> encoding(new EncodingInfo(traits));
-        if (_default_encoding_type_map.find(type) == std::end(_default_encoding_type_map)) {
+        if (_default_encoding_type_map.find(type) == _default_encoding_type_map.end()) {
             _default_encoding_type_map[type] = encoding_type;
         }
         if (optimize_value_seek && _value_seek_encoding_map.find(type) == _value_seek_encoding_map.end()) {
             _value_seek_encoding_map[type] = encoding_type;
         }
-        _encoding_map.emplace(key, encoding.release());
+        _encoding_map.emplace(key, new EncodingInfo(EncodingTraits<type, encoding_type>()));
     }
 
     std::unordered_map<FieldType, EncodingTypePB, std::hash<int>> _default_encoding_type_map;
@@ -230,7 +225,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<OLAP_FIELD_TYPE_BOOL, RLE>();
     _add_map<OLAP_FIELD_TYPE_BOOL, BIT_SHUFFLE>();
-    _add_map<OLAP_FIELD_TYPE_BOOL, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_BOOL, PLAIN_ENCODING, true>();
 
     _add_map<OLAP_FIELD_TYPE_DATE, BIT_SHUFFLE>();
@@ -249,13 +243,11 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, FOR_ENCODING, true>();
 
-    _add_map<OLAP_FIELD_TYPE_DECIMAL, BIT_SHUFFLE>();
-    _add_map<OLAP_FIELD_TYPE_DECIMAL, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_DECIMAL, BIT_SHUFFLE, true>();
+    _add_map<OLAP_FIELD_TYPE_DECIMAL, PLAIN_ENCODING>();
 
-    _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, BIT_SHUFFLE>();
-    _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, BIT_SHUFFLE, true>();
+    _add_map<OLAP_FIELD_TYPE_DECIMAL_V2, PLAIN_ENCODING>();
 
     _add_map<OLAP_FIELD_TYPE_HLL, PLAIN_ENCODING>();
 

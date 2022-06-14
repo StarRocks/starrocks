@@ -36,7 +36,7 @@ public:
         _chunks_sorter_partions.reserve(num_right_sinkers);
     }
 
-    void close(RuntimeState* state) override {}
+    void close(RuntimeState* state) override;
 
     void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
         _chunks_sorter_partions.push_back(chunks_sorter);
@@ -55,7 +55,7 @@ public:
         return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
     }
 
-    ChunkPtr pull_chunk();
+    StatusOr<ChunkPtr> pull_chunk();
 
 private:
     Status _merge_inputs();

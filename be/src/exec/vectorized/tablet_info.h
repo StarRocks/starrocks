@@ -6,8 +6,8 @@
 #include "exec/tablet_info.h"
 
 namespace starrocks {
+class RuntimeState;
 namespace vectorized {
-
 struct ChunkRow {
     ChunkRow() = default;
     ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
@@ -54,6 +54,10 @@ public:
 
     Status init();
 
+    Status prepare(RuntimeState* state);
+    Status open(RuntimeState* state);
+    void close(RuntimeState* state);
+
     int64_t db_id() const { return _t_param.db_id; }
     int64_t table_id() const { return _t_param.table_id; }
     int64_t version() const { return _t_param.version; }
@@ -61,8 +65,8 @@ public:
     // `invalid_row_index` stores index that chunk[index]
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
-    void find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-                      std::vector<uint8_t>* selection, int* invalid_row_index);
+    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
+                        std::vector<uint8_t>* selection, int* invalid_row_index);
 
     const std::vector<OlapTablePartition*>& get_partitions() const { return _partitions; }
 
@@ -90,6 +94,7 @@ private:
     std::vector<SlotDescriptor*> _distributed_slot_descs;
     Columns _partition_columns;
     std::vector<Column*> _distributed_columns;
+    std::vector<ExprContext*> _partitions_expr_ctxs;
 
     ObjectPool _obj_pool;
     std::vector<OlapTablePartition*> _partitions;

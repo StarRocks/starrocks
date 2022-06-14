@@ -37,7 +37,7 @@ public class MVColumnHLLUnionPattern implements MVColumnPattern {
         }
         if (fnExpr.getChild(0) instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) fnExpr.getChild(0);
-            if (slotRef.getType().getPrimitiveType() == PrimitiveType.HLL && slotRef.getColumn() != null) {
+            if (slotRef.getType().getPrimitiveType() == PrimitiveType.HLL) {
                 return true;
             } else {
                 return false;

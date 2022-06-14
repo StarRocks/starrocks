@@ -14,6 +14,8 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/schema_change.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
+#include "storage/txn_manager.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {

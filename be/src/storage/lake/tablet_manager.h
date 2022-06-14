@@ -3,10 +3,10 @@
 #pragma once
 
 #include "common/statusor.h"
-
-namespace staros::starlet {
-class Starlet;
-} // namespace staros::starlet
+#include "storage/lake/metadata_iterator.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 class Cache;
@@ -15,21 +15,22 @@ class TCreateTabletReq;
 
 namespace starrocks::lake {
 
-class MetadataIterator;
+class GroupAssigner;
 class Tablet;
-class TabletMetadata;
-class TxnLog;
+template <typename T>
+class MetadataIterator;
+using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
+using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
 class TabletManager {
     friend class Tablet;
-    using Starlet = staros::starlet::Starlet;
 
 public:
-    // Does NOT take the ownership of |starlet| and |starlet| must outlive
+    // Does NOT take the ownership of |group_assigner| and |group_assigner| must outlive
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(Starlet* starlet, int64_t cache_capacity);
+    explicit TabletManager(GroupAssigner* group_assigner, int64_t cache_capacity);
 
     Status create_tablet(const TCreateTabletReq& req);
 
@@ -37,20 +38,38 @@ public:
 
     Status drop_tablet(int64_t tablet_id);
 
-private:
     Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
-    StatusOr<TabletMetadata> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
+    Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, const std::string& path);
+    StatusOr<TabletMetadataIter> list_tablet_metadata(const std::string& group);
+    StatusOr<TabletMetadataIter> list_tablet_metadata(const std::string& group, int64_t tablet_id);
     Status delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
-    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group);
-    StatusOr<MetadataIterator> list_tablet_metadata(const std::string& group, int64_t tablet_id);
 
-    StatusOr<TxnLog> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     Status put_txn_log(const std::string& group, const TxnLog& log);
+    Status put_txn_log(const std::string& group, TxnLogPtr log);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& group, const std::string& path);
+    StatusOr<TxnLogIter> list_txn_log(const std::string& group);
+    StatusOr<TxnLogIter> list_txn_log(const std::string& group, int64_t tablet_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
-    StatusOr<MetadataIterator> list_txn_log(const std::string& group);
-    StatusOr<MetadataIterator> list_txn_log(const std::string& group, int64_t tablet_id);
 
-    Starlet* _starlet;
+    GroupAssigner* TEST_set_group_assigner(GroupAssigner* value) {
+        auto ret = _group_assigner;
+        _group_assigner = value;
+        return ret;
+    }
+
+private:
+    std::string tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson);
+    std::string tablet_metadata_path(const std::string& group, const std::string& metadata_path);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& metadata_path);
+
+    std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
+    std::string txn_log_path(const std::string& group, const std::string& txnlog_path);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& txnlog_path);
+
+    GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;
 };
 

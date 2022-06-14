@@ -479,7 +479,7 @@ CONF_mBool(sync_tablet_meta, "false");
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "10000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -490,6 +490,9 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
+
+// kafka reqeust timeout
+CONF_Int32(routine_load_kafka_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -584,8 +587,8 @@ CONF_Int32(late_materialization_ratio, "10");
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Max batched bytes for each transmit request.
-CONF_Int64(max_transmit_batched_bytes, "65536");
+// Max batched bytes for each transmit request. (256KB)
+CONF_Int64(max_transmit_batched_bytes, "262144");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -695,6 +698,9 @@ CONF_String(object_storage_endpoint, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
+// Acccess object storage using https.
+// this options is applicable only if `object_storage_endpoint` is not specified.
+CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
@@ -734,6 +740,11 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
+
+#ifdef USE_STAROS
+CONF_String(starmgr_addr, "");
+CONF_Int32(starlet_port, "9070");
+#endif
 
 } // namespace config
 

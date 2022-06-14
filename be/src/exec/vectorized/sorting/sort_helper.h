@@ -9,7 +9,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized//sorting//sort_permute.h"
 #include "exec/vectorized//sorting//sorting.h"
-#include "runtime/timestamp_value.h"
+#include "types/timestamp_value.h"
 #include "util/json.h"
 #include "util/orlp/pdqsort.h"
 

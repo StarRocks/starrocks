@@ -71,7 +71,7 @@ public class TimestampArithmeticExpr extends Expr {
 
     // C'tor for function-call like arithmetic, e.g., 'date_add(a, interval b year)'.
     public TimestampArithmeticExpr(String funcName, Expr e1, Expr e2, String timeUnitIdent) {
-        this.funcName = funcName;
+        this.funcName = funcName.toLowerCase();
         this.timeUnitIdent = timeUnitIdent;
         this.intervalFirst = false;
         children.add(e1);

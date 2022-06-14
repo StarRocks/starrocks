@@ -28,6 +28,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/bit_util.h"
 

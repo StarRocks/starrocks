@@ -58,7 +58,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
             size_t input_chunk_size = input_chunk->num_rows();
             _aggregator->update_num_input_rows(input_chunk_size);
             COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-            _aggregator->evaluate_exprs(input_chunk.get());
+            RETURN_IF_ERROR(_aggregator->evaluate_exprs(input_chunk.get()));
 
             if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
                 // force execute streaming

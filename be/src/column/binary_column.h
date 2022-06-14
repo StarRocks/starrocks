@@ -5,6 +5,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "common/statusor.h"
 #include "util/slice.h"
 
 namespace starrocks::vectorized {
@@ -288,7 +289,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override;
+    bool capacity_limit_reached(std::string* msg = nullptr) const override;
 
 private:
     void _build_slices() const;

@@ -20,6 +20,7 @@ Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprCont
 }
 
 void IntersectContext::close(RuntimeState* state) {
+    _hash_set.reset();
     if (_build_pool != nullptr) {
         _build_pool->free_all();
     }

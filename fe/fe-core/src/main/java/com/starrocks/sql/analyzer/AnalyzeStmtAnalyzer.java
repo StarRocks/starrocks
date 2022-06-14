@@ -38,7 +38,7 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
-            Table analyzeTable = MetaUtils.getStarRocksTable(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -87,7 +87,7 @@ public class AnalyzeStmtAnalyzer {
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
                     tbl.setDb(ClusterNamespace.getFullName(statement.getClusterName(), tbl.getDb()));
-                    Database db = MetaUtils.getStarRocks(session, statement.getTableName());
+                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -96,8 +96,8 @@ public class AnalyzeStmtAnalyzer {
                     statement.setDbId(db.getId());
                 } else if (null != statement.getTableName().getTbl()) {
                     MetaUtils.normalizationTableName(session, statement.getTableName());
-                    Database db = MetaUtils.getStarRocks(session, statement.getTableName());
-                    Table table = MetaUtils.getStarRocksTable(session, statement.getTableName());
+                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
+                    Table table = MetaUtils.getTable(session, statement.getTableName());
 
                     if (!(table instanceof OlapTable)) {
                         throw new SemanticException("Table '%s' is not a OLAP table", table.getName());

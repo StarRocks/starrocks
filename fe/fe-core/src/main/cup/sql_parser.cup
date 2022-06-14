@@ -260,7 +260,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_QUERY, KW_QUOTA,
     KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPAIR, KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_REPLICA, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
-    KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS, KW_REFRESH,
+    KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
     KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SELECT, KW_SEMI, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SETS, KW_SET_VAR, KW_SHOW,
     KW_SMALLINT, KW_SNAPSHOT, KW_SONAME, KW_SPLIT, KW_START, KW_STATUS, KW_STOP, KW_STORAGE, KW_STRING,
     KW_SUM, KW_SUPERUSER, KW_SYNC, KW_SYSTEM, KW_SWAP,
@@ -293,7 +293,7 @@ nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
     use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
-    enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt, refresh_stmt,
+    enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
 
@@ -650,8 +650,6 @@ stmt ::=
     {: RESULT = stmt; :}
 	| restore_stmt : stmt
     {: RESULT = stmt; :}
-    | refresh_stmt : stmt
-    {: RESULT = stmt; :}
     | unsupported_stmt : stmt
     {: RESULT = stmt; :}
     | export_stmt : stmt
@@ -765,10 +763,6 @@ alter_stmt ::=
     | KW_ALTER KW_SYSTEM alter_system_clause:clause
     {:
         RESULT = new AlterSystemStmt(clause);
-    :}
-    | KW_ALTER KW_CLUSTER ident:name opt_properties:properties
-    {:
-        RESULT = new AlterClusterStmt(name, properties);
     :}
     | KW_ALTER KW_DATABASE ident:dbName KW_SET KW_DATA KW_QUOTA quantity:quota_quantity
     {:
@@ -1135,11 +1129,6 @@ create_stmt ::=
     {:
         RESULT = new CreateDbStmt(ifNotExists, db);
     :}
-    /* cluster */
-   /* KW_CREATE KW_CLUSTER ident:name  opt_properties:properties KW_IDENTIFIED KW_BY STRING_LITERAL:password
-    {:
-        RESULT = new CreateClusterStmt(name, properties, password);
-    :}*/
     /* Function */
     | KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
             KW_RETURNS type_def:returnType opt_intermediate_type:intermediateType opt_properties:properties
@@ -1198,11 +1187,6 @@ create_stmt ::=
         opt_col_with_comment_list:columns opt_comment:comment KW_AS query_stmt:view_def
     {:
         RESULT = new CreateViewStmt(ifNotExists, viewName, columns, comment, view_def);
-    :}
-    /* cluster */
-    | KW_CREATE KW_CLUSTER ident:name opt_properties:properties KW_IDENTIFIED KW_BY STRING_LITERAL:password
-    {:
-        RESULT = new CreateClusterStmt(name, properties, password);
     :}
     | KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER ident:brokerName
       KW_ON KW_LOCATION STRING_LITERAL:location
@@ -1758,11 +1742,6 @@ drop_stmt ::=
     | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, force);
-    :}
-    /* cluster */
-    | KW_DROP KW_CLUSTER opt_if_exists:ifExists ident:cluster
-    {:
-        RESULT = new DropClusterStmt(ifExists, cluster);
     :}
     /* Function */
     | KW_DROP KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
@@ -2420,15 +2399,6 @@ show_param ::=
     | KW_AUTHORS
     {:
         RESULT = new ShowAuthorStmt();
-    :}
-    /* Create table */
-    | KW_CREATE KW_TABLE table_name:table
-    {:
-        RESULT = new ShowCreateTableStmt(table);
-    :}
-    | KW_CREATE KW_VIEW table_name:table
-    {:
-        RESULT = new ShowCreateTableStmt(table, true);
     :}
     /* Create database */
     | KW_CREATE KW_DATABASE ident:db
@@ -3233,13 +3203,6 @@ restore_stmt ::=
     :}
     ;
 
-refresh_stmt ::=
-    KW_REFRESH KW_EXTERNAL KW_TABLE  base_table_ref:tblRef
-    {:
-        RESULT = new RefreshExternalTableStmt(tblRef);
-    :}
-    ;
-
 // Kill statement
 kill_stmt ::=
     KW_KILL INTEGER_LITERAL:value
@@ -3988,8 +3951,6 @@ join_operator ::=
   {: RESULT = JoinOperator.INNER_JOIN; :}
   | KW_LEFT opt_outer KW_JOIN
   {: RESULT = JoinOperator.LEFT_OUTER_JOIN; :}
-  | KW_MERGE KW_JOIN
-  {: RESULT = JoinOperator.MERGE_JOIN; :}
   | KW_RIGHT opt_outer KW_JOIN
   {: RESULT = JoinOperator.RIGHT_OUTER_JOIN; :}
   | KW_FULL opt_outer KW_JOIN

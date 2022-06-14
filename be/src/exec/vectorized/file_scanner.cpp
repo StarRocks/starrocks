@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "exec/decompressor.h"

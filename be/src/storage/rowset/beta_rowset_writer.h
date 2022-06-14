@@ -26,6 +26,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "runtime/global_dict/types.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/segment_writer.h"
 
@@ -49,6 +50,10 @@ public:
     int64_t num_rows() override { return _num_rows_written; }
     int64_t total_data_size() override { return _total_data_size; }
     RowsetId rowset_id() override { return _context.rowset_id; }
+
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
+        return _global_dict_columns_valid_info;
+    }
 
 protected:
     Status flush_src_rssids(uint32_t segment_id);
@@ -80,6 +85,8 @@ protected:
     bool _already_built = false;
 
     FlushChunkState _flush_chunk_state = FlushChunkState::UNKNOWN;
+
+    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 // Chunk contains all schema columns data.

@@ -202,11 +202,11 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setTransmission_compression_type(streamLoadTask.getTransmisionCompressionType());
         if (streamLoadTask.getLoadParallelRequestNum() != 0) {
-            // primary key & unique key should not use parallel write since the order of write is important
-            if (destTable.getKeysType() == KeysType.PRIMARY_KEYS || destTable.getKeysType() == KeysType.UNIQUE_KEYS) {
-                queryOptions.setLoad_dop(1);
-            } else {
+            // only dup_keys can use parallel write since other table's the order of write is important
+            if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());
+            } else {
+                queryOptions.setLoad_dop(1);
             }
         }
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.

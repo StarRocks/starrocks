@@ -97,6 +97,15 @@ public class StatisticAutoCollector extends MasterDaemon {
                     minRowCount = partition.getRowCount();
                 }
             }
+
+            /*
+             * health = totalLoadRows / totalRowCount.
+             * The ratio of the number of modified lines to the total number of lines.
+             * Because we cannot obtain complete table-level information, we use the row count of
+             * the partition with the smallest row count as totalRowCount.
+             * It can be understood that we assume an extreme case where all imported and modified lines
+             * are concentrated in only one partition
+             */
             double healthy;
             if (minRowCount == 0) {
                 healthy = 1;

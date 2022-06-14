@@ -3,11 +3,16 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminShowConfigStmt;
+import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
+import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -46,6 +51,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
+            CreateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             AlterTableStatementAnalyzer.analyze(statement, context);
             return null;
@@ -65,7 +76,20 @@ public class Analyzer {
 
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
-            AdminSetReplicaStatusStmtAnalyzer.analyze(statement, session);
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                               ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -122,7 +146,13 @@ public class Analyzer {
 
         @Override
         public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
-            AdminSetStmtAnalyzer.analyze(adminSetConfigStmt, session);
+            AdminStmtAnalyzer.analyze(adminSetConfigStmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
             return null;
         }
 
@@ -175,8 +205,15 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                         ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
+            CreateMaterializedViewStmt.analyze(statement, context);
             return null;
         }
 

@@ -26,6 +26,7 @@
 
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 

@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include "column/fixed_length_column.h"
+
 namespace starrocks::vectorized {
 class AnalytorTest : public ::testing::Test {
 public:

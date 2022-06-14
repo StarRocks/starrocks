@@ -236,6 +236,17 @@ public class BDBHA implements HAProtocol {
         }
     }
 
+    public void removeHelperSocket(String ip, Integer port) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        Set<InetSocketAddress> helperSockets = Sets.newHashSet(replicationGroupAdmin.getHelperSockets());
+        InetSocketAddress targetAddress = new InetSocketAddress(ip, port);
+        if (helperSockets.contains(targetAddress)) {
+            helperSockets.remove(targetAddress);
+            environment.setNewReplicationGroupAdmin(helperSockets);
+            LOG.info("remove helper socket {}:{} from replicationGroupAdmin", ip, port);
+        }
+    }
+
     public void removeNodeIfExist(String host, int port) {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
@@ -280,5 +291,10 @@ public class BDBHA implements HAProtocol {
                                 setElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size()));
             }
         }
+    }
+
+    public synchronized void updateFrontendHostAndPort(String nodeName, String newHostName, int newPort) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        replicationGroupAdmin.updateAddress(nodeName, newHostName, newPort);
     }
 }

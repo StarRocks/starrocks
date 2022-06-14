@@ -28,6 +28,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
+#include "util/network_util.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
 
@@ -70,19 +71,21 @@ public:
         return stub;
     }
 
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) {
-        butil::EndPoint endpoint;
-        if (str2endpoint(taddr.hostname.c_str(), taddr.port, &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, hostname=" << taddr.hostname;
-            return nullptr;
-        }
-        return get_stub(endpoint);
-    }
+    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
     doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
-        if (str2endpoint(host.c_str(), port, &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, hostname=" << host;
+        std::string realhost;
+        realhost = host;
+        if (!is_valid_ip(host)) {
+            realhost = hostname_to_ip(host);
+            if (realhost == "") {
+                LOG(WARNING) << "failed to get ip from host";
+                return nullptr;
+            }
+        }
+        if (str2endpoint(realhost.c_str(), port, &endpoint)) {
+            LOG(WARNING) << "unknown endpoint, host = " << host;
             return nullptr;
         }
         return get_stub(endpoint);
