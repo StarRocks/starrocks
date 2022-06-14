@@ -21,7 +21,15 @@
 
 #include "storage/tablet_meta_manager.h"
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/writer.h>
+DIAGNOSTIC_POP
+
+#include <json2pb/json_to_pb.h>
+#include <json2pb/pb_to_json.h>
+#include <rocksdb/write_batch.h>
 
 #include <boost/algorithm/string/trim.hpp>
 #include <fstream>
@@ -34,9 +42,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
-#include "json2pb/json_to_pb.h"
-#include "json2pb/pb_to_json.h"
-#include "rocksdb/write_batch.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
