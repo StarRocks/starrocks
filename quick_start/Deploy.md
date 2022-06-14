@@ -316,7 +316,7 @@ The IP address should match the `priority_networks` setting; `portheartbeat_serv
 If an error occurs, delete the BE node using the following commands:
 
 * `alter system decommission backend "be_host:be_heartbeat_service_port";`
-* `alter system dropp backend "be_host:be_heartbeat_service_port";`
+* `alter system drop backend "be_host:be_heartbeat_service_port";`
 
 Step 3: Start the BE.
 
