@@ -92,22 +92,22 @@ public class ByteSizeValue implements Comparable<ByteSizeValue> {
     public String toString() {
         long bytes = getBytes();
         double value = bytes;
-        String suffix = "b";
+        String suffix = "B";
         if (bytes >= ByteSizeUnit.C5) {
             value = getPbFrac();
-            suffix = "pb";
+            suffix = "PB";
         } else if (bytes >= ByteSizeUnit.C4) {
             value = getTbFrac();
-            suffix = "tb";
+            suffix = "TB";
         } else if (bytes >= ByteSizeUnit.C3) {
             value = getGbFrac();
-            suffix = "gb";
+            suffix = "GB";
         } else if (bytes >= ByteSizeUnit.C2) {
             value = getMbFrac();
-            suffix = "mb";
+            suffix = "MB";
         } else if (bytes >= ByteSizeUnit.C1) {
             value = getKbFrac();
-            suffix = "kb";
+            suffix = "KB";
         }
         return Strings.format1Decimals(value, suffix);
     }
