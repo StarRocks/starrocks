@@ -135,7 +135,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
     } else if (config::object_storage_endpoint_use_https) {
-         config.scheme = Aws::Http::Scheme::HTTPS;
+        config.scheme = Aws::Http::Scheme::HTTPS;
     } else {
         config.scheme = Aws::Http::Scheme::HTTP;
     }
