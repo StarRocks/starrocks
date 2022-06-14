@@ -148,6 +148,9 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    // Update elements to default value which hit by the filter
+    virtual void update_default(const Filter& filter) = 0;
+
     // This function will update data from src according to the input indexes. 'indexes' contains
     // the row index will be update
     // For example:

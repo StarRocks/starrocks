@@ -157,6 +157,13 @@ void NullableColumn::append_value_multiple_times(const void* value, size_t count
     null_column_data().insert(null_column_data().end(), count, 0);
 }
 
+void NullableColumn::update_null_as_default() {
+    if (null_count() == 0) {
+        return;
+    }
+    _data_column->update_default(_null_column->get_data());
+}
+
 Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t replace_num = src.size();

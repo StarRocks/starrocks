@@ -116,6 +116,8 @@ public:
 
     void append_default(size_t count) override { _size += count; }
 
+    void update_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }

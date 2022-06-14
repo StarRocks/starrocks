@@ -210,6 +210,23 @@ void BinaryColumnBase<T>::_build_slices() const {
 }
 
 template <typename T>
+void BinaryColumnBase<T>::update_default(const Filter& filter) {
+    std::vector<uint32_t> indexes;
+    for (size_t i = 0; i < filter.size(); i++) {
+        Slice slice = get_slice(i);
+        if (filter[i] == 1 && slice.size > 0) {
+            indexes.push_back(i);
+        }
+    }
+    if (indexes.empty()) {
+        return;
+    }
+    auto default_column = clone_empty();
+    default_column->append_default(indexes.size());
+    update_rows(*default_column, indexes.data());
+}
+
+template <typename T>
 Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();

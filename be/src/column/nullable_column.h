@@ -51,6 +51,11 @@ public:
 
     void set_has_null(bool has_null) { _has_null = _has_null | has_null; }
 
+    // Update null element to default value
+    void update_null_as_default();
+
+    void update_default(const Filter& filter) override {}
+
     void update_has_null() {
         const NullColumn::Container& v = _null_column->get_data();
         const auto* p = v.data();
