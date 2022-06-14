@@ -393,6 +393,23 @@ TEST_F(AsyncDeltaWriterTest, test_write_after_close) {
     }));
 }
 
+TEST_F(AsyncDeltaWriterTest, test_finish_after_close) {
+    // Create and open DeltaWriter
+    auto tablet_id = _tablet_metadata->id();
+    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+    ASSERT_OK(delta_writer->open());
+
+    // close()
+    delta_writer->close();
+
+    auto tid = std::this_thread::get_id();
+    // finish()
+    delta_writer->finish([&](const Status& st) {
+        ASSERT_ERROR(st);
+        ASSERT_EQ(tid, std::this_thread::get_id());
+    });
+}
+
 TEST_F(AsyncDeltaWriterTest, test_close) {
     // Call close() multiple times
     {
