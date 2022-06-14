@@ -134,12 +134,10 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
         config.endpointOverride = uri.endpoint();
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
+    } else if (config::object_storage_endpoint_use_https) {
+         config.scheme = Aws::Http::Scheme::HTTPS;
     } else {
-        // To use implicit endpoint.
         config.scheme = Aws::Http::Scheme::HTTP;
-        if (config::object_storage_endpoint_use_https) {
-            config.scheme = Aws::Http::Scheme::HTTPS;
-        }
     }
     if (!config::object_storage_region.empty()) {
         config.region = config::object_storage_region;
