@@ -17,11 +17,10 @@ namespace starrocks::pipeline {
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                           int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks)
+                           std::atomic<int>& num_committed_scan_tasks)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _max_scan_concurrency(max_scan_concurrency),
           _num_committed_scan_tasks(num_committed_scan_tasks),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {
@@ -48,8 +47,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "MaxScanConcurrency", TUnit::UNIT);
-    COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_max_scan_concurrency));
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -351,16 +348,15 @@ bool ScanOperator::_try_to_increase_committed_scan_tasks() {
 }
 
 bool ScanOperator::_exceed_max_scan_concurrency(int num_committed_scan_tasks) const {
-    // _max_scan_concurrency takes effect, only when it is positive.
-    return _max_scan_concurrency > 0 && num_committed_scan_tasks >= _max_scan_concurrency;
+    size_t max = max_scan_concurrency();
+    // max_scan_concurrency takes effect, only when it is positive.
+    return max > 0 && num_committed_scan_tasks >= max;
 }
 
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
-          _scan_node(scan_node),
-          _max_scan_concurrency(scan_node->max_scan_concurrency()) {}
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

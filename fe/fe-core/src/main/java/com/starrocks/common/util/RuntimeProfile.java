@@ -55,7 +55,7 @@ public class RuntimeProfile {
     private static final String ROOT_COUNTER = "";
     private static final Set<String> NON_MERGE_COUNTER_NAMES =
             Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates",
-                    "MemoryLimit", "MaxScanConcurrency");
+                    "MemoryLimit");
 
     private final Counter counterTotalTime;
 
