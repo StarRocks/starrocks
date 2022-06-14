@@ -76,6 +76,8 @@ public:
         return tls_mem_tracker;
     }
 
+    static CurrentThread& current();
+
     static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 
     bool set_is_catched(bool is_catched) {
@@ -89,6 +91,7 @@ public:
     void mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             cur_tracker->consume(_cache_size);
             _cache_size = 0;
@@ -98,6 +101,7 @@ public:
     bool try_mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
             if (LIKELY(limit_tracker == nullptr)) {
@@ -148,10 +152,15 @@ public:
         }
     }
 
+    int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
+
 private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
     int64_t _cache_size = 0;
+    int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
+
+    // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     bool _is_catched = false;
     bool _check = true;
