@@ -89,7 +89,7 @@ public:
     void mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
-        _consumed_bytes += size;
+        _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             cur_tracker->consume(_cache_size);
             _cache_size = 0;
@@ -99,7 +99,7 @@ public:
     bool try_mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
-        _consumed_bytes += size;
+        _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
             if (LIKELY(limit_tracker == nullptr)) {
@@ -158,20 +158,20 @@ public:
         return res;
     }
 
-    int64_t get_consumed_bytes() const { return _consumed_bytes; }
+    int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
 private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
-    int64_t _cache_size = 0;
-    int64_t _consumed_bytes = 0;
+    int64_t _cache_size = 0;           // Allocated but not committed memory bytes
+    int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
+    int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
-    int64_t _try_consume_mem_size = 0;
 };
 
 inline thread_local CurrentThread tls_thread_status;
