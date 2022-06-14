@@ -334,7 +334,7 @@ public:
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const string& fname) override {
-        int fd;
+        int fd = 0;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
 
         uint64_t file_size = 0;

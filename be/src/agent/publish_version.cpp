@@ -2,7 +2,11 @@
 
 #include "publish_version.h"
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
+DIAGNOSTIC_POP
 
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
