@@ -86,6 +86,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -685,15 +686,26 @@ public class ShowExecutor {
             }
 
             if (table instanceof View) {
+                if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), "MATERIALIZED VIEW");
+                }
                 View view = (View) table;
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
                 resultSet = new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
-            } else {
-                if (showStmt.isView()) {
+            } else if (table instanceof MaterializedView) {
+                if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "VIEW");
+                }
+                rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
+                resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+            } else {
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.TABLE) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), showStmt.getType().getValue());
                 }
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
@@ -1573,7 +1585,7 @@ public class ShowExecutor {
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
         List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
-        rowSet.add(Arrays.asList("default", "default", "internal catalog"));
+        rowSet.add(Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
         rowSet.sort(new Comparator<List<String>>() {
             @Override
             public int compare(List<String> o1, List<String> o2) {

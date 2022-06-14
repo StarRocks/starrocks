@@ -107,7 +107,6 @@ private:
     // Only used when broadcast
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
-    size_t _request_bytes_threshold = config::max_transmit_batched_bytes;
 
     bool _is_first_chunk = true;
 

@@ -47,6 +47,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
+@Deprecated
 public abstract class AlterJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(AlterJob.class);
 

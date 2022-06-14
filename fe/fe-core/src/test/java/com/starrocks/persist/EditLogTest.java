@@ -21,18 +21,28 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Frontend;
+
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
     private String meta = "editLogTestDir/";
@@ -128,5 +138,39 @@ public class EditLogTest {
 
         EditLog editLog = new EditLog("node1");
         editLog.logTimestamp(new Timestamp());
+    }
+
+    private GlobalStateMgr mockGlobalStateMgr() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+
+        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
+        Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
+        field1.setAccessible(true);
+
+        ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
+        Frontend fe1 = new Frontend(FrontendNodeType.MASTER, "testName", "127.0.0.1", 1000);
+        frontends.put("testName", fe1);
+        field1.set(nodeMgr, frontends);
+
+        Field field2 = globalStateMgr.getClass().getDeclaredField("nodeMgr");
+        field2.setAccessible(true);
+        field2.set(globalStateMgr, nodeMgr);
+        return globalStateMgr;
+    }
+
+    @Test
+    public void testOpUpdateFrontend() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+        List<Frontend> frontends = mgr.getFrontends(null);
+        Frontend fe = frontends.get(0);
+        fe.updateHostAndEditLogPort("testHost", 1000);
+        JournalEntity journal = new JournalEntity();
+        journal.setData(fe);
+        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
+        EditLog.loadJournal(mgr, journal);
+        List<Frontend> updatedFrontends = mgr.getFrontends(null);
+        Frontend updatedfFe = updatedFrontends.get(0);
+        Assert.assertEquals("testHost", updatedfFe.getHost());
+        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 }

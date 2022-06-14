@@ -334,8 +334,8 @@ public class RuleSet {
     }
 
     public void addAutoJoinImplementationRule() {
-        this.implementRules.add(MergeJoinImplementationRule.getInstance());
         this.implementRules.add(HashJoinImplementationRule.getInstance());
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
     }
 
 }

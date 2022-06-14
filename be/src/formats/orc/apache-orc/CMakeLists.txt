@@ -160,10 +160,6 @@ install(
   DESTINATION "share/doc/orc")
 endif()
 
-if (BUILD_JAVA)
-  add_subdirectory(java)
-endif()
-
 if (BUILD_TOOLS)
   add_subdirectory(tools)
 endif ()

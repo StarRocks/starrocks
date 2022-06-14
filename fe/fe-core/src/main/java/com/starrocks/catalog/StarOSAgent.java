@@ -10,6 +10,7 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.WorkerInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,7 +34,7 @@ public class StarOSAgent {
     public StarOSAgent() {
         serviceId = -1;
         // check if Config.starmanager_address == FE address
-        if (Config.integrate_staros) {
+        if (Config.integrate_starmgr) {
             String[] starMgrAddr = Config.starmgr_address.split(":");
             if (!starMgrAddr[0].equals("127.0.0.1")) {
                 LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
@@ -131,7 +132,7 @@ public class StarOSAgent {
                 LOG.warn(e);
                 return;
             } else {
-                // get workerId from staros
+                // get workerId from starMgr
                 try {
                     WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                     workerId = workerInfo.getWorkerId();
@@ -146,5 +147,53 @@ public class StarOSAgent {
         workerToId.put(workerIpPort, workerId);
         workerToBackend.put(workerId, backendId);
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
+    }
+
+    public void removeWorker(String workerIpPort) throws DdlException {
+        long workerId = -1;
+        if (workerToId.containsKey(workerIpPort)) {
+            workerId = workerToId.get(workerIpPort);
+        } else {
+            // When FE && staros restart, workerToId is Empty, but staros already persisted
+            // worker infos, so we need to get workerId from starMgr
+            try {
+                WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                workerId = workerInfo.getWorkerId();
+            } catch (StarClientException e) {
+                if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                    throw new DdlException("Failed to get worker id from starMgr. error: "
+                            + e.getMessage());
+                }
+
+                LOG.info("worker {} not exist.", workerIpPort);
+                return;
+            }
+        }
+
+        try {
+            client.removeWorker(serviceId, workerId);
+        } catch (StarClientException e) {
+            // when multi threads remove this worker, maybe we would get "NOT_EXIST"
+            // but it is right, so only need to throw exception
+            // if code is not StarClientException.ExceptionCode.NOT_EXIST
+            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                throw new DdlException("Failed to remove worker. error: " + e.getMessage());
+            }
+        }
+
+        workerToBackend.remove(workerId);
+        workerToId.remove(workerIpPort);
+        LOG.info("remove worker {} success from StarMgr", workerIpPort);
+    }
+
+    public long getWorkerIdByBackendId(long backendId) {
+        long workerId = -1;
+        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+            if (entry.getValue() == backendId) {
+                workerId = entry.getKey();
+                break;
+            }
+        }
+        return workerId;
     }
 }

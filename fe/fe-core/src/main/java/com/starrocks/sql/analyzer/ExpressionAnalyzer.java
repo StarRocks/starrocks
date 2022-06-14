@@ -365,7 +365,7 @@ public class ExpressionAnalyzer {
         List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                FunctionSet.DATE_SUB);
+                FunctionSet.DAYS_SUB);
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {

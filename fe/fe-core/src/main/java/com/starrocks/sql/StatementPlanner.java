@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -21,6 +22,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -192,6 +194,7 @@ public class StatementPlanner {
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt
                 || statement instanceof CreateCatalogStmt
+                || statement instanceof CreateTableStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateMaterializedViewStatement
                 || statement instanceof CreateMaterializedViewStmt
@@ -214,6 +217,7 @@ public class StatementPlanner {
                 || statement instanceof ShowAnalyzeStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
+                || statement instanceof ShowCreateTableStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowMaterializedViewStmt
                 || statement instanceof ShowTableStmt

@@ -63,7 +63,6 @@ MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, 
           _keys_type(schema.keys_type()),
           _sink(sink),
           _aggregator(nullptr),
-          _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
           _mem_tracker(mem_tracker) {
     _init_aggregator_if_needed();
@@ -105,7 +104,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
 
-    if (_use_slot_desc) {
+    if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
         // So the chunk can only be accessed by the subscript
@@ -218,7 +217,7 @@ Status MemTable::flush() {
         return Status::OK();
     }
     std::string msg;
-    if (_result_chunk->reach_capacity_limit(&msg)) {
+    if (_result_chunk->capacity_limit_reached(&msg)) {
         return Status::InternalError(
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }

@@ -325,10 +325,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
                 cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
@@ -345,10 +342,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
-            for (auto j = 0; j < chunk_size; ++j) {
-                if (i * chunk_size + j >= num_rows) {
-                    break;
-                }
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));

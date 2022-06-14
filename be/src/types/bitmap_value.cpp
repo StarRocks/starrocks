@@ -587,15 +587,18 @@ int64_t BitmapValue::cardinality() const {
     return 0;
 }
 
-uint64_t BitmapValue::max() const {
+std::optional<uint64_t> BitmapValue::max() const {
     switch (_type) {
     case EMPTY:
-        return 0;
+        return {};
     case SINGLE:
         return _sv;
     case BITMAP:
         return _bitmap->maximum();
     case SET:
+        if (_set->size() == 0) {
+            return {};
+        }
         uint64_t max = 0;
         for (auto value : *_set) {
             if (value > max) {
@@ -604,20 +607,20 @@ uint64_t BitmapValue::max() const {
         }
         return max;
     }
-    return 0;
+    return {};
 }
 
-int64_t BitmapValue::min() const {
+std::optional<uint64_t> BitmapValue::min() const {
     switch (_type) {
     case EMPTY:
-        return -1;
+        return {};
     case SINGLE:
         return _sv;
     case BITMAP:
         return _bitmap->minimum();
     case SET:
         if (_set->size() == 0) {
-            return -1;
+            return {};
         }
         uint64_t min = std::numeric_limits<uint64_t>::max();
         for (const auto value : *_set) {
@@ -627,7 +630,7 @@ int64_t BitmapValue::min() const {
         }
         return min;
     }
-    return -1;
+    return {};
 }
 
 // Return how many bytes are required to serialize this bitmap.
@@ -844,7 +847,9 @@ void BitmapValue::_convert_to_smaller_type() {
             _type = EMPTY;
         } else {
             _type = SINGLE;
-            _sv = _bitmap->minimum();
+            auto min_value = _bitmap->minimum();
+            DCHECK(min_value.has_value());
+            _sv = min_value.value();
         }
         _bitmap->clear();
     }

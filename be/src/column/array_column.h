@@ -145,8 +145,8 @@ public:
 
     std::string debug_string() const override;
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
-        return _elements->reach_capacity_limit(msg) || _offsets->reach_capacity_limit(msg);
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        return _elements->capacity_limit_reached(msg) || _offsets->capacity_limit_reached(msg);
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;

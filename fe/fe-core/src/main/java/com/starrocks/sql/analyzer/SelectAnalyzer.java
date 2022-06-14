@@ -549,6 +549,16 @@ public class SelectAnalyzer {
         }
 
         @Override
+        public Expr visitFunctionCall(FunctionCallExpr expr, Void context) {
+            if (!expr.isAggregateFunction()) {
+                return visitExpression(expr, context);
+            } else {
+                // Columns inside aggregates are not rewritten
+                return expr;
+            }
+        }
+
+        @Override
         public Expr visitAnalyticExpr(AnalyticExpr expr, Void context) {
             for (int i = 0; i < expr.getFnCall().getChildren().size(); ++i) {
                 expr.getFnCall().setChild(i, visit(expr.getChild(i)));
