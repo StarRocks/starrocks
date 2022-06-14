@@ -122,6 +122,20 @@ public:
     DEFINE_VECTORIZED_FN(json_string);
 
     /**
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(json_int);
+
+    /**
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(json_double);
+
+    /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: JsonColumn
@@ -167,6 +181,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_array_empty);
 
+    /**
+     * 
+     * @param: 
+     * @paramType: 
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(string_json);
+
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(starrocks_udf::FunctionContext* context,
@@ -203,7 +225,7 @@ private:
 
     /* Following functions are only used in test. */
     template <PrimitiveType primitive_type>
-    static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
+    static ColumnPtr _raw_json_query(FunctionContext* context, const Columns& columns);
 
     template <PrimitiveType primitive_type>
     static void _build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value);

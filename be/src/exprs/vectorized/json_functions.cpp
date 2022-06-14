@@ -200,128 +200,6 @@ JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
-template <PrimitiveType primitive_type>
-ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& columns) {
-    auto json_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-
-    simdjson::ondemand::parser parser;
-
-    auto size = columns[0]->size();
-    ColumnBuilder<primitive_type> result(size);
-    for (int row = 0; row < size; ++row) {
-        if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
-
-        auto json_value = json_viewer.value(row);
-        if (json_value.empty()) {
-            result.append_null();
-            continue;
-        }
-        std::string json_string(json_value.data, json_value.size);
-
-        auto path_value = path_viewer.value(row);
-        std::string path_string(path_value.data, path_value.size);
-        // Must remove or replace the escape sequence.
-        path_string.erase(std::remove(path_string.begin(), path_string.end(), '\\'), path_string.end());
-        if (path_string.empty()) {
-            result.append_null();
-            continue;
-        }
-
-        // Reserve for simdjson padding.
-        json_string.reserve(json_string.size() + simdjson::SIMDJSON_PADDING);
-
-        auto doc = parser.iterate(json_string);
-        if (doc.error()) {
-            result.append_null();
-            continue;
-        }
-
-        std::vector<SimpleJsonPath> jsonpath;
-        parse_json_paths(path_string, &jsonpath);
-
-        simdjson::ondemand::json_type tp;
-
-        auto err = doc.type().get(tp);
-        if (err) {
-            result.append_null();
-            continue;
-        }
-
-        switch (tp) {
-        case simdjson::ondemand::json_type::object: {
-            simdjson::ondemand::object obj;
-
-            err = doc.get_object().get(obj);
-            if (err) {
-                result.append_null();
-                continue;
-            }
-
-            simdjson::ondemand::value value;
-            auto st = extract_from_object(obj, jsonpath, &value);
-            if (!st.ok()) {
-                result.append_null();
-                continue;
-            }
-
-            _build_column(result, value);
-            break;
-        }
-
-        case simdjson::ondemand::json_type::array: {
-            simdjson::ondemand::array arr;
-            err = doc.get_array().get(arr);
-            if (err) {
-                result.append_null();
-                continue;
-            }
-
-            for (auto a : arr) {
-                simdjson::ondemand::json_type tp;
-                err = a.type().get(tp);
-                if (err) {
-                    result.append_null();
-                    continue;
-                }
-
-                if (tp != simdjson::ondemand::json_type::object) {
-                    result.append_null();
-                    continue;
-                }
-
-                simdjson::ondemand::object obj;
-
-                err = a.get_object().get(obj);
-                if (err) {
-                    result.append_null();
-                    continue;
-                }
-
-                simdjson::ondemand::value value;
-                auto st = extract_from_object(obj, jsonpath, &value);
-                if (!st.ok()) {
-                    result.append_null();
-                    continue;
-                }
-
-                _build_column(result, value);
-            }
-            break;
-        }
-
-        default: {
-            result.append_null();
-            break;
-        }
-        }
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-} // namespace starrocks::vectorized
-
 template <>
 void JsonFunctions::_build_column(ColumnBuilder<TYPE_INT>& result, simdjson::ondemand::value& value) {
     int64_t i64;
@@ -370,15 +248,27 @@ void JsonFunctions::_build_column(ColumnBuilder<TYPE_VARCHAR>& result, simdjson:
 }
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
-    return JsonFunctions::template _iterate_rows<TYPE_INT>(context, columns);
+    auto jsons = string_json(context, columns);
+    auto paths = columns[1];
+
+    jsons = json_query(context, Columns{jsons, paths});
+    return json_int(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
-    return JsonFunctions::template _iterate_rows<TYPE_DOUBLE>(context, columns);
+    auto jsons = string_json(context, columns);
+    auto paths = columns[1];
+
+    jsons = json_query(context, Columns{jsons, paths});
+    return json_double(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
-    return JsonFunctions::template _iterate_rows<TYPE_VARCHAR>(context, columns);
+    auto jsons = string_json(context, columns);
+    auto paths = columns[1];
+
+    jsons = json_query(context, Columns{jsons, paths});
+    return json_string(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -419,6 +309,70 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
                 result.append_null();
             } else {
                 result.append(std::move(json_str.value()));
+            }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+
+ColumnPtr JsonFunctions::json_int(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
+    ColumnBuilder<TYPE_INT> result(columns[0]->size());
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            JsonValue* json = viewer.value(row);
+            auto json_int = json->get_int();
+            if (!json_int.ok()) {
+                result.append_null();
+            } else {
+                result.append(std::move(json_int.value()));
+            }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+
+ColumnPtr JsonFunctions::json_double(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
+    ColumnBuilder<TYPE_DOUBLE> result(columns[0]->size());
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            JsonValue* json = viewer.value(row);
+            auto json_d = json->get_double();
+            if (!json_d.ok()) {
+                result.append_null();
+            } else {
+                result.append(std::move(json_d.value()));
+            }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+
+ColumnPtr JsonFunctions::string_json(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    ColumnBuilder<TYPE_JSON> result(columns[0]->size());
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            auto raw = viewer.value(row);
+            JsonValue json_value;
+            auto st = JsonValue::parse(raw, &json_value);
+            if (!st.ok()) {
+                result.append_null();
+            } else {
+                result.append(std::move(json_value));
             }
         }
     }
