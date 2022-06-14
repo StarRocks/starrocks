@@ -232,11 +232,10 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     auto strings = BinaryColumn::create();
     auto strings2 = BinaryColumn::create();
 
-    std::string values[] = {R"([{"key":    1}", {"key": 2 }])", R"([{"key":    1}", {"key": 2 }])",
-                            R"([{"key":    1}", {"key": 2 }])"};
+    std::string values[] = {R"([{"key":    1}, {"key": 2 }])", R"([{"key":    1}, {"key": 2 }])"};
 
-    std::string strs[] = {"$..key", "$.[*].key", "$[*].key"};
-    std::string length_strings[] = {"[1, 2]", "[1, 2]", "[1, 2]"};
+    std::string strs[] = {"$[*].key", "$.[*].key"};
+    std::string length_strings[] = {"[1, 2]", "[1, 2]"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);
