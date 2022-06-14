@@ -78,7 +78,8 @@ TEST_F(JsonFunctionsTest, get_json_intTest) {
     columns.emplace_back(ints2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -88,8 +89,8 @@ TEST_F(JsonFunctionsTest, get_json_intTest) {
         ASSERT_EQ(length_ints[j], v->get_data()[j]);
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -112,7 +113,8 @@ TEST_F(JsonFunctionsTest, get_json_doubleTest) {
     columns.emplace_back(doubles2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
 
@@ -122,8 +124,8 @@ TEST_F(JsonFunctionsTest, get_json_doubleTest) {
         ASSERT_EQ(length_doubles[j], v->get_data()[j]);
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -149,7 +151,8 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
     columns.emplace_back(strings2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -159,8 +162,8 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
         ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -211,7 +214,7 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     columns.emplace_back(strings2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -221,7 +224,7 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
         ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
@@ -246,7 +249,7 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     columns.emplace_back(strings2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -256,7 +259,7 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
         ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
@@ -281,7 +284,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
         ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
 
@@ -291,7 +294,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
@@ -315,7 +318,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
         ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -325,7 +328,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
@@ -349,7 +352,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
         ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -359,7 +362,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
@@ -383,7 +386,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
         ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -393,7 +396,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
