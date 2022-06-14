@@ -130,11 +130,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
+    } else if (config::object_storage_endpoint_use_https) {
+        config.scheme = Aws::Http::Scheme::HTTPS;
+    } else {
+        config.scheme = Aws::Http::Scheme::HTTP;
     }
     if (!config::object_storage_region.empty()) {
         config.region = config::object_storage_region;
