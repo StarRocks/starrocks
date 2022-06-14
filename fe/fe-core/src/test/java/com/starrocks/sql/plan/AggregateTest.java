@@ -1359,6 +1359,80 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultiDistinctAggregate() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql =  "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM");
+        assertContains(plan, "18:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.");
+
+        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: t1a <=> 13: t1a");
+
+        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 13: t1a <=> 16: t1a\n" +
+                "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
+                "  |  equal join conjunct: 15: t1c <=> 18: t1c");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 20: t1c <=> 15: t1c");
+        assertContains(plan, "21:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+        assertContains(plan, "22:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
+                "  |  equal join conjunct: 17: expr <=> 20: expr");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(26: t1b)\n" +
+                "  |  group by: 27: t1c, 28: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 26> : 2: t1b\n" +
+                "  |  <slot 27> : 3: t1c\n" +
+                "  |  <slot 28> : 11: expr");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
     public void testSumString() throws Exception {
         String sql = "select sum(N_COMMENT) from nation";
         String plan = getFragmentPlan(sql);
