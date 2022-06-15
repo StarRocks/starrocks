@@ -893,7 +893,9 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 
 template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
-    std::stringstream ss;
+    if (state->has_reached_max_error_msg_num()) {
+        return;
+    }
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
@@ -914,8 +916,8 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
     auto* data = &data_column->get_data().front();
 
     int precision = desc->type().precision;
-    const auto max_decimal = get_scale_factor<CppType>(precision);
-    const auto min_decimal = -max_decimal;
+    const auto max_decimal = get_max_decimal<CppType>(precision);
+    const auto min_decimal = get_min_decimal<CppType>(precision);
 
     for (auto i = 0; i < num_rows; ++i) {
         if ((*validate_selection)[i] == VALID_SEL_OK) {
