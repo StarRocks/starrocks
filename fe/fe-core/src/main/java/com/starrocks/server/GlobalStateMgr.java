@@ -816,7 +816,7 @@ public class GlobalStateMgr {
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
         // init journal writer
-        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getLogQueue());
+        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getJournalQueue());
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -887,8 +887,8 @@ public class GlobalStateMgr {
 
         nodeMgr.checkCurrentNodeExist();
 
-        editLog.rollEditLog();
-        journalWriter.start();
+        journalWriter.init(editLog.getMaxJournalId());
+        journalWriter.startDaemon();
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
         // It will be set to the old type if any error happens in the following procedure

@@ -116,7 +116,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
-    public static GaugeMetricImpl<Long> GAUGE_STACKED_EDIT_LOG_NUM;
+    public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     private static ScheduledThreadPoolExecutor metricTimer =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -265,10 +265,10 @@ public final class MetricRepo {
         GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_TABLET_COMPACTION_SCORE);
 
-        GAUGE_STACKED_EDIT_LOG_NUM = new GaugeMetricImpl<>(
+        GAUGE_STACKED_JOURNAL_NUM = new GaugeMetricImpl<>(
                 "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
-        GAUGE_STACKED_EDIT_LOG_NUM.setValue(0L);
-        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_EDIT_LOG_NUM);
+        GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");

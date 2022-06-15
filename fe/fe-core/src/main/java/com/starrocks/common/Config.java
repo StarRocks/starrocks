@@ -1512,7 +1512,7 @@ public class Config extends ConfigBase {
      * Write log will fail if queue is full
      **/
     @ConfField(mutable = true)
-    public static int journal_queue_size = 1000;
+    public static int metadata_journal_queue_size = 1000;
 
     /**
      * The maxium size(key+value) of journal entity to write as a batch
@@ -1520,7 +1520,7 @@ public class Config extends ConfigBase {
      * TODO: set default value
      **/
     @ConfField(mutable = true)
-    public static int batch_journal_size_mb = 100;
+    public static int metadata_journal_max_batch_size_mb = 10;
 
     /**
      * The maxium number of journal entity to write as a batch
@@ -1528,7 +1528,7 @@ public class Config extends ConfigBase {
      * TODO: set default value
      **/
     @ConfField(mutable = true)
-    public static int batch_journal_cnt = 100;
+    public static int metadata_journal_max_batch_cnt = 100;
 
     /**
      * Fqdn function switch, 

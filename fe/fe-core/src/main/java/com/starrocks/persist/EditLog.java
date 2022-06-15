@@ -98,21 +98,21 @@ public class EditLog {
 
     private final Journal journal;
 
-    private BlockingQueue<JournalTask> logQueue;
+    private BlockingQueue<JournalTask> journalQueue;
 
     @VisibleForTesting
-    public EditLog(Journal journal, BlockingQueue<JournalTask> logQueue) {
+    public EditLog(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
-        this.logQueue = logQueue;
+        this.journalQueue = journalQueue;
     }
 
     public EditLog(String nodeName) {
         journal = JournalFactory.create(nodeName);
-        logQueue = new ArrayBlockingQueue<JournalTask>(Config.journal_queue_size);
+        journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
     }
 
-    public BlockingQueue<JournalTask> getLogQueue() {
-        return logQueue;
+    public BlockingQueue<JournalTask> getJournalQueue() {
+        return journalQueue;
     }
 
     public long getMaxJournalId() {
@@ -918,19 +918,14 @@ public class EditLog {
     }
 
     /**
-     * Close current journal and start a new journal
-     */
-    public void rollEditLog() {
-        journal.rollJournal();
-    }
-
-    /**
      * submit log to queue, wait for JournalWriter
      */
     protected void logEdit(short op, Writable writable) {
         long start = System.nanoTime();
-        Future<Void> task = submitLog(op, writable, -1);
-        waitInfinity(task);
+        Future<Boolean> task = submitLog(op, writable, -1);
+        boolean result = waitInfinity(task);
+        // for now if journal writer fails, it will exit directly, so this function should always return true.
+        assert (result == true);
         if (MetricRepo.isInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - start) / 1000000);
         }
@@ -939,7 +934,7 @@ public class EditLog {
     /**
      * submit log in queue and return immediately
      */
-    protected Future<Void> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+    private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -949,10 +944,10 @@ public class EditLog {
             entity.setData(writable);
             entity.write(buffer);
         } catch (IOException e) {
-            // The old implement swallow exception like this
+            // The old implementation swallow exception like this
             LOG.info("failed to serialized: {}", e);
         }
-        JournalTask task = new JournalTask(op, buffer, maxWaitIntervalMs);
+        JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
@@ -966,7 +961,7 @@ public class EditLog {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                this.logQueue.put(task);
+                this.journalQueue.put(task);
                 break;
             } catch (InterruptedException e) {
                 // got interrupted while waiting if necessary for space to become available
@@ -979,16 +974,18 @@ public class EditLog {
 
     /**
      * wait for JournalWriter commit all logs
+     * return true if JournalWriter wrote log successfully
+     * return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
+     * will simplely exit the whole process
      */
-    protected void waitInfinity(Future<Void> task) {
+    private boolean waitInfinity(Future<Boolean> task) {
         int cnt = 0;
         while (true) {
             try {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                task.get();
-                return;
+                return task.get();
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;

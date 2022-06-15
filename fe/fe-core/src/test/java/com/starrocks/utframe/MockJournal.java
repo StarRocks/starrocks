@@ -10,6 +10,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.map.HashedMap;
 
@@ -25,7 +26,6 @@ public class MockJournal implements Journal {
     private final AtomicLong nextJournalId = new AtomicLong(1);
     private final Map<Long, JournalEntity> values = Maps.newConcurrentMap();
     private Map<Long, JournalEntity> staggingEntityMap = new HashedMap();
-    private long staggingJournalId = -1;
 
     public MockJournal() {
     }
@@ -36,7 +36,8 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public void rollJournal() {
+    public void rollJournal(long journalId) {
+
     }
 
     @Override
@@ -91,7 +92,13 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public void writeWithinTxn(short op, DataOutputBuffer buffer) {
+    public void batchWriteBegin() throws InterruptedException, JournalException {
+        staggingEntityMap.clear();
+    }
+
+    @Override
+    public void batchWriteAppend(long journalId, DataOutputBuffer buffer)
+            throws InterruptedException, JournalException {
         JournalEntity je = new JournalEntity();
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
@@ -100,19 +107,18 @@ public class MockJournal implements Journal {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        if (staggingJournalId == -1) {
-            staggingJournalId = nextJournalId.get();
-        }
-        staggingJournalId ++;
-        staggingEntityMap.put(staggingJournalId, je);
+        staggingEntityMap.put(journalId, je);
     }
 
     @Override
-    public void commitTxn() {
+    public void batchWriteCommit() throws InterruptedException, JournalException {
         values.putAll(staggingEntityMap);
         staggingEntityMap.clear();
-        nextJournalId.set(staggingJournalId);
-        staggingJournalId = -1;
+    }
+
+    @Override
+    public void batchWriteAbort() throws InterruptedException, JournalException {
+        staggingEntityMap.clear();
     }
 
     private static class MockJournalCursor implements JournalCursor {

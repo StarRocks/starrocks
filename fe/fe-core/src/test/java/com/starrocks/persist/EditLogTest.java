@@ -11,7 +11,6 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 
 import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -27,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
+
     @Test
     public void testtNormal() throws Exception {
         BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
@@ -49,8 +49,7 @@ public class EditLogTest {
                 for (int i = 0; i != THREAD_NUM; i++) {
                     try {
                         JournalTask task = logQueue.take();
-                        LOG.info("got {} task op {}", i, task.getOp());
-                        task.markDone();
+                        task.markSucceed();
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -69,64 +68,56 @@ public class EditLogTest {
         Assert.assertEquals(0, logQueue.size());
     }
 
-
     @Test
-    public void testNoWaitInterrupt() throws Exception {
-        BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(1);
+    public void testInterrupt() throws Exception {
+        // block if more than one task is put
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(1);
         Thread t1 = new Thread(new Runnable() {
             @Override
             public void run() {
-                EditLog editLog = new EditLog(null, logQueue);
+                EditLog editLog = new EditLog(null, journalQueue);
                 editLog.logEdit((short) 1, new Text("111"));
             }
         });
+
+        t1.start();
+        while (journalQueue.isEmpty()) {
+            Thread.sleep(50);
+        }
+        // t1 is blocked in task.get() now
+        Assert.assertEquals(1, journalQueue.size());
+
+        // t2 will be blocked in queue.put() because queue is full
         Thread t2 = new Thread(new Runnable() {
             @Override
             public void run() {
-                EditLog editLog = new EditLog(null, logQueue);
-                editLog.logEdit((short) 2, new Text("111"));
+                EditLog editLog = new EditLog(null, journalQueue);
+                editLog.logEdit((short) 2, new Text("222"));
             }
         });
-        t1.start();
-        while (logQueue.isEmpty()) {
-            Thread.sleep(50);
-        }
-        Assert.assertEquals(1, logQueue.size());
-
-        // t2 is waiting
         t2.start();
 
-        // t2 got interrupt exception
+        // t1 got interrupt exception while blocking in task.get()
+        for (int i = 0; i != 3; i ++) {
+            t1.interrupt();
+            Thread.sleep(100);
+        }
+
+        // t2 got interrupt exception while blocking in queue.put()
         for (int i = 0; i != 3; i ++) {
             t2.interrupt();
             Thread.sleep(100);
         }
 
-        Assert.assertEquals(1, logQueue.size());
-        JournalTask take = logQueue.take();
-        Assert.assertEquals((short)1, take.getOp());
-        take.markDone();
-        take = logQueue.take();
-        Assert.assertEquals((short)2, take.getOp());
-        take.markDone();
+        Assert.assertEquals(1, journalQueue.size());
+        JournalTask task = journalQueue.take();
+
+        task.markSucceed();
+        task = journalQueue.take();
+        task.markSucceed();
 
         t1.join();
         t2.join();
-    }
-
-    @Test
-    public void testWaitInterrupt(@Mocked JournalTask task) throws Exception {
-        new Expectations(task) {
-            {
-                task.get();
-                times = 3;
-                result = new InterruptedException("mock mock");
-                result = new InterruptedException("mock mock");
-                result = null;
-            }
-        };
-        EditLog editLog = new EditLog(null, null);
-        editLog.waitInfinity(task);
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {

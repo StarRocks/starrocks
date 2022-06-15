@@ -17,6 +17,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
@@ -36,7 +37,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class BDBJEJournalTest {
     private static final Logger LOG = LogManager.getLogger(BDBJEJournalTest.class);
@@ -79,6 +79,21 @@ public class BDBJEJournalTest {
         return environment;
     }
 
+    private boolean checkKeyExists(long key, Database db) throws Exception {
+        DatabaseEntry theKey = new DatabaseEntry();
+        TupleBinding<Long> myBinding = TupleBinding.getPrimitiveBinding(Long.class);
+        myBinding.objectToEntry(key, theKey);
+        DatabaseEntry theData = new DatabaseEntry();
+        OperationStatus operationStatus = db.get(null, theKey, theData, LockMode.READ_COMMITTED);
+        if (operationStatus == OperationStatus.SUCCESS) {
+            return true;
+        } else if (operationStatus == OperationStatus.NOTFOUND) {
+            return false;
+        }
+        Assert.fail();
+        return false;
+    }
+
     private String readDBStringValue(long key, Database db) throws IOException {
         DatabaseEntry theKey = new DatabaseEntry();
         TupleBinding<Long> myBinding = TupleBinding.getPrimitiveBinding(Long.class);
@@ -92,7 +107,7 @@ public class BDBJEJournalTest {
     }
 
     /**
-     * write() vs writeWithinTxn()
+     * write() vs BatchWrite()
      * @throws Exception
      */
     @Test
@@ -113,10 +128,10 @@ public class BDBJEJournalTest {
 
         BDBEnvironment notxnEnvironment = initBDBEnv("notxn");
         Database notxnDatabase = notxnEnvironment.openDatabase("testDb").getDb();
-        Journal nonTxnJournal = new BDBJEJournal(notxnEnvironment, new CloseSafeDatabase(notxnDatabase), new AtomicLong(0));
+        Journal nonTxnJournal = new BDBJEJournal(notxnEnvironment, new CloseSafeDatabase(notxnDatabase));
         BDBEnvironment txnEnvironment = initBDBEnv("txn");
         Database txnDatabase = txnEnvironment.openDatabase("testDb").getDb();
-        Journal txnJournal = new BDBJEJournal(txnEnvironment, new CloseSafeDatabase(txnDatabase), new AtomicLong(0));
+        Journal txnJournal = new BDBJEJournal(txnEnvironment, new CloseSafeDatabase(txnDatabase));
         long startTime, endTime;
 
         LOG.info("================= TEST START ==========================");
@@ -134,15 +149,19 @@ public class BDBJEJournalTest {
         DataOutputBuffer buffer = new DataOutputBuffer();
         writable.write(buffer);
         startTime = System.currentTimeMillis();
+        txnJournal.batchWriteBegin();
         LOG.info("txn: start to wrote {} lines, value size {}, BATCH size {}", LOG_COUNT, VALUE_SIZE, BATCH_SIZE);
         for (long i = 0; i != LOG_COUNT; ++ i) {
-            txnJournal.writeWithinTxn((short) (i % 128), buffer);
+            txnJournal.batchWriteAppend(i, buffer);
             if (i % BATCH_SIZE == BATCH_SIZE - 1) {
-                txnJournal.commitTxn();
+                txnJournal.batchWriteCommit();
+                txnJournal.batchWriteBegin();
             }
         }
         if (LOG_COUNT % BATCH_SIZE != 0){
-            txnJournal.commitTxn();
+            txnJournal.batchWriteCommit();
+        } else {
+            txnJournal.batchWriteAbort();
         }
         endTime = System.currentTimeMillis();
         LOG.info("txn: wrote {} lines, value size {}, batch size {}, took {} seconds",
@@ -165,10 +184,10 @@ public class BDBJEJournalTest {
     }
 
     @Test
-    public void testWrieNormal() throws Exception {
+    public void testWrieNoMock() throws Exception {
         BDBEnvironment environment = initBDBEnv("testWrieNormal");
         CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
-        BDBJEJournal journal = new BDBJEJournal(environment, database, new AtomicLong(111));
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
 
         String data = "petals on a wet black bough";
         Writable writable = new Writable() {
@@ -181,51 +200,153 @@ public class BDBJEJournalTest {
         writable.write(buffer);
 
         // 1. initial check
-        Assert.assertEquals(111, journal.nextJournalId.get());
         Assert.assertNull(journal.currentTrasaction);
 
-        // 2. write & commit
-        journal.writeWithinTxn((short)-1, buffer);
-        journal.commitTxn();
-
-        Assert.assertEquals(112, journal.nextJournalId.get());
-
-        // 3. write one log, not commit
-        journal.writeWithinTxn((short)-1, buffer);
-
+        // 2. begin
+        journal.batchWriteBegin();
         Assert.assertNotNull(journal.currentTrasaction);
-        Assert.assertEquals(112, journal.nextJournalId.get());
-        Assert.assertEquals(112, journal.stagingStartJournalId);
-        Assert.assertEquals(113, journal.staggingNextJournalId);
 
-        // 4. write another log, not commit
-        journal.writeWithinTxn((short)-1, buffer);
+        // 3. write 1
+        journal.batchWriteAppend(1, buffer);
 
-        Assert.assertNotNull(journal.currentTrasaction);
-        Assert.assertEquals(112, journal.nextJournalId.get());
-        Assert.assertEquals(112, journal.stagingStartJournalId);
-        Assert.assertEquals(114, journal.staggingNextJournalId);
-
-        // 5. finally, commit
-        journal.commitTxn();
+        // 4. commit 1
+        journal.batchWriteCommit();
         Assert.assertNull(journal.currentTrasaction);
-        Assert.assertEquals(114, journal.nextJournalId.get());
 
-        // 6. check by read
-        for (int i = 112; i != 114; i ++) {
+        // 3. write 2 logs & commit
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteAppend(2, buffer);
+        journal.batchWriteAppend(3, buffer);
+        Assert.assertNotNull(journal.currentTrasaction);
+
+        // 4. commmit
+        journal.batchWriteCommit();
+        Assert.assertNull(journal.currentTrasaction);
+
+        // 5. check by read
+        for (int i = 1; i != 4; i ++) {
             String value = readDBStringValue(i, database.getDb());
             Assert.assertEquals(data, value);
         }
+
+        // 6. abort
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+
+        // 7. begin -> abort
+        journal.batchWriteBegin();
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+
+        // 8. write log -> abort
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(4, buffer);
+        journal.batchWriteAbort();
+        Assert.assertFalse(checkKeyExists(4, database.getDb()));
     }
 
     @Test
-    public void testWriteWithinTxnRetry(
+    public void testBatchWriteBeginRetry(
             @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
             @Mocked Database rawDatabase,
             @Mocked Environment rawEnvironment,
             @Mocked Transaction txn) throws Exception {
-        BDBEnvironment environment = initBDBEnv("testWriteWithinTxnRetry");
-        BDBJEJournal journal = new BDBJEJournal(environment, database, new AtomicLong(222));
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+
+        new Expectations() {
+            {
+                Thread.sleep(anyLong);
+                times = 1;
+            }
+        };
+
+        new Expectations(rawDatabase) {
+            {
+                rawDatabase.getEnvironment();
+                minTimes = 0;
+                result = rawEnvironment;
+            }
+        };
+        new Expectations(rawEnvironment) {
+            {
+                rawEnvironment.beginTransaction(null, (TransactionConfig) any);
+                times = 2;
+                result = new DatabaseNotFoundException("mock mock");
+                result = txn;
+            }
+        };
+        journal.batchWriteBegin();
+    }
+
+    @Test
+    public void testBatchWriteAppendRetry(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
+            @Mocked Database rawDatabase,
+            @Mocked Environment rawEnvironment,
+            @Mocked Transaction txn) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+
+        new Expectations() {
+            {
+                Thread.sleep(anyLong);
+                times = 2;
+            }
+        };
+        new Expectations(database) {
+            {
+                database.getDb();
+                minTimes = 0;
+                result = rawDatabase;
+
+                database.put(txn, (DatabaseEntry) any, (DatabaseEntry) any);
+                times = 3;
+                result = new DatabaseNotFoundException("mock mock");
+                result = OperationStatus.KEYEXIST;
+                result = OperationStatus.SUCCESS;
+            }
+        };
+
+        new Expectations(rawDatabase) {
+            {
+                rawDatabase.getEnvironment();
+                minTimes = 0;
+                result = rawEnvironment;
+
+                rawDatabase.getDatabaseName();
+                minTimes = 0;
+                result = "fakeDb";
+            }
+        };
+        new Expectations(rawEnvironment) {
+            {
+                rawEnvironment.beginTransaction(null, (TransactionConfig) any);
+                minTimes = 1;
+                result = txn;
+            }
+        };
+
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteAppend(1, buffer);
+    }
+
+    @Test
+    public void testBatchWriteCommitRetry(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
+            @Mocked Database rawDatabase,
+            @Mocked Environment rawEnvironment,
+            @Mocked Transaction txn) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
         String data = "petals on a wet black bough";
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, data);
@@ -234,7 +355,7 @@ public class BDBJEJournalTest {
         new Expectations() {
             {
                 Thread.sleep(anyLong);
-                times = 2;
+                times = 1;
             }
         };
 
@@ -245,11 +366,11 @@ public class BDBJEJournalTest {
                 result = rawDatabase;
 
                 database.put((Transaction) any, (DatabaseEntry) any, (DatabaseEntry) any);
-                times = 2;
-                result = new DatabaseNotFoundException("mock mock");
+                times = 1;
                 result = OperationStatus.SUCCESS;
             }
         };
+
         new Expectations(rawDatabase) {
             {
                 rawDatabase.getEnvironment();
@@ -258,32 +379,98 @@ public class BDBJEJournalTest {
 
                 rawDatabase.getDatabaseName();
                 minTimes = 0;
-                result = "mock mock";
+                result = "fakeDb";
             }
         };
+
         new Expectations(rawEnvironment) {
             {
                 rawEnvironment.beginTransaction(null, (TransactionConfig)any);
-                times = 2;
-                result = new DatabaseNotFoundException("mock mock");
-                result = txn;
+                times = 1;
             }
         };
+
         new Expectations(txn) {
             {
-                txn.getId();
-                minTimes = 0;
-                result = 999;
+                txn.commit();
+                times = 2;
+                result = new DatabaseNotFoundException("mock mock");
+                result = null;
             }
         };
-        Assert.assertNull(journal.currentTrasaction);
-        Assert.assertEquals(222, journal.nextJournalId.get());
-        journal.writeWithinTxn((short)-1, buffer);
 
-        Assert.assertNotNull(journal.currentTrasaction);
-        Assert.assertEquals(222, journal.nextJournalId.get());
-        Assert.assertEquals(222, journal.stagingStartJournalId);
-        Assert.assertEquals(223, journal.staggingNextJournalId);
-
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteCommit();
     }
- }
+
+    @Test(expected = JournalException.class)
+    public void testAppendNoBegin(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+        journal.batchWriteAppend(1, buffer);
+        Assert.fail();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testCommitNoBegin(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+        journal.batchWriteCommit();
+        Assert.fail();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testBeginTwice(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteBegin();
+        Assert.fail();
+    }
+
+    // you can count on me. -- abort
+    @Test
+    public void testAbort() throws Exception {
+        BDBEnvironment environment = initBDBEnv("testWrieNormal");
+        CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+
+        Assert.assertNull(journal.currentTrasaction);
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+
+        journal.batchWriteBegin();
+        Assert.assertNotNull(journal.currentTrasaction);
+        journal.batchWriteAppend(2, buffer);
+        journal.batchWriteCommit();
+        Assert.assertNull(journal.currentTrasaction);
+        journal.batchWriteAbort();
+        Assert.assertNull(journal.currentTrasaction);
+    }
+
+}

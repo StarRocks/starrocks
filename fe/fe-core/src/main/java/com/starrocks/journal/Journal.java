@@ -17,6 +17,7 @@
 
 package com.starrocks.journal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 
@@ -28,7 +29,7 @@ public interface Journal {
     public void open();
 
     // Roll Edit file or database
-    public void rollJournal();
+    public void rollJournal(long journalId);
 
     // Get the newest journal id 
     public long getMaxJournalId();
@@ -47,7 +48,8 @@ public interface Journal {
     public JournalCursor read(long fromKey, long toKey);
 
     // Write a journal and sync to disk
-    @Deprecated
+    // Only keep this method for test, will remove in next PR
+    @VisibleForTesting
     public void write(short op, Writable writable);
 
     // Delete journals whose max id is less than deleteToJournalId
@@ -59,9 +61,16 @@ public interface Journal {
     // Get all the dbs' name
     public List<Long> getDatabaseNames();
 
-    // Write a jounal within current transaction
-    public void writeWithinTxn(short op, DataOutputBuffer buffer);
+    // only support batch write
+    // start batch write
+    public void batchWriteBegin() throws InterruptedException, JournalException;
 
-    // commit current transaction
-    public void commitTxn();
+    // append buffer to current batch
+    public void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException;
+
+    // persist current batch
+    public void batchWriteCommit() throws InterruptedException, JournalException;
+
+    // abort current batch
+    public void batchWriteAbort() throws InterruptedException, JournalException;
 }

@@ -11,19 +11,18 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class JournalTask implements Future<Void> {
-    // op
-    private short op;
+public class JournalTask implements Future<Boolean> {
     // serialized JournalEntity
     private DataOutputBuffer buffer;
-    // count down latch, the producer which called logXX() will wait on it.
+    // write result
+    private Boolean isSucceed = null;
+    // count down latch, the producer which called logEdit() will wait on it.
     // JournalWriter will call notify() after log is committed.
     protected CountDownLatch latch;
-    // JournalWrite will commit immediately if recieved a log with betterCommitBeforeTime > now
+    // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTime;
 
-    public JournalTask(short op, DataOutputBuffer buffer, long maxWaitIntervalMs) {
-        this.op = op;
+    public JournalTask(DataOutputBuffer buffer, long maxWaitIntervalMs) {
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
@@ -33,7 +32,13 @@ public class JournalTask implements Future<Void> {
         }
     }
 
-    public void markDone() {
+    public void markSucceed() {
+        isSucceed = true;
+        latch.countDown();
+    }
+
+    public void markAbort() {
+        isSucceed = false;
         latch.countDown();
     }
 
@@ -50,26 +55,22 @@ public class JournalTask implements Future<Void> {
         return buffer;
     }
 
-    public short getOp() {
-        return op;
-    }
-
     @Override
     public boolean isDone() {
         return latch.getCount() == 0;
     }
 
     @Override
-    public Void get() throws InterruptedException, ExecutionException {
+    public Boolean get() throws InterruptedException, ExecutionException {
         latch.await();
-        return null;
+        return isSucceed;
     }
 
     @Override
-    public Void get(long timeout, @NotNull TimeUnit unit)
+    public Boolean get(long timeout, @NotNull TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
         latch.await(timeout, unit);
-        return null;
+        return isSucceed;
     }
 
     @Override
