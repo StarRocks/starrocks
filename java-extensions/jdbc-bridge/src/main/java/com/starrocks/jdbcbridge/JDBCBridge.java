@@ -2,6 +2,8 @@
 
 package com.starrocks.jdbcbridge;
 
+import org.apache.logging.log4j.Level;
+
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -19,6 +21,10 @@ import java.net.URLClassLoader;
 *   We can consider letting JDBCBridge manage the driver class loading and JDBC connection pool in the future.
 * */
 public class JDBCBridge {
+
+    static {
+        org.apache.logging.log4j.core.config.Configurator.setLevel("org.zaxxer.hikari", Level.ERROR);
+    }
 
     public JDBCBridge() {
     }
