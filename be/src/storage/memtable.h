@@ -69,7 +69,7 @@ private:
     std::vector<uint32_t> _selective_values;
 
     int64_t _tablet_id;
-    Schema* _vectorized_schema;
+const Schema* _vectorized_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
