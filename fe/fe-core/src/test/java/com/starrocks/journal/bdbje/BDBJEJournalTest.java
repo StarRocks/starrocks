@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -110,6 +111,7 @@ public class BDBJEJournalTest {
      * write() vs BatchWrite()
      * @throws Exception
      */
+    @Ignore
     @Test
     public void writeProfile() throws Exception {
         long LOG_COUNT = Long.valueOf(System.getenv().getOrDefault(
