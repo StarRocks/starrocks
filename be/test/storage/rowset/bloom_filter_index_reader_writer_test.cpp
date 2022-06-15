@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
+#include "common/statusor.h"
 #include "env/env_memory.h"
 #include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
@@ -31,6 +32,7 @@
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -93,11 +95,9 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        auto st = (*reader)->load(_block_mgr, fname, &meta.bloom_filter_index(), true, false);
-        ASSERT_TRUE(st.ok());
-
-        st = (*reader)->new_iterator(iter);
-        ASSERT_TRUE(st.ok());
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_block_mgr, fname, meta.bloom_filter_index(), true, false));
+        ASSERT_TRUE(r);
+        ASSERT_OK((*reader)->new_iterator(iter));
     }
 
     template <FieldType Type>
