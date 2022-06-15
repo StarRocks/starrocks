@@ -191,11 +191,14 @@ public class JournalWriterTest {
                 journal.batchWriteCommit();
                 times = 4;
 
-                journal.rollJournal(anyLong);
-                times = 2;
+                journal.rollJournal(7);
+                times = 1;
+                journal.rollJournal(13);
+                times = 1;
             }
         };
 
+        Assert.assertEquals(1, writer.nextVisibleJournalId);
         for (int i = 0; i != 4; i ++) {
             for (int j = 0; j != 3; j ++) {
                 journalQueue.add(new JournalTask(makeBuffer(10), -1));
@@ -203,6 +206,7 @@ public class JournalWriterTest {
             writer.writeOneBatch();
             Assert.assertEquals(0, journalQueue.size());
         }
+        Assert.assertEquals(13, writer.nextVisibleJournalId);
     }
 
 

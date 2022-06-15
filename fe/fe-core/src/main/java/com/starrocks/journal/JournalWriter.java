@@ -50,9 +50,9 @@ public class JournalWriter {
     /**
      * reset journal id & roll journal as a start
      */
-    public void init(long nextJournalId) {
-        this.nextVisibleJournalId = nextJournalId;
-        this.journal.rollJournal(nextJournalId);
+    public void init(long maxJournalId) {
+        this.nextVisibleJournalId = maxJournalId + 1;
+        this.journal.rollJournal(this.nextVisibleJournalId);
     }
 
     public void startDaemon() {
