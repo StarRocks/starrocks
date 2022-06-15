@@ -603,7 +603,7 @@ public class DataDescription {
     }
 
     public void analyzeTable(String fullDbName) throws AnalysisException {
-        Table table = MetaUtils.getStarRocksTable(ConnectContext.get(), new TableName(fullDbName, tableName));
+        Table table = MetaUtils.getTable(ConnectContext.get(), new TableName(fullDbName, tableName));
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
