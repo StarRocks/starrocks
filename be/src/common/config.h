@@ -738,6 +738,13 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
 
+// Support mapping varlen or long length primary keys into 128bit hash or not
+// If true, if key columns of primary key table contain varchar type, we will use a hash value(int128) to
+// replace the unqiue encoded key which can  save a lot of memory.
+// However, use fix length hash may encounter conflicts which can lead to the loss of some duplicate data.
+// Although the probability is very small, but it is possible. Please make sure you can accept it before
+// enable this feature.
+// default: false
 CONF_Bool(enable_hash_key, "false");
 
 #ifdef USE_STAROS

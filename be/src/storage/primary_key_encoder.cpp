@@ -263,14 +263,16 @@ bool PrimaryKeyEncoder::enable_hash_key(const vectorized::Schema& schema) {
     if (!config::enable_hash_key) {
         return false;
     }
+    size_t ret = 0;
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
         auto t = schema.field(i)->type()->type();
         if (t == OLAP_FIELD_TYPE_VARCHAR || t == OLAP_FIELD_TYPE_CHAR) {
             return true;
         }
+        ret += TabletColumn::get_field_length_by_type(t, 0);
     }
-    return false;
+    return ret > 16 ? true : false;
 }
 
 FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema) {

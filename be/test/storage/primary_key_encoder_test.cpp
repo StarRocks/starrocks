@@ -183,7 +183,7 @@ TEST(PrimaryKeyEncoderTest, testEnableHashKey) {
         tmp.set_uint8(i % 2);
         pchunk->columns()[3]->append_datum(tmp);
     }
-    
+
     vector<uint32_t> indexes;
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
@@ -204,7 +204,6 @@ TEST(PrimaryKeyEncoderTest, testEnableHashKey) {
         XXH128_hash_t val = XXH3_128bits(s.get_data(), s.get_size());
         ASSERT_EQ(keys[i], ((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
     }
-
 }
 
 } // namespace starrocks
