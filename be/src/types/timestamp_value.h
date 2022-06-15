@@ -109,6 +109,8 @@ public:
 
     bool is_valid() const;
 
+    bool is_valid_non_strict() const;
+
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 

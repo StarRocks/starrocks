@@ -69,6 +69,8 @@ public:
 
     bool is_valid() const;
 
+    bool is_valid_non_strict() const;
+
     std::string month_name() const;
 
     std::string day_name() const;
