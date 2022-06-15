@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -21,13 +22,13 @@ public class ArithmeticExprTest {
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
         try {
-            ScalarType decimal64p18s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+            ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
             addExpr.analyzeImpl(null);
-            Assert.assertEquals(addExpr.type, decimal64p18s2);
+            Assert.assertEquals(addExpr.type, decimal64p10s2);
             Assert.assertTrue(addExpr.getChild(0) instanceof CastExpr);
             Assert.assertTrue(addExpr.getChild(1) instanceof CastExpr);
-            Assert.assertEquals(addExpr.getChild(0).type, decimal64p18s2);
-            Assert.assertEquals(addExpr.getChild(1).type, decimal64p18s2);
+            Assert.assertEquals(addExpr.getChild(0).type, decimal64p10s2);
+            Assert.assertEquals(addExpr.getChild(1).type, decimal64p10s2);
         } catch (AnalysisException e) {
             Assert.fail("Should not throw exception");
         }
@@ -147,7 +148,7 @@ public class ArithmeticExprTest {
             try {
                 ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
                 Assert.fail("should throw exception");
-            } catch (AnalysisException ignored) {
+            } catch (SemanticException ignored) {
             }
         }
     }
