@@ -240,11 +240,13 @@ TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
         EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     }
 
-    // get version 4 to update lru list in cache
+    // get version 4 from cache
     {
         metadata.set_version(4);
         auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->version(), 4);
     }
 
     // put another 32 tablet meta to trigger cache eviction.
@@ -255,31 +257,28 @@ TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
 
     // test eviction result;
     {
-        // version 4 expect not evicted
+        // version 4  evicted
         metadata.set_version(4);
-        auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
-        auto ptr = _tabletManager->get_from_metacache(key_path);
-        EXPECT_TRUE(ptr != nullptr);
         auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
-    }
-    {
-        // version 2 expect evicted
-        metadata.set_version(2);
-        auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
-        auto ptr = _tabletManager->get_from_metacache(key_path);
-        EXPECT_TRUE(ptr == nullptr);
-        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
-        EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->version(), 4);
     }
     {
         // version 6 expect evicted
         metadata.set_version(6);
-        auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
-        auto ptr = _tabletManager->get_from_metacache(key_path);
-        EXPECT_TRUE(ptr == nullptr);
         auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->version(), 6);
+    }
+    {
+        // version 6 in cache
+        metadata.set_version(66);
+        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
+        EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->version(), 66);
     }
 }
 
