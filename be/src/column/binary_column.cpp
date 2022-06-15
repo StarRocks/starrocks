@@ -213,8 +213,8 @@ template <typename T>
 void BinaryColumnBase<T>::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
-        Slice slice = get_slice(i);
-        if (filter[i] == 1 && slice.size > 0) {
+        size_t len = _offsets[i + 1] - _offsets[i];
+        if (filter[i] == 1 && len > 0) {
             indexes.push_back(i);
         }
     }

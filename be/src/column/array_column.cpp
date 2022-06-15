@@ -440,6 +440,7 @@ Datum ArrayColumn::get(size_t idx) const {
 }
 
 size_t ArrayColumn::get_element_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
     return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
 }
 

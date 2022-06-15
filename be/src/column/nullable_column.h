@@ -52,7 +52,7 @@ public:
     void set_has_null(bool has_null) { _has_null = _has_null | has_null; }
 
     // Update null element to default value
-    void fill_null_as_default();
+    void fill_null_with_default();
 
     void fill_default(const Filter& filter) override {}
 

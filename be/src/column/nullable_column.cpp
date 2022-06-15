@@ -157,7 +157,7 @@ void NullableColumn::append_value_multiple_times(const void* value, size_t count
     null_column_data().insert(null_column_data().end(), count, 0);
 }
 
-void NullableColumn::fill_null_as_default() {
+void NullableColumn::fill_null_with_default() {
     if (null_count() == 0) {
         return;
     }
