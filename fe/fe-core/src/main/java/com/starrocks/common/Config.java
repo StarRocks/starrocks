@@ -1505,7 +1505,7 @@ public class Config extends ConfigBase {
      * In order to avoid unnecessary CLONE, we increase the timeout as much as possible
      */
     @ConfField(mutable = true)
-    public static int quorom_publish_wait_time_ms = 500;
+    public static int quorom_publish_wait_time_ms = 5000;
 
     /**
      * FE journal queue size
