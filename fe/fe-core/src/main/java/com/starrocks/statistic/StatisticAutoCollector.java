@@ -157,7 +157,7 @@ public class StatisticAutoCollector extends MasterDaemon {
                 if (analyzeMeta == null) {
                     partitions.stream().map(Partition::getId).forEach(tableCollectJob::addPartitionId);
                 } else {
-                    if (analyzeMeta.getHealthy() > Config.auto_collect_statistic_ratio) {
+                    if (analyzeMeta.getHealthy() > Config.statistic_auto_collect_ratio) {
                         continue;
                     }
                     LocalDateTime statsLastUpdateTime = analyzeMeta.getUpdateTime();

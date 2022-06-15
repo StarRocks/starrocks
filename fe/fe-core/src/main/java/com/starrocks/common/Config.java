@@ -1288,7 +1288,7 @@ public class Config extends ConfigBase {
      * Statistics collection threshold
      */
     @ConfField(mutable = true)
-    public static double auto_collect_statistic_ratio = 0.8;
+    public static double statistic_auto_collect_ratio = 0.8;
 
     /**
      * Full statistics collection max data size

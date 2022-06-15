@@ -161,21 +161,23 @@ public class AnalyzeManager implements Writable {
         String s = Text.readString(dis);
         SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
 
-        if (null != data && null != data.jobs) {
-            for (AnalyzeJob job : data.jobs) {
-                replayAddAnalyzeJob(job);
+        if (null != data) {
+            if (null != data.jobs) {
+                for (AnalyzeJob job : data.jobs) {
+                    replayAddAnalyzeJob(job);
+                }
             }
-        }
 
-        if (null != data && null != data.status) {
-            for (AnalyzeStatus status : data.status) {
-                replayAddAnalyzeStatus(status);
+            if (null != data.status) {
+                for (AnalyzeStatus status : data.status) {
+                    replayAddAnalyzeStatus(status);
+                }
             }
-        }
 
-        if (null != data && null != data.meta) {
-            for (AnalyzeMeta meta : data.meta) {
-                replayAddAnalyzeMeta(meta);
+            if (null != data.meta) {
+                for (AnalyzeMeta meta : data.meta) {
+                    replayAddAnalyzeMeta(meta);
+                }
             }
         }
     }
