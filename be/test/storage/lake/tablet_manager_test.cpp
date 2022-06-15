@@ -45,7 +45,7 @@ public:
         _test_dir = paths[0].path + "/lake";
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
         _group_assigner = new LocalGroupAssigner(_test_dir);
-        _tabletManager = new starrocks::lake::TabletManager(_group_assigner,16384);
+        _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 16384);
     }
     std::string tablet_group(std::string_view prefix, int64_t tablet_id) {
         ASSIGN_OR_ABORT(auto group_path, _group_assigner->get_group(tablet_id));
@@ -222,44 +222,7 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     EXPECT_TRUE(iter != txnlogs.end());
 }
 
-TEST_F(LakeTabletManagerTest, put_get_drop_tablet_metadata_cache) {
-    starrocks::lake::TabletMetadata metadata;
-    metadata.set_id(23456);
-    metadata.set_version(2);
-    auto rowset_meta_pb = metadata.add_rowsets();
-    rowset_meta_pb->set_id(2);
-    rowset_meta_pb->set_overlapped(false);
-    rowset_meta_pb->set_data_size(1024);
-    rowset_meta_pb->set_num_rows(5);
-    auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
-    auto meta_ptr = new std::shared_ptr<starrocks::lake::TabletMetadata>(new starrocks::lake::TabletMetadata(metadata));
-    bool inserted =
-            _tabletManager->put_into_metacache(key_path, static_cast<void*>(meta_ptr), metadata.SpaceUsedLong());
-    EXPECT_TRUE(inserted);
-    auto ptr = _tabletManager->get_from_metacache(key_path);
-    EXPECT_TRUE(ptr != nullptr);
-    _tabletManager->remove_from_metacache(key_path);
-    ptr = _tabletManager->get_from_metacache(key_path);
-    EXPECT_TRUE(ptr == nullptr);
-}
-
-TEST_F(LakeTabletManagerTest, put_get_drop_txnlog_cache) {
-    starrocks::lake::TxnLog txn_log;
-    txn_log.set_tablet_id(23456);
-    txn_log.set_txn_id(2);
-    auto key_path = fmt::format("txn_{:016X}_{:016X}", txn_log.tablet_id(), txn_log.txn_id());
-    auto value_ptr = new std::shared_ptr<starrocks::lake::TxnLog>(new starrocks::lake::TxnLog(txn_log));
-    bool inserted =
-            _tabletManager->put_into_metacache(key_path, static_cast<void*>(value_ptr), txn_log.SpaceUsedLong());
-    EXPECT_TRUE(inserted);
-    auto ptr = _tabletManager->get_from_metacache(key_path);
-    EXPECT_TRUE(ptr != nullptr);
-    _tabletManager->remove_from_metacache(key_path);
-    ptr = _tabletManager->get_from_metacache(key_path);
-    EXPECT_TRUE(ptr == nullptr);
-}
-
-TEST_F(LakeTabletManagerTest, metadata_cache_evict) {
+TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
     starrocks::lake::TabletMetadata metadata;
     metadata.set_id(23456);
     metadata.set_version(2);
@@ -273,20 +236,20 @@ TEST_F(LakeTabletManagerTest, metadata_cache_evict) {
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
-        metadata.set_version(2+i);
+        metadata.set_version(2 + i);
         EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     }
 
     // get version 4 to update lru list in cache
     {
         metadata.set_version(4);
-        auto res = _tabletManager->get_tablet_metadata(group,metadata.id(),metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
     }
 
     // put another 32 tablet meta to trigger cache eviction.
     for (int i = 0; i < 32; ++i) {
-        metadata.set_version(66+i);
+        metadata.set_version(66 + i);
         EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     }
 
@@ -297,7 +260,7 @@ TEST_F(LakeTabletManagerTest, metadata_cache_evict) {
         auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
         auto ptr = _tabletManager->get_from_metacache(key_path);
         EXPECT_TRUE(ptr != nullptr);
-        auto res = _tabletManager->get_tablet_metadata(group,metadata.id(),metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
     }
     {
@@ -306,7 +269,7 @@ TEST_F(LakeTabletManagerTest, metadata_cache_evict) {
         auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
         auto ptr = _tabletManager->get_from_metacache(key_path);
         EXPECT_TRUE(ptr == nullptr);
-        auto res = _tabletManager->get_tablet_metadata(group,metadata.id(),metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
     }
     {
@@ -315,7 +278,7 @@ TEST_F(LakeTabletManagerTest, metadata_cache_evict) {
         auto key_path = fmt::format("tbl_{:016X}_{:016X}", metadata.id(), metadata.version());
         auto ptr = _tabletManager->get_from_metacache(key_path);
         EXPECT_TRUE(ptr == nullptr);
-        auto res = _tabletManager->get_tablet_metadata(group,metadata.id(),metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
         EXPECT_TRUE(res.ok());
     }
 }

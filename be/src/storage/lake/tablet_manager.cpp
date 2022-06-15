@@ -76,7 +76,7 @@ static void tablet_meta_data_deleter(const CacheKey& key, void* value) {
 }
 
 bool TabletManager::put_into_metacache(const std::string& key_path, void* ptr, const int cost) {
-    CacheKey key(key_path);
+    CacheKey key = {key_path};
     Cache::Handle* handle = _metacache->insert(key, ptr, cost, tablet_meta_data_deleter);
     bool res = true;
     if (handle == nullptr) {
@@ -88,7 +88,7 @@ bool TabletManager::put_into_metacache(const std::string& key_path, void* ptr, c
 }
 
 void* TabletManager::get_from_metacache(const std::string& key_path) {
-    CacheKey key(key_path);
+    CacheKey key = {key_path};
     Cache::Handle* handle = _metacache->lookup(key);
     if (handle == nullptr) {
         return nullptr;
@@ -100,7 +100,7 @@ void* TabletManager::get_from_metacache(const std::string& key_path) {
 }
 
 void TabletManager::remove_from_metacache(const std::string& key_path) {
-    CacheKey key(key_path);
+    CacheKey key = {key_path};
     _metacache->erase(key);
 }
 

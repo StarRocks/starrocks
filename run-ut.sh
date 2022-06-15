@@ -227,8 +227,6 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test | grep -v bench_test`
 
-echo "    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER}"
-/home/disk5/sr-deps/toolchain/installed/gdb-10.2/bin/gdb ${STARROCKS_TEST_BINARY_DIR}/starrocks_test
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [ -x ${GTEST_PARALLEL} ]; then

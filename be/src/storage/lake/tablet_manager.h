@@ -60,10 +60,6 @@ public:
         return ret;
     }
 
-    bool put_into_metacache(const std::string& key_path, void* ptr, const int cost);
-    void* get_from_metacache(const std::string& key_path);
-    void remove_from_metacache(const std::string& key_path);
-
 private:
     std::string tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson);
     std::string tablet_metadata_path(const std::string& group, const std::string& metadata_path);
@@ -74,6 +70,10 @@ private:
     std::string txn_log_path(const std::string& group, const std::string& txnlog_path);
     std::string txn_log_cache_key(int64_t tablet_id, int64_t txn_id);
     StatusOr<TxnLogPtr> get_txn_log(const std::string& txnlog_path);
+
+    bool put_into_metacache(const std::string& key_path, void* ptr, const int cost);
+    void* get_from_metacache(const std::string& key_path);
+    void remove_from_metacache(const std::string& key_path);
 
     GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;
