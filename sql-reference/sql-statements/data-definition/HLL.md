@@ -69,16 +69,17 @@ HLL_EMPTY()
     uv_set hll hll_union)
     distributed by hash(id) buckets 32;
 
-    insert into test_uv select dt, set1 from test;
+    insert into test_uv select dt, id, set1 from test;
 
     c. 创建另外一张专门计算uv的表，然后insert并通过hll_hash根据test其它非hll列生成hll列
 
     create table test_uv(
     dt date,
+    id int,
     id_set hll hll_union)
     distributed by hash(id) buckets 32;
 
-    insert into test_uv select dt, hll_hash(id) from test;
+    insert into test_uv select dt, id, hll_hash(id) from test;
     ```
 
 4. 查询，hll列不允许直接查询它的原始值，可以通过配套的函数进行查询
