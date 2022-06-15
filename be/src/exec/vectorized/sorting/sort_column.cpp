@@ -6,6 +6,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
@@ -352,6 +353,15 @@ Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const boo
     return column->accept(&column_sorter);
 }
 
+Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const bool is_asc_order, const bool is_null_first,
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+    if (column->is_nullable()) {
+        ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
+    }
+    ColumnSorter column_sorter(cancel, is_asc_order, is_null_first, permutation, tie, range, build_tie);
+    return column->accept(&column_sorter);
+}
+
 Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
                             const std::vector<int>& null_firsts, Permutation* permutation) {
     if (columns.size() < 1) {
@@ -413,6 +423,13 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
                              std::pair<int, int> range, const bool build_tie, const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
+
+    for (auto& col : columns) {
+        if (col->is_nullable()) {
+            ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
+        }
+    }
+
     VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie,
                                 limit);
     RETURN_IF_ERROR(columns[0]->accept(&sorter));
