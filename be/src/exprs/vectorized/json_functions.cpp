@@ -201,23 +201,23 @@ JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
-    auto jsons = string_json(context, columns);
+    auto jsons = _string_json(context, columns);
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
-    return json_int(context, Columns{jsons});
+    return _json_int(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
-    auto jsons = string_json(context, columns);
+    auto jsons = _string_json(context, columns);
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
-    return json_double(context, Columns{jsons});
+    return _json_double(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
-    auto jsons = string_json(context, columns);
+    auto jsons = _string_json(context, columns);
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
@@ -268,7 +268,7 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_int(FunctionContext* context, const Columns& columns) {
+ColumnPtr JsonFunctions::_json_int(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_INT> result(columns[0]->size());
 
@@ -288,7 +288,7 @@ ColumnPtr JsonFunctions::json_int(FunctionContext* context, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_double(FunctionContext* context, const Columns& columns) {
+ColumnPtr JsonFunctions::_json_double(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_DOUBLE> result(columns[0]->size());
 
@@ -308,7 +308,7 @@ ColumnPtr JsonFunctions::json_double(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::string_json(FunctionContext* context, const Columns& columns) {
+ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
 

@@ -121,25 +121,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_string);
 
-    /**
-     * @param: [json_column]
-     * @paramType: [JsonColumn]
-     * @return: Int32Column
-     */
-    DEFINE_VECTORIZED_FN(json_int);
-
-    /**
-     * @param: [json_column]
-     * @paramType: [JsonColumn]
-     * @return: DoubleColumn
-     */
-    DEFINE_VECTORIZED_FN(json_double);
-
-    /**
-     * @param: [json_object, json_path]
-     * @paramType: [JsonColumn, BinaryColumn]
-     * @return: JsonColumn
-     */
     DEFINE_VECTORIZED_FN(json_query);
 
     /**
@@ -181,14 +162,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_array_empty);
 
-    /**
-     * 
-     * @param: 
-     * @paramType: 
-     * @return: BinaryColumn
-     */
-    DEFINE_VECTORIZED_FN(string_json);
-
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(starrocks_udf::FunctionContext* context,
@@ -211,6 +184,36 @@ public:
     }
 
 private:
+    /**
+     * Parse string column as json column
+     * @param: 
+     * @paramType: 
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(_string_json);
+
+    /**
+     * Convert json column to int column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: Int32Column
+     */
+    DEFINE_VECTORIZED_FN(_json_int);
+
+    /**
+     * Convert json column to double column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(_json_double);
+
+    /**
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: JsonColumn
+     */
+
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
 };
