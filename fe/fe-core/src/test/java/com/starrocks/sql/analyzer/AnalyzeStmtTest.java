@@ -5,6 +5,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
@@ -120,5 +121,13 @@ public class AnalyzeStmtTest {
                         "SELECT 10004, 10003, 'v2', 'test.t0', 't0', COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v2`)), " +
                         "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0 ",
                 StatisticSQLBuilder.buildCollectFullStatisticSQL(10002L, 10004L, 10003L, Lists.newArrayList("v1", "v2")));
+    }
+
+    @Test
+    public void testHistogram() {
+        String sql = "analyze table t0 update histogram on v1,v2 with 256 buckets";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc);
+        Assert.assertEquals(((AnalyzeHistogramDesc) (analyzeStmt.getAnalyzeTypeDesc())).getBuckets(), 256);
     }
 }
