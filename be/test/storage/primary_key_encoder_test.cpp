@@ -4,10 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "storage/chunk_helper.h"
+#include "util/xxh3.h"
 
 using namespace std;
 
@@ -153,6 +156,55 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         pchunk->columns()[3]->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testEnableHashKey) {
+    config::enable_hash_key = true;
+    auto sc = create_key_schema(
+            {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+    unique_ptr<vectorized::Column> dest;
+    PrimaryKeyEncoder::create_column(*sc, &dest);
+    ASSERT_TRUE(dest->is_numeric());
+    const int n = 1;
+    auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+    for (int i = 0; i < n; i++) {
+        vectorized::Datum tmp;
+        tmp.set_int32(i * 2343);
+        pchunk->columns()[0]->append_datum(tmp);
+        string tmpstr = StringPrintf("slice000%d", i * 17);
+        if (i % 5 == 0) {
+            // set some '\0'
+            tmpstr[rand() % tmpstr.size()] = '\0';
+        }
+        tmp.set_slice(tmpstr);
+        pchunk->columns()[1]->append_datum(tmp);
+        tmp.set_int16(i);
+        pchunk->columns()[2]->append_datum(tmp);
+        tmp.set_uint8(i % 2);
+        pchunk->columns()[3]->append_datum(tmp);
+    }
+    
+    vector<uint32_t> indexes;
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
+
+    config::enable_hash_key = false;
+    unique_ptr<vectorized::Column> bdest;
+    PrimaryKeyEncoder::create_column(*sc, &bdest);
+    ASSERT_TRUE(bdest->is_binary());
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, bdest.get());
+
+    vectorized::Int128Column& idest = down_cast<vectorized::Int128Column&>(*(dest.get()));
+    vectorized::BinaryColumn& bdest_new = down_cast<vectorized::BinaryColumn&>(*(bdest.get()));
+    auto* keys = reinterpret_cast<const int128_t*>(idest.raw_data());
+    for (int i = 0; i < n; i++) {
+        Slice s = bdest_new.get_slice(i);
+        XXH128_hash_t val = XXH3_128bits(s.get_data(), s.get_size());
+        ASSERT_EQ(keys[i], ((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
+    }
+
 }
 
 } // namespace starrocks
