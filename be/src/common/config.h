@@ -669,6 +669,9 @@ CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
 CONF_Int64(object_storage_max_connection, "102400");
+// Acccess object storage using https.
+// this options is applicable only if `object_storage_endpoint` is not specified.
+CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
