@@ -469,7 +469,7 @@ INSTANTIATE_TEST_SUITE_P(
                 // empty
                 std::make_tuple(R"( {"k1":1} )", "NULL", R"(NULL)"),
                 std::make_tuple(R"( {"k1":1} )", "$", R"( {"k1": 1} )"),
-                std::make_tuple(R"( {"k1":1} )", "", R"( {"k1": 1} )"),
+                std::make_tuple(R"( {"k1":1} )", "", R"(NULL)"),
 
                 // various types
                 std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", "$.k2", R"( "hehe" )"),
@@ -598,7 +598,7 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
-                                           std::make_tuple(R"({ "k1": {}})", "", true),
+                                           std::make_tuple(R"({ "k1": {}})", "", false),
                                            std::make_tuple(R"( { "k1": 1} )", "NULL", false),
 
                                            // error case
