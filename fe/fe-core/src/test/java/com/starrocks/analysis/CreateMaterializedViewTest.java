@@ -78,8 +78,8 @@ public class CreateMaterializedViewTest {
                         "                        `k1` date,\n" +
                         "                        `v2` datetime MAX,\n" +
                         "                        `v3` char(20) MIN,\n" +
-                        "                        `v4` tinyint SUM,\n" +
-                        "                        `v8` tinyint SUM,\n" +
+                        "                        `v4` bigint SUM,\n" +
+                        "                        `v8` bigint SUM,\n" +
                         "                        `v5` HLL HLL_UNION,\n" +
                         "                        `v6` BITMAP BITMAP_UNION,\n" +
                         "                        `v7` PERCENTILE PERCENTILE_UNION\n" +
