@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -19,7 +20,15 @@ import java.util.stream.Collectors;
 
 public class WorkGroupClassifier implements Writable {
     public static final Pattern UseRolePattern = Pattern.compile("^\\w+$");
+<<<<<<< HEAD
     public static final Set<String> QUERY_TYPES = Arrays.stream(QueryType.values()).map(Enum::name).collect(Collectors.toSet());
+=======
+    public static final Set<String> QUERY_TYPES =
+            Arrays.stream(QueryType.values()).map(Enum::name).collect(Collectors.toSet());
+    public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
+            ImmutableSet.of(QueryType.SELECT.name());
+
+>>>>>>> 7b7e97672 ([BugFix] fix #7107: throw exception when creating unsupported query_type (#7237))
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "user")
