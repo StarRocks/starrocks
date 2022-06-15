@@ -41,16 +41,18 @@ public class FloatLiteral extends LiteralExpr {
     public FloatLiteral() {
     }
 
-    public FloatLiteral(Double value) {
+    public FloatLiteral(Double value) throws AnalysisException {
+        checkValue(value);
         init(value);
     }
 
     /**
      * C'tor forcing type, e.g., due to implicit cast
      */
-    public FloatLiteral(Double value, Type type) {
+    public FloatLiteral(Double value, Type type) throws AnalysisException {
         this.value = value;
         this.type = type;
+        checkValue(value);
         analysisDone();
     }
 
@@ -58,6 +60,7 @@ public class FloatLiteral extends LiteralExpr {
         Double floatValue = null;
         try {
             floatValue = new Double(value);
+            checkValue(floatValue);
         } catch (NumberFormatException e) {
             throw new AnalysisException("Invalid floating-point literal: " + value, e);
         }
@@ -107,6 +110,12 @@ public class FloatLiteral extends LiteralExpr {
             type = Type.FLOAT;
         } else {
             type = Type.DOUBLE;
+        }
+    }
+
+    private void checkValue(Double value) throws AnalysisException {
+        if (value.isInfinite()||value.isNaN()) {
+            throw new AnalysisException("Invalid literal:" + value);
         }
     }
 
